@@ -10,6 +10,7 @@ import Plots as MP
 import scipy.optimize as op
 from scipy import integrate
 from MCMC_cosmology import Statistic_packages as SP
+from User_defined_modules import *
 
 def load_mcmc_results(output_path, file_name="tutorial.h5",CONFIG=None):
     chain_path = os.path.join(output_path, file_name)
@@ -18,7 +19,7 @@ def load_mcmc_results(output_path, file_name="tutorial.h5",CONFIG=None):
     print (np.shape(samples))
     return samples
  
-def model_likelihood(theta, data, Type, CONFIG, MODEL_func):
+def model_likelihood(theta, data, Type, CONFIG, MODEL_func, obs):
     """
     Computes the log-likelihood of a cosmological model given parameters, observational data, 
     and a model type (SNe, OHD, or CC).
@@ -43,7 +44,19 @@ def model_likelihood(theta, data, Type, CONFIG, MODEL_func):
     if isinstance(Type, list):
         Type = Type[0] 
     
-    redshift, type_data, type_data_error = data
+    if obs == "PantheonP":
+        #print("Matched PantheonP")
+        redshift = data['zHD']
+        mb = data['m_b_corr']
+        trig = data['IS_CALIBRATOR']
+        cepheid = data['CEPH_DIST']
+        cov = data['cov']
+    else:
+        #print(f"Matched {obs} but not PantheonP")
+        redshift = data["redshift"]
+        type_data = data["type_data"]
+        type_data_error = data["type_data_error"]
+        
     param_dict = {param: value for param, value in zip(CONFIG["parameters"], theta)}
 
     model = np.zeros(len(redshift))
@@ -55,7 +68,14 @@ def model_likelihood(theta, data, Type, CONFIG, MODEL_func):
             model[i] = 25+ 5*np.log10(y_dl[i])
     elif Type=="OHD" or Type=="CC":
         for i, z in enumerate(redshift):
-             model[i] = param_dict["H_0"]*MODEL_func(z,param_dict,Type)  
+             model[i] = param_dict["H_0"]*MODEL_func(z,param_dict,Type) 
+    elif Type=="fsigma8" or Type=="sigma8":   
+        E_value = nonLinear_Hubble_parameter(redshift,param_dict,Type)
+        Omega_zeta = matter_density_z(redshift,param_dict,Type)
+        if Type=="fsigma8":
+            model  = param_dict['sigma_8'] * (Omega_zeta / E_value**2) ** param_dict['gamma']
+        else:
+            model = (Omega_zeta / E_value**2) ** param_dict['gamma'] 
     else:
         print(f"Unknown Type: {Type}. Unable to compute model.")
         return -np.inf  # Return invalid log-likelihood for unknown type
@@ -63,7 +83,10 @@ def model_likelihood(theta, data, Type, CONFIG, MODEL_func):
     if model is None:
         raise ValueError("Model computation failed. Model is None.")
     
-    chi = SP.Calc_chi(Type, type_data, type_data_error,model)
+    if obs == "PantheonP":
+        chi = SP.Calc_PantP_chi(mb, trig, cepheid, cov, model)
+    else:
+        chi = SP.Calc_chi(Type, type_data, type_data_error, model)
     return -0.5*chi
     
 def lnprior(theta, CONFIG):
@@ -84,7 +107,7 @@ def lnprior(theta, CONFIG):
             return -np.inf  # Parameter out of bounds
     return 0.0  #
     
-def lnprob(theta, data, Type, CONFIG, MODEL_func):
+def lnprob(theta, data, Type, CONFIG, MODEL_func, obs):
     """
     Log-probability function combining prior and likelihood.
     Args:
@@ -102,19 +125,16 @@ def lnprob(theta, data, Type, CONFIG, MODEL_func):
     lp = lnprior(theta, CONFIG)
     if not np.isfinite(lp):
         return -np.inf  # Invalid prior
-    return lp + model_likelihood(theta, data, Type, CONFIG, MODEL_func)
+    return lp + model_likelihood(theta, data, Type, CONFIG, MODEL_func, obs)
 
-def run_mcmc(data, Type="SNe", model_name="LCDM", MODEL_func=None, parallel=True, saveChains =False, 
-             overwrite=False, autoCorr = True, CONFIG=None):
+def run_mcmc(data, model_name="LCDM", chain_path =None, MODEL_func=None, parallel=True, saveChains =False, 
+             overwrite=False, autoCorr = True, CONFIG=None, obs=None):
     """
     Runs an MCMC sampler using the emcee library with optional parallelization, 
     chain saving, and autocorrelation-based convergence checking.
 
     Args:
         data (array-like): The observational data to be used in the MCMC analysis (redshift, data, data_err).
-
-        Type (str, optional): The category or label for the observation type (e.g., "SNe"). 
-                        Default is "SNe".
 
         MODEL (callable): The model function that computes the likelihood or other relevant quantities. 
                         N.B Must be provided by the user.
@@ -149,26 +169,27 @@ def run_mcmc(data, Type="SNe", model_name="LCDM", MODEL_func=None, parallel=True
     Returns:
         samples (array-like): The MCMC samples after processing (e.g., burn-in removal). 
     """
-    
+    Type = CONFIG['observation_types']
     # Ensure that CONFIG and MODEL are provided; these are essential for the MCMC setup
     if CONFIG is None or MODEL_func is None:
         raise ValueError("CONFIG and Model must be provided from the main script")
     
-    # Path to the MCMC chain file to check if the chain file already exists and whether to overwrite it
-    output_dir = f"MCMC_Chains/{model_name}/{Type[0]}"
-    file_name = f"{Type[0]}.h5"
-    chain_path = os.path.join(output_dir, file_name)
-    if not overwrite and os.path.exists(chain_path):
-        print(f"Loading existing MCMC chain from {chain_path}")
-        samples = load_mcmc_results(output_path=output_dir, file_name=file_name, CONFIG=CONFIG)
-        return samples  # Exit early if not overwriting and chain is already available
+    ## Path to the MCMC chain file to check if the chain file already exists and whether to overwrite it
+    #output_dir = f"MCMC_Chains/{model_name}/{CONFIG['observations'][0]}"
+    #file_name = f"{CONFIG['observations'][0]}.h5"
+    #chain_path = os.path.join(output_dir, file_name)
+    #if not overwrite and os.path.exists(chain_path):
+        #print(f"Loading existing MCMC chain from {chain_path}")
+        #samples = load_mcmc_results(output_path=output_dir, file_name=file_name, CONFIG=CONFIG)
+        #return samples  # Exit early if not overwriting and chain is already available
+    
     
     # Setup of theta and bound for an arbitrary amount of parameters and run Scip.optimize.minimize to find a good
     # starting point for the MCMC simulation.
     bnds = [(CONFIG["prior_limits"][param][0], CONFIG["prior_limits"][param][1]) for param in CONFIG["parameters"]]
     theta = [CONFIG["true_values"][i] for i, param in enumerate(CONFIG["parameters"])]
     nll = lambda *args: -model_likelihood(*args)
-    result = op.minimize(nll, theta, args=(data, Type, CONFIG, MODEL_func),bounds =bnds)
+    result = op.minimize(nll, theta, args=(data, Type, CONFIG, MODEL_func, obs),bounds =bnds)
     print ("SciPy's optimized start point for MCMC: ",result['x'])
     pos = [result['x'] + 1e-4 * np.random.randn(CONFIG["ndim"]) for _ in range(CONFIG["nwalker"])]
     
@@ -181,11 +202,11 @@ def run_mcmc(data, Type="SNe", model_name="LCDM", MODEL_func=None, parallel=True
                 backend = emcee.backends.HDFBackend(chain_path)
                 backend.reset(CONFIG["nwalker"], CONFIG["ndim"])
                 sampler = emcee.EnsembleSampler(
-                    CONFIG["nwalker"], CONFIG["ndim"], lnprob, args=(data, Type, CONFIG, MODEL_func),backend=backend, pool=pool
+                    CONFIG["nwalker"], CONFIG["ndim"], lnprob, args=(data, Type, CONFIG, MODEL_func, obs),backend=backend, pool=pool
             )
             else:
                 sampler = emcee.EnsembleSampler(
-                    CONFIG["nwalker"], CONFIG["ndim"], lnprob, args=(data, Type, CONFIG, MODEL_func), pool=pool
+                    CONFIG["nwalker"], CONFIG["ndim"], lnprob, args=(data, Type, CONFIG, MODEL_func, obs), pool=pool
             )
             start = time.time()
             
@@ -200,11 +221,11 @@ def run_mcmc(data, Type="SNe", model_name="LCDM", MODEL_func=None, parallel=True
             backend = emcee.backends.HDFBackend(chain_path)
             backend.reset(CONFIG["nwalker"], CONFIG["ndim"])
             sampler = emcee.EnsembleSampler(
-                CONFIG["nwalker"], CONFIG["ndim"],  lnprob, args=(data, Type, CONFIG, MODEL_func), backend=backend
+                CONFIG["nwalker"], CONFIG["ndim"],  lnprob, args=(data, Type, CONFIG, MODEL_func, obs), backend=backend
             )
         else:
             sampler = emcee.EnsembleSampler(
-                CONFIG["nwalker"], CONFIG["ndim"],  lnprob, args=(data, Type, CONFIG, MODEL_func), backend=backend
+                CONFIG["nwalker"], CONFIG["ndim"],  lnprob, args=(data, Type, CONFIG, MODEL_func, obs), backend=backend
             ) 
                 
         if autoCorr: # AutoCorrelation to speed up calculation. Stops the MCMC when convergence occured

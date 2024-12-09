@@ -1,31 +1,68 @@
 import numpy as np
 import os
+import pandas as pd
+import scipy.linalg as la
 
-# Load data once
-def load_data(file_path):
-    """Load supernova data from a file."""
+def load_data(file_path, observations):
+    """
+    Load supernova data from a file and return a structured dictionary.
+
+    Args:
+        file_path (str): Path to the data file.
+        observations (str): Type of observation (e.g., "OHD", "CC").
+
+    Returns:
+        dict: A dictionary with keys 'redshift', 'type_data', and 'type_error', corresponding to
+              redshift values, observational data, and errors.
+    """
     data = np.loadtxt(file_path)
-    return data[:, 0], data[:, 1], data[:, 2]  # redshift, observational value, error
+    return {"redshift": data[:, 0], "type_data": data[:, 1], "type_data_error": data[:, 2]}
 
 def load_all_data(config):
     """
-    Load all datasets specified in the config.
+    Load all datasets specified in the CONFIG dictionary.
 
     Args:
-        config (dict): The CONFIG dictionary containing an "Observations" key
+        config (dict): The CONFIG dictionary containing an "observations" key
                        with a list of observation types.
 
     Returns:
-        dict: A dictionary where keys are observation types and values are tuples
-              of (redshift, observation value, observation error).
+        dict: A dictionary where keys are observation types and values are the loaded data.
+              For standard datasets, returns (redshift, observation value, observation error).
+              For 'PantheonP', returns a dictionary with specific keys for the dataset.
     """
     observation_data = {}
+
     for observation in config["observations"]:
-        file_path = f"./Observations/{observation}.dat"  # Assume file name matches observation type
-        observation_data[observation] = load_data(file_path)
+        file_path = os.path.join("./Observations", f"{observation}.dat")  # File path based on observation name
+
+        if observation == "PantheonP":
+            # Special handling for Pantheon+ dataset
+            print(f"Loading Pantheon+ dataset from {file_path}")
+            data = pd.read_csv(file_path, delim_whitespace=True)
+            cov_path = os.path.join("./Observations", "PantheonP.cov")
+            C00 = np.loadtxt(cov_path)
+            cov_array = C00[1:len(C00)]  
+            cov_matrix = cov_array.reshape(1701, 1701)
+            cov = la.cholesky(cov_matrix, lower=True, overwrite_a=True) 
+            
+            observation_data[observation] = {
+                "zHD": data["zHD"].values,
+                "m_b_corr": data["m_b_corr"].values,
+                "m_b_corr_err_DIAG": data["m_b_corr_err_DIAG"].values,
+                "IS_CALIBRATOR": data["IS_CALIBRATOR"].values,
+                "CEPH_DIST": data["CEPH_DIST"].values,
+                "biasCor_m_b": data["biasCor_m_b"].values,
+                "cov_matrix": cov_matrix,
+                "cov": cov
+            }
+        else:
+            # General case for other datasets
+            print(f"Loading {observation} dataset from {file_path}")
+            observation_data[observation]=load_data(file_path, observations=observation)
     return observation_data
 
-def create_config(parameters, true_values=None, prior_limits=None, observations=None, nwalkers=20, nsteps=200, burn=20, model_name=None):
+def create_config(parameters, true_values=None, prior_limits=None, observation=None, Type=None, nwalkers=20, nsteps=200, burn=20, model_name=None):
     """
     Dynamically creates a CONFIG dictionary for the user's model.
 
@@ -36,7 +73,7 @@ def create_config(parameters, true_values=None, prior_limits=None, observations=
         prior_limits (dict, optional): Dictionary of prior limits for parameters
                                         (e.g., {"Omega_m": (0.0, 1.0), "alpha": (0.0, 2.0)}).
                                         This argument is mandatory.
-        observations (list, optional): List of observations (e.g., ["SNe", "OHD"]).
+        observation (list, optional): List of observations (e.g., ["SNe", "OHD"]).
                                         Defaults to ["SNe"] if not provided.
         nwalker (int): Number of MCMC walkers. Default of 20 setup for test run. Recommended 100 for full runs
         nsteps (int): Number of iterations the MCMC simulations must make before stopping. Default of 200 setup
@@ -52,8 +89,17 @@ def create_config(parameters, true_values=None, prior_limits=None, observations=
     # Default values
     if true_values is None:
         true_values = {}
-    if observations is None:
+        
+    if observation is None:
         observations = ["SNe"]
+    
+    # Map each observation to its type
+    observation_types = []
+    for obs in observation:
+        if obs in ["Pantheon", "JLA", "PantheonP"]:
+            observation_types.append("SNe")
+        else:
+            observation_types.append(obs)
         
     if model_name is None:
         model_name = "LCDM"
@@ -71,12 +117,13 @@ def create_config(parameters, true_values=None, prior_limits=None, observations=
         "parameters": parameters,
         "true_values": [true_values.get(param, np.sum(prior_limits[param])/2) for param in parameters],
         "prior_limits": {param: prior_limits[param] for param in parameters},
-        "observations": observations,
+        "observations": observation,
         "ndim": len(parameters),
         "nwalker": nwalkers,  # Number of walkers
         "nsteps": nsteps,  # Number of steps
         "burn": burn,     # Burn-in steps
-        "model_name": model_name
+        "model_name": model_name,
+        "observation_types": observation_types
     }
     data = load_all_data(config)
     return config, data
