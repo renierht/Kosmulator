@@ -19,7 +19,7 @@ prior_limits = {
     #"Omega_w": (0.0,1.0)
 }
 
-CONFIG, data = Config.create_config(parameters, true_values, prior_limits, observations=["SNe", "OHD", "CC"],nwalkers=10,nsteps=500,burn=50, model_name="CC_test")
+CONFIG, data = Config.create_config(parameters, true_values, prior_limits, observations=["SNe", "OHD", "CC"],nwalkers=10,nsteps=1000,burn=50, model_name="CC_test")
 output_dirs = Config.create_output_directory(model_name=CONFIG['model_name'],observations=CONFIG["observations"])
 
 '''
