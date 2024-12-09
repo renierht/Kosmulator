@@ -5,7 +5,7 @@ The package is designed to be modular and user-friendly, allowing researchers to
 
 ## Installation 
 Install package directly from GitHub
-git clone git+https://github.com/yourusername/mcmc_cosmology.git
+git clone https://github.com/renierht/MCMC_cosmology.git
 
 ## Features
 
