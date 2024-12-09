@@ -2,4 +2,4 @@ tmpdrive/
 .tmp.driveupload/
 __pycache__/
 *.pyc
-MCMC_chain/
+MCMC_chains/
