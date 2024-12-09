@@ -16,7 +16,7 @@ setup(
         "scipy",
         "matplotlib",
         "emcee>=3.0.0",  # Example dependency for MCMC
-        "getdist
+        "getdist"
     ],  # Specify dependencies
     classifiers=[
         "Programming Language :: Python :: 3",
