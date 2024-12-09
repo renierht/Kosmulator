@@ -1,13 +1,25 @@
 import numpy as np
 import Plots as MP
+import scipy.linalg as la
 
 def Calc_chi(Type, type_data, type_data_error,model):
-    if Type=="SNe" or Type=="OHD":
-        chi = np.sum(((type_data - model)**2) / (type_data_error ** 2))
-    elif Type=="CC":
+    if Type=="CC":
         chi = Covariance_matrix(model, type_data, type_data_error)
+    else:
+        chi = np.sum(((type_data - model)**2) / (type_data_error ** 2))     
     return chi
-        
+    
+def Calc_PantP_chi(mb, trig, cepheid, cov, model):
+    M = -19.20
+    meub = mb - M
+    #Incorporate Cepheid calibrations or use model predictions
+    moduli = np.where(trig == 1, cepheid, model)  # `trig` and `cepheid` must be defined
+    delta = meub - moduli # Calculate residuals
+    # Solve using covariance matrix (cov should be the actual covariance matrix of mb data)
+    residuals = la.solve_triangular(cov, delta, lower=True, check_finite=False)
+    chi= (residuals ** 2).sum()  # Sum of squared residuals for chi-squared value
+    return chi
+    
 def Covariance_matrix(model, type_data, type_data_error):
     Cov_matrix = np.diag(type_data_error**2)
     C_inv = np.linalg.inv(Cov_matrix)
