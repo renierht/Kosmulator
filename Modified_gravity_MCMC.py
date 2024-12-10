@@ -10,7 +10,7 @@ def MODEL(z, param_dict, Type="SNe"):
     return {"SNe": 1 / model, "OHD": model, "CC":model, "fsigma8":model, "BAO":1/model}.get(Type, None)
 
 # Centralized configuration parameters
-parameters = ["Omega_m","H_0","gamma","sigma_8"]
+parameters = ["Omega_m","H_0"]#,"gamma","sigma_8"]
 true_values = {"Omega_m": 0.315, "H_0": 67.4, "gamma": 0.55, "sigma_8": 0.8}
 prior_limits = {
     "Omega_m": (0.15, 0.4),
