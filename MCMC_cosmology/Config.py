@@ -56,6 +56,11 @@ def load_all_data(config):
                 "cov_matrix": cov_matrix,
                 "cov": cov
             }
+        elif observation == "BAO":
+            data = np.loadtxt(file_path)
+            observation_data[observation] = {
+            "covd1": np.array(data)
+            }
         else:
             # General case for other datasets
             print(f"Loading {observation} dataset from {file_path}")
