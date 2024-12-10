@@ -10,7 +10,7 @@ import Plots as MP
 import scipy.optimize as op
 from scipy import integrate
 from MCMC_cosmology import Statistic_packages as SP
-from User_defined_modules import *
+import User_defined_modules as UDM
 
 def load_mcmc_results(output_path, file_name="tutorial.h5",CONFIG=None):
     chain_path = os.path.join(output_path, file_name)
@@ -51,6 +51,8 @@ def model_likelihood(theta, data, Type, CONFIG, MODEL_func, obs):
         trig = data['IS_CALIBRATOR']
         cepheid = data['CEPH_DIST']
         cov = data['cov']
+    elif obs == "BAO":
+        covd1 = data['covd1']
     else:
         #print(f"Matched {obs} but not PantheonP")
         redshift = data["redshift"]
@@ -58,33 +60,39 @@ def model_likelihood(theta, data, Type, CONFIG, MODEL_func, obs):
         type_data_error = data["type_data_error"]
         
     param_dict = {param: value for param, value in zip(CONFIG["parameters"], theta)}
-
-    model = np.zeros(len(redshift))
+    if obs != 'BAO':
+        model = np.zeros(len(redshift))
+        
     if Type=="SNe":
         y_dl = np.zeros(len(redshift))
         for i in range(0,len(redshift)):
-            int_val = integrate.quad(MODEL_func,0,redshift[i],args=(param_dict,Type))            #intergrating over our model
-            y_dl[i] = (300000/param_dict['H_0'])*(1+redshift[i])*int_val[0]                          #calculating the luminosity distance
+            #int_val = integrate.quad(MODEL_func,0,redshift[i],args=(param_dict,Type))            #intergrating over our model
+            #y_dl[i] = (300000/param_dict['H_0'])*(1+redshift[i])*int_val[0]                          #calculating the luminosity distance
+            y_dl[i] = UDM.comoving_distance(MODEL_func, redshift[i], param_dict, Type)*(1+redshift[i])
             model[i] = 25+ 5*np.log10(y_dl[i])
     elif Type=="OHD" or Type=="CC":
         for i, z in enumerate(redshift):
              model[i] = param_dict["H_0"]*MODEL_func(z,param_dict,Type) 
     elif Type=="fsigma8" or Type=="sigma8":   
-        E_value = nonLinear_Hubble_parameter(redshift,param_dict,Type)
-        Omega_zeta = matter_density_z(redshift,param_dict,Type)
+        E_value = UDM.nonLinear_Hubble_parameter(redshift,param_dict,Type)
+        Omega_zeta = UDM.matter_density_z(redshift,param_dict,Type)
         if Type=="fsigma8":
             model  = param_dict['sigma_8'] * (Omega_zeta / E_value**2) ** param_dict['gamma']
         else:
             model = (Omega_zeta / E_value**2) ** param_dict['gamma'] 
+    elif Type=="BAO":
+        pass
     else:
         print(f"Unknown Type: {Type}. Unable to compute model.")
         return -np.inf  # Return invalid log-likelihood for unknown type
 
-    if model is None:
+    if model is None and obs !='BAO':
         raise ValueError("Model computation failed. Model is None.")
     
     if obs == "PantheonP":
         chi = SP.Calc_PantP_chi(mb, trig, cepheid, cov, model)
+    if obs == "BAO":
+        chi = SP.Calc_BAO_chi(covd1, MODEL_func, param_dict, Type, rd)
     else:
         chi = SP.Calc_chi(Type, type_data, type_data_error, model)
     return -0.5*chi

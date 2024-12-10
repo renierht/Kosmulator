@@ -1,5 +1,6 @@
 import numpy as np
 import Plots as MP
+import User_defined_modules as UDM
 import scipy.linalg as la
 
 def Calc_chi(Type, type_data, type_data_error,model):
@@ -19,6 +20,19 @@ def Calc_PantP_chi(mb, trig, cepheid, cov, model):
     residuals = la.solve_triangular(cov, delta, lower=True, check_finite=False)
     chi= (residuals ** 2).sum()  # Sum of squared residuals for chi-squared value
     return chi
+    
+def Calc_BAO_chi(covd1, Model_func, param_dict, Type, rd):
+    zz12 = [UDM.dvrd(0.295, Model_func, param_dict, Type, rd) - 7.925129270, UDM.dmrd(0.510, Model_func, param_dict, Type, rd) - 13.62003080, 
+            UDM.dhrd(0.510, Model_func, param_dict, Type, rd) - 20.98334647, UDM.dmrd(0.706, Model_func, param_dict, Type, rd) - 16.84645313, 
+            UDM.dhrd(0.706, Model_func, param_dict, Type, rd) - 20.07872919, UDM.dmrd(0.930, Model_func, param_dict, Type, rd) - 21.70841761,
+            UDM.dhrd(0.930, Model_func, param_dict, Type, rd) - 17.87612922, UDM.dmrd(1.317, Model_func, param_dict, Type, rd) - 27.78720817, 
+            UDM.dhrd(1.317, Model_func, param_dict, Type, rd) - 13.82372285, UDM.dvrd(1.491, Model_func, param_dict, Type, rd) - 26.07217182, 
+            UDM.dmrd(2.330, Model_func, param_dict, Type, rd) - 39.70838281, UDM.dhrd(2.330, Model_func, param_dict, Type, rd) - 8.522565830]
+    covinvd1 = np.linalg.inv(covd1)
+    desi_chi = np.dot(zz12, np.dot(covinvd1, zz12))
+    return desi_chi
+    
+    
     
 def Covariance_matrix(model, type_data, type_data_error):
     Cov_matrix = np.diag(type_data_error**2)

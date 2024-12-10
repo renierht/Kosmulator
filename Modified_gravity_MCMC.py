@@ -7,7 +7,7 @@ import os
 def MODEL(z, param_dict, Type="SNe"):
     """General relativity model for the cosmological parameter."""
     model = np.sqrt(param_dict['Omega_m']*(1 + z)**3+1-param_dict['Omega_m'])#+0.5*param_dict['Omega_w'])
-    return {"SNe": 1 / model, "OHD": model, "CC":model, "fsigma8":model}.get(Type, None)
+    return {"SNe": 1 / model, "OHD": model, "CC":model, "fsigma8":model, "BAO":1/model}.get(Type, None)
 
 # Centralized configuration parameters
 parameters = ["Omega_m","H_0","gamma","sigma_8"]
@@ -21,7 +21,7 @@ prior_limits = {
 }
 overwrite = False
 
-CONFIG, data = Config.create_config(parameters, true_values, prior_limits, observation=['fsigma8'], nwalkers=20,nsteps=1000,burn=10, model_name="LCDM")
+CONFIG, data = Config.create_config(parameters, true_values, prior_limits, observation=['BAO'], nwalkers=20,nsteps=1000,burn=10, model_name="LCDM")
 output_dirs = Config.create_output_directory(model_name=CONFIG['model_name'],observations=CONFIG["observations"])
 '''
 Auto Correlesation occurs when MCMC average changes between parameters is less that 0.5% over 100 iterations!!!
