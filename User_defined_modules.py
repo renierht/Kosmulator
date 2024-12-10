@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import integrate
 
 ##############################################################
 #### Only when using sigma8 or fsigma8 observations
@@ -16,22 +17,22 @@ def matter_density_z(z, param_dict, Type="fsigma8"):
 def Hubble(param_dict):
     return 300000/param_dict['H_0']
 
-def comoving_distance(Model_func, redshift, param_dict, Type):
-    comoving_distance = Hubble(param_dict)*integrate.quad(MODEL_func,0,redshift,args=(param_dict,Type))
+def comoving_distance(MODEL_func, redshift, param_dict, Type):
+    comoving_distance = Hubble(param_dict)*integrate.quad(MODEL_func,0,redshift,args=(param_dict,Type))[0]
     return comoving_distance
 
-def dmrd(redshift, Model_func, param_dict, Type, rd):
-    dmrd = comoving_distance(Model_func, redshift, param_dict, Type)/rd
+def dmrd(redshift, MODEL_func, param_dict, Type, rd):
+    dmrd = comoving_distance(MODEL_func, redshift, param_dict, Type)/rd
     return dmrd
 
-def dhrd(redshift, Model_func, param_dict, Type, rd):
+def dhrd(redshift, MODEL_func, param_dict, Type, rd):
     dhrd = Hubble(param_dict)*MODEL_func(redshift, param_dict, Type="SNe")/rd
     return dhrd
     
-def dvrd(redshift, Model_func, param_dict, Type, rd):
-    dvrd = (Hubble(param_dict)*((redshift*(comoving_distance(Model_func, redshift, param_dict, Type)/Hubble(param_dict))**2)/(1/MODEL_func(redshift, param_dict, Type="SNe")))**(1/3))/rd
+def dvrd(redshift, MODEL_func, param_dict, Type, rd):
+    dvrd = (Hubble(param_dict)*((redshift*(comoving_distance(MODEL_func, redshift, param_dict, Type)/Hubble(param_dict))**2)/(1/MODEL_func(redshift, param_dict, Type="SNe")))**(1/3))/rd
     return dvrd
     
-def dArd(redshift, Model_func, param_dict, Type, rd):
-    dArd = (comoving_distance(Model_func, redshift, param_dict, Type)/(1+redshift))/rd
+def dArd(redshift, MODEL_func, param_dict, Type, rd):
+    dArd = (comoving_distance(MODEL_func, redshift, param_dict, Type)/(1+redshift))/rd
     return dArd

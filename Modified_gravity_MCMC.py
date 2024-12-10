@@ -15,13 +15,13 @@ true_values = {"Omega_m": 0.315, "H_0": 67.4, "gamma": 0.55, "sigma_8": 0.8}
 prior_limits = {
     "Omega_m": (0.15, 0.4),
     "H_0": (60, 80),
-    "gamma": (0.43, 0.68),
-    "sigma_8": (0.5, 1.0),
+    #"gamma": (0.43, 0.68),
+    #"sigma_8": (0.5, 1.0),
     #"Omega_w": (0.0,1.0)
 }
-overwrite = False
+overwrite = True
 
-CONFIG, data = Config.create_config(parameters, true_values, prior_limits, observation=['BAO'], nwalkers=20,nsteps=1000,burn=10, model_name="LCDM")
+CONFIG, data = Config.create_config(parameters, true_values, prior_limits, observation=['JLA', 'Pantheon', 'CC', 'OHD'], nwalkers=100,nsteps=10000,burn=500, model_name="LCDM")
 output_dirs = Config.create_output_directory(model_name=CONFIG['model_name'],observations=CONFIG["observations"])
 '''
 Auto Correlesation occurs when MCMC average changes between parameters is less that 0.5% over 100 iterations!!!
