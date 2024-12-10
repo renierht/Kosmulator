@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import h5py
 import Plots as MP
 import scipy.optimize as op
-from scipy import integrate
+#from scipy import integrate
 from MCMC_cosmology import Statistic_packages as SP
 import User_defined_modules as UDM
 

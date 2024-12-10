@@ -3,3 +3,4 @@ tmpdrive/
 __pycache__/
 *.pyc
 MCMC_chains/
+Observations/~BROMIUM/
