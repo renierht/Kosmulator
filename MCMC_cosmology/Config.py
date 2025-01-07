@@ -4,6 +4,7 @@ import pandas as pd
 import scipy.linalg as la
 import inspect
 import warnings
+import re
 
 def load_data(file_path, observations):
     """
@@ -39,45 +40,46 @@ def load_all_data(config):
     """
     observation_data = {}
 
-    for observation in config["observations"]:
-        # Construct file path based on observation name
-        file_path = os.path.join("./Observations", f"{observation}.dat")
+    for i,observation in enumerate(config["observations"]):
+        for a in range(0,len(observation)):
+            # Construct file path based on observation name
+            file_path = os.path.join("./Observations", f"{observation[a]}.dat")
 
-        if observation == "PantheonP":
-            # Special handling for the Pantheon+ dataset
-            data = pd.read_csv(file_path, delim_whitespace = True)
+            if observation[a] == "PantheonP":
+                # Special handling for the Pantheon+ dataset
+                data = pd.read_csv(file_path, delim_whitespace = True)
 
-            # Load and process the covariance matrix
-            cov_path = os.path.join("./Observations", "PantheonP.cov")
-            C00 = np.loadtxt(cov_path)
-            cov_array = C00[1:len(C00)]
-            cov_matrix = cov_array.reshape(1701, 1701)
-            cov = la.cholesky(cov_matrix, lower = True, overwrite_a = True)
+                # Load and process the covariance matrix
+                cov_path = os.path.join("./Observations", "PantheonP.cov")
+                C00 = np.loadtxt(cov_path)
+                cov_array = C00[1:len(C00)]
+                cov_matrix = cov_array.reshape(1701, 1701)
+                cov = la.cholesky(cov_matrix, lower = True, overwrite_a = True)
 
-            # Store dataset-specific values in a dictionary
-            observation_data[observation] = {
-                "zHD": data["zHD"].values,
-                "m_b_corr": data["m_b_corr"].values,
-                "m_b_corr_err_DIAG": data["m_b_corr_err_DIAG"].values,
-                "IS_CALIBRATOR": data["IS_CALIBRATOR"].values,
-                "CEPH_DIST": data["CEPH_DIST"].values,
-                "biasCor_m_b": data["biasCor_m_b"].values,
-                "cov_matrix": cov_matrix,
-                "cov": cov
-            }
-        elif observation == "BAO":
-            # Special handling for BAO data
-            data = np.loadtxt(file_path)
-            observation_data[observation] = {
-                "covd1": np.array(data)
-            }
-        else:
-            # General case for other datasets
-            observation_data[observation] = load_data(file_path, observations=observation)
+                # Store dataset-specific values in a dictionary
+                observation_data[observation[a]] = {
+                    "zHD": data["zHD"].values,
+                    "m_b_corr": data["m_b_corr"].values,
+                    "m_b_corr_err_DIAG": data["m_b_corr_err_DIAG"].values,
+                    "IS_CALIBRATOR": data["IS_CALIBRATOR"].values,
+                    "CEPH_DIST": data["CEPH_DIST"].values,
+                    "biasCor_m_b": data["biasCor_m_b"].values,
+                    "cov_matrix": cov_matrix,
+                    "cov": cov
+                }
+            elif observation[a] == "BAO":
+                # Special handling for BAO data
+                data = np.loadtxt(file_path)
+                observation_data[observation[a]] = {
+                    "covd1": np.array(data)
+                }
+            else:
+                # General case for other datasets
+                observation_data[observation[a]] = load_data(file_path, observations=observation[a])
 
     return observation_data
 
-def create_config(parameters, true_values=None, prior_limits=None, observation=None,
+def create_config(models, true_values=None, prior_limits=None, observation=None,
                   Type=None, nwalkers=20, nsteps=200, burn=20, model_name=None):
     """
     Dynamically creates a CONFIG dictionary for the user's model.
@@ -104,40 +106,54 @@ def create_config(parameters, true_values=None, prior_limits=None, observation=N
 
     # Map observations to their types
     observation_types = []
+    #for i,obs in enumerate(observation):
     for obs in observation:
-        if obs in ["Pantheon", "JLA", "PantheonP"]:
-            observation_types.append("SNe")
-        else:
-            observation_types.append(obs)
+        types = [ ]
+        #for a in range(0,len(obs)):
+        for a in obs:
+            if a in ["Pantheon", "JLA", "PantheonP"]:
+                types.append("SNe")
+            else:
+                types.append(a)
+        observation_types.append(types)
 
     # Default model name if not provided
     if model_name is None:
         model_name = "LCDM"
 
-    # Validate prior limits
-    if prior_limits is None:
-        raise ValueError("Prior limits must be provided for all parameters.")
-    missing_priors = [param for param in parameters if param not in prior_limits]
-    if missing_priors:
-        raise ValueError(f"Missing prior limits for parameters: {', '.join(missing_priors)}")
+    # Validate model configurations
+    if not isinstance(models, dict) or not models:
+        raise ValueError("Models must be provided as a non-empty dictionary.")
+        
+    #for model_name, model_config in models.items():
+     #   if "parameters" not in model_config or not model_config["parameters"]:
+      #      raise ValueError(f"Model '{model_name}' must define a non-empty 'parameters' list.")
+       # for param in model_config["parameters"]:
+        #    if param not in prior_limits:
+         #       raise ValueError(f"Prior limits for parameter '{param}' are missing in model '{model_name}'.")
 
     # Build the CONFIG dictionary
-    config = {
-        "parameters": parameters,
-        "true_values": [true_values.get(param, np.sum(prior_limits[param]) / 2) for param in parameters],
-        "prior_limits": {param: prior_limits[param] for param in parameters},
-        "observations": observation,
-        "ndim": len(parameters),
-        "nwalker": nwalkers,
-        "nsteps": nsteps,
-        "burn": burn,
-        "model_name": model_name,
-        "observation_types": observation_types
-    }
-
-    # Load observational data
-    data = load_all_data(config)
-
+    config = {}
+    data = {}
+    for mods in model_name:
+        parameters = models[mods]['parameters']
+        config[mods] = {
+                "parameters": parameters,
+                "true_values": [true_values.get(param, np.sum(prior_limits[param]) / 2) for param in parameters],
+                "prior_limits": {param: prior_limits[param] for param in parameters},
+                "observations": observation,
+                "ndim": len(parameters),
+                "nwalker": nwalkers,
+                "nsteps": nsteps,
+                "burn": burn,
+                "model_name": model_name,
+                "observation_types": observation_types
+                }
+                
+        #print (config[mods]['observations'])
+        # Load observational data
+        data = load_all_data(config[mods])
+        #print (data)
     return config, data
     
 def create_output_directory(model_name="LCDM", observations=None):
@@ -166,8 +182,31 @@ def create_output_directory(model_name="LCDM", observations=None):
         output_paths[obs] = obs_dir
 
     return output_paths
-    
-def Warn_unused_params(MODEL_funcs, likelihood_func, param_dict, model_name, obs_types):
+
+def find_used_params(func, param_dict_keys, obs_type=None):
+    '''
+    Find used parameters in the source code of a function.
+
+    Args:
+        func (function): The function to analyze.
+        param_dict_keys (iterable): The keys of the parameter dictionary to check.
+        obs_type (str): Current observation type (optional).
+
+    Returns:
+        set: A set of parameters used in the function.
+    '''
+    try:
+        source = inspect.getsource(func)
+        used = set()
+        for key in param_dict_keys:
+            if re.search(rf"param_dict\[['\"]{key}['\"]\]", source):
+                used.add(key)
+        return used
+    except OSError as e:
+        print(f"Debug: Could not inspect {func.__name__}: {e}")
+        return set()
+            
+def Warn_unused_params(MODEL_funcs, likelihood_func, param_dict, model_name, obs_type):
     """
     Warn about unused parameters in `param_dict` for a given set of functions.
 
@@ -181,29 +220,44 @@ def Warn_unused_params(MODEL_funcs, likelihood_func, param_dict, model_name, obs
         "SNe": [],  # SNe does not use gamma or sigma_8
         "fsigma8": ["gamma", "sigma_8"],
         "sigma8": ["gamma"],
+        "BAO": ["rd"],
         # Add more observation types and their parameters as needed
     }
+    
+    # Initialize sets for tracking unused parameters across all observation types
+    total_used_params = set()
+    param_dict_keys = set(param_dict.keys())
 
-    # Aggregate relevant parameters for all observation types
-    relevant_params = set()
-    for obs_type in obs_types:
-        relevant_params.update(obs_type_param_map.get(obs_type, []))
+    # Process each observation
+    for obs in obs_type:
+        relevant_params = set(obs_type_param_map.get(obs_type, []))
 
-    # Extract used parameters from all MODEL functions and the likelihood function
-    used_params = set()
-    for model_func in MODEL_funcs:
-        used_params.update(inspect.signature(model_func).parameters.keys())
-    used_params.update(inspect.signature(likelihood_func).parameters.keys())
+        # Extract used parameters for each function
+        used_params = set()
+        for model_func in MODEL_funcs:
+            used_in_model = find_used_params(model_func, param_dict_keys, obs_type)
+            used_params.update(used_in_model)
 
-    # Add the relevant params for the provided observation types
-    used_params.update(relevant_params)
+        used_in_likelihood = find_used_params(likelihood_func, param_dict_keys, obs_type)
+        used_params.update(used_in_likelihood)
+        
+         # Add explicitly relevant params for this observation
+        used_params.update(relevant_params)
 
-    # Calculate unused parameters
-    unused_params = set(param_dict.keys()) - used_params
+        # Accumulate total used params
+        total_used_params.update(used_params)
+    
+    # Identify unused parameters across all observations
+    unused_params = param_dict_keys - total_used_params
 
+    # Debugging information
+    # print("Debug: Total used parameters:", total_used_params)
+    # print("Debug: Param dict keys:", param_dict_keys)
+    
     # Warn about unused parameters
     if unused_params:
         warnings.warn(
-            f"\n The following parameters are unused in the {model_name} model: {unused_params} !!!\n"
+            f"The following parameters are unused for the {model_name} model and the model_likelihood function: {unused_params} !!!"
         )
+        print ("\n")
         
