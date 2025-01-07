@@ -10,8 +10,6 @@ import Plots as MP                                   # Custom module for creatin
 from MCMC_cosmology import Statistic_packages as SP  # Custom module for statitical functions for cosmological calculations
 import User_defined_modules as UDM                   # Custom module with user-defined functions for cosmological calculations
 
-
-
 # Load previous MCMC results from an HDF5 file
 def load_mcmc_results(output_path, file_name = "tutorial.h5", CONFIG = None):
     """
@@ -100,7 +98,7 @@ def model_likelihood(theta, data, Type, CONFIG, MODEL_func, obs):
         print(f"Unknown Type: {Type}. Unable to compute model.")
         return -np.inf
 
-    # Compute chi-square for the model based on the observation
+    # Compute likelihoods for the model based on the observation
     if obs == "PantheonP":
         chi = SP.Calc_PantP_chi(mb, trig, cepheid, cov, model, param_dict)
     elif obs == "BAO":
@@ -128,7 +126,6 @@ def lnprior(theta, CONFIG):
             return -np.inf
     return 0.0
     
-    
 # Combined log-probability function
 def lnprob(theta, data, Type, CONFIG, MODEL_func, obs):
     """
@@ -147,17 +144,20 @@ def lnprob(theta, data, Type, CONFIG, MODEL_func, obs):
     lp = lnprior(theta, CONFIG)
     if not np.isfinite(lp):
         return -np.inf
-    return lp + model_likelihood(theta, data, Type, CONFIG, MODEL_func, obs)
+        
+    total_likelihood = 0
+    for i in range(0,len(Type)):
+        total_likelihood += model_likelihood(theta, data[obs[i]], Type[i], CONFIG, MODEL_func, obs[i])
+    return lp + total_likelihood
 
 def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, parallel = True, 
-             saveChains = False, overwrite = False, autoCorr = True, CONFIG = None, obs = None):
+             saveChains = False, overwrite = False, autoCorr = True, CONFIG = None, obs = None,  Type  = None):
     """
     Runs an MCMC sampler using the emcee library with optional parallelization, 
     chain saving, and autocorrelation-based convergence checking.
 
     Args:
-        data (array-like)           : The observational data to be used in the MCMC analysis 
-                                      (redshift, data, data_err).
+        data (dict, array-like)        : The observational data to be used in the MCMC analysis.
                                       
         MODEL (callable)            : The model function that computes the likelihood or other 
                                       relevant quantities. N.B. Must be provided by the user.
@@ -196,10 +196,10 @@ def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, pa
     # Importing the correct multiprocessing package based on OS system. Works for Linux and Mac
     if parallel:
         if platform.system() == "Darwin":  # macOS
-            print ("Your system is a Mac-based system")
+            print ("OS:                       Mac-based system")
             from multiprocess import Pool, get_context
         elif platform.system() == "Linux":
-            print ("Your system is a Linux-based system")
+            print ("OS:                       Linux-based system")
             from multiprocessing import Pool, get_context
         else:
             raise ImportError("Unsupported operating system for parallization in this script.")
@@ -209,12 +209,11 @@ def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, pa
         raise ValueError("CONFIG and MODEL_func must be provided.")
     
     # Optimize starting point for MCMC
-    Type = CONFIG['observation_types']
     bnds = [(CONFIG["prior_limits"][param][0], CONFIG["prior_limits"][param][1]) for param in CONFIG["parameters"]]
     theta = [CONFIG["true_values"][i] for i, param in enumerate(CONFIG["parameters"])]
     nll = lambda *args: -model_likelihood(*args)
-    result = op.minimize(nll, theta, args=(data, Type, CONFIG, MODEL_func, obs),bounds =bnds)
-    print ("SciPy's optimized start point for MCMC: ",result['x'])
+    result = op.minimize(nll, theta, args=(data[obs[0]], Type, CONFIG, MODEL_func, obs),bounds =bnds)
+    print ("SciPy's optimized IC:    ",result['x'])
     pos = [result['x'] + 1e-4 * np.random.randn(CONFIG["ndim"]) for _ in range(CONFIG["nwalker"])]
     
     # Setting up the MCMC ensamble that will be used to run the MCMC simulation. It can be done either in parallel
@@ -241,7 +240,7 @@ def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, pa
             else:
                 sampler.run_mcmc(pos, CONFIG["nsteps"], progress = True)                
             end = time.time()
-            print(f"Multiprocessing took {end - start:.1f} seconds")
+            print(f"Multiprocessing took {end - start:.1f} seconds\n")
             
     else: # Calculating in series
         if saveChains:
@@ -262,7 +261,7 @@ def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, pa
         else:
             sampler.run_mcmc(pos, CONFIG["nsteps"], progress = True)   
         end = time.time()
-        print(f"Series processing took {end - start:.1f} seconds")
+        print(f"Series processing took {end - start:.1f} seconds\n")
         
     samples = sampler.chain[:, CONFIG["burn"] :, :].reshape((-1, CONFIG["ndim"]))
     return samples

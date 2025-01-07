@@ -1,5 +1,5 @@
 import numpy as np
-import Plots as MP                  # Custom module for creating plots (e.g., autocorrelation plot)
+import Plots as MP                                  # Custom module for creating plots (e.g., autocorrelation plot)
 import User_defined_modules as UDM  # Custom module with user-defined functions for cosmological calculations
 import scipy.linalg as la 
 
