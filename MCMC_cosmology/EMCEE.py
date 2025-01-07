@@ -201,6 +201,10 @@ def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, pa
         elif platform.system() == "Linux":
             print ("OS:                       Linux-based system")
             from multiprocessing import Pool, get_context
+        elif platform.system() == "Windows":
+            print ("OS:                       Windows-based system")
+            print ('Note: Windows crashes with the multiprocessing tool. Switching to serial calculation')
+            parallel = False  # Disable parallelization for Windows
         else:
             raise ImportError("Unsupported operating system for parallization in this script.")
             
