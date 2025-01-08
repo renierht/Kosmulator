@@ -1,6 +1,6 @@
 import numpy as np
-import Plots as MP                                  # Custom module for creating plots (e.g., autocorrelation plot)
-import User_defined_modules as UDM  # Custom module with user-defined functions for cosmological calculations
+from Plots.Plots import autocorrPlot                 # Custom module for creating plots (e.g., autocorrelation plot)
+import User_defined_modules as UDM     # Custom module with user-defined functions for cosmological calculations
 import scipy.linalg as la 
 
 def Calc_chi(Type, type_data, type_data_error, model):
@@ -97,7 +97,7 @@ def Covariance_matrix(model, type_data, type_data_error):
     chi = np.dot(delta_H, np.dot(C_inv, delta_H))   # Compute chi-squared
     return chi
     
-def AutoCorr(pos, iterations, sampler):
+def AutoCorr(pos, iterations, sampler,  model_name, color, obs, convergence = 0.01):
     """
     Compute and monitor the autocorrelation time during MCMC sampling.
 
@@ -125,9 +125,9 @@ def AutoCorr(pos, iterations, sampler):
 
          # Check for convergence
         converged  = np.all(tau * 100 < sampler.iteration) 
-        converged &= np.all(np.abs(old_tau - tau) / tau < 0.01)
+        converged &= np.all(np.abs(old_tau - tau) / tau < convergence)
         if converged: 
             break # Stop sampling if convergence criteria are met
         
         old_tau = tau
-        MP.autocorrPlot(autocorr, index)   
+        autocorrPlot(autocorr, index,  model_name, color, obs)   
