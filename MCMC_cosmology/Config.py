@@ -261,3 +261,43 @@ def Warn_unused_params(MODEL_funcs, likelihood_func, param_dict, model_name, obs
         )
         print ("\n")
         
+def generate_label(obs):
+    """
+    Generate a label based on the observation list.
+
+    Parameters:
+    - obs: List of observations (e.g., ['JLA'], ['OHD'], ['JLA', 'OHD'])
+
+    Returns:
+    - str: A label string for the plot
+    """
+    if len(obs) == 1:
+        # Single entry: return the first item as the label
+        return obs[0]
+    else:
+        # Multiple entries: join them with '+'
+        return '+'.join(obs)  
+
+def format_elapsed_time(seconds):
+    """
+    Format elapsed time into days, hours, minutes, and seconds.
+
+    Parameters:
+    - seconds (int or float): Total elapsed time in seconds.
+
+    Returns:
+    - str: A formatted string representing the elapsed time.
+    """
+    seconds = int(seconds)  # Ensure seconds is an integer
+    days, seconds = divmod(seconds, 86400)  # 86400 seconds in a day
+    hours, seconds = divmod(seconds, 3600)  # 3600 seconds in an hour
+    minutes, seconds = divmod(seconds, 60)  # 60 seconds in a minute
+
+    if days > 0:
+        return f"{days}:{hours:02}:{minutes:02}:{seconds:02} days"
+    elif hours > 0:
+        return f"{hours}:{minutes:02}:{seconds:02} hours"
+    elif minutes > 0:
+        return f"{minutes}:{seconds:02} minutes"
+    else:
+        return f"{seconds} seconds"

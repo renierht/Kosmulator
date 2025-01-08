@@ -1,31 +1,31 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import sys
+import time
 from MCMC_cosmology import Config, EMCEE, Statistic_packages
-import Plots as MP                                                       # Custom module for creating plots (e.g., autocorrelation plot)
+from Plots import Plots as MP                                                       # Custom module for creating plots (e.g., autocorrelation plot)
 import User_defined_modules as UDM                      # Custom module with user-defined functions for cosmological calculations
 
-# Centralized configuration of cosmological parameters and priors, additional parameters 
-# can be uncommented or added as needed. Overwrite flag for MCMC chains; if True, rerun 
-# and overwrite existing results,
-overwrite = True
-models = {
-    "LCDM"     : {"parameters": ["Omega_m", "H_0"]}, #, "M_abs", "rd", "ns", "As", "Omega_b", "gamma", "sigma_8",]
-    "BetaRn" : {"parameters": ["Omega_m", "H_0", "q0", "q1", "beta", "n"]}
-    }
+if sys.version_info[0] == 2:
+        print(f'\033[4;31mNote\033[0m: Your Python version {sys.version_info[0]}.{sys.version_info[1]} is outdated. Be carefull when executing the program')
 
-true_values = {
-    "Omega_m"   : 0.315, 
-    "H_0"           : 67.4, 
-    "gamma"       : 0.55, 
-    "sigma_8"   : 0.8,
-    "q0"             : -0.537,
-    "ns"             : 0.96,
-    "As"             : 3.1,
-    "Omega_b"   : 0.045,
-    "rd"             : 147.5
-    }
-  
+'''
+Create a configuration object and load observational data. 
+Note: Current observations include JLA, Pantheon, OHD, CC, Pantheon+ (PantheonP), fsigma8, sigma8, BAO
+Note: Auto-correlation checks are used to ensure convergence of the MCMC.
+        The simulation stops early if the average parameter change across 100 iterations is less than 1.0% (changable).
+'''
+model_names = [ "LCDM", "BetaRn"]
+observations = [['JLA'],['OHD'],['JLA', 'OHD']]
+nwalkers : int = 20
+nsteps : int = 200
+burn : int = 10
+
+overwrite = True
+convergence = 0.01
+color_schemes = ['r', 'b', 'green', 'cyan', 'yellow', 'grey', 'k', 'm']
+
 prior_limits = {
     "Omega_m"   : (0.10, 0.4),  
     "H_0"           : (60.0, 80.0),
@@ -40,30 +40,38 @@ prior_limits = {
     "rd"             : (100.0, 200.0),
     }
 
-'''
-Create a configuration object and load observational data. 
-Note: Current observations include JLA, Pantheon, OHD, CC, Pantheon+ (PantheonP), fsigma8, sigma8, BAO
-Note: Auto-correlation checks are used to ensure convergence of the MCMC.
-        The simulation stops early if the average parameter change across 100 iterations is less than 1.0%.
-'''
-        
+true_values = {
+    "Omega_m"   : 0.315, 
+    "H_0"           : 67.4, 
+    "gamma"       : 0.55, 
+    "sigma_8"   : 0.8,
+    "q0"             : -0.537,
+    "ns"             : 0.96,
+    "As"             : 3.1,
+    "Omega_b"   : 0.045,
+    "rd"             : 147.5
+    }
+
+models = UDM.Get_model_names(model_names)
+
 CONFIG, data = Config.create_config(models                   = models,
                                                                      true_values         = true_values,
                                                                      prior_limits       = prior_limits,
-                                                                     observation         = [ ['Pantheon'],['JLA', 'OHD','Pantheon']], 
-                                                                     nwalkers               = 20,              # Number of MCMC walkers
-                                                                     nsteps                   = 200,             # Number of steps for each walker
-                                                                     burn                       = 20,              # Burn-in steps to discard
-                                                                     model_name           = ["LCDM"]         # Specify your model name (e.g., Lambda-CDM)
+                                                                     observation         = observations, #,['JLA', 'OHD','Pantheon']], 
+                                                                     nwalkers               = nwalkers,              # Number of MCMC walkers
+                                                                     nsteps                   = nsteps,             # Number of steps for each walker
+                                                                     burn                       = burn,              # Burn-in steps to discard
+                                                                     model_name           = model_names         # Specify your model name (e.g., Lambda-CDM)
 )
 
-#print (CONFIG[list(models.keys())[0]]['observation_types'])
 # Dictionary to store MCMC samples for all models and observations
 All_Samples = {}
 if __name__ == "__main__":
+    start = time.time()
     # Loop over all models
     for j, model_name in enumerate(CONFIG[list(models.keys())[0]]['model_name']):   # j loops over the models
-        print(f"\nProcessing model:         {model_name}\n")
+        print (f"\n\033[33m################################################\033[0m\n\033[33m####\033[0m Processing model:         \033[4;31m{model_name}\033[0m")
+        print ("\033[33m################################################\033[0m")
 
         # Dictionary to store samples for the current model
         Samples = {}
@@ -82,9 +90,9 @@ if __name__ == "__main__":
             
             if len(obs)>1:
                 for a in range(0,len(obs)):
-                    print(f"Observations:             Combo {obs[a]} data (aka {CONFIG[list(models.keys())[j]]['observation_types'][i][a]} data)...")
+                    print(f"Observations:             Combo \033[34m{obs[a]}\033[0m data (aka \033[34m{CONFIG[list(models.keys())[j]]['observation_types'][i][a]}\033[0m data)")
             else:
-                print(f"Observations:             {obs[0]} data (aka {CONFIG[list(models.keys())[j]]['observation_types'][i][0]} data)...")
+                print(f"Observations:             \033[34m{obs[0]}\033[0m data (aka \033[34m{CONFIG[list(models.keys())[j]]['observation_types'][i][0]}\033[0m data)")
             #Config.Warn_unused_params([MODEL, EMCEE.model_likelihood], EMCEE.model_likelihood, dict(zip(CONFIG["parameters"], CONFIG["true_values"])), 
             #                                                   CONFIG['model_name'], CONFIG['observation_types'][i],)
 
@@ -100,7 +108,7 @@ if __name__ == "__main__":
                 Samples[obs[0]] = samples  # Store the loaded samples
             else:
                 # Run MCMC simulation for the current observation
-                Samples[obs[0]] = EMCEE.run_mcmc(data,
+                Samples[Config.generate_label(obs)] = EMCEE.run_mcmc(data,
                                                 saveChains  = True,
                                                 chain_path  = chain_path,
                                                 overwrite    = overwrite,
@@ -110,12 +118,17 @@ if __name__ == "__main__":
                                                 parallel      = True,  # Run in parallel if possible (NB! Windows machines struggle with parallization)
                                                 model_name  = model_name,
                                                 obs                = obs,
-                                                Type              = CONFIG[list(models.keys())[j]]['observation_types'][i]
+                                                Type              = CONFIG[list(models.keys())[j]]['observation_types'][i], 
+                                                colors           = color_schemes[i],
+                                                convergence = convergence,
             )
         # Generate corner plots for the estimated parameters
-        MP.make_CornerPlot(Samples, CONFIG = CONFIG[list(models.keys())[j]])
+        MP.make_CornerPlot(Samples, CONFIG = CONFIG[list(models.keys())[j]], model_name = model_name, color = color_schemes)
         
         # Store the samples for the current model
         All_Samples[model_name] = Samples
-        
-    print("All models processed successfully!")
+    end = time.time()
+    formatted_time = Config.format_elapsed_time(end-start)
+    print(f"\nAll models processed successfully in a total time of {formatted_time}!!!\n")
+    
+    #print (np.shape(All_Samples['LCDM']['JLA']))

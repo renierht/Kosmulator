@@ -6,8 +6,9 @@ import platform
 import matplotlib.pyplot as plt
 import h5py
 import scipy.optimize as op
-import Plots as MP                                   # Custom module for creating plots (e.g., autocorrelation plot)
+#from Plots import Plots as MP                                   # Custom module for creating plots (e.g., autocorrelation plot)
 from MCMC_cosmology import Statistic_packages as SP  # Custom module for statitical functions for cosmological calculations
+from MCMC_cosmology.Config import format_elapsed_time
 import User_defined_modules as UDM                   # Custom module with user-defined functions for cosmological calculations
 
 # Load previous MCMC results from an HDF5 file
@@ -151,7 +152,8 @@ def lnprob(theta, data, Type, CONFIG, MODEL_func, obs):
     return lp + total_likelihood
 
 def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, parallel = True, 
-             saveChains = False, overwrite = False, autoCorr = True, CONFIG = None, obs = None,  Type  = None):
+             saveChains = False, overwrite = False, autoCorr = True, CONFIG = None, obs = None,  
+             Type  = None, colors = 'r', convergence = 0.01):
     """
     Runs an MCMC sampler using the emcee library with optional parallelization, 
     chain saving, and autocorrelation-based convergence checking.
@@ -192,7 +194,6 @@ def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, pa
     Returns:
         samples (array-like)        : The MCMC samples after processing (e.g., burn-in removal). 
     """
-    
     # Importing the correct multiprocessing package based on OS system. Works for Linux and Mac
     if parallel:
         if platform.system() == "Darwin":  # macOS
@@ -213,16 +214,20 @@ def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, pa
         raise ValueError("CONFIG and MODEL_func must be provided.")
     
     # Optimize starting point for MCMC
+    print ("\nFinding optimized initial parameter positions with Scipy...")
     bnds = [(CONFIG["prior_limits"][param][0], CONFIG["prior_limits"][param][1]) for param in CONFIG["parameters"]]
     theta = [CONFIG["true_values"][i] for i, param in enumerate(CONFIG["parameters"])]
     nll = lambda *args: -model_likelihood(*args)
     result = op.minimize(nll, theta, args=(data[obs[0]], Type, CONFIG, MODEL_func, obs),bounds =bnds)
-    print ("SciPy's optimized IC:    ",result['x'])
+    print (f"SciPy's optimized IC:     {result['x']}")
+    #print ("")
     pos = [result['x'] + 1e-4 * np.random.randn(CONFIG["ndim"]) for _ in range(CONFIG["nwalker"])]
     
     # Setting up the MCMC ensamble that will be used to run the MCMC simulation. It can be done either in parallel
     # or series. You also have the choice of enabling saving the chains for later usage, as well as if you want to 
     # and Auto Correlation to stop the MCMC simulation when it has converged. 
+    
+    print (f"\nRunning the MCMC simulation for the \033[34m{model_name}\033[0m model on these data sets: \033[34m{obs}\033[0m...")
     if parallel:
         with Pool() as pool:
             if saveChains:
@@ -240,11 +245,13 @@ def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, pa
             
             start = time.time()
             if autoCorr:    # AutoCorrelation to speed up calculation. Stops the MCMC when convergence occured
-                SP.AutoCorr(pos, iterations = CONFIG['nsteps'], sampler = sampler)
+                SP.AutoCorr(pos, iterations = CONFIG['nsteps'], sampler = sampler, model_name = model_name, 
+                                        color = colors, obs = obs, convergence = convergence)
             else:
                 sampler.run_mcmc(pos, CONFIG["nsteps"], progress = True)                
             end = time.time()
-            print(f"Multiprocessing took {end - start:.1f} seconds\n")
+            formatted_time = format_elapsed_time(end-start)
+            print(f"Multiprocessing took {formatted_time}\n")
             
     else: # Calculating in series
         if saveChains:
@@ -261,11 +268,14 @@ def run_mcmc(data, model_name = "LCDM", chain_path = None, MODEL_func = None, pa
                 
         start = time.time()
         if autoCorr: # AutoCorrelation to speed up calculation. Stops the MCMC when convergence occured
-            SP.AutoCorr(pos, iterations=CONFIG['nsteps'], sampler = sampler)
+            
+            SP.AutoCorr(pos, iterations=CONFIG['nsteps'], sampler = sampler, model_name = model_name, 
+                                    color = colors, obs = obs[0], convergence = convergence)
         else:
             sampler.run_mcmc(pos, CONFIG["nsteps"], progress = True)   
         end = time.time()
-        print(f"Series processing took {end - start:.1f} seconds\n")
+        formatted_time = format_elapsed_time(end-start)
+        print(f"Series processing took {formatted_time}\n")
         
     samples = sampler.chain[:, CONFIG["burn"] :, :].reshape((-1, CONFIG["ndim"]))
     return samples
