@@ -52,9 +52,9 @@ Kosmulator/
 		# If you want to test your model against multiple observations. If the list contains multiple entries
 		# the MCMC simulation will combine their likelihoods and minimized the combined likelihood.
 		
-## Refenences
-Original version: 	Hough, R.T., Abebe, A. and Ferreira, S.E.S., 2020. Viability tests of f (R)-gravity models with Supernovae Type 1A data. The European Physical Journal C, 80(8), p.787.
-EMCEE package: 		Foreman-Mackey, D., Hogg, D.W., Lang, D. and Goodman, J., 2013. emcee: the MCMC hammer. Publications of the Astronomical Society of the Pacific, 125(925), p.306.
+## References
+Original version: 	Hough, R.T., Abebe, A. and Ferreira, S.E.S., 2020. Viability tests of f (R)-gravity models with Supernovae Type 1A data. The European Physical Journal C, 80(8), p.787. https://doi.org/10.1140/epjc/s10052-020-8342-7
+EMCEE package: 		Foreman-Mackey, D., Hogg, D.W., Lang, D. and Goodman, J., 2013. emcee: the MCMC hammer. Publications of the Astronomical Society of the Pacific, 125(925), p.306. https://doi.org/10.1086/670067
 
 Observations:
 JLA: 				1) M. Hicken, P. Challis, S. Jha et al., CfA3: 185 Type Ia Supernova light curves from the CfA. Astrophys. J. 700, 331–357 (2009). https://doi.org/10.1088/0004-637X/700/1/331
