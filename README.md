@@ -11,8 +11,11 @@ observationaldata, and visualize results.
 
 ## Installation 
 Install package directly from GitHub
+
 git clone https://github.com/renierht/Kosmulator.git
+
 cd Kosmulator
+
 python setup install
 
 ## Features
@@ -57,6 +60,7 @@ Original version: 	Hough, R.T., Abebe, A. and Ferreira, S.E.S., 2020. Viability 
 EMCEE package: 		Foreman-Mackey, D., Hogg, D.W., Lang, D. and Goodman, J., 2013. emcee: the MCMC hammer. Publications of the Astronomical Society of the Pacific, 125(925), p.306. https://doi.org/10.1086/670067
 
 Observations:
+
 JLA: 				1) M. Hicken, P. Challis, S. Jha et al., CfA3: 185 Type Ia Supernova light curves from the CfA. Astrophys. J. 700, 331–357 (2009). https://doi.org/10.1088/0004-637X/700/1/331
 					2) J.D. Neill, M. Sullivan, D.A. Howell et al., The local hosts of Type Ia Supernovae. Astrophys. J. 707, 1449–1465 (2009). https://doi.org/10.1088/0004-637X/707/2/1449
 					3) A. Conley, J. Guy, M. Sullivan et al., Supernova constraints and systematic uncertainties from the first three years of the Supernova Legacy Survey. Astrophys. J. Suppl. Ser. 192, 1 (2010). https://doi.org/10.1088/0067-0049/192/1/1
