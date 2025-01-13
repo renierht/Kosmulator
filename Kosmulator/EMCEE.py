@@ -6,9 +6,8 @@ import platform
 import matplotlib.pyplot as plt
 import h5py
 import scipy.optimize as op
-#from Plots import Plots as MP                                   # Custom module for creating plots (e.g., autocorrelation plot)
-from MCMC_cosmology import Statistic_packages as SP  # Custom module for statitical functions for cosmological calculations
-from MCMC_cosmology.Config import format_elapsed_time
+from Kosmulator import Statistic_packages as SP  # Custom module for statitical functions for cosmological calculations
+from Kosmulator.Config import format_elapsed_time
 import User_defined_modules as UDM                   # Custom module with user-defined functions for cosmological calculations
 
 # Load previous MCMC results from an HDF5 file

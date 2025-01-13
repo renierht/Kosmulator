@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 import sys
 import time
-from MCMC_cosmology import Config, EMCEE, Statistic_packages
+from Kosmulator import Config, EMCEE, Statistic_packages
 from Plots import Plots as MP                                                       # Custom module for creating plots (e.g., autocorrelation plot)
 import User_defined_modules as UDM                      # Custom module with user-defined functions for cosmological calculations
 
@@ -19,8 +19,8 @@ Note: Auto-correlation checks are used to ensure convergence of the MCMC.
 model_names = [ "LCDM"]
 observations = [['JLA'],['OHD']]
 nwalkers : int = 10
-nsteps : int = 10000
-burn : int = 1000
+nsteps : int = 1000
+burn : int = 10
 
 overwrite = True
 convergence = 0.01

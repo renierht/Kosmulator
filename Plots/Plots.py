@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 from getdist import plots, MCSamples
-from MCMC_cosmology.Config import generate_label
+from Kosmulator.Config import generate_label
 import numpy as np
 import shutil
 import sys

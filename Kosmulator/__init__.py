@@ -1,4 +1,4 @@
-# mcmc_cosmology/__init__.py
+# Kosmulator/__init__.py
 
 __version__ = "0.1.0"
 __author__ = "Renier T. Hough"
