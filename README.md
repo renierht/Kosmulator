@@ -8,6 +8,7 @@ observationaldata, and visualize results.
 2) Getdist (Plotting packages)
 3) Numpy, Matplotlip, Scipy, h5py
 4) Generic Python packages: time, sys, os, platform, inspect, warnings, re, shutil (already part of the Python library)
+5) Latex (Miktex/Texlive) - This is not a necessary requirement. The code should work without it, but the graphs would look much better with latex installed on the PC
 
 ## Installation 
 Install package directly from GitHub
