@@ -1,5 +1,5 @@
-# Kosmulator: an MCMC simulation to analyze you alternative cosmological models
-Kosmulator is a Python package for running Markov Chain Monte Carlo (MCMC) simulations to study modified gravity and alternative cosmology models. 
+# Kosmulator: an MCMC simulation to analyze alternative cosmological models
+Kosmulator is a Python package utalising the EMCEE:Hammer package for running Markov Chain Monte Carlo (MCMC) simulations to study modified gravity and alternative cosmology models. 
 The package is designed to be modular and user-friendly, allowing researchers to easily configure simulations, interact with various set of 
 observationaldata, and visualize results.
 
@@ -71,6 +71,8 @@ Observations:
 6) fsigma8:
 7) sigma8:
 
+## Acknowledgements
+I would like to thank the EMCEE: Hammer group for making their MCMC simulation software publically available. This code would not be possible without their hard work.
 
 ## Contributions
 Contributions are welcome! If you'd like to contribute, please fork the repository and submit a pull request, or send your tested code directly to me and I will add it to the software.
