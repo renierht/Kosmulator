@@ -16,11 +16,11 @@ Note: Current observations include JLA, Pantheon, OHD, CC, Pantheon+ (PantheonP)
 Note: Auto-correlation checks are used to ensure convergence of the MCMC.
         The simulation stops early if the average parameter change across 100 iterations is less than 1.0% (changable).
 '''
-model_names = [ "LCDM", "BetaRn"]
-observations = [['JLA'],['OHD'],['JLA', 'OHD']]
-nwalkers : int = 20
-nsteps : int = 200
-burn : int = 10
+model_names = [ "LCDM"]
+observations = [['JLA'],['OHD']]
+nwalkers : int = 10
+nsteps : int = 10000
+burn : int = 1000
 
 overwrite = True
 convergence = 0.01
