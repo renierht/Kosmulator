@@ -1,4 +1,4 @@
-# Kosmulator: A Python package for Modified Gravity and alternative cosmology MCMC simulations.
+# Kosmulator: A Python package for analysing modified gravity and alternative cosmology with MCMC simulations.
 Kosmulator is a Python package utalising the EMCEE:Hammer package for running Markov Chain Monte Carlo (MCMC) simulations to study modified gravity and alternative cosmology models. 
 The package is designed to be modular and user-friendly, allowing researchers to easily configure simulations, interact with various set of 
 observationaldata, and visualize results.
