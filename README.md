@@ -1,44 +1,81 @@
 # MCMC Cosmology
+Kosmulator is a Python package for running Markov Chain Monte Carlo (MCMC) simulations to study modified gravity and alternative cosmology models. 
+The package is designed to be modular and user-friendly, allowing researchers to easily configure simulations, interact with various set of 
+observationaldata, and visualize results.
 
-MCMC Cosmology is a Python package for running Markov Chain Monte Carlo (MCMC) simulations to study modified gravity models. 
-The package is designed to be modular and user-friendly, allowing researchers to easily configure simulations, interact with data, and visualize results.
+## Requirements
+1) EMCEE python packages (controls the MCMC simulation)
+2) Getdist (Plotting packages)
+3) Numpy, Matplotlip, Scipy, h5py
+4) Generic Python packages: time, sys, os, platform, inspect, warnings, re, shutil (already part of the Python library)
 
 ## Installation 
 Install package directly from GitHub
-git clone https://github.com/renierht/MCMC_cosmology.git
+git clone https://github.com/renierht/Kosmulator.git
+cd Kosmulator
+python setup install
 
 ## Features
 
 - **Configurable Simulation Framework**: Define and manage simulation parameters via a configuration file.
-- **Built-in Statistical Tools**: Use pre-built Gaussian statistical models for observational data, with the addition of a covariance matrix calculation for cosmic chronometer data.
-- **Customizable Models**: Extend the functionality by adding new observational models or datasets. Currently we have Supernovae Type 1A, Observable Hubble data, and Cosmic Chronometer data.
+- **Built-in Statistical Tools**: Use pre-built Gaussian statistical models for observational data, with the addition of a covariance matrix calculation for cosmic chronometer and BAO data.
+- **Customizable Models**: Extend the functionality by adding new observational models or datasets. Currently we have SNe Type 1A, OHD, CC, BAO, and RSD data.
 - **Visualization**: Generate basic auto correlation and MCMC informative plots to analyze the simulation results. Feel free to add different plots
 - **Resume Simulations**: Restart simulations using saved MCMC chains. N.B. Chains can be restarted, but not necessarily recommended.
 
 ## Project Structure
 
 ```plaintext
-MCMC_cosmology/
-├── mcmc_cosmology/         # Core package
-│   ├── Config.py           # Configuration management
-│   ├── EMCEE.py            # Main MCMC simulation script
-│   ├── Statistic_packages.py  # Statistical functions and models
-├── Observations/           # Observational data directory
-├── MCMC_Chains/            # Directory for MCMC simulation chains
-├── Modified_gravity_MCMC.py  # User-facing script to set up simulations
-├── Plots.py                # User-facing script for generating plots
-├── README.md               # Project description
-├── setup.py                # Configuration for packaging
-├── LICENSE                 # License for the project
+Kosmulator/
+├── Kosmulator/         		# Core package\
+│   ├── __init__.py           	# Program initialisation	
+│   ├── Config.py           	# Configuration management
+│   ├── EMCEE.py            	# Main MCMC simulation script
+│   ├── Statistic_packages.py  	# Statistical functions and models
+├── Observations/           	# Observational data directory
+├── MCMC_Chains/            	# Save directory for MCMC simulation chains
+├── Plots/         				# Save directory for the analysed output Plots\
+│   ├── Plots.py                # User-facing script for generating plots	
+├── Kosmulator.py  				# User-facing script to set up simulations
+├── LICENSE                 	# License for the project
+├── README.md               	# Project description
+├── setup.py                	# Configuration for packaging
+├── User_defined_modules      	# User-facing script for alternative gravity/cosmology models
 ```
 
 ## Setting up examples
-1) Use Modified_gravity_MCMC.py to set up your modified gravity model and configuration file.
-2) Specify your observational data in CONFIG['observation'], even when new observations were added
-3) Run simulation using EMCEE.run_mcmc(...)
+1) Use Kosmulator.py to set up the parameters of the MCMC simulation for your gravity model and configuration file.
+2) Use User_defined_modules.py to set up a dictonary entry of your model which the MCMC simulation needs to analyse.
+3) In Kosmulator.py, specify you model name and which observation types you want it analysed against.
+4) Ex. 	model_names = [ "LCDM", "your_model_name"] # if you want to want to run multiple models
+		observations = [['JLA'],['OHD'], ['CC', 'OHD', 'Pantheon']] 
+		# If you want to test your model against multiple observations. If the list contains multiple entries
+		# the MCMC simulation will combine their likelihoods and minimized the combined likelihood.
+		
+## Refenences
+Original version: 	Hough, R.T., Abebe, A. and Ferreira, S.E.S., 2020. Viability tests of f (R)-gravity models with Supernovae Type 1A data. The European Physical Journal C, 80(8), p.787.
+EMCEE package: 		Foreman-Mackey, D., Hogg, D.W., Lang, D. and Goodman, J., 2013. emcee: the MCMC hammer. Publications of the Astronomical Society of the Pacific, 125(925), p.306.
+
+Observations:
+JLA: 				1) M. Hicken, P. Challis, S. Jha et al., CfA3: 185 Type Ia Supernova light curves from the CfA. Astrophys. J. 700, 331–357 (2009). https://doi.org/10.1088/0004-637X/700/1/331
+					2) J.D. Neill, M. Sullivan, D.A. Howell et al., The local hosts of Type Ia Supernovae. Astrophys. J. 707, 1449–1465 (2009). https://doi.org/10.1088/0004-637X/707/2/1449
+					3) A. Conley, J. Guy, M. Sullivan et al., Supernova constraints and systematic uncertainties from the first three years of the Supernova Legacy Survey. Astrophys. J. Suppl. Ser. 192, 1 (2010). https://doi.org/10.1088/0067-0049/192/1/1
+				  
+Pantheon:	
+
+Pantheon+: 
+
+OHD:
+
+CC:
+
+fsigma8:
+
+sigma8:
+
 
 ## Contributions
-Contributions are welcome! If you'd like to contribute, please fork the repository and submit a pull request. 
+Contributions are welcome! If you'd like to contribute, please fork the repository and submit a pull request, or send your tested code directly to me and I will add it to the software.
 
 ## Contact
-For questions or feedback, please reach out to [renierht@gmail.com].
+For questions or feedback, please reach out to [renierht@gmail.com, 25026097@mynwu.ac.za].
