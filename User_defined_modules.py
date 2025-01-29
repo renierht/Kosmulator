@@ -10,7 +10,7 @@ def LCDM_MODEL(z, param_dict, Type = "SNe"):
     Args:
         z (float)           : Redshift value.
         param_dict (dict)   : Dictionary containing cosmological parameters.
-        Type (str)          : Type of observation ('SNe', 'OHD', 'CC', 'fsigma8', or 'BAO').
+        Type (str)          : Type of observation ('SNe', 'OHD', 'CC', f_sigma_8', or 'BAO').
 
     Returns:
         float or None       : Theoretical model prediction based on the observation type.
@@ -72,7 +72,7 @@ def Calculate_return_values(model, Type):
 
     Args:
         model (float): Calculated model value.
-        Type (str): Type of observation ('SNe', 'OHD', 'CC', 'fsigma8', or 'BAO').
+        Type (str): Type of observation ('SNe', 'OHD', 'CC', 'f_sigma_8', or 'BAO').
 
     Returns:
         float or None: Theoretical model prediction based on the observation type.
@@ -80,8 +80,8 @@ def Calculate_return_values(model, Type):
     return {"SNe": 1 / model,  # Supernovae (inverse of model)
                    "OHD": model,      # Observational Hubble Data
                    "CC": model,       # Cosmic Chronometers
-                   "fsigma8": model,  # Growth rate of structure including sigma_8 as a parameter
-                   "sigma8": model,   # Growth rate of structure
+                   "f_sigma_8": model,  # Growth rate of structure including sigma_8 as a parameter
+                   "sigma_8": model,   # Growth rate of structure
                    "BAO": 1 / model,  # Baryon Acoustic Oscillations (inverse of model)}
                    }.get(Type, None)
 
@@ -121,14 +121,14 @@ def Hubble(param_dict):
 # Functions for cosmological calculations, specifically used
 # for observations involving sigma8 or fsigma8.
 ##############################################################  
-def matter_density_z(z, MODEL_func, param_dict, Type = "fsigma8"):
+def matter_density_z(z, MODEL_func, param_dict, Type = "f_sigma_8"):
     '''
     Compute the matter density parameter Omega(z) at redshift z.
 
     Args:
         z (float): Redshift.
         param_dict (dict)       : Dictionary containing cosmological parameters.
-        Type (str, optional)    : Type of observation. Defaults to "fsigma8".
+        Type (str, optional)    : Type of observation. Defaults to "f_sigma_8".
 
     Returns:
         float                   : Omega(z), the ratio of matter density to critical density at z.
@@ -155,7 +155,7 @@ def dmrd(redshift, MODEL_func, param_dict, Type):
     Returns:
         float: D_M / r_d, dimensionless comoving distance.
     '''
-    dmrd = Comoving_distance(MODEL_func, redshift, param_dict, Type) / param_dict['rd']
+    dmrd = Comoving_distance(MODEL_func, redshift, param_dict, Type) / param_dict['r_d']
     return dmrd
 
 def dhrd(redshift, MODEL_func, param_dict, Type):
@@ -171,7 +171,7 @@ def dhrd(redshift, MODEL_func, param_dict, Type):
     Returns:
         float: D_H / r_d, dimensionless Hubble distance.
     '''
-    dhrd = Hubble(param_dict) * MODEL_func(redshift, param_dict, Type) / param_dict['rd']
+    dhrd = Hubble(param_dict) * MODEL_func(redshift, param_dict, Type) / param_dict['r_d']
     return dhrd
     
 def dvrd(redshift, MODEL_func, param_dict, Type):
@@ -188,7 +188,7 @@ def dvrd(redshift, MODEL_func, param_dict, Type):
         float: D_V / r_d, dimensionless volume-averaged distance.
     '''
     dvrd = (Hubble(param_dict) * ((redshift * (Comoving_distance(MODEL_func, redshift, param_dict, Type) / Hubble(param_dict))**2)
-                                  / (1 / MODEL_func(redshift, param_dict, Type))) ** (1 / 3)) / param_dict['rd']
+                                  / (1 / MODEL_func(redshift, param_dict, Type))) ** (1 / 3)) / param_dict['r_d']
     return dvrd
     
 def dArd(redshift, MODEL_func, param_dict, Type):
@@ -204,5 +204,5 @@ def dArd(redshift, MODEL_func, param_dict, Type):
     Returns:
         float: D_A / r_d, dimensionless angular diameter distance.
     '''
-    dArd = (Comoving_distance(MODEL_func, redshift, param_dict, Type) / (1 + redshift)) / param_dict['rd']
+    dArd = (Comoving_distance(MODEL_func, redshift, param_dict, Type) / (1 + redshift)) / param_dict['r_d']
     return dArd

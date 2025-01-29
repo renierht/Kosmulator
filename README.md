@@ -8,7 +8,25 @@ observationaldata, and visualize results.
 2) Getdist (Plotting packages)
 3) Numpy, Matplotlip, Scipy, h5py
 4) Generic Python packages: time, sys, os, platform, inspect, warnings, re, shutil (already part of the Python library)
-5) Latex (Miktex/Texlive) - This is not a necessary requirement. The code should work without it, but the graphs would look much better with latex installed on the PC
+5) LaTeX (MikTeX/TexLive) - This is a required dependency for enhanced plot quality. Follow the instructions below to install LaTeX for your operating system.
+
+### LaTeX Installation
+To use Kosmulator's LaTeX features for enhanced plot quality, ensure LaTeX is installed on your system.
+
+- **Windows**: [MiKTeX Installation Guide](https://miktex.org/howto/install-miktex)
+- **macOS**: Install via Homebrew:
+  ```bash
+  brew install mactex
+  ```
+- **Linux**: Install the full TeX Live package:
+  ```bash
+  sudo apt install texlive-full
+  ```
+
+Verify LaTeX installation with:
+```bash
+latex --version
+```
 
 ## Installation 
 Install package directly from GitHub
@@ -19,6 +37,9 @@ cd Kosmulator
 
 python setup install
 
+# Test Run
+In Kosmulator.py set model_names to ['LCDM'], observations to [['JLA']], nwalkers: int = 10, nsteps: int = 200, and burn: int = 10,then run the command python Kosmulator.py in your terminal. If it ran successfully, it has been installed correctly!
+
 ## Features
 
 - **Configurable Simulation Framework**: Define and manage simulation parameters via a configuration file.
@@ -27,32 +48,35 @@ python setup install
 - **Visualization**: Generate basic auto correlation and MCMC informative plots to analyze the simulation results. Feel free to add different plots
 - **Resume Simulations**: Restart simulations using saved MCMC chains. N.B. Chains can be restarted, but not necessarily recommended.
 
+
 ## Project Structure
 
 ```plaintext
 Kosmulator/
-├── Kosmulator/         		# Core package\
-│   ├── __init__.py           	# Program initialisation	
-│   ├── Config.py           	# Configuration management
-│   ├── EMCEE.py            	# Main MCMC simulation script
-│   ├── Statistic_packages.py  	# Statistical functions and models
-├── Observations/           	# Observational data directory
-├── MCMC_Chains/            	# Save directory for MCMC simulation chains
-├── Plots/         				# Save directory for the analysed output Plots\
-│   ├── Plots.py                # User-facing script for generating plots	
+├── Kosmulator/          		# Core package\
+│   ├── __init__.py            	# Program initialisation	
+│   ├── Config.py            	# Configuration management
+│   ├── EMCEE.py             	# Main MCMC simulation script
+│   ├── Statistic_packages.py   # Statistical functions and models
+│   ├── MCMC_setup.py   		# Calls the EMCEE function based on your CONFIG setup
+├── Observations/            	# Observational data directory
+├── MCMC_Chains/             	# Save directory for MCMC simulation chains
+├── Plots/          				# Save directory for the analysed output Plots\
+│   ├── Plots.py                # User-facing script for generating plots
+│   ├── Plot_functions.py       # Random functions to improve plots.	
 ├── Kosmulator.py  				# User-facing script to set up simulations
-├── LICENSE                 	# License for the project
-├── README.md               	# Project description
-├── setup.py                	# Configuration for packaging
-├── User_defined_modules      	# User-facing script for alternative gravity/cosmology models
+├── User_defined_modules.py       	# User-facing script for alternative gravity/cosmology models
+├── LICENSE                  	# License for the project
+├── README.md                	# Project description
+├── setup.py                 	# Configuration for packaging
 ```
 
-## Setting up examples
+## Setting up your model
 1) Use Kosmulator.py to set up the parameters of the MCMC simulation for your gravity model and configuration file.
 2) Use User_defined_modules.py to set up a dictonary entry of your model which the MCMC simulation needs to analyse.
 3) In Kosmulator.py, specify you model name and which observation types you want it analysed against.
-4) Ex. 	model_names = [ "LCDM", "your_model_name"] # if you want to want to run multiple models
-		observations = [['JLA'],['OHD'], ['CC', 'OHD', 'Pantheon']] 
+4) Ex.  	model_names = [ "LCDM", "your_model_name"] # if you want to want to run multiple models
+			observations = [['JLA'],['OHD'], ['CC', 'OHD', 'Pantheon']] 
 		# If you want to test your model against multiple observations. If the list contains multiple entries
 		# the MCMC simulation will combine their likelihoods and minimized the combined likelihood.
 		
@@ -73,7 +97,7 @@ Observations:
 7) sigma8:
 
 ## Acknowledgements
-I would like to thank the EMCEE: Hammer group for making their MCMC simulation software publically available. This code would not be possible without their hard work.
+I would like to thank the EMCEE: Hammer group for making their MCMC simulation software publically available. This code would not be possible without their hard work. I would also like to thank the **ChatGPT** software for assisting with debugging, improving the code structure, and optimizing features.
 
 ## Contributions
 Contributions are welcome! If you'd like to contribute, please fork the repository and submit a pull request, or send your tested code directly to me and I will add it to the software.
