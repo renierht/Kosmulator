@@ -29,6 +29,7 @@ def BetaRn_MODEL(z, param_dict, Type = "SNe"):
     term3bottom = (1+((1-qz)/(param_dict["n"]*qz)) - ((param_dict["n"]-1)/(qz-(qz**2)))*(2+qz-jz))
     model = ((term1)/(term2bottom*term3bottom))**((1)/(2*param_dict["n"]))
     return Calculate_return_values(model, Type)
+
     
 ##############################################################
 # Functions to control Models for the entire program

@@ -4,15 +4,21 @@ The package is designed to be modular and user-friendly, allowing researchers to
 observationaldata, and visualize results.
 
 ## Requirements
-1) EMCEE python packages (controls the MCMC simulation)
-2) Getdist (Plotting packages)
-3) Numpy, Matplotlip, Scipy, h5py
+1) EMCEE python packages (controls the MCMC simulation) (https://emcee.readthedocs.io/en/stable/user/install/)
+2) Getdist (Plotting packages) (https://getdist.readthedocs.io/en/latest/intro.html)
+3) Numpy, Matplotlip, Scipy, h5py, Pandas (https://numpy.org/install/, https://matplotlib.org/stable/install/index.html, https://scipy.org/install/, https://pypi.org/project/h5py/, https://pypi.org/project/pandas/)
 4) Generic Python packages: time, sys, os, platform, inspect, warnings, re, shutil (already part of the Python library)
 5) LaTeX (MikTeX/TexLive) - This is a required dependency for enhanced plot quality. Follow the instructions below to install LaTeX for your operating system.
 
 ### LaTeX Installation
 To use Kosmulator's LaTeX features for enhanced plot quality, ensure LaTeX is installed on your system.
 
+Verify LaTeX installation with:
+```bash
+latex --version
+```
+
+If requirement not met, follow os installation below:
 - **Windows**: [MiKTeX Installation Guide](https://miktex.org/howto/install-miktex)
 - **macOS**: Install via Homebrew:
   ```bash
@@ -35,10 +41,15 @@ git clone https://github.com/renierht/Kosmulator.git
 
 cd Kosmulator
 
-python setup install
+python setup.py install
 
 # Test Run
-In Kosmulator.py set model_names to ['LCDM'], observations to [['JLA']], nwalkers: int = 10, nsteps: int = 200, and burn: int = 10,then run the command python Kosmulator.py in your terminal. If it ran successfully, it has been installed correctly!
+In Kosmulator.py --  set model_names to ['LCDM'], 
+					 observations to [['JLA']], 
+					 nwalkers: int = 10 
+					 nsteps: int = 200 
+					 burn: int = 10
+then run the command python Kosmulator.py in your terminal. If it ran successfully, it has been installed correctly!
 
 ## Features
 
@@ -93,6 +104,7 @@ Observations:
 3) Pantheon+: 
 4) OHD:
 5) CC:
+6) BAO:
 6) fsigma8:
 7) sigma8:
 
