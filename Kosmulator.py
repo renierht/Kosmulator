@@ -12,14 +12,15 @@ from Kosmulator.MCMC_setup import run_mcmc_for_all_models
 if sys.version_info[0] == 2:
     print(f'\033[4;31mNote\033[0m: Your Python version {sys.version_info[0]}.{sys.version_info[1]} is outdated. Be careful when executing the program.')
 
+#'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'sigma_8'
 # Constants for the simulation
 model_names = ['LCDM']
-observations = [['JLA']]
-nwalkers: int = 6
-nsteps: int = 200
+observations = [['JLA'],['OHD','CC'],['OHD','JLA','Pantheon']]
+nwalkers: int = 10
+nsteps: int = 500
 burn: int = 10
 
-overwrite = True
+overwrite = False
 convergence = 0.01
 
 prior_limits = {

@@ -36,6 +36,7 @@ setup(
         "emcee>=3.0.0",
         "getdist",
         "h5py",
+        "pandas",
     ],
     extras_require={
         "latex": ["latex"], 
