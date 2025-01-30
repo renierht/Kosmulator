@@ -29,11 +29,6 @@ If requirement not met, follow os installation below:
   sudo apt install texlive-full
   ```
 
-Verify LaTeX installation with:
-```bash
-latex --version
-```
-
 ## Installation 
 Install package directly from GitHub
 
