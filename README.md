@@ -87,21 +87,21 @@ Kosmulator/
 		# the MCMC simulation will combine their likelihoods and minimized the combined likelihood.
 		
 ## References
-1) Original version: 	Hough, R.T., Abebe, A. and Ferreira, S.E.S., 2020. Viability tests of f (R)-gravity models with Supernovae Type 1A data. The European Physical Journal C, 80(8), p.787. https://doi.org/10.1140/epjc/s10052-020-8342-7
-2) EMCEE package: 		Foreman-Mackey, D., Hogg, D.W., Lang, D. and Goodman, J., 2013. emcee: the MCMC hammer. Publications of the Astronomical Society of the Pacific, 125(925), p.306. https://doi.org/10.1086/670067
+1) Original version: 	Hough, R.T., Abebe, A. and Ferreira, S.E.S., 2020. Viability tests of f (R)-gravity models with Supernovae Type 1A data. EPCJ, 80(8), p.787. https://doi.org/10.1140/epjc/s10052-020-8342-7
+2) EMCEE package: 		Foreman-Mackey, D., Hogg, D.W., Lang, D. et al., 2013. emcee: the MCMC hammer. PASP, 125(925), p.306. https://doi.org/10.1086/670067
 
 Observations:
 
-1) JLA: 				1) M. Hicken, P. Challis, S. Jha et al., CfA3: 185 Type Ia Supernova light curves from the CfA. Astrophys. J. 700, 331–357 (2009). https://doi.org/10.1088/0004-637X/700/1/331
-						2) J.D. Neill, M. Sullivan, D.A. Howell et al., The local hosts of Type Ia Supernovae. Astrophys. J. 707, 1449–1465 (2009). https://doi.org/10.1088/0004-637X/707/2/1449
-						3) A. Conley, J. Guy, M. Sullivan et al., Supernova constraints and systematic uncertainties from the first three years of the Supernova Legacy Survey. Astrophys. J. Suppl. Ser. 192, 1 (2010). https://doi.org/10.1088/0067-0049/192/1/1
+1) JLA: 				1) M. Hicken, P. Challis, S. Jha et al., 2009. CfA3: 185 Type Ia Supernova light curves from the CfA. ApJ, 700, p.331. https://doi.org/10.1088/0004-637X/700/1/331
+						2) J.D. Neill, M. Sullivan, D.A. Howell et al., 2009. The local hosts of Type Ia Supernovae. ApJ, 707, p.1449. https://doi.org/10.1088/0004-637X/707/2/1449
+						3) A. Conley, J. Guy, M. Sullivan et al., 2010. Supernova constraints and systematic uncertainties from the first three years of the Supernova Legacy Survey. ApJ Suppl. Ser., 192, p.1. https://doi.org/10.1088/0067-0049/192/1/1
 2) Pantheon:	
-3) Pantheon+: 
+3) Pantheon+: 			1) D. Brout, D. Scolnic, D., B. Popovic et al., 2022. The Pantheon+ analysis: cosmological constraints. ApJ, 938(2), p.110. https://doi.org/10.3847/1538-4357/ac8e04
 4) OHD:
-5) CC:
-6) BAO:
-6) fsigma8:
-7) sigma8:
+5) CC:					1) M. Moresco, R. Jimenez, L. Verde et al., 2020. Setting the stage for cosmic chronometers. II. Impact of stellar population synthesis models systematics and full covariance matrix. ApJ, 898(1), p.82.  https://doi.org/10.3847/1538-4357/ab9eb0
+6) BAO/DESI:			1) A. G. Adame, J. Aguilar, S. Ahlen et al., 2024. DESI 2024 VI: Cosmological constraints from the measurements of baryon acoustic oscillations. arXiv preprint https://arxiv.org/pdf/2404.03002.
+6) fsigma8:				1) F. Skara and L. Perivolaropoulos, L., 2020. Tension of the EG statistic and redshift space distortion data with the Planck-Λ CDM model and implications for weakening gravity. PRD, 101(6), p.063521.
+7) sigma8:				1) L. Perenon, J. Bel, R. Maartens et al. 2019. Optimising growth of structure constraints on modified gravity. JCAP, 2019(06), p.020. https://doi.org/10.1088/1475-7516/2019/06/020
 
 ## Acknowledgements
 I would like to thank the EMCEE: Hammer group for making their MCMC simulation software publically available. This code would not be possible without their hard work. I would also like to thank the **ChatGPT** software for assisting with debugging, improving the code structure, and optimizing features.

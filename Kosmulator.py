@@ -14,14 +14,15 @@ if sys.version_info[0] == 2:
 
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'sigma_8'
 # Constants for the simulation
-model_names = ['LCDM']
-observations = [['JLA'],['OHD','CC'],['OHD','JLA','Pantheon']]
-nwalkers: int = 10
-nsteps: int = 500
-burn: int = 10
+model_names = ['LCDM', "NonLinear"]
+observations = [['JLA']]
+nwalkers: int = 100
+nsteps: int = 10000
+burn: int = 100
 
-overwrite = False
+overwrite = True
 convergence = 0.01
+
 
 prior_limits = {
     "Omega_m": (0.10, 0.4),
@@ -96,6 +97,7 @@ CONFIG, data = Config.create_config(
     burn=burn,
     model_name=model_names,
 )
+
 
 # Main execution block
 if __name__ == "__main__":

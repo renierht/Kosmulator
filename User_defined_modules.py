@@ -1,5 +1,7 @@
 import numpy as np
 from scipy import integrate
+from scipy.optimize import fsolve
+from scipy.interpolate import RegularGridInterpolator
 
 ##############################################################
 # Define your cosmological model used for MCMC analysis
@@ -29,8 +31,33 @@ def BetaRn_MODEL(z, param_dict, Type = "SNe"):
     term3bottom = (1+((1-qz)/(param_dict["n"]*qz)) - ((param_dict["n"]-1)/(qz-(qz**2)))*(2+qz-jz))
     model = ((term1)/(term2bottom*term3bottom))**((1)/(2*param_dict["n"]))
     return Calculate_return_values(model, Type)
-
     
+def NonLinear_fsolve_MODEL(z, param_dict, Type="SNe"):
+    """
+    Solve the nonlinear algebraic equation for E(z).
+
+    Args:
+        z (float): Redshift.
+        param_dict (dict): Dictionary containing cosmological parameters.
+        Type (str): Type of observation.
+
+    Returns:
+        float: Normalized Hubble parameter E(z).
+    """
+
+    def hubble_nonlinear(E, z, Omega_m, n):
+        """ The nonlinear equation to be solved for E(z). """
+        return E**2 - (Omega_m * (1 + z)**3 + (1 - Omega_m) * E**(2 * n))
+
+    # Extract model parameters
+    Omega_m = param_dict["Omega_m"]
+    n = param_dict["n"]
+
+    # Solve for E(z) using fsolve, starting with an initial guess of 1.0
+    E_solution = fsolve(hubble_nonlinear, 1.0, args=(z, Omega_m, n))[0]
+
+    return Calculate_return_values(E_solution, Type)
+
 ##############################################################
 # Functions to control Models for the entire program
 ##############################################################
@@ -50,6 +77,7 @@ def Get_model_function(model_name):
     models = {
         "LCDM": LCDM_MODEL,
         "BetaRn": BetaRn_MODEL,
+        "NonLinear": NonLinear_fsolve_MODEL,
         # Add new model names to the model dict
     }
     if model_name not in models:
@@ -62,6 +90,7 @@ def Get_model_names(model_name):
     all_models = {
         "LCDM"     : {"parameters": ["Omega_m", "H_0"]}, #, "M_abs", "rd", "ns", "As", "Omega_b", "gamma", "sigma_8",]
         "BetaRn" : {"parameters": ["Omega_m", "H_0", "q0", "q1", "beta", "n"]},
+        "NonLinear"  : {"parameters": ["Omega_m", "H_0", "n"]},
         #"BetaR2n" : {"parameters": ["Omega_m", "H_0", "q0"]},
     }
     models = {name: all_models[name] for name in model_name if name in all_models}
@@ -86,9 +115,50 @@ def Calculate_return_values(model, Type):
                    "BAO": 1 / model,  # Baryon Acoustic Oscillations (inverse of model)}
                    }.get(Type, None)
 
+
+    """
+    Compute E(z) dynamically using a precomputed interpolation table for any user-defined model.
+
+    Args:
+        z (float): Redshift.
+        param_dict (dict): Cosmological parameters.
+        Type (str): Type of observation.
+        CONFIG (dict): Configuration dictionary.
+        mod (str): Model name.
+
+    Returns:
+        float: Normalized Hubble parameter E(z).
+    """
+
+    global E_interpolator
+
+    if mod is None:
+        raise ValueError("Model name (mod) must be specified.")
+
+    # Ensure the interpolation table is created only ONCE per model
+    if mod not in E_interpolator:
+        if CONFIG is None:
+            raise ValueError("CONFIG must be provided to initialize the interpolation table.")
+        print(f"Initializing precomputed E(z) table for model {mod} dynamically...")
+
+        # Get the user-defined model function from User_defined_modules
+        MODEL_func = Get_model_function(mod)
+
+        # Precompute the interpolation table for the selected model
+        E_interpolator[mod], interpolator_param_names = precompute_interpolation_table(CONFIG, mod, MODEL_func)
+
+    # Extract only the parameters needed for interpolation
+    param_values = [param_dict[param] for param in interpolator_param_names]
+
+    # Use the interpolator to get E(z) for the current parameters
+    E_z = E_interpolator[mod](param_values + [z])[0]
+
+    return Calculate_return_values(E_z, Type)
+
 ##############################################################
 # General used functions
 ##############################################################
+
 def Comoving_distance(MODEL_func, redshift, param_dict, Type):
     '''
     Compute the comoving distance to a given redshift.
@@ -102,7 +172,7 @@ def Comoving_distance(MODEL_func, redshift, param_dict, Type):
     Returns:
         float: Comoving distance in Mpc.
     '''
-    comoving_distance = Hubble(param_dict) * integrate.quad(MODEL_func, 0, redshift, args = (param_dict, Type))[0]
+    comoving_distance = Hubble(param_dict)*integrate.quad(MODEL_func, 0, redshift, args = (param_dict, Type))[0]
     return comoving_distance
 
 def Hubble(param_dict):

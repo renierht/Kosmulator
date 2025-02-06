@@ -6,6 +6,7 @@ import platform
 import matplotlib.pyplot as plt
 import h5py
 import scipy.optimize as op
+from scipy.optimize import fsolve
 from Kosmulator import Statistic_packages as SP  # Statistical functions for cosmological calculations
 from Kosmulator.Config import format_elapsed_time, load_mcmc_results
 import User_defined_modules as UDM  # Custom user-defined cosmology functions
@@ -49,12 +50,11 @@ def model_likelihood(theta, data, Type, CONFIG, MODEL_func, obs):
     if obs != 'BAO':
         model = np.zeros(len(redshift))
     
-    # Compute model predictions
     if Type == "SNe":
-        y_dl = np.zeros(len(redshift))
-        for i in range(len(redshift)):
-            y_dl[i] = UDM.Comoving_distance(MODEL_func, redshift[i], param_dict, Type) * (1 + redshift[i])
-            model[i] = 25 + 5 * np.log10(y_dl[i])
+            y_dl = np.zeros(len(redshift))
+            for i in range(len(redshift)):
+                y_dl[i] = UDM.Comoving_distance(MODEL_func, redshift[i], param_dict, Type) * (1 + redshift[i])
+                model[i] = 25 + 5 * np.log10(y_dl[i])
     elif Type in ["OHD", "CC"]:
         model = [param_dict["H_0"] * MODEL_func(z, param_dict, Type) for z in redshift]
     elif Type in ["f_sigma_8", "sigma_8"]:
@@ -94,10 +94,11 @@ def lnprob(theta, data, Type, CONFIG, MODEL_func, obs):
     lp = lnprior(theta, CONFIG)
     if not np.isfinite(lp):
         return -np.inf
-    return lp + sum(model_likelihood(theta, data[obs[i]], Type[i], CONFIG, MODEL_func, obs[i]) for i in range(len(Type)))
+    return lp + sum(model_likelihood(theta, data[obs[i]], Type[i], CONFIG, MODEL_func, obs[i],) for i in range(len(Type)))
 
 def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None, parallel=True, saveChains=False, 
-    overwrite=False, autoCorr=True, CONFIG=None, obs=None, Type=None, colors='r', convergence=0.01, last_obs=False, PLOT_SETTINGS=None):
+    overwrite=False, autoCorr=True, CONFIG=None, obs=None, Type=None, colors='r', convergence=0.01, last_obs=False
+    , PLOT_SETTINGS=None):
     """
     Run MCMC sampler using `emcee` with parallelization, saving, and autocorrelation-based convergence.
     """
