@@ -111,7 +111,7 @@ def Calculate_return_values(model, Type):
                    "OHD": model,      # Observational Hubble Data
                    "CC": model,       # Cosmic Chronometers
                    "f_sigma_8": model,  # Growth rate of structure including sigma_8 as a parameter
-                   "sigma_8": model,   # Growth rate of structure
+                   "f": model,   # Growth rate of structure
                    "BAO": 1 / model,  # Baryon Acoustic Oscillations (inverse of model)}
                    }.get(Type, None)
 

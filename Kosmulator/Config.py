@@ -86,7 +86,7 @@ def Add_required_parameters(models, observations):
     """
     Add required parameters like H_0 and r_d if missing, with warnings.
     """
-    params_map = {"BAO": "r_d", "PantheonP": "M_abs", "f_sigma_8": ["sigma_8", "gamma"], "sigma_8": "gamma"}
+    params_map = {"BAO": "r_d", "PantheonP": "M_abs", "f_sigma_8": ["sigma_8", "gamma"], "f": "gamma"}
     for mod, mod_data in models.items():
         parameters = mod_data["parameters"]
         if "H_0" not in parameters:
