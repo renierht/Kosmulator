@@ -57,10 +57,13 @@ def model_likelihood(theta, data, Type, CONFIG, MODEL_func, obs):
                 model[i] = 25 + 5 * np.log10(y_dl[i])
     elif Type in ["OHD", "CC"]:
         model = [param_dict["H_0"] * MODEL_func(z, param_dict, Type) for z in redshift]
-    elif Type in ["f_sigma_8", "sigma_8"]:
+    elif Type in ["f_sigma_8", "f"]:
         E_value = MODEL_func(redshift, param_dict, Type)
         Omega_zeta = UDM.matter_density_z(redshift, MODEL_func, param_dict, Type)
-        model = param_dict['sigma_8'] * (Omega_zeta / E_value**2) ** param_dict['gamma'] if Type == "f_sigma_8" else (Omega_zeta / E_value**2) ** param_dict['gamma']
+        if Type == "f_sigma_8":
+            model = param_dict['sigma_8'] * (Omega_zeta / E_value**2) ** param_dict['gamma'] 
+        elif "f":
+            model = (Omega_zeta / E_value**2) ** param_dict['gamma']
     elif Type == "BAO":
         pass
     else:

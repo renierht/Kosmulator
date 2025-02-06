@@ -10,14 +10,14 @@ def compute_model(model_name, redshift_values, params, obs_type="SNe"):
             model = [params["H_0"] * model_func(z, params, obs_type) for z in redshift_values]
             y_label = "Hubble Parameter H(z)"
             return model, y_label
-        elif obs_type == 'f_sigma_8' or  obs_type=='sigma_8':
+        elif obs_type == 'f_sigma_8' or  obs_type=='f':
             if obs_type == "f_sigma_8":
                 model = [params['sigma_8'] * (UDM.matter_density_z(z, model_func, params, obs_type) / model_func(z, params, obs_type )**2) ** params['gamma'] for z in redshift_values]
                 y_label = '$f\sigma_{8}$'
                 return model, y_label
             else:
                 model = [(UDM.matter_density_z(z, model_func, params, obs_type) / model_func(z, params, obs_type )**2) ** params['gamma']for z in redshift_values]
-                y_label = 'Growth rate'
+                y_label = '$f$'
                 return model, y_label
         else:
             model = [25 + 5 * np.log10(UDM.Comoving_distance(model_func, z, params, obs_type) * (1 + z)) for z in redshift_values]
