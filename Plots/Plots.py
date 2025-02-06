@@ -147,7 +147,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, color_schemes):
 
             combined_redshift, combined_type_data, combined_type_data_error = prepare_data(obs_set, data, params_combined_median)
 
-            redshiftx = np.linspace(0.005, max(combined_redshift) + 0.05, 25000)
+            redshiftx = np.linspace(0.005, max(combined_redshift) + 0.05, 10000)
             obs_type = observation_types[obs_index][0]
 
             model_combined_median, y_label = compute_model(model_name, redshiftx, params_combined_median, obs_type=obs_type)
