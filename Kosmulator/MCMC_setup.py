@@ -58,12 +58,11 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
 
             # Load existing MCMC chains if not overwriting
             if not overwrite and os.path.exists(chain_path):
-                print(f"Loading existing MCMC chain from {chain_path}")
+                print(f"Loading existing MCMC chain from {chain_path}\n")
                 samples = EMCEE.load_mcmc_results(output_path=output_dir, file_name=file_name, CONFIG=CONFIG[list(models.keys())[j]])
                 observation_key = '+'.join(obs) if len(obs) > 1 else obs[0]
                 Samples[observation_key] = samples
             else:
-                # Run MCMC and store results
                 label = Config.generate_label(obs)
                 Samples[label] = EMCEE.run_mcmc(
                     data=data,
@@ -81,6 +80,7 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
                     convergence=convergence,
                     last_obs=last_obs,
                     PLOT_SETTINGS=PLOT_SETTINGS,
+                    obs_index = i
                 )
 
         All_Samples[model_name] = Samples  # Store all samples for the current model
