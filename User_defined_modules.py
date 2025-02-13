@@ -2,62 +2,61 @@ import numpy as np
 from scipy import integrate
 from scipy.optimize import fsolve
 from scipy.interpolate import RegularGridInterpolator
+from scipy.optimize import root
 
 ##############################################################
 # Define your cosmological model used for MCMC analysis
 ##############################################################
-def LCDM_MODEL(z, param_dict, Type = "SNe"):
-    '''
+def LCDM_MODEL(z, param_dict, Type="SNe"):
+    """
     Lambda Cold Dark Matter (LCDM) model.
     Args:
-        z (float)           : Redshift value.
-        param_dict (dict)   : Dictionary containing cosmological parameters.
-        Type (str)          : Type of observation ('SNe', 'OHD', 'CC', f_sigma_8', or 'BAO').
+        z (float or np.ndarray): Redshift value(s).
+        param_dict (dict): Dictionary containing cosmological parameters.
+        Type (str): Type of observation ('SNe', 'OHD', 'CC', f_sigma_8', or 'BAO').
 
     Returns:
-        float or None       : Theoretical model prediction based on the observation type.
-    '''
+        float or np.ndarray: Theoretical model prediction based on the observation type.
+    """
+    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
     model = np.sqrt(param_dict['Omega_m'] * (1 + z)**3 + 1 - param_dict['Omega_m'])
-    return Calculate_return_values(model, Type)
-    
-def BetaRn_MODEL(z, param_dict, Type = "SNe"):
-    '''
-    Beta R^n model for cosmology.
-    '''
-    qz = param_dict["q0"]+param_dict["q1"]*((z)/(z+1))
-    jz = qz*(2*qz+1)+((param_dict["q1"])/(z+1))
-    term1 = (param_dict["Omega_m"]*(1+z)**3)
-    term2bottom = qz*param_dict["n"]*param_dict["beta"]*(6**(param_dict["n"]-1))*((1-qz)**(param_dict["n"]-1))
-    term3bottom = (1+((1-qz)/(param_dict["n"]*qz)) - ((param_dict["n"]-1)/(qz-(qz**2)))*(2+qz-jz))
-    model = ((term1)/(term2bottom*term3bottom))**((1)/(2*param_dict["n"]))
-    return Calculate_return_values(model, Type)
-    
-def NonLinear_fsolve_MODEL(z, param_dict, Type="SNe"):
+    result = Calculate_return_values(model, Type)
+    return result if len(result) > 1 else result[0]  # Return scalar if input was scalar
+
+def f1CDM_MODEL(z, param_dict, Type="SNe"):
     """
     Solve the nonlinear algebraic equation for E(z).
-
-    Args:
-        z (float): Redshift.
-        param_dict (dict): Dictionary containing cosmological parameters.
-        Type (str): Type of observation.
-
-    Returns:
-        float: Normalized Hubble parameter E(z).
     """
-
+    
+    z = np.atleast_1d(z)  # Ensure z is treated as an array
     def hubble_nonlinear(E, z, Omega_m, n):
-        """ The nonlinear equation to be solved for E(z). """
         return E**2 - (Omega_m * (1 + z)**3 + (1 - Omega_m) * E**(2 * n))
 
     # Extract model parameters
     Omega_m = param_dict["Omega_m"]
     n = param_dict["n"]
 
-    # Solve for E(z) using fsolve, starting with an initial guess of 1.0
-    E_solution = fsolve(hubble_nonlinear, 1.0, args=(z, Omega_m, n))[0]
+    # Solve for E(z) (vectorized)
+    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, n))[0] for zi in z])
 
-    return Calculate_return_values(E_solution, Type)
+    # Return processed results based on Type
+    result = Calculate_return_values(E_solution, Type)
+    return result if len(result) > 1 else result[0]
 
+def BetaRn_MODEL(z, param_dict, Type = "SNe"):
+    '''
+    Beta R^n model for cosmology.
+    '''
+    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
+    qz = param_dict["q0"]+param_dict["q1"]*((z)/(z+1))
+    jz = qz*(2*qz+1)+((param_dict["q1"])/(z+1))
+    term1 = (param_dict["Omega_m"]*(1+z)**3)
+    term2bottom = qz*param_dict["n"]*param_dict["beta"]*(6**(param_dict["n"]-1))*((1-qz)**(param_dict["n"]-1))
+    term3bottom = (1+((1-qz)/(param_dict["n"]*qz)) - ((param_dict["n"]-1)/(qz-(qz**2)))*(2+qz-jz))
+    model = ((term1)/(term2bottom*term3bottom))**((1)/(2*param_dict["n"]))
+    result = Calculate_return_values(model, Type)
+    return result if len(result) > 1 else result[0]
+    
 ##############################################################
 # Functions to control Models for the entire program
 ##############################################################
@@ -76,9 +75,8 @@ def Get_model_function(model_name):
     '''
     models = {
         "LCDM": LCDM_MODEL,
+        "f1CDM": f1CDM_MODEL,
         "BetaRn": BetaRn_MODEL,
-        "NonLinear": NonLinear_fsolve_MODEL,
-        # Add new model names to the model dict
     }
     if model_name not in models:
         raise ValueError(f"Model '{model_name}' not recognized. Available models: {list(models.keys())}")
@@ -86,12 +84,11 @@ def Get_model_function(model_name):
     return models[model_name]    
     
 def Get_model_names(model_name):
-    # Set up free parameter list for your new models
+    # Set up free parameter list for your new models. N.B. Only include the parameters that you have in your model
     all_models = {
-        "LCDM"     : {"parameters": ["Omega_m", "H_0"]}, #, "M_abs", "rd", "ns", "As", "Omega_b", "gamma", "sigma_8",]
-        "BetaRn" : {"parameters": ["Omega_m", "H_0", "q0", "q1", "beta", "n"]},
-        "NonLinear"  : {"parameters": ["Omega_m", "H_0", "n"]},
-        #"BetaR2n" : {"parameters": ["Omega_m", "H_0", "q0"]},
+        "LCDM"     : {"parameters": ["Omega_m"]},
+        "f1CDM"  : {"parameters": ["Omega_m", "n"]},
+        "BetaRn" : {"parameters": ["Omega_m", "q0", "q1", "beta", "n"]},
     }
     models = {name: all_models[name] for name in model_name if name in all_models}
     return models
@@ -115,65 +112,9 @@ def Calculate_return_values(model, Type):
                    "BAO": 1 / model,  # Baryon Acoustic Oscillations (inverse of model)}
                    }.get(Type, None)
 
-
-    """
-    Compute E(z) dynamically using a precomputed interpolation table for any user-defined model.
-
-    Args:
-        z (float): Redshift.
-        param_dict (dict): Cosmological parameters.
-        Type (str): Type of observation.
-        CONFIG (dict): Configuration dictionary.
-        mod (str): Model name.
-
-    Returns:
-        float: Normalized Hubble parameter E(z).
-    """
-
-    global E_interpolator
-
-    if mod is None:
-        raise ValueError("Model name (mod) must be specified.")
-
-    # Ensure the interpolation table is created only ONCE per model
-    if mod not in E_interpolator:
-        if CONFIG is None:
-            raise ValueError("CONFIG must be provided to initialize the interpolation table.")
-        print(f"Initializing precomputed E(z) table for model {mod} dynamically...")
-
-        # Get the user-defined model function from User_defined_modules
-        MODEL_func = Get_model_function(mod)
-
-        # Precompute the interpolation table for the selected model
-        E_interpolator[mod], interpolator_param_names = precompute_interpolation_table(CONFIG, mod, MODEL_func)
-
-    # Extract only the parameters needed for interpolation
-    param_values = [param_dict[param] for param in interpolator_param_names]
-
-    # Use the interpolator to get E(z) for the current parameters
-    E_z = E_interpolator[mod](param_values + [z])[0]
-
-    return Calculate_return_values(E_z, Type)
-
 ##############################################################
 # General used functions
 ##############################################################
-
-def Comoving_distance(MODEL_func, redshift, param_dict, Type):
-    '''
-    Compute the comoving distance to a given redshift.
-
-    Args:
-        MODEL_func (callable): Function that calculates the Hubble parameter at a given redshift.
-        redshift (float): Redshift to compute the comoving distance to.
-        param_dict (dict): Dictionary containing cosmological parameters.
-        Type (str): Type of observation.
-
-    Returns:
-        float: Comoving distance in Mpc.
-    '''
-    comoving_distance = Hubble(param_dict)*integrate.quad(MODEL_func, 0, redshift, args = (param_dict, Type))[0]
-    return comoving_distance
 
 def Hubble(param_dict):
     '''
@@ -188,10 +129,65 @@ def Hubble(param_dict):
     '''
     return 300000 / param_dict['H_0']
 
+def Comoving_distance_vectorized(MODEL_func, redshifts, param_dict, Type):
+    """
+    Compute the comoving distances for an array of redshifts (vectorized version).
+    Args:
+        MODEL_func (callable): Function that calculates the Hubble parameter at a given redshift.
+        redshifts (array-like): Array of redshifts to compute the comoving distance for.
+        param_dict (dict): Dictionary containing cosmological parameters.
+        Type (str): Type of observation.
+
+    Returns:
+        np.ndarray: Array of comoving distances in Mpc.
+    """
+    comoving_distances = np.zeros_like(redshifts)
+    for i, z in enumerate(redshifts):
+        comoving_distances[i] = integrate.quad(MODEL_func, 0, z, args=(param_dict, Type))[0]
+
+    return comoving_distances * Hubble(param_dict)
+
 ##############################################################
 # Functions for cosmological calculations, specifically used
 # for observations involving sigma8 or fsigma8.
 ##############################################################  
+# Define the integral term for f_sigma8(z)
+def integral_term(z, MODEL_func, param_dict, Type="f_sigma_8"):
+    """
+    Compute the integral term in the f_sigma_8 definition:
+    Integral = ∫ (Omega_zeta^gamma / (1 + z)) dz from 0 to z.
+
+    Args:
+        z (float or array-like): Upper limit of the integral (current redshift).
+        MODEL_func (function): Function to compute H(z) or related model values.
+        param_dict (dict): Dictionary containing cosmological parameters.
+        Type (str, optional): Type of observation. Defaults to "f_sigma_8".
+
+    Returns:
+        float or array-like: Value of the integral term for scalar or array input.
+    """
+    gamma = param_dict["gamma"]
+
+    def integrand(z_prime):
+        Omega_zeta = matter_density_z(z_prime, MODEL_func, param_dict, Type)
+        return (Omega_zeta ** gamma) / (1 + z_prime)
+
+    # Handle scalar input
+    if np.isscalar(z):
+        integral_value, _ = integrate.quad(integrand, 0, z)
+        return integral_value
+
+    # Handle array input
+    elif isinstance(z, (list, np.ndarray)):
+        results = []
+        for z_val in z:
+            integral_value, _ = integrate.quad(integrand, 0, z_val)
+            results.append(integral_value)
+        return np.array(results)
+    
+    else:
+        raise ValueError("Input z must be a scalar or array-like.")
+    
 def matter_density_z(z, MODEL_func, param_dict, Type = "f_sigma_8"):
     '''
     Compute the matter density parameter Omega(z) at redshift z.
@@ -212,22 +208,22 @@ def matter_density_z(z, MODEL_func, param_dict, Type = "f_sigma_8"):
 # Functions for cosmological calculations, specifically used
 # for observations involving BAO.
 ##############################################################
-def dmrd(redshift, MODEL_func, param_dict, Type):
-    '''
-    Compute the dimensionless comoving distance D_M / r_d.
+def dmrd(redshifts, MODEL_func, param_dict, Type):
+    """
+    Compute the dimensionless comoving distance D_M / r_d for one or more redshifts.
 
     Args:
-        redshift (float): Redshift.
+        redshifts (float or array-like): Redshift(s).
         MODEL_func (callable): Function for Hubble parameter or related quantities.
         param_dict (dict): Dictionary of cosmological parameters.
         Type (str): Type of observation.
-        rd (float): Sound horizon at the drag epoch (r_d).
 
     Returns:
-        float: D_M / r_d, dimensionless comoving distance.
-    '''
-    dmrd = Comoving_distance(MODEL_func, redshift, param_dict, Type) / param_dict['r_d']
-    return dmrd
+        float or np.ndarray: D_M / r_d for the given redshift(s).
+    """
+    #dmrd = Comoving_distance(MODEL_func, redshift, param_dict, Type) / param_dict['r_d']
+    comoving_distances = Comoving_distance_vectorized(MODEL_func, np.atleast_1d(redshifts), param_dict, Type)
+    return comoving_distances / param_dict['r_d']
 
 def dhrd(redshift, MODEL_func, param_dict, Type):
     '''
@@ -245,35 +241,56 @@ def dhrd(redshift, MODEL_func, param_dict, Type):
     dhrd = Hubble(param_dict) * MODEL_func(redshift, param_dict, Type) / param_dict['r_d']
     return dhrd
     
-def dvrd(redshift, MODEL_func, param_dict, Type):
-    '''
-    Compute the dimensionless volume-averaged distance D_V / r_d.
+def dvrd(redshifts, MODEL_func, param_dict, Type):
+    """
+    Compute the dimensionless volume-averaged distance D_V / r_d for one or more redshifts.
 
     Args:
-        redshift (float): Redshift.
+        redshifts (float or array-like): Redshift(s).
         MODEL_func (callable): Function for Hubble parameter or related quantities.
         param_dict (dict): Dictionary of cosmological parameters.
         Type (str): Type of observation.
 
     Returns:
-        float: D_V / r_d, dimensionless volume-averaged distance.
-    '''
-    dvrd = (Hubble(param_dict) * ((redshift * (Comoving_distance(MODEL_func, redshift, param_dict, Type) / Hubble(param_dict))**2)
-                                  / (1 / MODEL_func(redshift, param_dict, Type))) ** (1 / 3)) / param_dict['r_d']
-    return dvrd
+        float or np.ndarray: D_V / r_d for the given redshift(s).
+    """
+    #dvrd = (Hubble(param_dict) * ((redshift * (Comoving_distance(MODEL_func, redshift, param_dict, Type) / Hubble(param_dict))**2)/ (1 / MODEL_func(redshift, param_dict, Type))) ** (1 / 3)) / param_dict['r_d']
+    redshifts = np.atleast_1d(redshifts)
     
-def dArd(redshift, MODEL_func, param_dict, Type):
-    '''
-    Compute the dimensionless angular diameter distance D_A / r_d.
+    # Compute comoving distances and Hubble parameter for all redshifts
+    comoving_distances = Comoving_distance_vectorized(MODEL_func, redshifts, param_dict, Type)
+    H_vals = np.array([MODEL_func(z, param_dict, Type) for z in redshifts])
+
+    # Calculate D_V for each redshift
+    dvrd_vals = (
+        Hubble(param_dict)
+        * ((redshifts * (comoving_distances / Hubble(param_dict))**2) / (1 / H_vals)) ** (1 / 3)
+    ) / param_dict['r_d']
+
+    return dvrd_vals
+    
+def dArd(redshifts, MODEL_func, param_dict, Type):
+    """
+    Compute the dimensionless angular diameter distance D_A / r_d for one or more redshifts.
 
     Args:
-        redshift (float): Redshift.
+        redshifts (float or array-like): Redshift(s).
         MODEL_func (callable): Function for Hubble parameter or related quantities.
         param_dict (dict): Dictionary of cosmological parameters.
         Type (str): Type of observation.
 
     Returns:
-        float: D_A / r_d, dimensionless angular diameter distance.
-    '''
-    dArd = (Comoving_distance(MODEL_func, redshift, param_dict, Type) / (1 + redshift)) / param_dict['r_d']
-    return dArd
+        float or np.ndarray: D_A / r_d for the given redshift(s).
+    """
+    #dArd = (Comoving_distance(MODEL_func, redshift, param_dict, Type) / (1 + redshift)) / param_dict['r_d']
+    redshifts = np.atleast_1d(redshifts)
+    
+    # Compute comoving distances
+    comoving_distances = Comoving_distance_vectorized(MODEL_func, redshifts, param_dict, Type)
+
+    # Calculate D_A / r_d
+    dArd_vals = (comoving_distances / (1 + redshifts)) / param_dict['r_d']
+
+    return dArd_vals
+
+    

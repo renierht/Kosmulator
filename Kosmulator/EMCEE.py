@@ -10,98 +10,117 @@ from scipy.optimize import fsolve
 from Kosmulator import Statistic_packages as SP  # Statistical functions for cosmological calculations
 from Kosmulator.Config import format_elapsed_time, load_mcmc_results
 import User_defined_modules as UDM  # Custom user-defined cosmology functions
+from joblib import Parallel, delayed
             
-def model_likelihood(theta, data, Type, CONFIG, MODEL_func, obs):
+def model_likelihood(theta, obs_data, obs_type, CONFIG, MODEL_func, obs, obs_index):
     """
-    Compute the log-likelihood for given parameters and observational data.
-    
-    Args:
-        theta (array-like): Current parameter values (e.g., [Omega_m, H0]).
-        data (dict): Observational data and associated errors.
-        Type (str): Observation type (e.g., "SNe", "OHD").
-        CONFIG (dict): Configuration dictionary.
-        MODEL_func (function): Function to compute the model values.
-        obs (str): Specific observation being analyzed.
-    
-    Returns:
-        float: Log-likelihood value (-0.5 * chi-square).
+    Compute the log-likelihood for a given model and observation.
     """
-    model = None
-    if isinstance(Type, list):
-        Type = Type[0]
-    
-    # Extract data based on observation type
+    # Ensure obs_type is a single string (if needed)
+    if isinstance(obs_type, list):
+        obs_type = obs_type[0]
+
+    # Extract parameters for the current observation from CONFIG
+    required_params = CONFIG["parameters"][obs_index]
+    param_dict = {param: value for param, value in zip(required_params, theta)}
+
+    # Special handling for BAO:
+    if obs == "BAO":
+        chi = SP.Calc_BAO_chi(obs_data, MODEL_func, param_dict, obs_type)
+        return -0.5 * chi
+        
+    # Handle specific cases for observations
     if obs == "PantheonP":
-        redshift = data['zHD']
-        mb = data['m_b_corr']
-        trig = data['IS_CALIBRATOR']
-        cepheid = data['CEPH_DIST']
-        cov = data['cov']
-    elif obs == "BAO":
-        covd1 = data['covd1']
+        redshift = obs_data['zHD']
+        mb = obs_data['m_b_corr']
+        trig = obs_data['IS_CALIBRATOR']
+        cepheid = obs_data['CEPH_DIST']
+        cov = obs_data['cov']
     else:
-        redshift = data["redshift"]
-        type_data = data["type_data"]
-        type_data_error = data["type_data_error"]
-    
-    # Map parameter values
-    param_dict = {param: value for param, value in zip(CONFIG["parameters"], theta)}
-    
-    if obs != 'BAO':
-        model = np.zeros(len(redshift))
-    
-    if Type == "SNe":
-            y_dl = np.zeros(len(redshift))
-            for i in range(len(redshift)):
-                y_dl[i] = UDM.Comoving_distance(MODEL_func, redshift[i], param_dict, Type) * (1 + redshift[i])
-                model[i] = 25 + 5 * np.log10(y_dl[i])
-    elif Type in ["OHD", "CC"]:
-        model = [param_dict["H_0"] * MODEL_func(z, param_dict, Type) for z in redshift]
-    elif Type in ["f_sigma_8", "f"]:
-        E_value = MODEL_func(redshift, param_dict, Type)
-        Omega_zeta = UDM.matter_density_z(redshift, MODEL_func, param_dict, Type)
-        if Type == "f_sigma_8":
-            model = param_dict['sigma_8'] * (Omega_zeta / E_value**2) ** param_dict['gamma'] 
-        elif "f":
-            model = (Omega_zeta / E_value**2) ** param_dict['gamma']
-    elif Type == "BAO":
-        pass
+        redshift = obs_data["redshift"]
+        type_data = obs_data["type_data"]
+        type_data_error = obs_data["type_data_error"]
+
+    # Compute the model prediction based on the observation type
+    if obs_type == "SNe":
+        # Vectorized luminosity distance computation
+        comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, redshift, param_dict, obs_type)
+        y_dl = comoving_distances * (1 + redshift)
+        model = 25 + 5 * np.log10(y_dl)
+    elif obs_type in ["OHD", "CC"]:
+        # Vectorized Hubble parameter computation
+        model = param_dict["H_0"] * np.array([MODEL_func(z, param_dict, obs_type) for z in redshift])
+    elif obs_type in ["f_sigma_8", "f"]:
+        # Compute growth rate model
+        Omega_zeta = UDM.matter_density_z(redshift, MODEL_func, param_dict, obs_type)
+        if obs_type == "f_sigma_8":
+            integral_term = UDM.integral_term(redshift, MODEL_func, param_dict, obs_type)
+            model = (
+                param_dict["sigma_8"]
+                * Omega_zeta ** param_dict["gamma"]
+                * np.exp(-1 * integral_term)
+            )
+        else:
+            model = Omega_zeta ** param_dict["gamma"]
     else:
-        print(f"Unknown Type: {Type}. Unable to compute model.")
+        print(f"ERROR: Unknown obs_type: {obs_type}. Unable to compute model.")
         return -np.inf
 
-    # Compute chi-square and likelihood
+    # Compute chi-square likelihood
     if obs == "PantheonP":
         chi = SP.Calc_PantP_chi(mb, trig, cepheid, cov, model, param_dict)
-    elif obs == "BAO":
-        chi = SP.Calc_BAO_chi(covd1, MODEL_func, param_dict, Type)
     else:
-        chi = SP.Calc_chi(Type, type_data, type_data_error, model)
-
+        chi = SP.Calc_chi(obs_type, type_data, type_data_error, model)
     return -0.5 * chi
 
-def lnprior(theta, CONFIG):
+def lnprior(theta, CONFIG, obs_index=0):
     """
     Compute the log-prior for the given parameters.
     """
-    for param, value in zip(CONFIG["parameters"], theta):
-        lower, upper = CONFIG["prior_limits"][param]
-        if not (lower < value < upper):
-            return -np.inf
-    return 0.0
-    
-def lnprob(theta, data, Type, CONFIG, MODEL_func, obs):
-    """
-    Compute the combined log-prior and log-likelihood.
-    """
-    lp = lnprior(theta, CONFIG)
-    if not np.isfinite(lp):
+    prior_limits = np.array([
+        CONFIG["prior_limits"][obs_index][param]
+        for param in CONFIG["parameters"][obs_index]
+    ])
+    if np.any((theta <= prior_limits[:, 0]) | (theta >= prior_limits[:, 1])):
         return -np.inf
-    return lp + sum(model_likelihood(theta, data[obs[i]], Type[i], CONFIG, MODEL_func, obs[i],) for i in range(len(Type)))
+    return 0.0
+
+def lnprob(theta, data, Type, CONFIG, MODEL_func, obs, obs_index):
+    """
+    Compute the log-probability (prior + likelihood) for MCMC sampling.
+    Args:
+        theta (array): Parameter values.
+        data (dict): Observational data.
+        Type (list): List of observation types.
+        CONFIG (dict): Configuration dictionary.
+        MODEL_func (callable): Cosmological model function.
+        obs (list): List of observation names.
+        obs_index (int): Index of the observation in CONFIG.
+
+    Returns:
+        float: Log-probability (prior + likelihood).
+    """
+    # Ensure obs and Type are lists
+    obs = [obs] if isinstance(obs, str) else obs
+    Type = [Type] if isinstance(Type, str) else Type
+
+    # Compute the log-prior
+    lp = lnprior(theta, CONFIG, obs_index)
+    if not np.isfinite(lp):  # Skip likelihood if prior is invalid
+        return -np.inf
+
+    # Calculate total likelihood efficiently
+    total_likelihood = sum(
+        model_likelihood(theta, data[obs_name], obs_type, CONFIG, MODEL_func, obs_name, obs_index)
+        for obs_name, obs_type in zip(obs, Type)
+    )
+
+    # Combine prior and likelihood
+    return lp + total_likelihood
 
 def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None, parallel=True, saveChains=False, 
     overwrite=False, autoCorr=True, CONFIG=None, obs=None, Type=None, colors='r', convergence=0.01, last_obs=False
-    , PLOT_SETTINGS=None):
+    , PLOT_SETTINGS=None, obs_index=0):
     """
     Run MCMC sampler using `emcee` with parallelization, saving, and autocorrelation-based convergence.
     """
@@ -125,13 +144,33 @@ def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None, parallel
         raise ValueError("CONFIG and MODEL_func must be provided.")
     
     # Optimize starting point for MCMC
-    print ("\nFinding optimized initial parameter positions with Scipy...")
-    bnds = [(CONFIG["prior_limits"][param][0], CONFIG["prior_limits"][param][1]) for param in CONFIG["parameters"]]
-    theta_init = [CONFIG["true_values"][i] for i in range(len(CONFIG["parameters"]))]
-    nll = lambda *args: -model_likelihood(*args)
-    result = op.minimize(nll, theta_init, args=(data[obs[0]], Type, CONFIG, MODEL_func, obs[0]), bounds=bnds)
-    pos = [result['x'] + 1e-4 * np.random.randn(CONFIG["ndim"]) for _ in range(CONFIG["nwalker"])]
-    print (f"SciPy's optimized IC:     {result['x']}")
+    # For optimization, use only the first observation and its type.
+    if isinstance(obs, list):
+        obs_str = obs[0]
+    else:
+        obs_str = obs
+
+    if isinstance(Type, list):
+        obs_type_for_opt = Type[0]
+    else:
+        obs_type_for_opt = Type
+    print("\nFinding optimized initial parameter positions with Scipy...")
+    bnds = np.array([
+            (CONFIG["prior_limits"][obs_index][param][0], CONFIG["prior_limits"][obs_index][param][1])
+            for param in CONFIG["parameters"][obs_index]
+    ])
+    theta_init = np.array([CONFIG["true_values"][obs_index][i] for i in range(len(CONFIG["parameters"][obs_index]))])
+    nll = lambda theta, *args: -model_likelihood(theta, *args)  # Negative log-likelihood
+
+    result = op.minimize(
+        nll, theta_init,
+        args=(data[obs_str], obs_type_for_opt, CONFIG, MODEL_func, obs_str, obs_index),
+        bounds=bnds,
+        method='L-BFGS-B'  # Use L-BFGS-B for better handling of bounds
+    )
+    pos = result['x'] + 1e-4 * np.random.randn(CONFIG["nwalker"], len(CONFIG["parameters"][obs_index]))
+
+    print(f"SciPy's optimized IC: {result['x']}")
     
     # Setting up the MCMC ensamble that will be used to run the MCMC simulation. It can be done either in parallel
     # or series. You also have the choice of enabling saving the chains for later usage, as well as if you want to 
@@ -142,14 +181,14 @@ def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None, parallel
         with Pool() as pool:
             if saveChains:
                 backend = emcee.backends.HDFBackend(chain_path)
-                backend.reset(CONFIG["nwalker"], CONFIG["ndim"])
+                backend.reset(CONFIG["nwalker"], CONFIG["ndim"][obs_index])
                 sampler = emcee.EnsembleSampler(
-                    CONFIG["nwalker"], CONFIG["ndim"], lnprob, args = (data, Type, CONFIG, MODEL_func, obs),
+                    CONFIG["nwalker"], CONFIG["ndim"][obs_index], lnprob, args = (data, Type, CONFIG, MODEL_func, obs, obs_index),
                     backend = backend, pool = pool,
                 )
             else:
                 sampler = emcee.EnsembleSampler(
-                    CONFIG["nwalker"], CONFIG["ndim"], lnprob, args=(data, Type, CONFIG, MODEL_func, obs), 
+                    CONFIG["nwalker"],CONFIG["ndim"][obs_index], lnprob, args=(data, Type, CONFIG, MODEL_func, obs, obs_index), 
                     pool = pool,
             )
             
@@ -167,13 +206,13 @@ def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None, parallel
     else: # Calculating in series
         if saveChains:
             backend = emcee.backends.HDFBackend(chain_path)
-            backend.reset(CONFIG["nwalker"], CONFIG["ndim"])
+            backend.reset(CONFIG["nwalker"], CONFIG["ndim"][obs_index])
             sampler = emcee.EnsembleSampler(
-                CONFIG["nwalker"], CONFIG["ndim"],  lnprob, args = (data, Type, CONFIG, MODEL_func, obs), backend = backend,
+                CONFIG["nwalker"], CONFIG["ndim"][obs_index],  lnprob, args = (data, Type, CONFIG, MODEL_func, obs, obs_index), backend = backend,
             )
         else:
             sampler = emcee.EnsembleSampler(
-                CONFIG["nwalker"], CONFIG["ndim"],  lnprob, args = (data, Type, CONFIG, MODEL_func, obs),
+                CONFIG["nwalker"], CONFIG["ndim"][obs_index],  lnprob, args = (data, Type, CONFIG, MODEL_func, obs, obs_index),
             ) 
                 
         start = time.time()
@@ -186,7 +225,7 @@ def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None, parallel
         formatted_time = format_elapsed_time(end-start)
         print(f"Series processing took {formatted_time}\n")
         
-    samples = sampler.chain[:, CONFIG["burn"] :, :].reshape((-1, CONFIG["ndim"]))
+    samples = sampler.chain[:, CONFIG["burn"] :, :].reshape((-1, CONFIG["ndim"][obs_index]))
     return samples
 
 

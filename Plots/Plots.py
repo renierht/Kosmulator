@@ -14,12 +14,21 @@ import re
 def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data):
     """Generate corner plots and best-fit plots for all models."""
     All_best_fit_values = {}
+    All_LaTeX_Tables = {}  # Dictionary to store LaTeX tables for each model
+
     for model_name, Samples in All_Samples.items():
         print(f"\nCreating corner plot for model {model_name}...")
-        All_best_fit_values[model_name] = make_CornerPlot(Samples, CONFIG[model_name], model_name, model_name, PLOT_SETTINGS)
-    print("\nPlotting Best-Fit models onto its data source...")
+        structured_values, aligned_table, parameter_labels, observation_names = make_CornerPlot(
+            Samples, CONFIG[model_name], model_name, model_name, PLOT_SETTINGS
+        )
+        All_best_fit_values[model_name] = structured_values  # Store best-fit values for this model
+        All_LaTeX_Tables[model_name] = (aligned_table, parameter_labels, observation_names)  # Store LaTeX table data
+
+    print("\n\nPlotting Best-Fit models onto its data source...\n")
     best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS["color_schemes"])
-    
+
+    return All_best_fit_values, All_LaTeX_Tables
+ 
 def autocorrPlot(autocorr, index, model_name, color, obs, PLOT_SETTINGS, close_plot=False, nsteps=100):
     """
     Generate and save the autocorrelation plot dynamically during MCMC sampling.
@@ -59,75 +68,119 @@ def autocorrPlot(autocorr, index, model_name, color, obs, PLOT_SETTINGS, close_p
     plt.ylabel(r"Mean $\hat{\tau}$", fontsize=PLOT_SETTINGS.get("label_font_size", 12))
     plt.legend(fontsize=PLOT_SETTINGS.get("legend_font_size", 10))
     plt.savefig(f"./Plots/auto_corr/{model_name}.png", dpi=PLOT_SETTINGS.get("dpi", 200))
-       
+
 def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     """Generate a corner plot from MCMC samples with optional LaTeX table."""
     print("\n\033[4;31mNote\033[0m: GetDist's read chains ignore burn-in, since EMCEE already applies a burn fraction.")
-
+    
     # Ensure output folder exists
     folder_path = f"./Plots/corner_plots/{model_name}/"
     os.makedirs(folder_path, exist_ok=True)
-
-    # Prepare parameter labels
-    parameter_labels = greek_Symbols(CONFIG['parameters']) if PLOT_SETTINGS.get("latex_enabled", False) else CONFIG['parameters']
+    
+    # Extract plot settings
+    line_styles = PLOT_SETTINGS.get("line_styles", ["-", "--", ":", "-."])
+    line_widths = [1.2, 1.5]
+    color_schemes = PLOT_SETTINGS.get("color_schemes", ['r', 'b', 'green', 'cyan', 'yellow'])
 
     # Initialize GetDist plotter
     g = plots.get_subplot_plotter(subplot_size=4, subplot_size_ratio=0.8)
     g.settings.figure_legend_frame = True
     g.settings.tight_layout = True
     g.settings.alpha_filled_add = 0.4
-    g.settings.title_limit_fontsize = PLOT_SETTINGS.get("title_font_size", 12)
-    g.settings.legend_fontsize = PLOT_SETTINGS.get("legend_font_size", 12)
-    g.settings.fontsize = PLOT_SETTINGS.get("label_font_size", 12)
-
-    # Extract plot settings
-    line_styles = PLOT_SETTINGS.get("line_styles", ['-', '--', ':', '-.'])
-    line_widths = [1.2, 1.5] * (len(line_styles) // 2 + 1)
-    color_schemes = PLOT_SETTINGS.get("color_schemes", ['r', 'b', 'green', 'cyan'])
-
-    # Verify Samples
-    if not Samples:
-        raise ValueError("Samples dictionary is empty or not properly set up.")
+    g.settings.solid_colors = list(reversed(color_schemes))
+    
+    # Determine the number of parameters from the first sample
+    if Samples:
+        first_sample = next(iter(Samples.values()))
+        num_params = first_sample.shape[1]
+    else:
+        raise ValueError("No samples found to determine the number of parameters.")
+    
+    # Dynamically calculate font size
+    base_size = PLOT_SETTINGS.get("label_font_size", 12)
+    max_size = 20
+    font_size = base_size + ((num_params - 2) / (6 - 2)) * (max_size - base_size)
+    font_size = max(font_size, base_size)
+    g.settings.title_limit_fontsize = font_size
+    g.settings.legend_fontsize = font_size
+    g.settings.fontsize = font_size
 
     # Prepare distributions and labels
-    distributions = []
-    labels = []
-    for obs in Samples:
-        if not Samples[obs].size:
+    distributions, labels = [], []
+    for i, (obs, sample) in enumerate(Samples.items()):
+        obs_list = next((obs_entry for obs_entry in CONFIG["observations"] if "+".join(obs_entry) == obs), None)
+        if obs_list is None:
+            raise ValueError(f"Observation '{obs}' not found in CONFIG['observations'].")
+
+        param_index = CONFIG["observations"].index(obs_list)
+        parameter_names = CONFIG["parameters"][param_index]
+        parameter_labels = (
+            greek_Symbols(parameter_names) if PLOT_SETTINGS.get("latex_enabled", False) else parameter_names
+        )
+
+        if not sample.size:
             raise ValueError(f"Samples for '{obs}' are empty.")
-        distribution = MCSamples(samples=Samples[obs], names=parameter_labels, labels=parameter_labels)
+
+        distribution = MCSamples(samples=sample, names=parameter_names, labels=parameter_labels)
+        distribution.plotColor = color_schemes[i % len(color_schemes)]
         distributions.append(distribution)
         labels.append(obs)
 
-    # Calculate LaTeX table and structured values
-    results, latex_table, structured_values = SP.calculate_asymmetric_from_samples(Samples, CONFIG['parameters'])
+    formatted_labels = [
+        obs.replace("PantheonP", "Pantheon+").replace("f_sigma_8", r"$f_{\sigma_8}$")
+        for obs in labels
+    ]
+    
+    results, latex_table, structured_values = SP.calculate_asymmetric_from_samples(
+        Samples, CONFIG["parameters"], CONFIG["observations"]
+    )
+    
+    aligned_latex_table = align_table_to_parameters(latex_table, CONFIG["parameters"])
 
-    # Plot corner plot
-    num_cols = (len(labels) + 1) // 2  # Maximum 2 entries per column
+    line_args = [
+        {
+            "ls": line_styles[i % len(line_styles)],
+            "lw": line_widths[i % len(line_widths)],
+            "color": color_schemes[i % len(color_schemes)]
+        }
+        for i in range(len(distributions))
+    ]
+
+    num_cols = (len(labels) + 1) // 2
     g.triangle_plot(
         distributions,
         filled=True,
-        legend_labels=labels,
-        legend_loc='upper right',
+        legend_labels=formatted_labels,
+        legend_loc="upper right",
         legend_ncol=num_cols,
-        line_args=[{'ls': ls, 'lw': lw, 'color': color_schemes[i % len(color_schemes)]}
-                   for i, (ls, lw) in enumerate(zip(line_styles, line_widths))]
+        line_args=line_args,
     )
 
-    # Optionally add table to the plot
-    if PLOT_SETTINGS and PLOT_SETTINGS.get("Table", False):
-        add_corner_table(g, latex_table, labels, parameter_labels, PLOT_SETTINGS, len(CONFIG['parameters']))
+    formatted_columns = format_for_latex(greek_Symbols(CONFIG["parameters"][0]))
 
-    # Save the plot
+    if PLOT_SETTINGS.get("Table", False):
+        add_corner_table(
+            g,
+            aligned_latex_table,
+            formatted_labels,
+            PLOT_SETTINGS,
+            formatted_columns,
+            CONFIG["parameters"][0],
+            len(CONFIG["parameters"][0]),
+        )
+
     plt.savefig(f"{folder_path}/{save_file_name}.png", dpi=PLOT_SETTINGS.get("dpi", 300))
     plt.close()
 
-    return structured_values
-    
+    # Return the aligned LaTeX table, parameter labels, and observation names
+    return structured_values, aligned_latex_table, CONFIG["parameters"][0], ["+".join(obs) for obs in CONFIG["observations"]]
+
 def best_fit_plots(All_best_fit_values, CONFIG, data, color_schemes):
     """
     Generate best-fit plots for each model and observation combination.
     """
+    red_start, reset_color = "\033[31m", "\033[0m"  # ANSI codes for warnings
+
     for model_name, model_best_fit in All_best_fit_values.items():
         observations = CONFIG[model_name]["observations"]
         observation_types = CONFIG[model_name]["observation_types"]
@@ -135,51 +188,51 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, color_schemes):
         for obs_index, obs_set in enumerate(observations):
             obs_name = "_".join(obs_set)
             folder_path = f"./Plots/Best_fits/{model_name}/{obs_name}/"
-            setup_folder(folder_path)
-
             obs_types = observation_types[obs_index]
+
+            # Skip certain plots
             if len(set(obs_types)) > 1 and not (set(obs_types) == {'OHD', 'CC'} or set(obs_types) == {'CC', 'OHD'}):
-                print(f"Skipping combination plot for {obs_set} due to mixed observation types (excluding OHD+CC): {obs_types}")
+                print(f"{red_start}Skipping{reset_color} combination plot for {obs_set} due to mixed observation types (excluding OHD+CC).")
+                continue
+            if "BAO" in obs_types:
+                print(f"{red_start}Skipping{reset_color} the best-fit plot for {obs_set} data.")
                 continue
 
-            combined_best_fit = model_best_fit["+".join(obs_set)]
-            params_combined_median, params_combined_upper, params_combined_lower = fetch_best_fit_values(combined_best_fit)
+            setup_folder(folder_path)
 
-            combined_redshift, combined_type_data, combined_type_data_error = prepare_data(obs_set, data, params_combined_median)
+            # Extract best-fit values and prepare data
+            combined_best_fit = model_best_fit["+".join(obs_set)]
+            params_median, params_upper, params_lower = fetch_best_fit_values(combined_best_fit)
+            combined_redshift, combined_data, combined_error = prepare_data(obs_set, data, params_median)
 
             redshiftx = np.linspace(0.005, max(combined_redshift) + 0.05, 10000)
             obs_type = observation_types[obs_index][0]
 
-            model_combined_median, y_label = compute_model(model_name, redshiftx, params_combined_median, obs_type=obs_type)
-            model_combined_upper, _ = compute_model(model_name, redshiftx, params_combined_upper, obs_type=obs_type)
-            model_combined_lower, _ = compute_model(model_name, redshiftx, params_combined_lower, obs_type=obs_type)
+            # Compute models for median, upper, and lower bounds
+            model_median, y_label = compute_model(model_name, redshiftx, params_median, obs_type=obs_type)
+            model_upper, _ = compute_model(model_name, redshiftx, params_upper, obs_type=obs_type)
+            model_lower, _ = compute_model(model_name, redshiftx, params_lower, obs_type=obs_type)
 
             # Create the plot
             fig, (ax_main, ax_residual) = plt.subplots(
-                nrows=2, ncols=1, figsize=(8, 8), gridspec_kw={"height_ratios": [3, 1], "hspace": 0}, sharex=True
+                nrows=2, ncols=1, figsize=(8, 8),
+                gridspec_kw={"height_ratios": [3, 1], "hspace": 0}, sharex=True
             )
 
+            # Plot the best-fit model and uncertainty
             ax_main.plot(
-                redshiftx, model_combined_median,
-                label=f"{model_name} (Combined: {'+'.join(obs_set)})",
-                color=color_schemes[0], linestyle="-", zorder=3, linewidth=2
+                redshiftx, model_median, label=f"{model_name} (Combined: {'+'.join(obs_set)})",
+                color=color_schemes[0], linestyle="-", linewidth=2, zorder=3
             )
             ax_main.fill_between(
-                redshiftx, model_combined_lower, model_combined_upper,
+                redshiftx, model_lower, model_upper,
                 color="k", alpha=0.5, label="Model Uncertainty", zorder=2
             )
 
+            # Plot observational data
             for i, obs in enumerate(obs_set):
                 obs_data = data[obs]
-                if obs == 'PantheonP':
-                    redshift = obs_data['zHD']
-                    type_data = obs_data['m_b_corr'] - params_combined_median['M_abs']
-                    type_data_error = np.zeros(len(type_data))
-                else:
-                    redshift = obs_data["redshift"]
-                    type_data = obs_data["type_data"]
-                    type_data_error = obs_data["type_data_error"]
-
+                redshift, type_data, type_data_error = extract_observation_data(obs, obs_data, params_median)
                 ax_main.errorbar(
                     redshift, type_data, yerr=type_data_error,
                     fmt="o", label=obs, color=color_schemes[(i + 1) % len(color_schemes)],
@@ -191,20 +244,14 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, color_schemes):
             ax_main.legend(loc="lower right")
             ax_main.grid(False)
 
-            interpolator = interp1d(redshiftx, model_combined_median, kind="linear", bounds_error=False, fill_value="extrapolate")
+            # Compute and plot residuals
+            interpolator = interp1d(redshiftx, model_median, kind="linear", bounds_error=False, fill_value="extrapolate")
             model_at_combined_data = interpolator(combined_redshift)
 
             residual_start = 0
             for i, obs in enumerate(obs_set):
                 obs_data = data[obs]
-                if obs == 'PantheonP':
-                    redshift = obs_data['zHD']
-                    type_data = obs_data['m_b_corr'] - params_combined_median['M_abs']
-                    type_data_error = np.zeros(len(type_data))
-                else:
-                    redshift = obs_data["redshift"]
-                    type_data = obs_data["type_data"]
-                    type_data_error = obs_data["type_data_error"]
+                redshift, type_data, type_data_error = extract_observation_data(obs, obs_data, params_median)
 
                 residuals = [type_data[j] - model_at_combined_data[residual_start + j] for j in range(len(type_data))]
                 residual_start += len(type_data)
@@ -219,6 +266,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, color_schemes):
             ax_residual.set_ylabel("Residual: $Model - Data$ ($Mpc$)")
             ax_residual.grid()
 
+            # Save the plot
             plt.tight_layout()
             plt.subplots_adjust(hspace=0)
             plt.savefig(f"{folder_path}/{model_name}_Combined.png", dpi=300)

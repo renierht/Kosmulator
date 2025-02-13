@@ -49,60 +49,108 @@ def load_all_data(config):
 
 def create_config(models, true_values=None, prior_limits=None, observation=None, nwalkers=20, nsteps=200, burn=20, model_name=None):
     """
-    Create a CONFIG dictionary dynamically.
+    Create a CONFIG dictionary dynamically, ensuring each observation has its own parameter set.
     """
-    observation = observation or ["SNe"]
+    observation = observation or [["SNe"]]
     true_values = true_values or {}
-    observation_types = [["SNe" if obs in ["Pantheon", "JLA", "PantheonP"] else obs for obs in obs_list] for obs_list in observation]
-    model_name = model_name or "LCDM"
+    prior_limits = prior_limits or {}
+    
+    # Define observation type mappings
+    obs_type_map = {
+        "JLA": "SNe",
+        "Pantheon": "SNe",
+        "PantheonP": "SNe",
+        "OHD": "OHD",
+        "CC": "CC",
+        "BAO": "BAO",
+        "f_sigma_8": "f_sigma_8",
+        "f": "f",
+    }
+
     config, data = {}, {}
 
-    # Validate model configurations
-    if not isinstance(models, dict) or not models:
-        raise ValueError("Models must be provided as a non-empty dictionary.")
-
     for mod in model_name:
-        parameters = models[mod]['parameters']
-        ndim = len(parameters)
-        adjusted_nwalkers = max(nwalkers, 2 * ndim + 2)
-        if nwalkers < 2 * ndim:
-            print(f"\033[4;31mSafeguard:\033[0m 'nwalkers' for model '{mod}' was too low ({nwalkers}). \033[34mAdjusted to {adjusted_nwalkers}\033[0m (2x+2 the number of parameters: {ndim}).")
+        parameters_list = models[mod]['parameters']  # Now a list of lists
+
+        ndim_list = [len(params) for params in parameters_list]  # Compute dimensions per observation
+        adjusted_nwalkers = max(nwalkers, 2 * max(ndim_list) + 2)
+        
+        # Generate observation types dynamically
+        observation_types = [
+            [obs_type_map[obs_item] for obs_item in obs_list if obs_item in obs_type_map] 
+            for obs_list in observation
+        ]
+
         config[mod] = {
-            "parameters": parameters,
-            "true_values": [true_values.get(p, np.mean(prior_limits[p])) for p in parameters],
-            "prior_limits": {p: prior_limits[p] for p in parameters},
+            "parameters": parameters_list,  # List of lists now
+            "true_values": [
+                [
+                    true_values[p] if p in true_values else sum(prior_limits[p]) / 2 if p in prior_limits else 0.5
+                    for p in param_set
+                ]
+                for param_set in parameters_list
+            ],
+            "prior_limits": [
+                {p: prior_limits[p] for p in param_set if p in prior_limits}
+                for param_set in parameters_list
+            ],
             "observations": observation,
-            "ndim": ndim,
+            "observation_types": observation_types, 
+            "ndim": ndim_list,
             "nwalker": adjusted_nwalkers,
             "nsteps": nsteps,
             "burn": burn,
             "model_name": model_name,
-            "observation_types": observation_types
         }
+
+        # Load the data
         data = load_all_data(config[mod])
+
     return config, data
 
 def Add_required_parameters(models, observations):
     """
-    Add required parameters like H_0 and r_d if missing, with warnings.
+    Modify the parameter list structure: ensure each observation set has the correct parameters.
+    Prints warnings when parameters are added automatically.
     """
-    params_map = {"BAO": "r_d", "PantheonP": "M_abs", "f_sigma_8": ["sigma_8", "gamma"], "f": "gamma"}
+    params_map = {
+        "BAO": ["H_0","r_d"], 
+        "PantheonP": ["H_0","M_abs"], 
+        "f_sigma_8": ["sigma_8", "gamma"], 
+        "f": ["gamma"],
+        "JLA": ["H_0"],
+        "OHD": ["H_0"],
+        "CC": ["H_0"],
+        "Pantheon": ["H_0"],
+    }
+
     for mod, mod_data in models.items():
-        parameters = mod_data["parameters"]
-        if "H_0" not in parameters:
-            parameters.append("H_0")
-            print(f"\033[4;31mSafeguard:\033[0m Added 'H_0' to the parameter list of {mod} (Required for all models).")
+        core_parameters = mod_data["parameters"][:]  # Copy user-defined parameters
+        new_param_list = []  # Create a fresh list for observations
+        
+        print(f"\nProcessing model: {mod}")
+        
+        # Loop through each observation and assign the correct parameters
         for obs in observations:
+            obs_parameters = list(core_parameters)  # Start with core parameters
+            added_params = []
+
             for key, value in params_map.items():
                 if key in obs:
-                    if isinstance(value, list):
-                        for v in value:
-                            if v not in parameters:
-                                parameters.append(v)
-                                print(f"\033[4;31mSafeguard:\033[0m Added '{v}' to the parameter list of {mod} (Required for {key}).")
-                    elif value not in parameters:
-                        parameters.append(value)
-                        print(f"\033[4;31mSafeguard:\033[0m Added '{value}' to the parameter list of {mod} (Required for {key}).")
+                    for v in value:
+                        if v not in obs_parameters:
+                            obs_parameters.append(v)
+                            added_params.append(v)
+
+            # Show a warning if parameters were added
+            if added_params:
+                print(f"\033[4;31mSafeguard:\033[0m Added {added_params} to the parameter list for {obs} (Required for this observation type).")
+
+            new_param_list.append(obs_parameters)  # Append modified parameter list
+
+        # Ensure we **replace** instead of appending
+        mod_data["parameters"] = new_param_list  
+
     return models
 
 def create_output_directory(model_name, observations):
