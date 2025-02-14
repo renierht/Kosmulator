@@ -15,13 +15,14 @@ if sys.version_info[0] == 2:
 
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
-model_names = ["f1CDM_v"]
-observations =  [['BAO','f_sigma_8'],['BAO'],['Pantheon'],['f'],['f_sigma_8']]
-nwalkers: int = 20
+model_names = ["BetaRn"]
+observations =  [['JLA','BAO','f_sigma_8'],['JLA'],['BAO'],['f'],['f_sigma_8'], ['OHD'],['CC']]
+true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
+nwalkers: int = 10
 nsteps: int = 200
 burn: int = 10
 
-overwrite =False
+overwrite = False
 convergence = 0.01
 
 prior_limits = {
@@ -32,7 +33,7 @@ prior_limits = {
     "zeta": (0.0,0.3),
     "gamma": (0.4, 0.7),
     "sigma_8": (0.5, 1.0),
-    "n": (0.0, 0.5),
+    "n": (0.15,1.0),
     "p": (0.0, 1.0),
     "Gamma": (2.0, 10.0),
     "q0": (-0.8, -0.01),
@@ -95,6 +96,11 @@ if PLOT_SETTINGS["latex_enabled"]:
             plt.rc("text", usetex=True)
             plt.rc("font", family="Arial")
 
+# Ensure the true_model is at the front of the model_names list
+if true_model in model_names:
+    model_names.remove(true_model)  # Remove it from its current position
+model_names.insert(0, true_model)  # Insert it at the front
+
 # Display safeguard warnings
 print(f"\033[33m################################################\033[0m")
 print(f"\033[33m####\033[0m Safeguards + Warnings")
@@ -114,7 +120,7 @@ CONFIG, data = Config.create_config(  # Do NOT call Add_required_parameters agai
     burn=burn,
     model_name=model_names,
 )
-    
+
 # Main execution block
 if __name__ == "__main__":
     start = time.time()
@@ -129,15 +135,13 @@ if __name__ == "__main__":
         convergence=convergence,
         PLOT_SETTINGS=PLOT_SETTINGS,
     )
-    
-    
+   
     # Generate plots
     print(f"\n\033[33m################################################\033[0m")
     print(f"\033[33m####\033[0m Generating Plots :)")
     print(f"\033[33m################################################\033[0m")
 
-    best_fit_values, All_LaTeX_Tables = MP.generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data)
-
+    best_fit_values, All_LaTeX_Tables, statistical_results = MP.generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model)
 
     # Print LaTeX tables for all models
     for model_name, (aligned_table, parameter_labels, observation_names) in All_LaTeX_Tables.items():
