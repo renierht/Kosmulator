@@ -190,3 +190,63 @@ def format_elapsed_time(seconds):
     if minutes:
         return f"{minutes}:{seconds:02} minutes"
     return f"{seconds} seconds"
+
+def save_stats_to_file(model, folder, stats_list):
+    """Save statistical results to a file."""
+    file_path = os.path.join(folder, "stats_summary.txt")
+    with open(file_path, "w") as f:
+        f.write(f"Statistical Results for Model: {model}\n\n")
+        f.write("Observation            | Log-Likelihood | Chi-Squared | Reduced Chi-Squared | AIC     | BIC     | dAIC   | dBIC\n")
+        f.write("-" * 120 + "\n")
+        for stats in stats_list:
+            f.write(
+                f"{stats['Observation']:<22} | "
+                f"{stats['Log-Likelihood']:<15.4f} | "
+                f"{stats['Chi_squared']:<12.4f} | "
+                f"{stats['Reduced_Chi_squared']:<20.4f} | "
+                f"{stats['AIC']:<8.3f} | {stats['BIC']:<8.3f} | "
+                f"{stats['dAIC']:<8.3f} | {stats['dBIC']:<8.3f}\n"
+            )
+
+def save_interpretations_to_file(model, folder, interpretations_list):
+    """Save interpretations to a file."""
+    file_path = os.path.join(folder, "interpretations_summary.txt")
+    with open(file_path, "w") as f:
+        f.write(f"Interpretations for Model: {model}\n\n")
+        f.write("Observation            | Reduced Chi2 Diagnostics                              | AIC Interpretation               | BIC Interpretation\n")
+        f.write("-" * 140 + "\n")
+        for interpretation in interpretations_list:
+            f.write(
+                f"{interpretation['Observation']:<22} | "
+                f"{interpretation['Reduced Chi2 Diagnostics']:<50} | "
+                f"{interpretation['AIC Interpretation']:<30} | "
+                f"{interpretation['BIC Interpretation']:<30}\n"
+            )
+
+def save_latex_table_to_file(model, folder, table_data):
+    """Save LaTeX tables to a file."""
+    aligned_table, parameter_labels, observation_names = table_data
+    file_path = os.path.join(folder, "aligned_table.txt")
+    with open(file_path, "w") as f:
+        f.write(f"Aligned Table for Model: {model}\n")
+        f.write("Observation            | " + " | ".join(parameter_labels) + "\n")
+        f.write("-" * (20 + 25 * len(parameter_labels)) + "\n")
+        for obs, row in zip(observation_names, aligned_table):
+            f.write(obs + " | " + " | ".join(row) + "\n")
+
+def print_stats_table(model, stats_list):
+    """Print the statistical results table to the console."""
+    print(f"Statistical Results for Model: {model}")
+    print("Observation            | Log-Likelihood | Chi-Squared | Reduced Chi-Squared | AIC     | BIC     | dAIC   | dBIC")
+    print("-" * 120)
+    for stats in stats_list:
+        print(
+            f"{stats['Observation']:<22} | "
+            f"{stats['Log-Likelihood']:<15.4f} | "
+            f"{stats['Chi_squared']:<12.4f} | "
+            f"{stats['Reduced_Chi_squared']:<20.4f} | "
+            f"{stats['AIC']:<8.3f} | {stats['BIC']:<8.3f} | "
+            f"{stats['dAIC']:<8.3f} | {stats['dBIC']:<8.3f}"
+        )
+    print("\n")
+
