@@ -183,7 +183,242 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
 
     return results, latex_table, structured_values
 
+def statistical_analysis(best_fit_values, data, CONFIG, true_model):
+    """
+    Perform statistical analysis for all models and observation combinations,
+    and calculate delta AIC/BIC relative to the true model.
 
+    Args:
+        best_fit_values (dict): Best-fit parameter values for each model and observation.
+        data (dict): Observational data.
+        CONFIG (dict): Configuration dictionary.
+        true_model (str): Name of the true model to use as the reference.
+
+    Returns:
+        dict: Statistical analysis results (Log-Likelihood, Chi-squared, Reduced Chi-squared, AIC, BIC, dAIC, dBIC).
+    """
+    results = {}
+    reference_aic = {}
+    reference_bic = {}
+
+    for model_name, observations in best_fit_values.items():
+        results[model_name] = {}
+        for obs_name, params in observations.items():
+            # Extract best-fit parameter values (median values)
+            param_dict = {param: values[0] for param, values in params.items()}
+            num_params = len(param_dict)  # Number of free parameters for this model
+
+            # Handle combined datasets (e.g., 'BAO+f_sigma_8')
+            obs_list = obs_name.split("+")
+            chi_squared_total = 0
+            num_data_points_total = 0
+
+            for obs in obs_list:
+                # Extract data for the individual observation
+                obs_data = data.get(obs)
+                if not obs_data:
+                    raise ValueError(f"Observation data for {obs} not found.")
+
+                # Determine model function
+                MODEL_func = UDM.Get_model_function(model_name)
+
+                # Dynamically find `obs_type` from CONFIG
+                try:
+                    obs_index = CONFIG[model_name]["observations"].index([obs])
+                    obs_type = CONFIG[model_name]["observation_types"][obs_index][0]
+                except ValueError:
+                    raise ValueError(f"Observation {obs} not found in CONFIG for model {model_name}.")
+
+                # Handle JLA and Pantheon datasets
+                if obs_type == "SNe" and obs != "PantheonP":
+                    redshift = obs_data["redshift"]
+                    type_data = obs_data["type_data"]
+                    type_data_error = obs_data["type_data_error"]
+
+                    # Compute comoving distances and distance modulus
+                    comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, redshift, param_dict, "SNe")
+                    model = 25 + 5 * np.log10(comoving_distances * (1 + redshift))
+
+                    # Calculate chi-squared for these datasets
+                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model)
+                    num_data_points_total += len(type_data)
+
+                # Handle PantheonP dataset
+                elif obs == "PantheonP":
+                    zHD = obs_data["zHD"]
+                    m_b_corr = obs_data["m_b_corr"]
+                    IS_CALIBRATOR = obs_data["IS_CALIBRATOR"]
+                    CEPH_DIST = obs_data["CEPH_DIST"]
+                    cov = obs_data["cov"]
+
+                    # Compute comoving distances and distance modulus
+                    comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, zHD, param_dict, "SNe")
+                    distance_modulus = 25 + 5 * np.log10(comoving_distances * (1 + zHD))
+
+                    # Use PantheonP chi calculation
+                    chi_squared = Calc_PantP_chi(m_b_corr, IS_CALIBRATOR, CEPH_DIST, cov, distance_modulus, param_dict)
+                    num_data_points_total += len(m_b_corr)
+
+                # Handle BAO datasets
+                elif obs_type == "BAO":
+                    chi_squared = Calc_BAO_chi(obs_data, MODEL_func, param_dict, "BAO")
+                    num_data_points_total += len(obs_data["covd1"])  # Number of points from the covariance matrix
+
+                # Handle growth rate and f_sigma_8 datasets
+                elif obs_type in ["f", "f_sigma_8"]:
+                    redshift = obs_data["redshift"]
+                    type_data = obs_data["type_data"]
+                    type_data_error = obs_data["type_data_error"]
+
+                    Omega_zeta = UDM.matter_density_z(redshift, MODEL_func, param_dict, obs_type)
+
+                    if obs_type == "f":
+                        model = Omega_zeta ** param_dict["gamma"]
+                    elif obs_type == "f_sigma_8":
+                        integral_term = UDM.integral_term(redshift, MODEL_func, param_dict, obs_type)
+                        model = param_dict["sigma_8"] * Omega_zeta ** param_dict["gamma"] * np.exp(-1 * integral_term)
+
+                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model)
+                    num_data_points_total += len(type_data)
+
+                # Handle OHD and CC datasets
+                elif obs_type in ["OHD", "CC"]:
+                    redshift = obs_data["redshift"]
+                    type_data = obs_data["type_data"]
+                    type_data_error = obs_data["type_data_error"]
+
+                    model = param_dict["H_0"] * np.array([MODEL_func(z, param_dict, obs_type) for z in redshift])
+                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model)
+                    num_data_points_total += len(type_data)
+
+                else:
+                    raise ValueError(f"Unsupported observation type: {obs_type}")
+
+                # Update chi-squared total
+                chi_squared_total += chi_squared
+
+            # Compute log-likelihood
+            log_likelihood = -0.5 * chi_squared_total
+
+            # Calculate degrees of freedom
+            dof = num_data_points_total - num_params
+            if dof <= 0:
+                raise ValueError(f"Degrees of freedom (DOF) is zero or negative. Check your model or dataset.")
+
+            # Calculate reduced chi-squared
+            reduced_chi_squared = chi_squared_total / dof
+
+            # Calculate AIC
+            aic = 2 * num_params - 2 * log_likelihood
+
+            # Calculate BIC
+            bic = num_params * np.log(num_data_points_total) - 2 * log_likelihood
+
+            # Store results
+            results[model_name][obs_name] = {
+                "Log-Likelihood": log_likelihood,
+                "Chi_squared": chi_squared_total,
+                "Reduced_Chi_squared": reduced_chi_squared,
+                "AIC": aic,
+                "BIC": bic,
+            }
+
+            # Save AIC/BIC for the true model
+            if model_name == true_model:
+                reference_aic[obs_name] = aic
+                reference_bic[obs_name] = bic
+
+    # Calculate delta AIC/BIC for all models relative to the true model
+    for model_name, obs_results in results.items():
+        for obs_name, stats in obs_results.items():
+            stats["dAIC"] = stats["AIC"] - reference_aic.get(obs_name, stats["AIC"])
+            stats["dBIC"] = stats["BIC"] - reference_bic.get(obs_name, stats["BIC"])
+
+    return results
+
+def provide_model_diagnostics(reduced_chi_squared, model_name="", reference_chi_squared=None):
+    """
+    Provide a quick diagnostic description of the model's performance.
+
+    Args:
+        reduced_chi_squared (float): Reduced chi-squared value.
+        model_name (str): Name of the model (e.g., "LCDM") for context.
+        reference_chi_squared (float, optional): Reduced chi-squared value of a reference model (e.g., LCDM).
+
+    Returns:
+        str: Diagnostic feedback for the user.
+    """
+    feedback = ""
+
+    # Statistical Approach
+    feedback += "Statistical Interpretation:\n"
+    if 0.9 <= reduced_chi_squared <= 1.1:
+        feedback += "  - The model appears to fit the data very well. The reduced chi-squared is close to 1, " \
+                    "indicating the residuals are consistent with the uncertainties.\n"
+    elif 0.5 <= reduced_chi_squared < 0.9:
+        feedback += "  - The reduced chi-squared is slightly below 1. This could indicate overfitting, " \
+                    "or that the data uncertainties may be overestimated.\n"
+    elif reduced_chi_squared < 0.5:
+        feedback += "  - The reduced chi-squared is significantly below 1. This suggests possible overfitting or overly conservative error bars.\n"
+    elif 1.1 < reduced_chi_squared <= 3.0:
+        feedback += "  - The reduced chi-squared is above 1, but within an acceptable range. This indicates a reasonable fit, though there " \
+                    "might be room for improvement in the model or data uncertainties.\n"
+    else:
+        feedback += "  - The reduced chi-squared is significantly above 3. This suggests the model does not fit the data well. " \
+                    "Consider revising your model or checking for systematic errors in the data.\n"
+
+    # Benchmark Approach: Only applies to non-LCDM models
+    if reference_chi_squared is not None and model_name.lower() != "lcdm":
+        feedback += "\nBenchmark Comparison (Relative to LCDM):\n"
+        if reduced_chi_squared < reference_chi_squared:
+            feedback += f"  - This model's reduced chi-squared ({reduced_chi_squared:.2f}) is lower than the benchmark LCDM value ({reference_chi_squared:.2f}).\n"
+            feedback += "    This could indicate overfitting or that uncertainties are playing a significant role.\n"
+        elif reduced_chi_squared > reference_chi_squared:
+            feedback += f"  - This model's reduced chi-squared ({reduced_chi_squared:.2f}) is higher than the benchmark LCDM value ({reference_chi_squared:.2f}).\n"
+            feedback += "    This may suggest underfitting or that the model does not capture the data as well as LCDM.\n"
+        else:
+            feedback += f"  - This model's reduced chi-squared matches the benchmark LCDM value ({reference_chi_squared:.2f}), suggesting a comparable fit.\n"
+
+    # Special case for LCDM
+    if model_name.lower() == "lcdm":
+        feedback += "\nThe LCDM model is widely regarded as a robust and well-tested benchmark model. It is recommended when comparing to other models to compare their reduced chi-squared values to the LCDM model's to determine whether over- or under-fitting happened irregardless of the uncertainties in the observations themselves.\n"
+
+    return feedback
+
+def interpret_delta_aic_bic(delta_aic, delta_bic):
+    """
+    Interpret delta AIC and BIC values using Jeffreys scale.
+
+    Args:
+        delta_aic (float): Delta AIC relative to the true model.
+        delta_bic (float): Delta BIC relative to the true model.
+
+    Returns:
+        str: Interpretation of the delta AIC and BIC values.
+    """
+    feedback = ""
+
+    # Interpret delta AIC
+    if delta_aic < 0:
+        feedback += f"  - Delta AIC: The model has a better fit than the reference model (Delta AIC = {delta_aic:.2f}).\n"
+    elif delta_aic <= 2:
+        feedback += "  - Delta AIC: The models are equally plausible.\n"
+    elif 4 <= delta_aic < 7:
+        feedback += "  - Delta AIC: Moderate evidence against this model.\n"
+    elif delta_aic >= 10:
+        feedback += "  - Delta AIC: Strong evidence against this model.\n"
+
+    # Interpret delta BIC
+    if delta_bic < 0:
+        feedback += f"  - Delta BIC: The model is strongly preferred over the reference model (Delta BIC = {delta_bic:.2f}).\n"
+    elif delta_bic <= 2:
+        feedback += "  - Delta BIC: The models are equally plausible.\n"
+    elif 4 <= delta_bic < 7:
+        feedback += "  - Delta BIC: Moderate evidence against this model.\n"
+    elif delta_bic >= 10:
+        feedback += "  - Delta BIC: Strong evidence against this model.\n"
+
+    return feedback
 
 
 
