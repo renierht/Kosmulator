@@ -113,6 +113,12 @@ def Add_required_parameters(models, observations):
     Modify the parameter list structure: ensure each observation set has the correct parameters.
     Prints warnings when parameters are added automatically.
     """
+    try:
+        from mpi4py import MPI
+        return MPI.COMM_WORLD.Get_rank()
+    except ImportError:
+        return 0
+
     params_map = {
         "BAO": ["H_0","r_d"], 
         "PantheonP": ["H_0","M_abs"], 
@@ -128,7 +134,6 @@ def Add_required_parameters(models, observations):
         core_parameters = mod_data["parameters"][:]  # Copy user-defined parameters
         new_param_list = []  # Create a fresh list for observations
         
-        print(f"\nProcessing model: {mod}")
         
         # Loop through each observation and assign the correct parameters
         for obs in observations:
@@ -159,16 +164,17 @@ def create_output_directory(model_name, observations):
     """
     if not observations:
         raise ValueError("No observations provided.")
-    save_dir = f"MCMC_Chains/{model_name}/"
+    output_suffix = os.getenv("OUTPUT_SUFFIX", "")
+    save_dir = f"MCMC_Chains{output_suffix}/{model_name}/"
     os.makedirs(save_dir, exist_ok=True)
 
     output_paths = {}
     for obs in observations:
         # Create subdirectory for each observation
         obs_dir = os.path.join(save_dir, obs)
-        os.makedirs(obs_dir, exist_ok = True)
+        os.makedirs(obs_dir, exist_ok=True)
         output_paths[obs] = obs_dir
-    return output_paths
+    return save_dir, output_paths
 
 def generate_label(obs):
     """Generate a label based on the observation list."""

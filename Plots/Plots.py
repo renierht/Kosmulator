@@ -231,7 +231,10 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         line_args=line_args,
     )
 
-    formatted_columns = format_for_latex(greek_Symbols(CONFIG["parameters"][0]))
+    if PLOT_SETTINGS.get("latex_enabled", False):
+        formatted_columns = format_for_latex(greek_Symbols(CONFIG["parameters"][0]))
+    else:
+        formatted_columns = CONFIG["parameters"][0]
 
     if PLOT_SETTINGS.get("Table", False):
         add_corner_table(
