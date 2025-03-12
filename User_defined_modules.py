@@ -27,7 +27,7 @@ def f1CDM_MODEL(z, param_dict, Type="SNe"):
     """
     Solve the nonlinear algebraic equation for E(z).
     """
-    
+
     z = np.atleast_1d(z)  # Ensure z is treated as an array
     def hubble_nonlinear(E, z, Omega_m, n):
         return E**2 - (Omega_m * (1 + z)**3 + (1 - Omega_m) * E**(2 * n))
@@ -42,6 +42,22 @@ def f1CDM_MODEL(z, param_dict, Type="SNe"):
     # Return processed results based on Type
     result = Calculate_return_values(E_solution, Type)
     return result if len(result) > 1 else result[0]
+
+def f1CDM_v_MODEL(z, param_dict, Type="SNe"):
+    z = np.atleast_1d(z)  # Ensure z is treated as an array
+    def hubble_nonlinear(E, z, Omega_m, n, zeta):
+        return E**2 - (Omega_m * (1 + z)**(3-3*zeta) + (1 - Omega_m) * E**(2 * n))
+
+    Omega_m = param_dict["Omega_m"]
+    n = param_dict["n"]
+    zeta = param_dict["zeta"]
+
+    # Solve for E(z) (vectorized)
+    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, n, zeta))[0] for zi in z])
+
+    result = Calculate_return_values(E_solution, Type)
+    return result if len(result) > 1 else result[0]
+
 
 def BetaRn_MODEL(z, param_dict, Type = "SNe"):
     '''
@@ -76,6 +92,7 @@ def Get_model_function(model_name):
     models = {
         "LCDM": LCDM_MODEL,
         "f1CDM": f1CDM_MODEL,
+        "f1CDM_v": f1CDM_v_MODEL,
         "BetaRn": BetaRn_MODEL,
     }
     if model_name not in models:
@@ -88,6 +105,7 @@ def Get_model_names(model_name):
     all_models = {
         "LCDM"     : {"parameters": ["Omega_m"]},
         "f1CDM"  : {"parameters": ["Omega_m", "n"]},
+        "f1CDM_v"  : {"parameters": ["Omega_m", "n","zeta"]},
         "BetaRn" : {"parameters": ["Omega_m", "q0", "q1", "beta", "n"]},
     }
     models = {name: all_models[name] for name in model_name if name in all_models}

@@ -15,12 +15,12 @@ if sys.version_info[0] == 2:
 
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
-model_names = ["BetaRn"]
-observations =  [['JLA','BAO','f_sigma_8'],['JLA'],['BAO'],['f'],['f_sigma_8'], ['OHD'],['CC']]
+model_names = ["f1CDM_v"]
+observations =  [['CC','BAO','PantheonP','f_sigma_8']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
-nwalkers: int = 10
-nsteps: int = 200
-burn: int = 10
+nwalkers: int = 100
+nsteps: int = 10000
+burn: int = 1000
 
 overwrite = False
 convergence = 0.01
