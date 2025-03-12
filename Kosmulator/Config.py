@@ -113,11 +113,11 @@ def Add_required_parameters(models, observations):
     Modify the parameter list structure: ensure each observation set has the correct parameters.
     Prints warnings when parameters are added automatically.
     """
-    try:
-        from mpi4py import MPI
-        return MPI.COMM_WORLD.Get_rank()
-    except ImportError:
-        return 0
+    #try:
+    #    from mpi4py import MPI
+    #    return MPI.COMM_WORLD.Get_rank()
+    #except ImportError:
+    #    return 0
 
     params_map = {
         "BAO": ["H_0","r_d"], 
@@ -158,19 +158,26 @@ def Add_required_parameters(models, observations):
 
     return models
 
-def create_output_directory(model_name, observations):
+def create_output_directory(model_name, observations, suffix=""):
     """
     Create output directories for saving MCMC results.
+
+    Args:
+        model_name (str): Name of the model.
+        observations (list): List of observation names.
+        suffix (str): Suffix string to append to the base folder name.
+
+    Returns:
+        tuple: (save_dir, output_paths)
     """
     if not observations:
         raise ValueError("No observations provided.")
-    output_suffix = os.getenv("OUTPUT_SUFFIX", "")
-    save_dir = f"MCMC_Chains{output_suffix}/{model_name}/"
+    save_dir = f"MCMC_Chains{suffix}/{model_name}/"
     os.makedirs(save_dir, exist_ok=True)
 
     output_paths = {}
     for obs in observations:
-        # Create subdirectory for each observation
+        # Create a subdirectory for each observation
         obs_dir = os.path.join(save_dir, obs)
         os.makedirs(obs_dir, exist_ok=True)
         output_paths[obs] = obs_dir
