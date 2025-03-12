@@ -6,7 +6,7 @@ import User_defined_modules as UDM
 # Add the parent directory to the Python path for module imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, convergence, PLOT_SETTINGS, use_mpi, num_cores):
+def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, convergence, PLOT_SETTINGS, use_mpi, num_cores, suffix=""):
     """
     Run MCMC simulations for all models and observations.
 
@@ -53,7 +53,7 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
 
             # Create the output directories and retrieve the model function
             #output_dirs = Config.create_output_directory(model_name=model_name, observations=[observations_name])
-            base_dir, output_dirs = Config.create_output_directory(model_name, [observations_name])
+            base_dir, output_dirs = Config.create_output_directory(model_name, [observations_name], suffix=suffix)
             MODEL = UDM.Get_model_function(model_name)
 
             # Print observation details
@@ -70,10 +70,11 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
 
             # Load existing MCMC chains if not overwriting
             if not overwrite and os.path.exists(chain_path):
-                print(f"Loading existing MCMC chain from {chain_path}\n")
-                samples = EMCEE.load_mcmc_results(output_path=output_dir, file_name=file_name, CONFIG=CONFIG[list(models.keys())[j]])
-                observation_key = '+'.join(obs) if len(obs) > 1 else obs[0]
-                Samples[observation_key] = samples
+                if rank == 0:
+                    print(f"Loading existing MCMC chain from {chain_path}\n")
+                    samples = EMCEE.load_mcmc_results(output_path=output_dir, file_name=file_name, CONFIG=CONFIG[list(models.keys())[j]])
+                    observation_key = '+'.join(obs) if len(obs) > 1 else obs[0]
+                    Samples[observation_key] = samples
             else:
                 label = Config.generate_label(obs)
                 Samples[label] = EMCEE.run_mcmc(

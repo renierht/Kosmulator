@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import os
 import sys
 import time
+import argparse
 from Kosmulator import Config, EMCEE, Statistic_packages
 from Plots import Plots as MP  # Custom module for creating plots (e.g., autocorrelation plot)
 import User_defined_modules as UDM  # Custom module with user-defined functions for cosmological calculations
@@ -16,17 +17,13 @@ if sys.version_info[0] == 2:
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
 #model_names = ["f1CDM","f1CDM_v"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
-model_names = ["LCDM"]
-observations =  [['OHD']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
+model_names = ["BetaRn"]
+observations =  [['PantheonP']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 10
 nsteps: int = 200
 burn: int = 10
-
-overwrite = True
 convergence = 0.01
-use_mpi = True
-num_cores = 8
 
 prior_limits = {
     "Omega_m": (0.10, 0.4),
@@ -59,9 +56,43 @@ true_values = {
     "M_abs": -19.2,
 }
 
-full_colors = ['r', 'b', 'green', 'cyan', 'purple', 'grey', 'yellow', 'm', 
+# Create an argument parser
+parser = argparse.ArgumentParser(description="Run Kosmulator MCMC simulation.")
+parser.add_argument("--num_cores", type=int, default=8,
+                    help="Number of cores to use (default: 8).")
+parser.add_argument("--OUTPUT_SUFFIX", type=str, default="",
+                    help="Suffix for the MCMC chain folder (default: empty).")
+parser.add_argument("--latex_enabled", type=lambda x: (str(x).lower() == "true"),
+                    default=True, help="Enable LaTeX in plots (default: True).")
+parser.add_argument("--use_mpi", type=lambda x: (str(x).lower() == "true"),
+                    default=None, help="Force MPI usage (default: auto-detect).")
+parser.add_argument("--overwrite", type=lambda x: (str(x).lower() == "true"),
+                    default=False, help="Overwrite existing MCMC chains (default: False).")
+args = parser.parse_args()
+
+# Auto-detect MPI if not explicitly forced
+if args.use_mpi is None:
+    try:
+        from mpi4py import MPI
+        # If running locally, the MPI world will have size 1.
+        if MPI.COMM_WORLD.Get_size() == 1:
+            use_mpi = False
+        else:
+            use_mpi = True
+    except ImportError:
+        use_mpi = False
+else:
+    use_mpi = args.use_mpi
+
+num_cores = args.num_cores
+OUTPUT_SUFFIX = args.OUTPUT_SUFFIX
+latex_enabled = args.latex_enabled
+overwrite = args.overwrite
+
+
+full_colors = ['r', 'b', 'green', 'cyan', 'purple', 'grey', 'yellow', 'm',
                'k', 'gray', 'orange', 'pink', 'crimson', 'darkred', 'salmon']
-               
+
 PLOT_SETTINGS = {
     "color_schemes": full_colors[:len(observations)],
     "line_styles": ["-", "--", ":", "-."],
@@ -69,7 +100,7 @@ PLOT_SETTINGS = {
     "legend_font_size": 12,
     "title_font_size": 12,
     "label_font_size": 12,
-    "latex_enabled": True,
+    "latex_enabled": latex_enabled,
     "dpi": 300,
     "autocorr_save_path": "./Plots/auto_corr/",
     "Table": True,
@@ -117,6 +148,11 @@ except ImportError:
 
 # Only master loads heavy CONFIG, data, and models; then broadcast them.
 if rank == 0:
+    print (f"use_mpi: {use_mpi}, num_cores: {num_cores}, OUTPUT_SUFFIX: {OUTPUT_SUFFIX}, latex_enabled: {latex_enabled}, overwrite: {overwrite}")
+    print(f"\033[33m{'#'*48}\033[0m")
+    print(f"\033[33m####\033[0m Safeguards + Warnings")
+    print(f"\033[33m{'#'*48}\033[0m")
+    
     models_local = UDM.Get_model_names(model_names)
     models_local = Config.Add_required_parameters(models_local, observations)
     CONFIG, data = Config.create_config(
@@ -138,11 +174,6 @@ if comm is not None:
     data = comm.bcast(data, root=0)
     models_local = comm.bcast(models_local, root=0)
 
-# Display safeguard warnings only on master.
-if rank == 0:
-    print(f"\033[33m{'#'*48}\033[0m")
-    print(f"\033[33m####\033[0m Safeguards + Warnings")
-    print(f"\033[33m{'#'*48}\033[0m")
 
 # Main execution block: use the broadcasted CONFIG and models_local.
 if __name__ == "__main__":
@@ -158,6 +189,7 @@ if __name__ == "__main__":
         PLOT_SETTINGS=PLOT_SETTINGS,
         use_mpi=use_mpi,
         num_cores=num_cores,
+        suffix=OUTPUT_SUFFIX,
     )
 
     if rank == 0:
