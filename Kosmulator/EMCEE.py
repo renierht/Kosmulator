@@ -11,6 +11,8 @@ from Kosmulator import Statistic_packages as SP  # Statistical functions for cos
 from Kosmulator.Config import format_elapsed_time, load_mcmc_results
 import User_defined_modules as UDM  # Custom user-defined cosmology functions
 from joblib import Parallel, delayed
+import sys
+import multiprocessing
             
 def model_likelihood(theta, obs_data, obs_type, CONFIG, MODEL_func, obs, obs_index):
     """
@@ -35,7 +37,7 @@ def model_likelihood(theta, obs_data, obs_type, CONFIG, MODEL_func, obs, obs_ind
         mb = obs_data['m_b_corr']
         trig = obs_data['IS_CALIBRATOR']
         cepheid = obs_data['CEPH_DIST']
-        cov = obs_data['cov']
+        cov_mat = obs_data['cov']
     else:
         redshift = obs_data["redshift"]
         type_data = obs_data["type_data"]
@@ -68,7 +70,7 @@ def model_likelihood(theta, obs_data, obs_type, CONFIG, MODEL_func, obs, obs_ind
 
     # Compute chi-square likelihood
     if obs == "PantheonP":
-        chi = SP.Calc_PantP_chi(mb, trig, cepheid, cov, model, param_dict)
+        chi = SP.Calc_PantP_chi(mb, trig, cepheid, cov_mat, model, param_dict)
     else:
         chi = SP.Calc_chi(obs_type, type_data, type_data_error, model)
     return -0.5 * chi
@@ -118,27 +120,21 @@ def lnprob(theta, data, Type, CONFIG, MODEL_func, obs, obs_index):
     # Combine prior and likelihood
     return lp + total_likelihood
 
-def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None, parallel=True, saveChains=False, 
-    overwrite=False, autoCorr=True, CONFIG=None, obs=None, Type=None, colors='r', convergence=0.01, last_obs=False
-    , PLOT_SETTINGS=None, obs_index=0):
+def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None,
+             use_mpi=False, num_cores=None, parallel=True, saveChains=False, overwrite=False,
+             autoCorr=True, CONFIG=None, obs=None, Type=None, colors='r',
+             convergence=0.01, last_obs=False, PLOT_SETTINGS=None, obs_index=0):
     """
     Run MCMC sampler using `emcee` with parallelization, saving, and autocorrelation-based convergence.
     """
-    # Determine multiprocessing settings
-    if parallel:
-        if platform.system() == "Darwin":  # macOS
-            print ("OS:                       Mac-based system")
-            from multiprocess import Pool, get_context
-        elif platform.system() == "Linux":
-            print ("OS:                       Linux-based system")
-            from multiprocessing import Pool, get_context
-        elif platform.system() == "Windows":
-            print ("OS:                       Windows-based system")
-            print ('Note: Windows crashes with the multiprocessing tool. Switching to serial calculation')
-            parallel = False  # Disable parallelization for Windows
-        else:
-            raise ImportError("Unsupported operating system for parallization in this script.")
-            
+
+    # Get the appropriate pool:
+    pool = get_pool(use_mpi=use_mpi,num_cores=num_cores)
+
+    if pool is None:
+        # If no pool is returned, fall back to serial mode:
+        parallel = False
+    
     # Check inputs
     if CONFIG is None or MODEL_func is None:
         raise ValueError("CONFIG and MODEL_func must be provided.")
@@ -178,7 +174,7 @@ def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None, parallel
     
     print (f"\nRunning the MCMC simulation for the \033[34m{model_name}\033[0m model on these data sets: \033[34m{obs}\033[0m...")
     if parallel:
-        with Pool() as pool:
+        with pool:
             if saveChains:
                 backend = emcee.backends.HDFBackend(chain_path)
                 backend.reset(CONFIG["nwalker"], CONFIG["ndim"][obs_index])
@@ -228,4 +224,54 @@ def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None, parallel
     samples = sampler.chain[:, CONFIG["burn"] :, :].reshape((-1, CONFIG["ndim"][obs_index]))
     return samples
 
+def get_pool(use_mpi=False, num_cores=None):
+    """
+    Returns an appropriate pool.
+    If use_mpi is True and schwimmbad is available, use MPIPool.
+    Otherwise, fall back to the local multiprocessing pool.
+    """
+    try:
+        from mpi4py import MPI
+        rank = MPI.COMM_WORLD.Get_rank()
+    except ImportError:
+        rank = 0
 
+    if num_cores is None:
+        num_cores = multiprocessing.cpu_count()
+
+    if platform.system() == "Darwin":  # macOS
+        if rank == 0:
+            print("OS: Mac-based system")
+            from multiprocess import Pool, get_context
+    elif platform.system() == "Linux":
+        if rank == 0:
+            print("OS: Linux-based system")
+            from multiprocessing import Pool, get_context
+    elif platform.system() == "Windows":
+        if rank == 0:
+            print("OS: Windows-based system")
+            print("Note: Windows has issues with multiprocessing. Switching to serial calculation.")
+        return None  # Or handle serially
+    else:
+        raise ImportError("Unsupported operating system for parallelization in this script.")
+
+    if use_mpi:
+        try:
+            from schwimmbad import MPIPool
+            pool = MPIPool()
+            # In MPI mode, only the master process should continue.
+            if not pool.is_master():
+                pool.wait()
+                sys.exit(0)
+            if rank == 0:
+                print("Using MPI Pool with schwimmbad.")
+            return pool
+        except ImportError:
+            if rank == 0:
+                print("MPI requested but schwimmbad is not installed. Falling back to local multiprocessing.")
+            # Fall through to local pool
+    
+    # If not using MPI or schwimmbad not available, determine the pool based on OS:
+    if rank == 0:
+        print(f"Using local multiprocessing Pool with {num_cores} cores.")
+    return Pool(num_cores)

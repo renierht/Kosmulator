@@ -22,6 +22,12 @@ def LCDM_MODEL(z, param_dict, Type="SNe"):
     model = np.sqrt(param_dict['Omega_m'] * (1 + z)**3 + 1 - param_dict['Omega_m'])
     result = Calculate_return_values(model, Type)
     return result if len(result) > 1 else result[0]  # Return scalar if input was scalar
+    
+def LCDM_v_MODEL(z, param_dict, Type="SNe"):
+    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
+    model = np.sqrt(param_dict['Omega_m'] * (1 + z)**(3-3*param_dict['zeta']) + 1 - param_dict['Omega_m'])
+    result = Calculate_return_values(model, Type)
+    return result if len(result) > 1 else result[0]  # Return scalar if input was scalar
 
 def f1CDM_MODEL(z, param_dict, Type="SNe"):
     """
@@ -43,6 +49,79 @@ def f1CDM_MODEL(z, param_dict, Type="SNe"):
     result = Calculate_return_values(E_solution, Type)
     return result if len(result) > 1 else result[0]
 
+def f1CDM_v_MODEL(z, param_dict, Type="SNe"):
+    z = np.atleast_1d(z)  # Ensure z is treated as an array
+    def hubble_nonlinear(E, z, Omega_m, n, zeta):
+        return E**2 - (Omega_m * (1 + z)**(3-3*zeta) + (1 - Omega_m) * E**(2 * n))
+
+    Omega_m = param_dict["Omega_m"]
+    n = param_dict["n"]
+    zeta = param_dict["zeta"]
+
+    # Solve for E(z) (vectorized)
+    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, n, zeta))[0] for zi in z])
+
+    result = Calculate_return_values(E_solution, Type)
+    return result if len(result) > 1 else result[0]
+    
+def f2CDM_MODEL(z, param_dict, Type="SNe"):
+    z = np.atleast_1d(z)  # Ensure z is treated as an array
+    def hubble_nonlinear(E, z, Omega_m, p):
+        return E**2 - Omega_m * (1 + z)**3 -((1-Omega_m)/(1-(1+p)* np.exp(-p)))*(1-(1+p)*E*np.exp(-p*E))
+
+    Omega_m = param_dict["Omega_m"]
+    p = param_dict["p"]
+
+    # Solve for E(z) (vectorized)
+    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, p))[0] for zi in z])
+
+    result = Calculate_return_values(E_solution, Type)
+    return result if len(result) > 1 else result[0]
+    
+def f2CDM_v_MODEL(z, param_dict, Type="SNe"):
+    z = np.atleast_1d(z)  # Ensure z is treated as an array
+    def hubble_nonlinear(E, z, Omega_m, p, zeta):
+        return E**2 - Omega_m * (1 + z)**(3-3*zeta) -((1-Omega_m)/(1-(1+p)* np.exp(-p)))*(1-(1+p)*E*np.exp(-p*E))
+
+    Omega_m = param_dict["Omega_m"]
+    p = param_dict["p"]
+    zeta = param_dict["zeta"]
+
+    # Solve for E(z) (vectorized)
+    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, p, zeta))[0] for zi in z])
+
+    result = Calculate_return_values(E_solution, Type)
+    return result if len(result) > 1 else result[0]
+    
+def f3CDM_MODEL(z, param_dict, Type="SNe"):
+    z = np.atleast_1d(z)  # Ensure z is treated as an array
+    def hubble_nonlinear(E, z, Omega_m, Gamma):
+        return E**2 - Omega_m * (1 + z)**3 - ((1 - Omega_m)/(2-np.log(Gamma)))*(2-np.log(Gamma*E))
+
+    Omega_m = param_dict["Omega_m"]
+    Gamma = param_dict["Gamma"]
+
+    # Solve for E(z) (vectorized)
+    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, Gamma))[0] for zi in z])
+
+    result = Calculate_return_values(E_solution, Type)
+    return result if len(result) > 1 else result[0]
+    
+def f3CDM_v_MODEL(z, param_dict, Type="SNe"):
+    z = np.atleast_1d(z)  # Ensure z is treated as an array
+    def hubble_nonlinear(E, z, Omega_m, Gamma,zeta):
+        return E**2 - Omega_m * (1 + z)**(3-3*zeta) - ((1 - Omega_m)/(2-np.log(Gamma)))*(2-np.log(Gamma*E))
+
+    Omega_m = param_dict["Omega_m"]
+    Gamma = param_dict["Gamma"]
+    zeta = param_dict["zeta"]
+
+    # Solve for E(z) (vectorized)
+    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, Gamma, zeta))[0] for zi in z])
+
+    result = Calculate_return_values(E_solution, Type)
+    return result if len(result) > 1 else result[0]
+
 def BetaRn_MODEL(z, param_dict, Type = "SNe"):
     '''
     Beta R^n model for cosmology.
@@ -56,6 +135,22 @@ def BetaRn_MODEL(z, param_dict, Type = "SNe"):
     model = ((term1)/(term2bottom*term3bottom))**((1)/(2*param_dict["n"]))
     result = Calculate_return_values(model, Type)
     return result if len(result) > 1 else result[0]
+    
+def BetaR_alphaR_MODEL(z, param_dict, Type="SNe"):
+    """
+    Lambda Cold Dark Matter (LCDM) model.
+    Args:
+        z (float or np.ndarray): Redshift value(s).
+        param_dict (dict): Dictionary containing cosmological parameters.
+        Type (str): Type of observation ('SNe', 'OHD', 'CC', f_sigma_8', or 'BAO').
+
+    Returns:
+        float or np.ndarray: Theoretical model prediction based on the observation type.
+    """
+    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
+    model = np.sqrt((1/param_dict["alpha"])*(param_dict["Omega_m"]*(1+z)**3-(param_dict["beta"]/6)))
+    result = Calculate_return_values(model, Type)
+    return result if len(result) > 1 else result[0]  # Return scalar if input was scalar
     
 ##############################################################
 # Functions to control Models for the entire program
@@ -76,7 +171,14 @@ def Get_model_function(model_name):
     models = {
         "LCDM": LCDM_MODEL,
         "f1CDM": f1CDM_MODEL,
+        "f2CDM": f2CDM_MODEL,
+        "f3CDM": f3CDM_MODEL,
+        "LCDM_v": LCDM_v_MODEL,
+        "f1CDM_v": f1CDM_v_MODEL,
+        "f2CDM_v": f2CDM_v_MODEL,
+        "f3CDM_v": f3CDM_v_MODEL,
         "BetaRn": BetaRn_MODEL,
+        "aRBR": BetaR_alphaR_MODEL,
     }
     if model_name not in models:
         raise ValueError(f"Model '{model_name}' not recognized. Available models: {list(models.keys())}")
@@ -88,7 +190,16 @@ def Get_model_names(model_name):
     all_models = {
         "LCDM"     : {"parameters": ["Omega_m"]},
         "f1CDM"  : {"parameters": ["Omega_m", "n"]},
+        "f2CDM"  : {"parameters": ["Omega_m", "p"]},
+        "f3CDM"  : {"parameters": ["Omega_m", "Gamma"]},
+        
+        "LCDM_v"     : {"parameters": ["Omega_m","zeta"]},
+        "f1CDM_v"  : {"parameters": ["Omega_m", "n","zeta"]},
+        "f2CDM_v"  : {"parameters": ["Omega_m", "p","zeta"]},
+        "f3CDM_v"  : {"parameters": ["Omega_m", "Gamma","zeta"]},
+        
         "BetaRn" : {"parameters": ["Omega_m", "q0", "q1", "beta", "n"]},
+        "aRBR" : {"parameters": ["Omega_m", "alpha", "beta"]},
     }
     models = {name: all_models[name] for name in model_name if name in all_models}
     return models
@@ -146,7 +257,7 @@ def Comoving_distance_vectorized(MODEL_func, redshifts, param_dict, Type):
         comoving_distances[i] = integrate.quad(MODEL_func, 0, z, args=(param_dict, Type))[0]
 
     return comoving_distances * Hubble(param_dict)
-
+    
 ##############################################################
 # Functions for cosmological calculations, specifically used
 # for observations involving sigma8 or fsigma8.

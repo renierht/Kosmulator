@@ -18,7 +18,8 @@ def Calc_chi(Type, type_data, type_data_error, model):
     """
     result = Covariance_matrix(model, type_data, type_data_error) if Type == "CC" else np.sum(((type_data - model) ** 2) / (type_data_error ** 2))
     return result
-    
+
+
 def Calc_PantP_chi(mb, trig, cepheid, cov, model, param_dict):
     """
     Calculate chi-squared for Pantheon+ data using a covariance matrix.
@@ -88,19 +89,7 @@ def Covariance_matrix(model, type_data, type_data_error):
     result = np.sum(delta_H ** 2 * Cov_inv_diag)  # Avoid explicit matrix inversion
     
     return result
-
-def Covariance_matrix_old(model, type_data, type_data_error):
-    """
-    Compute chi-squared using a full covariance matrix approach.
-    """
-    print (f"Covariance matrix - type_data: {type_data}, type_data_error: {type_data_error}, model: {model}")
-    Cov_matrix = np.diag(type_data_error ** 2)
-    delta_H = type_data - model
-    print (f"Cov_matrix: {Cov_matrix}, delta_H: {delta_H}")
-    result = np.dot(delta_H, np.dot(np.linalg.inv(Cov_matrix), delta_H))
-    print (f"Cov_matrix result: {result}")
-    return result
-    
+  
 def AutoCorr(pos, iterations, sampler, model_name, color, obs, PLOT_SETTINGS, convergence=0.01, last_obs=False):
     """
     Compute and monitor the autocorrelation time during MCMC sampling.
@@ -201,49 +190,47 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
     reference_aic = {}
     reference_bic = {}
 
-    for model_name, observations in best_fit_values.items():
+    for model_name, obs_results in best_fit_values.items():
         results[model_name] = {}
-        for obs_name, params in observations.items():
-            # Extract best-fit parameter values (median values)
+        for obs_name, params in obs_results.items():
+            # Extract best-fit (median) values
             param_dict = {param: values[0] for param, values in params.items()}
-            num_params = len(param_dict)  # Number of free parameters for this model
+            num_params = len(param_dict)
 
-            # Handle combined datasets (e.g., 'BAO+f_sigma_8')
-            obs_list = obs_name.split("+")
+            # Recover the full observation list from CONFIG that corresponds to this best-fit key.
+            # Here, we assume the best-fit key is formed by joining the individual observation names with "+"
+            obs_entry = next(
+                (obs_list for obs_list in CONFIG[model_name]["observations"] if "+".join(obs_list) == obs_name),
+                None
+            )
+            if obs_entry is None:
+                raise ValueError(f"Observation {obs_name} not found in CONFIG for model {model_name}.")
+            obs_index = CONFIG[model_name]["observations"].index(obs_entry)
+            # Use the primary observation type (first element) for the combined set.
+            obs_type = CONFIG[model_name]["observation_types"][obs_index][0]
+
             chi_squared_total = 0
             num_data_points_total = 0
 
-            for obs in obs_list:
-                # Extract data for the individual observation
+            # Get the model function once for this model.
+            MODEL_func = UDM.Get_model_function(model_name)
+            
+            # Loop over each individual observation in the recovered observation list.
+            for obs in obs_entry:
                 obs_data = data.get(obs)
                 if not obs_data:
                     raise ValueError(f"Observation data for {obs} not found.")
 
-                # Determine model function
-                MODEL_func = UDM.Get_model_function(model_name)
-
-                # Dynamically find `obs_type` from CONFIG
-                try:
-                    obs_index = CONFIG[model_name]["observations"].index([obs])
-                    obs_type = CONFIG[model_name]["observation_types"][obs_index][0]
-                except ValueError:
-                    raise ValueError(f"Observation {obs} not found in CONFIG for model {model_name}.")
-
-                # Handle JLA and Pantheon datasets
                 if obs_type == "SNe" and obs != "PantheonP":
                     redshift = obs_data["redshift"]
                     type_data = obs_data["type_data"]
                     type_data_error = obs_data["type_data_error"]
 
-                    # Compute comoving distances and distance modulus
                     comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, redshift, param_dict, "SNe")
-                    model = 25 + 5 * np.log10(comoving_distances * (1 + redshift))
-
-                    # Calculate chi-squared for these datasets
-                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model)
+                    model_val = 25 + 5 * np.log10(comoving_distances * (1 + redshift))
+                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model_val)
                     num_data_points_total += len(type_data)
 
-                # Handle PantheonP dataset
                 elif obs == "PantheonP":
                     zHD = obs_data["zHD"]
                     m_b_corr = obs_data["m_b_corr"]
@@ -251,70 +238,52 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                     CEPH_DIST = obs_data["CEPH_DIST"]
                     cov = obs_data["cov"]
 
-                    # Compute comoving distances and distance modulus
                     comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, zHD, param_dict, "SNe")
                     distance_modulus = 25 + 5 * np.log10(comoving_distances * (1 + zHD))
-
-                    # Use PantheonP chi calculation
                     chi_squared = Calc_PantP_chi(m_b_corr, IS_CALIBRATOR, CEPH_DIST, cov, distance_modulus, param_dict)
                     num_data_points_total += len(m_b_corr)
 
-                # Handle BAO datasets
                 elif obs_type == "BAO":
                     chi_squared = Calc_BAO_chi(obs_data, MODEL_func, param_dict, "BAO")
-                    num_data_points_total += len(obs_data["covd1"])  # Number of points from the covariance matrix
+                    num_data_points_total += len(obs_data["covd1"])
 
-                # Handle growth rate and f_sigma_8 datasets
                 elif obs_type in ["f", "f_sigma_8"]:
                     redshift = obs_data["redshift"]
                     type_data = obs_data["type_data"]
                     type_data_error = obs_data["type_data_error"]
 
                     Omega_zeta = UDM.matter_density_z(redshift, MODEL_func, param_dict, obs_type)
-
                     if obs_type == "f":
-                        model = Omega_zeta ** param_dict["gamma"]
+                        model_val = Omega_zeta ** param_dict["gamma"]
                     elif obs_type == "f_sigma_8":
                         integral_term = UDM.integral_term(redshift, MODEL_func, param_dict, obs_type)
-                        model = param_dict["sigma_8"] * Omega_zeta ** param_dict["gamma"] * np.exp(-1 * integral_term)
-
-                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model)
+                        model_val = param_dict["sigma_8"] * Omega_zeta ** param_dict["gamma"] * np.exp(-1 * integral_term)
+                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model_val)
                     num_data_points_total += len(type_data)
 
-                # Handle OHD and CC datasets
                 elif obs_type in ["OHD", "CC"]:
                     redshift = obs_data["redshift"]
                     type_data = obs_data["type_data"]
                     type_data_error = obs_data["type_data_error"]
 
-                    model = param_dict["H_0"] * np.array([MODEL_func(z, param_dict, obs_type) for z in redshift])
-                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model)
+                    model_val = param_dict["H_0"] * np.array([MODEL_func(z, param_dict, obs_type) for z in redshift])
+                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model_val)
                     num_data_points_total += len(type_data)
 
                 else:
                     raise ValueError(f"Unsupported observation type: {obs_type}")
-
+                
                 # Update chi-squared total
                 chi_squared_total += chi_squared
 
-            # Compute log-likelihood
             log_likelihood = -0.5 * chi_squared_total
-
-            # Calculate degrees of freedom
             dof = num_data_points_total - num_params
             if dof <= 0:
-                raise ValueError(f"Degrees of freedom (DOF) is zero or negative. Check your model or dataset.")
-
-            # Calculate reduced chi-squared
+                raise ValueError("Degrees of freedom (DOF) is zero or negative. Check your model or dataset.")
             reduced_chi_squared = chi_squared_total / dof
-
-            # Calculate AIC
             aic = 2 * num_params - 2 * log_likelihood
-
-            # Calculate BIC
             bic = num_params * np.log(num_data_points_total) - 2 * log_likelihood
 
-            # Store results
             results[model_name][obs_name] = {
                 "Log-Likelihood": log_likelihood,
                 "Chi_squared": chi_squared_total,
@@ -322,13 +291,11 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 "AIC": aic,
                 "BIC": bic,
             }
-
-            # Save AIC/BIC for the true model
             if model_name == true_model:
                 reference_aic[obs_name] = aic
                 reference_bic[obs_name] = bic
-
-    # Calculate delta AIC/BIC for all models relative to the true model
+    
+    # Calculate delta AIC and delta BIC relative to the true model
     for model_name, obs_results in results.items():
         for obs_name, stats in obs_results.items():
             stats["dAIC"] = stats["AIC"] - reference_aic.get(obs_name, stats["AIC"])

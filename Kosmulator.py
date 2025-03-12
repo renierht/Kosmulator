@@ -15,15 +15,18 @@ if sys.version_info[0] == 2:
 
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
-model_names = ["BetaRn"]
-observations =  [['JLA','BAO','f_sigma_8'],['JLA'],['BAO'],['f'],['f_sigma_8'], ['OHD'],['CC']]
+#model_names = ["f1CDM","f1CDM_v"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
+model_names = ["LCDM"]
+observations =  [['OHD']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 10
 nsteps: int = 200
 burn: int = 10
 
-overwrite = False
+overwrite = True
 convergence = 0.01
+use_mpi = True
+num_cores = 8
 
 prior_limits = {
     "Omega_m": (0.10, 0.4),
@@ -33,12 +36,13 @@ prior_limits = {
     "zeta": (0.0,0.3),
     "gamma": (0.4, 0.7),
     "sigma_8": (0.5, 1.0),
-    "n": (0.15,1.0),
+    "n": (0.0,0.5), #0.0,0.5
     "p": (0.0, 1.0),
     "Gamma": (2.0, 10.0),
     "q0": (-0.8, -0.01),
     "q1": (-0.75, 1.0),
     "beta": (0.01, 5.0),
+    "alpha": (0.1, 100.0),
     "Omega_w": (0.0, 1.0),
 }
 
@@ -54,6 +58,7 @@ true_values = {
     "rd": 147.5,
     "M_abs": -19.2,
 }
+
 full_colors = ['r', 'b', 'green', 'cyan', 'purple', 'grey', 'yellow', 'm', 
                'k', 'gray', 'orange', 'pink', 'crimson', 'darkred', 'salmon']
                
@@ -101,54 +106,73 @@ if true_model in model_names:
     model_names.remove(true_model)  # Remove it from its current position
 model_names.insert(0, true_model)  # Insert it at the front
 
-# Display safeguard warnings
-print(f"\033[33m################################################\033[0m")
-print(f"\033[33m####\033[0m Safeguards + Warnings")
-print(f"\033[33m################################################\033[0m")
+# --- MPI Setup ---
+try:
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+except ImportError:
+    rank = 0
+    comm = None
 
-# Prepare models and configurations
-models = UDM.Get_model_names(model_names)  # Get initial model names
-models = Config.Add_required_parameters(models, observations)  # Ensure observations get correct parameters
+# Only master loads heavy CONFIG, data, and models; then broadcast them.
+if rank == 0:
+    models_local = UDM.Get_model_names(model_names)
+    models_local = Config.Add_required_parameters(models_local, observations)
+    CONFIG, data = Config.create_config(
+        models=models_local,
+        true_values=true_values,
+        prior_limits=prior_limits,
+        observation=observations,
+        nwalkers=nwalkers,
+        nsteps=nsteps,
+        burn=burn,
+        model_name=model_names,
+    )
+    print(CONFIG)
+else:
+    CONFIG, data, models_local = None, None, None
 
-CONFIG, data = Config.create_config(  # Do NOT call Add_required_parameters again inside create_config!
-    models=models,
-    true_values=true_values,
-    prior_limits=prior_limits,
-    observation=observations,
-    nwalkers=nwalkers,
-    nsteps=nsteps,
-    burn=burn,
-    model_name=model_names,
-)
+if comm is not None:
+    CONFIG = comm.bcast(CONFIG, root=0)
+    data = comm.bcast(data, root=0)
+    models_local = comm.bcast(models_local, root=0)
 
-# Main execution block
+# Display safeguard warnings only on master.
+if rank == 0:
+    print(f"\033[33m{'#'*48}\033[0m")
+    print(f"\033[33m####\033[0m Safeguards + Warnings")
+    print(f"\033[33m{'#'*48}\033[0m")
+
+# Main execution block: use the broadcasted CONFIG and models_local.
 if __name__ == "__main__":
     start = time.time()
 
-    # Run MCMC simulations
     All_Samples = run_mcmc_for_all_models(
-        models=models,
+        models=models_local,  # use the broadcasted models dictionary
         observations=observations,
         CONFIG=CONFIG,
         data=data,
         overwrite=overwrite,
         convergence=convergence,
         PLOT_SETTINGS=PLOT_SETTINGS,
+        use_mpi=use_mpi,
+        num_cores=num_cores,
     )
-   
-    # Generate plots
-    print(f"\n\033[33m################################################\033[0m")
-    print(f"\033[33m####\033[0m Generating Plots :)")
-    print(f"\033[33m################################################\033[0m")
 
-    best_fit_values, All_LaTeX_Tables, statistical_results = MP.generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model)
+    if rank == 0:
+        print(f"\n\033[33m{'#'*48}\033[0m")
+        print(f"\033[33m####\033[0m Generating Plots :)")
+        print(f"\033[33m{'#'*48}\033[0m")
 
-    # Print LaTeX tables for all models
-    for model_name, (aligned_table, parameter_labels, observation_names) in All_LaTeX_Tables.items():
-        print(f"\nModel: {model_name} Aligned LaTeX Table:")
-        print_aligned_latex_table(aligned_table, parameter_labels, observation_names)
+        best_fit_values, All_LaTeX_Tables, statistical_results = MP.generate_plots(
+            All_Samples, CONFIG, PLOT_SETTINGS, data, true_model
+        )
 
-    # Print execution time
-    end = time.time()
-    formatted_time = Config.format_elapsed_time(end - start)
-    print(f"\nAll models processed successfully in a total time of {formatted_time}!!!\n")
+        for model_name, (aligned_table, parameter_labels, observation_names) in All_LaTeX_Tables.items():
+            print(f"\nModel: {model_name} Aligned LaTeX Table:")
+            print_aligned_latex_table(aligned_table, parameter_labels, observation_names)
+
+        end = time.time()
+        formatted_time = Config.format_elapsed_time(end - start)
+        print(f"\nAll models processed successfully in a total time of {formatted_time}!!!\n")

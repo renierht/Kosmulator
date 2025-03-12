@@ -10,16 +10,19 @@ observationaldata, and visualize results.
 4) Generic Python packages: time, sys, os, platform, inspect, warnings, re, shutil (already part of the Python library)
 5) LaTeX (MikTeX/TexLive) - This is a required dependency for enhanced plot quality. Follow the instructions below to install LaTeX for your operating system.
 
-### LaTeX Installation
-To use Kosmulator's LaTeX features for enhanced plot quality, ensure LaTeX is installed on your system.
+## LaTeX Dependencies for Plot Rendering and installation
+Kosmulator uses Matplotlib's LaTeX rendering to generate high-quality formatted plots, ensure LaTeX is installed on your system.
 
 Verify LaTeX installation with:
 ```bash
 latex --version
 ```
 
-If requirement not met, follow os installation below:
-- **Windows**: [MiKTeX Installation Guide](https://miktex.org/howto/install-miktex)
+
+If requirement not met or rf you encounter an error such as:
+RuntimeError: latex was not able to process the following string: ... (your system is missing some required LaTeX packages (e.g., type1ec.sty)
+Follow os installation or update below:
+- **Windows**: [MiKTeX Installation Guide](https://miktex.org/howto/install-miktex, ensure that you enable the option for automatic installation of missing packages)
 - **macOS**: Install via Homebrew:
   ```bash
   brew install mactex
@@ -27,7 +30,9 @@ If requirement not met, follow os installation below:
 - **Linux**: Install the full TeX Live package:
   ```bash
   sudo apt install texlive-full
+  sudo apt-get install texlive-latex-recommended texlive-fonts-recommended (if missing packages are required)
   ```
+If you prefer not to install a full LaTeX distribution, you can disable LaTeX rendering by setting "latex_enabled": False in your PLOT_SETTINGS within the configuration. This will disable the LaTeX formatting for your plots.
 
 ## Installation 
 Install package directly from GitHub
@@ -85,7 +90,12 @@ Kosmulator/
 			observations = [['JLA'],['OHD'], ['CC', 'OHD', 'Pantheon']] 
 		# If you want to test your model against multiple observations. If the list contains multiple entries
 		# the MCMC simulation will combine their likelihoods and minimized the combined likelihood.
-		
+
+## LaTeX Dependencies for Plot Rendering
+Kosmulator uses Matplotlib's LaTeX rendering to generate high-quality formatted plots. If you encounter an error such as:
+---RuntimeError: latex was not able to process the following string: ...
+this typically means that your system is missing some required LaTeX packages (e.g., type1ec.sty).	
+
 ## References
 1) Original version: 	Hough, R.T., Abebe, A. and Ferreira, S.E.S., 2020. Viability tests of f (R)-gravity models with Supernovae Type 1A data. EPCJ, 80(8), p.787. https://doi.org/10.1140/epjc/s10052-020-8342-7
 2) EMCEE package: 		Foreman-Mackey, D., Hogg, D.W., Lang, D. et al., 2013. emcee: the MCMC hammer. PASP, 125(925), p.306. https://doi.org/10.1086/670067
