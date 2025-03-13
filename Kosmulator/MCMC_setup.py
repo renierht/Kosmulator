@@ -6,7 +6,7 @@ import User_defined_modules as UDM
 # Add the parent directory to the Python path for module imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, convergence, PLOT_SETTINGS, use_mpi, num_cores, suffix=""):
+def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, convergence, PLOT_SETTINGS, use_mpi, num_cores, suffix="", pool=None, pantheon_cov=None):
     """
     Run MCMC simulations for all models and observations.
 
@@ -30,19 +30,28 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
         rank = comm.Get_rank()
     except ImportError:
         rank = 0
-    
+
     # Loop through each model in the configuration
     for j, model_name in enumerate(CONFIG[list(models.keys())[0]]['model_name']):
-        
         if rank == 0:
             print(f"\n\033[33m{'#'*48}\033[0m")
             print(f"\033[33m####\033[0m Processing model: \033[4;31m{model_name}\033[0m")
             print(f"\033[33m{'#'*48}\033[0m")
         
         Samples = {}  # Dictionary to store samples for the current model
+        
 
         # Loop through all observation sets for the current model
-        for i, obs in enumerate(CONFIG[list(models.keys())[j]]['observations']):
+        for i, obs in enumerate(CONFIG[list(models.keys())[j]]['observations']): 
+            if "PantheonP" in obs:
+                print('Attaching pantheon_cov', flush=True)
+                if "PantheonP" in data:
+                    data["PantheonP"]["cov"] = pantheon_cov
+            else:
+                print("popping pantheon_cov", flush=True)
+                if "PantheonP" in data:
+                    data["PantheonP"].pop("cov", None) 
+            
             last_obs = i == (len(observations) - 1)
 
             # Generate a name for the observation set
@@ -61,9 +70,8 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
                 obs_type = CONFIG[list(models.keys())[j]]['observation_types'][i][a]
                 if rank == 0: 
                     print(f"Observations:             \033[34m{obs[a]}\033[0m data (aka \033[34m{obs_type}\033[0m data)")
-
+            
             # Define the output directory and file name for the MCMC chain
-            #output_dir = f"MCMC_Chains/{model_name}/{observations_name}"
             output_dir = output_dirs[observations_name]
             file_name = f"{observations_name}.h5"
             chain_path = os.path.join(output_dir, file_name)
@@ -85,7 +93,7 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
                     MODEL_func=MODEL,
                     CONFIG=CONFIG[list(models.keys())[j]],
                     autoCorr=True,
-                    parallel=True,
+                    parallel=False,
                     model_name=model_name,
                     obs=obs,
                     Type=CONFIG[list(models.keys())[j]]['observation_types'][i],
@@ -96,7 +104,11 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
                     obs_index = i,
                     use_mpi=use_mpi,
                     num_cores = num_cores,
+                    pool=pool,
                 )
+            
+            if "PantheonP" in obs:
+                data["PantheonP"].pop("cov", None)  
 
         All_Samples[model_name] = Samples  # Store all samples for the current model
 
