@@ -31,15 +31,15 @@ def load_all_data(config):
         for obs in obs_list:
             file_path = os.path.join("./Observations", f"{obs}.dat")
             if obs == "PantheonP":
-                data = pd.read_csv(file_path, delim_whitespace=True)
-                cov_matrix = la.cholesky(np.loadtxt("./Observations/PantheonP.cov")[1:].reshape(1701, 1701), lower=True)
+                data = pd.read_csv(file_path, sep='\s+')
+                #cov_matrix = la.cholesky(np.loadtxt("./Observations/PantheonP.cov")[1:].reshape(1701, 1701), lower=True)
                 observation_data[obs] = {"zHD": data["zHD"].values,
                     "m_b_corr": data["m_b_corr"].values,
                     "m_b_corr_err_DIAG": data["m_b_corr_err_DIAG"].values,
                     "IS_CALIBRATOR": data["IS_CALIBRATOR"].values,
                     "CEPH_DIST": data["CEPH_DIST"].values,
                     "biasCor_m_b": data["biasCor_m_b"].values,
-                    "cov": cov_matrix
+                    "cov_path": "./Observations/PantheonP.cov",
                 }
             elif obs == "BAO":
                 observation_data[obs] = {"covd1": np.loadtxt(file_path)}

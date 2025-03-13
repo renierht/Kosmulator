@@ -123,16 +123,18 @@ def lnprob(theta, data, Type, CONFIG, MODEL_func, obs, obs_index):
 def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None,
              use_mpi=False, num_cores=None, parallel=True, saveChains=False, overwrite=False,
              autoCorr=True, CONFIG=None, obs=None, Type=None, colors='r',
-             convergence=0.01, last_obs=False, PLOT_SETTINGS=None, obs_index=0):
+             convergence=0.01, last_obs=False, PLOT_SETTINGS=None, obs_index=0, pool=None):
     """
     Run MCMC sampler using `emcee` with parallelization, saving, and autocorrelation-based convergence.
     """
 
-    # Get the appropriate pool:
-    pool = get_pool(use_mpi=use_mpi,num_cores=num_cores)
+    # Determine if an external pool was provided.
+    external_pool = pool is not None
 
     if pool is None:
-        # If no pool is returned, fall back to serial mode:
+        pool = get_pool(use_mpi=use_mpi, num_cores=num_cores)
+    
+    if pool is None:
         parallel = False
     
     # Check inputs
@@ -174,31 +176,33 @@ def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None,
     
     print (f"\nRunning the MCMC simulation for the \033[34m{model_name}\033[0m model on these data sets: \033[34m{obs}\033[0m...")
     if parallel:
-        with pool:
+        if external_pool:
+            # External pool (MPI pool passed in)
             if saveChains:
                 backend = emcee.backends.HDFBackend(chain_path)
                 backend.reset(CONFIG["nwalker"], CONFIG["ndim"][obs_index])
-                sampler = emcee.EnsembleSampler(
-                    CONFIG["nwalker"], CONFIG["ndim"][obs_index], lnprob, args = (data, Type, CONFIG, MODEL_func, obs, obs_index),
-                    backend = backend, pool = pool,
-                )
+                sampler = emcee.EnsembleSampler(CONFIG["nwalker"], CONFIG["ndim"][obs_index], lnprob, args=(data, Type, CONFIG, MODEL_func, obs, obs_index), backend=backend, pool=pool)
             else:
-                sampler = emcee.EnsembleSampler(
-                    CONFIG["nwalker"],CONFIG["ndim"][obs_index], lnprob, args=(data, Type, CONFIG, MODEL_func, obs, obs_index), 
-                    pool = pool,
-            )
-            
-            start = time.time()
-            if autoCorr:    # AutoCorrelation to speed up calculation. Stops the MCMC when convergence occured
-                SP.AutoCorr(pos, iterations = CONFIG['nsteps'], sampler = sampler, model_name = model_name, 
-                                        color = colors, obs = obs, PLOT_SETTINGS = PLOT_SETTINGS, convergence = convergence, last_obs = last_obs)
-                                        
+                sampler = emcee.EnsembleSampler(CONFIG["nwalker"], CONFIG["ndim"][obs_index], lnprob, args=(data, Type, CONFIG, MODEL_func, obs, obs_index), pool=pool)
+        else:
+            # Local multiprocessing pool (no external pool passed in)
+            if saveChains:
+                backend = emcee.backends.HDFBackend(chain_path)
+                backend.reset(CONFIG["nwalker"], CONFIG["ndim"][obs_index])
+                sampler = emcee.EnsembleSampler(CONFIG["nwalker"], CONFIG["ndim"][obs_index], lnprob, args=(data, Type, CONFIG, MODEL_func, obs, obs_index), backend=backend, pool=pool)
             else:
-                sampler.run_mcmc(pos, CONFIG["nsteps"], progress = True)                
-            end = time.time()
-            formatted_time = format_elapsed_time(end-start)
-            print(f"Multiprocessing took {formatted_time}\n")
-            
+                sampler = emcee.EnsembleSampler(CONFIG["nwalker"], CONFIG["ndim"][obs_index], lnprob, args=(data, Type, CONFIG, MODEL_func, obs, obs_index), pool=pool)        
+        
+        start = time.time()
+        if autoCorr:    # AutoCorrelation to speed up calculation. Stops the MCMC when convergence occured
+            SP.AutoCorr(pos, iterations = CONFIG['nsteps'], sampler = sampler, model_name = model_name, 
+                        color = colors, obs = obs, PLOT_SETTINGS = PLOT_SETTINGS, convergence = convergence, last_obs = last_obs)                
+        else:
+            sampler.run_mcmc(pos, CONFIG["nsteps"], progress = True)                
+        
+        end = time.time()
+        formatted_time = format_elapsed_time(end-start)
+        print(f"Multiprocessing took {formatted_time}\n")    
     else: # Calculating in series
         if saveChains:
             backend = emcee.backends.HDFBackend(chain_path)

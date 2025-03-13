@@ -9,6 +9,8 @@ from Plots import Plots as MP  # Custom module for creating plots (e.g., autocor
 import User_defined_modules as UDM  # Custom module with user-defined functions for cosmological calculations
 from Kosmulator.MCMC_setup import run_mcmc_for_all_models
 from Plots.Plot_functions import print_aligned_latex_table
+import scipy.linalg as la
+import gc
 
 # Safeguard: Check Python version and warn if outdated
 if sys.version_info[0] == 2:
@@ -18,10 +20,10 @@ if sys.version_info[0] == 2:
 # Constants for the simulation
 #model_names = ["f1CDM","f1CDM_v"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
 model_names = ["LCDM"]
-observations =  [['OHD'],['OHD','CC'], ['PantheonP']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
+observations =  [['OHD'],['PantheonP','BAO'],['OHD','CC']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 10
-nsteps: int = 200
+nsteps: int = 100
 burn: int = 10
 convergence = 0.01
 
@@ -141,6 +143,7 @@ if true_model in model_names:
 model_names.insert(0, true_model)  # Insert it at the front
 
 # --- MPI Setup ---
+# --- MPI Setup ---
 try:
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -151,11 +154,10 @@ except ImportError:
 
 # Only master loads heavy CONFIG, data, and models; then broadcast them.
 if rank == 0:
-    print (f"use_mpi: {use_mpi}, num_cores: {num_cores}, OUTPUT_SUFFIX: {OUTPUT_SUFFIX}, latex_enabled: {latex_enabled}, overwrite: {overwrite}")
-    print(f"\033[33m{'#'*48}\033[0m")
-    print(f"\033[33m####\033[0m Safeguards + Warnings")
-    print(f"\033[33m{'#'*48}\033[0m")
-    
+    print(f"\033[33m{'#'*48}\033[0m", flush=True)
+    print(f"\033[33m####\033[0m Safeguards + Warnings", flush=True)
+    print(f"\033[33m{'#'*48}\033[0m", flush=True)
+
     models_local = UDM.Get_model_names(model_names)
     models_local = Config.Add_required_parameters(models_local, observations)
     CONFIG, data = Config.create_config(
@@ -168,8 +170,8 @@ if rank == 0:
         burn=burn,
         model_name=model_names,
     )
-    print(f"CONFIG: {CONFIG}")
-    print(f"data: {data}")
+    #print(f"CONFIG: {CONFIG}", flush=True)
+    #print(f"data: {data}", flush=True)
 else:
     CONFIG, data, models_local = None, None, None
 
@@ -177,6 +179,41 @@ if comm is not None:
     CONFIG = comm.bcast(CONFIG, root=0)
     data = comm.bcast(data, root=0)
     models_local = comm.bcast(models_local, root=0)
+
+pantheon_cov = None
+pantheon_required = any(
+    "PantheonP" in obs for obs in CONFIG[list(models_local.keys())[0]]['observations']
+)
+
+if pantheon_required:
+    if comm is not None:
+        if rank == 0:
+            cov_raw = np.loadtxt("./Observations/PantheonP.cov")[1:].reshape(1701, 1701)
+            pantheon_cov = la.cholesky(cov_raw, lower=True)
+        else:
+            pantheon_cov = None
+        pantheon_cov = comm.bcast(pantheon_cov, root=0)
+    else:
+        # Non-MPI serial fallback
+        cov_raw = np.loadtxt("./Observations/PantheonP.cov")[1:].reshape(1701, 1701)
+        pantheon_cov = la.cholesky(cov_raw, lower=True)
+
+# 🔹 Step 3: Now create the Schwimmbad MPI pool AFTER broadcasting
+if use_mpi:
+    try:
+        from schwimmbad import MPIPool
+        pool = MPIPool()
+
+        # Only master process continues; workers wait and then exit.
+        if not pool.is_master():
+            pool.wait()
+            sys.exit(0)
+
+        print("Using MPI Pool with schwimmbad.")
+    except ImportError:
+        pool = None
+else:
+    pool = None
 
 
 # Main execution block: use the broadcasted CONFIG and models_local.
@@ -194,20 +231,29 @@ if __name__ == "__main__":
         use_mpi=use_mpi,
         num_cores=num_cores,
         suffix=OUTPUT_SUFFIX,
+        pool=pool,
+        pantheon_cov=pantheon_cov,
     )
 
+    if pantheon_cov is not None:
+        del pantheon_cov
+        gc.collect()
+
+    if pool is not None and rank == 0:
+        pool.close()
+
     if rank == 0:
-        print(f"\n\033[33m{'#'*48}\033[0m")
-        print(f"\033[33m####\033[0m Generating Plots :)")
-        print(f"\033[33m{'#'*48}\033[0m")
+        print(f"\n\033[33m{'#'*48}\033[0m", flush=True)
+        print(f"\033[33m####\033[0m Generating Plots :)", flush=True)
+        print(f"\033[33m{'#'*48}\033[0m", flush=True)
 
-        best_fit_values, All_LaTeX_Tables, statistical_results = MP.generate_plots(
-            All_Samples, CONFIG, PLOT_SETTINGS, data, true_model
-        )
+        #best_fit_values, All_LaTeX_Tables, statistical_results = MP.generate_plots(
+        #    All_Samples, CONFIG, PLOT_SETTINGS, data, true_model
+        #)
 
-        for model_name, (aligned_table, parameter_labels, observation_names) in All_LaTeX_Tables.items():
-            print(f"\nModel: {model_name} Aligned LaTeX Table:")
-            print_aligned_latex_table(aligned_table, parameter_labels, observation_names)
+        #for model_name, (aligned_table, parameter_labels, observation_names) in All_LaTeX_Tables.items():
+        #    print(f"\nModel: {model_name} Aligned LaTeX Table:")
+        #    print_aligned_latex_table(aligned_table, parameter_labels, observation_names)
 
         end = time.time()
         formatted_time = Config.format_elapsed_time(end - start)
