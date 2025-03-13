@@ -17,8 +17,8 @@ if sys.version_info[0] == 2:
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
 #model_names = ["f1CDM","f1CDM_v"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
-model_names = ["BetaRn"]
-observations =  [['PantheonP']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
+model_names = ["LCDM"]
+observations =  [['OHD'],['OHD','CC'], ['PantheonP']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 10
 nsteps: int = 200
@@ -68,6 +68,8 @@ parser.add_argument("--use_mpi", type=lambda x: (str(x).lower() == "true"),
                     default=None, help="Force MPI usage (default: auto-detect).")
 parser.add_argument("--overwrite", type=lambda x: (str(x).lower() == "true"),
                     default=False, help="Overwrite existing MCMC chains (default: False).")
+parser.add_argument("--plot_table", type=lambda x: (str(x).lower() == "true"),
+                    default=True, help="Enable Best-fit table on plots (default: True).")
 args = parser.parse_args()
 
 # Auto-detect MPI if not explicitly forced
@@ -87,6 +89,7 @@ else:
 num_cores = args.num_cores
 OUTPUT_SUFFIX = args.OUTPUT_SUFFIX
 latex_enabled = args.latex_enabled
+plot_table = args.plot_table
 overwrite = args.overwrite
 
 
@@ -103,7 +106,7 @@ PLOT_SETTINGS = {
     "latex_enabled": latex_enabled,
     "dpi": 300,
     "autocorr_save_path": "./Plots/auto_corr/",
-    "Table": True,
+    "Table": plot_table,
     "table_anchor": (0.98, 1.0),  # pushes the table further up
 
     # Additional table-specific settings for finer control:
@@ -165,7 +168,8 @@ if rank == 0:
         burn=burn,
         model_name=model_names,
     )
-    print(CONFIG)
+    print(f"CONFIG: {CONFIG}")
+    print(f"data: {data}")
 else:
     CONFIG, data, models_local = None, None, None
 
