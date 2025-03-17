@@ -6,6 +6,7 @@ import scipy.linalg as la
 import inspect
 import warnings
 import re
+import textwrap
 
 def load_mcmc_results(output_path, file_name="tutorial.h5", CONFIG=None):
     """
@@ -205,47 +206,122 @@ def format_elapsed_time(seconds):
     return f"{seconds} seconds"
 
 def save_stats_to_file(model, folder, stats_list):
-    """Save statistical results to a file."""
+    """Save statistical results to a file with aligned columns."""
     file_path = os.path.join(folder, "stats_summary.txt")
     with open(file_path, "w") as f:
-        f.write(f"Statistical Results for Model: {model}\n\n")
-        f.write("Observation            | Log-Likelihood | Chi-Squared | Reduced Chi-Squared | AIC     | BIC     | dAIC   | dBIC\n")
-        f.write("-" * 120 + "\n")
+        f.write(f"Statistical Results for Model: {model}\n")
+        
+        # Construct header with fixed widths:
+        header = (
+            f"{'Observation':<30} | "
+            f"{'Log-Likelihood':>18} | "
+            f"{'Chi-Squared':>15} | "
+            f"{'Reduced Chi-Squared':>25} | "
+            f"{'AIC':>10} | "
+            f"{'BIC':>10} | "
+            f"{'dAIC':>10} | "
+            f"{'dBIC':>10}"
+        )
+        f.write(header + "\n")
+        # Separator line matching the header's width:
+        f.write("-" * len(header) + "\n")
+        
+        # Write each row with the same fixed-width formatting.
         for stats in stats_list:
-            f.write(
-                f"{stats['Observation']:<22} | "
-                f"{stats['Log-Likelihood']:<15.4f} | "
-                f"{stats['Chi_squared']:<12.4f} | "
-                f"{stats['Reduced_Chi_squared']:<20.4f} | "
-                f"{stats['AIC']:<8.3f} | {stats['BIC']:<8.3f} | "
-                f"{stats['dAIC']:<8.3f} | {stats['dBIC']:<8.3f}\n"
+            row = (
+                f"{stats['Observation']:<30} | "
+                f"{stats['Log-Likelihood']:>18.4f} | "
+                f"{stats['Chi_squared']:>15.4f} | "
+                f"{stats['Reduced_Chi_squared']:>25.4f} | "
+                f"{stats['AIC']:>10.3f} | "
+                f"{stats['BIC']:>10.3f} | "
+                f"{stats['dAIC']:>10.3f} | "
+                f"{stats['dBIC']:>10.3f}"
             )
+            f.write(row + "\n")
 
 def save_interpretations_to_file(model, folder, interpretations_list):
-    """Save interpretations to a file."""
+    """Save interpretations to a file with aligned, wrapped commentary in columns."""
     file_path = os.path.join(folder, "interpretations_summary.txt")
+    
+    # Set fixed widths for each column.
+    obs_width = 30
+    diag_width = 50
+    aic_width = 35
+    bic_width = 35
+
     with open(file_path, "w") as f:
         f.write(f"Interpretations for Model: {model}\n\n")
-        f.write("Observation            | Reduced Chi2 Diagnostics                              | AIC Interpretation               | BIC Interpretation\n")
-        f.write("-" * 140 + "\n")
-        for interpretation in interpretations_list:
-            f.write(
-                f"{interpretation['Observation']:<22} | "
-                f"{interpretation['Reduced Chi2 Diagnostics']:<50} | "
-                f"{interpretation['AIC Interpretation']:<30} | "
-                f"{interpretation['BIC Interpretation']:<30}\n"
-            )
+        
+        # Create header row.
+        header = (
+            f"{'Observation':<{obs_width}} | "
+            f"{'Reduced Chi2 Diagnostics':<{diag_width}} | "
+            f"{'AIC Interpretation':<{aic_width}} | "
+            f"{'BIC Interpretation':<{bic_width}}"
+        )
+        f.write(header + "\n")
+        total_width = obs_width + diag_width + aic_width + bic_width + 9
+        f.write("-" * total_width + "\n")
+        
+        # Process each interpretation.
+        for interp in interpretations_list:
+            obs = interp["Observation"]
+            diag = interp["Reduced Chi2 Diagnostics"]
+            aic_interp = interp["AIC Interpretation"]
+            bic_interp = interp["BIC Interpretation"]
+            
+            # Wrap the text for each commentary column.
+            diag_lines = textwrap.wrap(diag, width=diag_width)
+            aic_lines = textwrap.wrap(aic_interp, width=aic_width)
+            bic_lines = textwrap.wrap(bic_interp, width=bic_width)
+            
+            # For the observation column we usually have one line.
+            obs_line = obs.ljust(obs_width)
+            
+            # Determine the number of lines needed for this row.
+            max_lines = max(1, len(diag_lines), len(aic_lines), len(bic_lines))
+            
+            # Write out the row line by line.
+            for i in range(max_lines):
+                obs_str = obs_line if i == 0 else " " * obs_width
+                diag_str = diag_lines[i] if i < len(diag_lines) else ""
+                aic_str = aic_lines[i] if i < len(aic_lines) else ""
+                bic_str = bic_lines[i] if i < len(bic_lines) else ""
+                line = (
+                    f"{obs_str:<{obs_width}} | "
+                    f"{diag_str:<{diag_width}} | "
+                    f"{aic_str:<{aic_width}} | "
+                    f"{bic_str:<{bic_width}}"
+                )
+                f.write(line + "\n")
 
 def save_latex_table_to_file(model, folder, table_data):
-    """Save LaTeX tables to a file."""
+    """Save LaTeX tables to a file with aligned columns."""
     aligned_table, parameter_labels, observation_names = table_data
     file_path = os.path.join(folder, "aligned_table.txt")
+    
+    # Set fixed widths: observation column 30 characters, each parameter column 30 characters.
+    obs_width = 30
+    param_width = 30
+
     with open(file_path, "w") as f:
+        # Write header title.
         f.write(f"Aligned Table for Model: {model}\n")
-        f.write("Observation            | " + " | ".join(parameter_labels) + "\n")
-        f.write("-" * (20 + 25 * len(parameter_labels)) + "\n")
+        
+        # Construct header line.
+        header = f"{'Observation':<{obs_width}} | " + " | ".join(f"{col:<{param_width}}" for col in parameter_labels) + "\n"
+        f.write(header)
+        
+        # Construct a separator line.
+        total_width = obs_width + 3 + len(parameter_labels) * (param_width + 3) - 3
+        f.write("-" * total_width + "\n")
+        
+        # Write each row with fixed-width formatting.
         for obs, row in zip(observation_names, aligned_table):
-            f.write(obs + " | " + " | ".join(row) + "\n")
+            row_str = f"{obs:<{obs_width}} | " + " | ".join(f"{cell:<{param_width}}" for cell in row) + "\n"
+            f.write(row_str)
+
 
 def print_stats_table(model, stats_list):
     """Print the statistical results table to the console."""

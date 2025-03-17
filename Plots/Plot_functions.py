@@ -217,33 +217,30 @@ def add_corner_table(g, latex_table, labels, PLOT_SETTINGS, parameter_labels, fl
 def print_aligned_latex_table(latex_table, parameter_labels, observation_names):
     """
     Print the aligned LaTeX table in a readable format for the terminal.
-    The observation names are displayed in red and parameter names in blue.
-
-    Args:
-        latex_table (list of list of str): The aligned LaTeX table.
-        parameter_labels (list of str): The parameter labels for the table columns.
-        observation_names (list of str): Names of the observations (e.g., PantheonP, BAO, etc.).
+    The header row is printed in blue, while the observation names in the first column of each row are printed in red.
+    The observation column is set to 30 characters wide.
     """
-    # Dynamically calculate the max width for observation names
-    obs_col_width = max(len(obs) for obs in observation_names) + 5  # Add padding
-    
-    # ANSI escape codes for colors
-    red_start = "\033[31m"  # Red for observations
-    blue_start = "\033[34m"  # Blue for parameter names
-    reset_color = "\033[0m"  # Reset to default color
-    
-    print("\nFinal Aligned LaTeX Table:\n")
-    
-    # Print the header row with parameter names in blue
-    header = ["Observation"] + parameter_labels
-    print(f"{red_start}{header[0]:<{obs_col_width}}{reset_color} | " + 
-          " | ".join(f"{blue_start}{col:<30}{reset_color}" for col in header[1:]))
-    print("-" * (obs_col_width + 3 + 31 * len(parameter_labels)))
+    # Set the observation column width to 30 characters.
+    obs_col_width = 30
 
-    # Print each row of the table with observation names in red
+    # ANSI escape codes for colors.
+    blue = "\033[34m"   # Blue for the header.
+    red = "\033[31m"    # Red for observation values.
+    reset = "\033[0m"   # Reset color.
+
+    # Construct the header row with the first column ("Observation") and the parameter columns.
+    header = ["Observation"] + parameter_labels
+    header_str = f"{header[0]:<{obs_col_width}} | " + " | ".join(f"{col:<30}" for col in header[1:])
+    print(blue + header_str + reset)
+    total_width = obs_col_width + 3 + 31 * len(parameter_labels)
+    print("-" * total_width)
+
+    # Print each row: the observation name in the first column (red) and the remaining columns uncolored.
     for obs_name, row in zip(observation_names, latex_table):
-        row_str = " | ".join(f"{col:<30}" if col else "{:<30}".format("") for col in row)
-        print(f"{red_start}{obs_name:<{obs_col_width}}{reset_color} | {row_str}")
+        obs_str = f"{obs_name:<{obs_col_width}}"
+        obs_str = red + obs_str + reset
+        row_str = " | ".join(f"{col:<30}" for col in row)
+        print(f"{obs_str} | {row_str}")
 
 def align_table_to_parameters(latex_table, parameters):
     """
