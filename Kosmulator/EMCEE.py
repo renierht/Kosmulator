@@ -13,7 +13,9 @@ import User_defined_modules as UDM  # Custom user-defined cosmology functions
 from joblib import Parallel, delayed
 import sys
 import multiprocessing
-            
+from mpi4py import MPI  # Ensure this is imported at the top if using MPI
+
+
 def model_likelihood(theta, obs_data, obs_type, CONFIG, MODEL_func, obs, obs_index):
     """
     Compute the log-likelihood for a given model and observation.
@@ -202,7 +204,15 @@ def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None,
         
         end = time.time()
         formatted_time = format_elapsed_time(end-start)
-        print(f"Multiprocessing took {formatted_time}\n")    
+        if use_mpi:
+            mpi_size = MPI.COMM_WORLD.Get_size()  # Total number of MPI processes
+            worker_count = mpi_size - 1 if mpi_size > 1 else 1
+            if worker_count > 1:
+                print(f"MPI parallel processing took {formatted_time} using {worker_count} worker(s).\n")
+            else:
+                print(f"Running in series on MPI (effectively 1 worker) took {formatted_time}.\n")
+        else:
+            print(f"Local multiprocessing took {formatted_time} using {num_cores} core(s).\n")
     else: # Calculating in series
         if saveChains:
             backend = emcee.backends.HDFBackend(chain_path)
@@ -223,7 +233,10 @@ def run_mcmc(data, model_name="LCDM", chain_path=None, MODEL_func=None,
             sampler.run_mcmc(pos, CONFIG["nsteps"], progress = True)   
         end = time.time()
         formatted_time = format_elapsed_time(end-start)
-        print(f"Series processing took {formatted_time}\n")
+        if use_mpi:
+            print(f"Running in series on MPI (effectively 1 core) took {formatted_time}.\n")
+        else:
+            print(f"Series processing took {formatted_time} on 1 core.\n")
         
     samples = sampler.chain[:, CONFIG["burn"] :, :].reshape((-1, CONFIG["ndim"][obs_index]))
     return samples
@@ -274,8 +287,15 @@ def get_pool(use_mpi=False, num_cores=None):
             if rank == 0:
                 print("MPI requested but schwimmbad is not installed. Falling back to local multiprocessing.")
             # Fall through to local pool
-    
-    # If not using MPI or schwimmbad not available, determine the pool based on OS:
-    if rank == 0:
-        print(f"Using local multiprocessing Pool with {num_cores} cores.")
+   
+    # Local multiprocessing: if only one core is specified, return None so that processing is series.
+    if num_cores > 1:
+        if rank == 0:
+            print(f"Using local multiprocessing Pool with {num_cores} cores.")
+        from multiprocessing import Pool
+        return Pool(num_cores)
+    else:
+        if rank == 0:
+            print("Running in series on 1 core.")
+        return None
     return Pool(num_cores)

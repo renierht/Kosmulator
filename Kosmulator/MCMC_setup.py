@@ -2,6 +2,7 @@ import os
 import sys
 from Kosmulator import Config, EMCEE
 import User_defined_modules as UDM
+import platform
 
 # Add the parent directory to the Python path for module imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -44,11 +45,9 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
         # Loop through all observation sets for the current model
         for i, obs in enumerate(CONFIG[list(models.keys())[j]]['observations']): 
             if "PantheonP" in obs:
-                print('Attaching pantheon_cov', flush=True)
                 if "PantheonP" in data:
                     data["PantheonP"]["cov"] = pantheon_cov
             else:
-                print("popping pantheon_cov", flush=True)
                 if "PantheonP" in data:
                     data["PantheonP"].pop("cov", None) 
             
@@ -85,6 +84,8 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
                     Samples[observation_key] = samples
             else:
                 label = Config.generate_label(obs)
+                parallel_flag = True if (use_mpi or (num_cores is not None and num_cores > 1)) and platform.system() != "Windows" else False
+                
                 Samples[label] = EMCEE.run_mcmc(
                     data=data,
                     saveChains=True,
@@ -93,7 +94,7 @@ def run_mcmc_for_all_models(models, observations, CONFIG, data, overwrite, conve
                     MODEL_func=MODEL,
                     CONFIG=CONFIG[list(models.keys())[j]],
                     autoCorr=True,
-                    parallel=False,
+                    parallel=parallel_flag,
                     model_name=model_name,
                     obs=obs,
                     Type=CONFIG[list(models.keys())[j]]['observation_types'][i],

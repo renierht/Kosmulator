@@ -176,15 +176,9 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
     """
     Perform statistical analysis for all models and observation combinations,
     and calculate delta AIC/BIC relative to the true model.
-
-    Args:
-        best_fit_values (dict): Best-fit parameter values for each model and observation.
-        data (dict): Observational data.
-        CONFIG (dict): Configuration dictionary.
-        true_model (str): Name of the true model to use as the reference.
-
-    Returns:
-        dict: Statistical analysis results (Log-Likelihood, Chi-squared, Reduced Chi-squared, AIC, BIC, dAIC, dBIC).
+    
+    This updated version processes each observation individually by pairing it with
+    its corresponding observation type from CONFIG.
     """
     results = {}
     reference_aic = {}
@@ -193,12 +187,11 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
     for model_name, obs_results in best_fit_values.items():
         results[model_name] = {}
         for obs_name, params in obs_results.items():
-            # Extract best-fit (median) values
+            # Extract best-fit (median) values into a dictionary.
             param_dict = {param: values[0] for param, values in params.items()}
             num_params = len(param_dict)
 
-            # Recover the full observation list from CONFIG that corresponds to this best-fit key.
-            # Here, we assume the best-fit key is formed by joining the individual observation names with "+"
+            # Recover the full observation list that corresponds to this best-fit key.
             obs_entry = next(
                 (obs_list for obs_list in CONFIG[model_name]["observations"] if "+".join(obs_list) == obs_name),
                 None
@@ -206,74 +199,66 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
             if obs_entry is None:
                 raise ValueError(f"Observation {obs_name} not found in CONFIG for model {model_name}.")
             obs_index = CONFIG[model_name]["observations"].index(obs_entry)
-            # Use the primary observation type (first element) for the combined set.
-            obs_type = CONFIG[model_name]["observation_types"][obs_index][0]
 
             chi_squared_total = 0
             num_data_points_total = 0
 
             # Get the model function once for this model.
             MODEL_func = UDM.Get_model_function(model_name)
-            
-            # Loop over each individual observation in the recovered observation list.
-            for obs in obs_entry:
+            # Get the list of observation types for this observation set.
+            obs_types = CONFIG[model_name]["observation_types"][obs_index]
+
+            # Loop over each individual observation in the set, using its corresponding type.
+            for i, obs in enumerate(obs_entry):
+                obs_type = obs_types[i]
                 obs_data = data.get(obs)
                 if not obs_data:
                     raise ValueError(f"Observation data for {obs} not found.")
 
-                if obs_type == "SNe" and obs != "PantheonP":
-                    redshift = obs_data["redshift"]
-                    type_data = obs_data["type_data"]
-                    type_data_error = obs_data["type_data_error"]
-
-                    comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, redshift, param_dict, "SNe")
-                    model_val = 25 + 5 * np.log10(comoving_distances * (1 + redshift))
-                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model_val)
-                    num_data_points_total += len(type_data)
-
-                elif obs == "PantheonP":
+                if obs == "PantheonP":
                     zHD = obs_data["zHD"]
                     m_b_corr = obs_data["m_b_corr"]
                     IS_CALIBRATOR = obs_data["IS_CALIBRATOR"]
                     CEPH_DIST = obs_data["CEPH_DIST"]
                     cov = obs_data["cov"]
-
+                    # For PantheonP, use the "SNe" branch.
                     comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, zHD, param_dict, "SNe")
                     distance_modulus = 25 + 5 * np.log10(comoving_distances * (1 + zHD))
                     chi_squared = Calc_PantP_chi(m_b_corr, IS_CALIBRATOR, CEPH_DIST, cov, distance_modulus, param_dict)
                     num_data_points_total += len(m_b_corr)
-
-                elif obs_type == "BAO":
+                elif obs == "BAO":
                     chi_squared = Calc_BAO_chi(obs_data, MODEL_func, param_dict, "BAO")
                     num_data_points_total += len(obs_data["covd1"])
-
-                elif obs_type in ["f", "f_sigma_8"]:
+                elif obs_type == "SNe":
                     redshift = obs_data["redshift"]
                     type_data = obs_data["type_data"]
                     type_data_error = obs_data["type_data_error"]
-
-                    Omega_zeta = UDM.matter_density_z(redshift, MODEL_func, param_dict, obs_type)
-                    if obs_type == "f":
-                        model_val = Omega_zeta ** param_dict["gamma"]
-                    elif obs_type == "f_sigma_8":
-                        integral_term = UDM.integral_term(redshift, MODEL_func, param_dict, obs_type)
-                        model_val = param_dict["sigma_8"] * Omega_zeta ** param_dict["gamma"] * np.exp(-1 * integral_term)
+                    comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, redshift, param_dict, "SNe")
+                    model_val = 25 + 5 * np.log10(comoving_distances * (1 + redshift))
                     chi_squared = Calc_chi(obs_type, type_data, type_data_error, model_val)
                     num_data_points_total += len(type_data)
-
                 elif obs_type in ["OHD", "CC"]:
                     redshift = obs_data["redshift"]
                     type_data = obs_data["type_data"]
                     type_data_error = obs_data["type_data_error"]
-
                     model_val = param_dict["H_0"] * np.array([MODEL_func(z, param_dict, obs_type) for z in redshift])
                     chi_squared = Calc_chi(obs_type, type_data, type_data_error, model_val)
                     num_data_points_total += len(type_data)
-
+                elif obs_type in ["f", "f_sigma_8"]:
+                    redshift = obs_data["redshift"]
+                    type_data = obs_data["type_data"]
+                    type_data_error = obs_data["type_data_error"]
+                    Omega_zeta = UDM.matter_density_z(redshift, MODEL_func, param_dict, obs_type)
+                    if obs_type == "f_sigma_8":
+                        integral_term = UDM.integral_term(redshift, MODEL_func, param_dict, obs_type)
+                        model_val = param_dict["sigma_8"] * Omega_zeta ** param_dict["gamma"] * np.exp(-1 * integral_term)
+                    else:
+                        model_val = Omega_zeta ** param_dict["gamma"]
+                    chi_squared = Calc_chi(obs_type, type_data, type_data_error, model_val)
+                    num_data_points_total += len(type_data)
                 else:
                     raise ValueError(f"Unsupported observation type: {obs_type}")
                 
-                # Update chi-squared total
                 chi_squared_total += chi_squared
 
             log_likelihood = -0.5 * chi_squared_total
@@ -295,13 +280,14 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 reference_aic[obs_name] = aic
                 reference_bic[obs_name] = bic
     
-    # Calculate delta AIC and delta BIC relative to the true model
+    # Calculate delta AIC and delta BIC relative to the true model.
     for model_name, obs_results in results.items():
         for obs_name, stats in obs_results.items():
             stats["dAIC"] = stats["AIC"] - reference_aic.get(obs_name, stats["AIC"])
             stats["dBIC"] = stats["BIC"] - reference_bic.get(obs_name, stats["BIC"])
 
     return results
+
 
 def provide_model_diagnostics(reduced_chi_squared, model_name="", reference_chi_squared=None):
     """

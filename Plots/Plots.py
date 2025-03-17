@@ -12,6 +12,7 @@ import os
 import re
 import pandas as pd
 
+
 def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
     """
     Generate corner plots, best-fit plots, statistical analysis, and save results to organized folders.
@@ -39,11 +40,13 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
         All_LaTeX_Tables[model_name] = (aligned_table, parameter_labels, observation_names)
 
     # 2. Generate best-fit plots
-    print("\nCreating best-fit plots...")
+    print("\n\nCreating best-fit plots...\n")
     best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS["color_schemes"])
 
     # 3. Perform statistical analysis
-    print("\nPerforming statistical analysis...")
+    print(f"\n\n\033[33m{'#'*48}\033[0m")
+    print(f"\033[33m####\033[0m Performing statistical analysis")
+    print(f"\033[33m{'#'*48}\033[0m\n")
     statistical_results = SP.statistical_analysis(All_best_fit_values, data, CONFIG, true_model)
 
     # 4. Process statistical results and interpretations
@@ -97,12 +100,46 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
         # Save LaTeX tables
         save_latex_table_to_file(model, model_folder, All_LaTeX_Tables[model])
 
-    # 6. Print final statistical tables to the console
-    print("\nFinal Statistical Tables:\n")
+    # 6. Print final statistical tables to the console using the improved print functio
     for model, stats_list in stats_dict.items():
         print_stats_table(model, stats_list)
 
     return All_best_fit_values, All_LaTeX_Tables, statistical_results
+
+def print_stats_table(model, stats_list):
+    red = "\033[31m"      # Red for observations
+    blue = "\033[34m"     # Blue for header
+    reset = "\033[0m"     # Reset color
+
+    # Increase column widths:
+    header = (
+        f"{'Observation':<30} | "   # 25 characters for Observation
+        f"{'Log-Likelihood':>18} | "  # 18 characters for Log-Likelihood
+        f"{'Chi-Squared':>15} | "     # 15 characters for Chi-Squared
+        f"{'Reduced Chi-Squared':>20} | "  # 25 characters for Reduced Chi-Squared
+        f"{'AIC':>11} | "            # 10 characters for AIC
+        f"{'BIC':>11} | "            # 10 characters for BIC
+        f"{'dAIC':>11} | "           # 10 characters for dAIC
+        f"{'dBIC':>11}"              # 10 characters for dBIC
+    )
+    print(f"Statistical Results for Model: {model}")
+    print(blue + header + reset)
+    print("-" * 150)
+    for stats in stats_list:
+        obs_str = f"{stats['Observation']:<30}"
+        obs_str = red + obs_str + reset
+        row = (
+            f"{obs_str} | "
+            f"{stats['Log-Likelihood']:>18.4f} | "
+            f"{stats['Chi_squared']:>15.4f} | "
+            f"{stats['Reduced_Chi_squared']:>20.4f} | "
+            f"{stats['AIC']:>11.3f} | "
+            f"{stats['BIC']:>11.3f} | "
+            f"{stats['dAIC']:>11.3f} | "
+            f"{stats['dBIC']:>11.3f}"
+        )
+        print(row)
+    print("\n")
 
 def autocorrPlot(autocorr, index, model_name, color, obs, PLOT_SETTINGS, close_plot=False, nsteps=100):
     """
