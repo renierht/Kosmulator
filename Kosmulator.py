@@ -19,7 +19,7 @@ if sys.version_info[0] == 2:
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
 #model_names = ["f1CDM","f1CDM_v"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
-model_names = ["LCDM"]
+model_names = ["BetaRn"]
 observations =  [['OHD'],['PantheonP','BAO'],['OHD','CC']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 10
@@ -246,14 +246,20 @@ if __name__ == "__main__":
         print(f"\n\033[33m{'#'*48}\033[0m", flush=True)
         print(f"\033[33m####\033[0m Generating Plots :)", flush=True)
         print(f"\033[33m{'#'*48}\033[0m", flush=True)
+        
+        # Re-read the Pantheon+ covariance matrix from the provided file path.
+        cov_raw = np.loadtxt(data["PantheonP"]["cov_path"])[1:].reshape(1701, 1701)
+        data["PantheonP"]["cov"] = la.cholesky(cov_raw, lower=True)
+        if "PantheonP" in data and "cov" not in data["PantheonP"]:
+            data["PantheonP"]["cov"] = pantheon_cov 
+        
+        best_fit_values, All_LaTeX_Tables, statistical_results = MP.generate_plots(
+            All_Samples, CONFIG, PLOT_SETTINGS, data, true_model
+        )
 
-        #best_fit_values, All_LaTeX_Tables, statistical_results = MP.generate_plots(
-        #    All_Samples, CONFIG, PLOT_SETTINGS, data, true_model
-        #)
-
-        #for model_name, (aligned_table, parameter_labels, observation_names) in All_LaTeX_Tables.items():
-        #    print(f"\nModel: {model_name} Aligned LaTeX Table:")
-        #    print_aligned_latex_table(aligned_table, parameter_labels, observation_names)
+        for model_name, (aligned_table, parameter_labels, observation_names) in All_LaTeX_Tables.items():
+            print(f"\nModel: {model_name} Aligned LaTeX Table:")
+            print_aligned_latex_table(aligned_table, parameter_labels, observation_names)
 
         end = time.time()
         formatted_time = Config.format_elapsed_time(end - start)
