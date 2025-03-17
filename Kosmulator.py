@@ -263,4 +263,10 @@ if __name__ == "__main__":
 
         end = time.time()
         formatted_time = Config.format_elapsed_time(end - start)
-        print(f"\nAll models processed successfully in a total time of {formatted_time}!!!\n")
+        print(f"\n\n\033[33m{'#'*75}\033[0m")
+        print(f"\033[33m#### \033[0m")
+        print(f"\033[33m#### All models processed successfully in a total time of {formatted_time}!!!\033[0m")
+        print(f"\033[33m#### \033[0m")
+        print(f"\033[33m#### Thank you for using Kosmulator :D\033[0m")
+        print(f"\033[33m#### \033[0m")
+        print(f"\033[33m{'#'*75}\033[0m")
