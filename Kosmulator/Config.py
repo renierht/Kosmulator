@@ -23,6 +23,18 @@ def load_data(file_path):
     data = np.loadtxt(file_path)
     return {"redshift": data[:, 0], "type_data": data[:, 1], "type_data_error": data[:, 2]}
 
+def prepare_pantheonP_data(data, z_min=0.01):
+    """
+    Pre-filter the PantheonP data: select SNe with redshift > z_min
+    or flagged as calibrators.
+    """
+    # Create a boolean mask for good SNe.
+    mask = (data["zHD"] > z_min) | (data["IS_CALIBRATOR"] > 0)
+    data["mask"] = mask
+    data["indices"] = np.where(mask)[0]
+    # Do not compute or attach the heavy reduced covariance here.
+    return data
+
 def load_all_data(config):
     """
     Load all datasets specified in the CONFIG dictionary.
@@ -32,16 +44,18 @@ def load_all_data(config):
         for obs in obs_list:
             file_path = os.path.join("./Observations", f"{obs}.dat")
             if obs == "PantheonP":
-                data = pd.read_csv(file_path, sep='\s+')
-                #cov_matrix = la.cholesky(np.loadtxt("./Observations/PantheonP.cov")[1:].reshape(1701, 1701), lower=True)
-                observation_data[obs] = {"zHD": data["zHD"].values,
-                    "m_b_corr": data["m_b_corr"].values,
-                    "m_b_corr_err_DIAG": data["m_b_corr_err_DIAG"].values,
-                    "IS_CALIBRATOR": data["IS_CALIBRATOR"].values,
-                    "CEPH_DIST": data["CEPH_DIST"].values,
-                    "biasCor_m_b": data["biasCor_m_b"].values,
+                df = pd.read_csv(file_path, sep='\s+')
+                pantheon_data = {
+                    "zHD": df["zHD"].values,
+                    "m_b_corr": df["m_b_corr"].values,
+                    "m_b_corr_err_DIAG": df["m_b_corr_err_DIAG"].values,
+                    "IS_CALIBRATOR": df["IS_CALIBRATOR"].values,
+                    "CEPH_DIST": df["CEPH_DIST"].values,
+                    "biasCor_m_b": df["biasCor_m_b"].values,
                     "cov_path": "./Observations/PantheonP.cov",
                 }
+                # Preprocess PantheonP data (now without computing the heavy covariance)
+                observation_data[obs] = prepare_pantheonP_data(pantheon_data)
             elif obs == "BAO":
                 observation_data[obs] = {"covd1": np.loadtxt(file_path)}
             else:
@@ -114,11 +128,6 @@ def Add_required_parameters(models, observations):
     Modify the parameter list structure: ensure each observation set has the correct parameters.
     Prints warnings when parameters are added automatically.
     """
-    #try:
-    #    from mpi4py import MPI
-    #    return MPI.COMM_WORLD.Get_rank()
-    #except ImportError:
-    #    return 0
 
     params_map = {
         "BAO": ["H_0","r_d"], 

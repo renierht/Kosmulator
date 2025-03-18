@@ -2,6 +2,7 @@ import numpy as np
 import scipy.linalg as la 
 from Plots.Plots import autocorrPlot  # Custom module for autocorrelation plotting
 import User_defined_modules as UDM   # Custom user-defined cosmology functions
+import numexpr as ne
 
 def Calc_chi(Type, type_data, type_data_error, model):
     """
@@ -20,16 +21,23 @@ def Calc_chi(Type, type_data, type_data_error, model):
     return result
 
 
-def Calc_PantP_chi(mb, trig, cepheid, cov, model, param_dict):
+def Calc_PantP_chi(mb, trig, cepheid, cov, model, param_dict, mask=None):
     """
-    Calculate chi-squared for Pantheon+ data using a covariance matrix.
+    Calculate chi-squared for Pantheon+ data using a covariance matrix,
+    applying a mask to reduce the data arrays if provided.
     """
     M = param_dict.get('M_abs', -19.20)  # Default absolute magnitude
-    meub = mb - M  # Distance modulus
+    meub = ne.evaluate("mb - M", local_dict={'mb': mb, 'M': M})
+    # If a mask is provided, reduce the arrays accordingly.
+    if mask is not None:
+        meub = meub[mask]
+        trig = trig[mask]
+        cepheid = cepheid[mask]
+        model = model[mask]
     moduli = np.where(trig == 1, cepheid, model)
-    delta = meub - moduli
+    delta = ne.evaluate("meub - moduli", local_dict={'meub': meub, 'moduli': moduli})
     residuals = la.solve_triangular(cov, delta, lower=True, check_finite=False)
-    return (residuals ** 2).sum()
+    return ne.evaluate("sum(residuals**2)")
 
 def Calc_BAO_chi(data, Model_func, param_dict, Type):
     """

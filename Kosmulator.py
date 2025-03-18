@@ -19,8 +19,8 @@ if sys.version_info[0] == 2:
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
 #model_names = ["f1CDM","f1CDM_v"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
-model_names = ["BetaRn"]
-observations =  [['OHD'],['PantheonP','BAO'],['OHD','CC']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
+model_names = ["LCDM"]
+observations =  [['PantheonP'],['OHD','CC'], ['OHD']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 10
 nsteps: int = 100
@@ -188,13 +188,15 @@ pantheon_required = any(
 if pantheon_required:
     if comm is not None:
         if rank == 0:
+            # Use the mask stored in your PantheonP data to compute the reduced covariance
+            mask = data["PantheonP"]["mask"]
             cov_raw = np.loadtxt("./Observations/PantheonP.cov")[1:].reshape(1701, 1701)
-            pantheon_cov = la.cholesky(cov_raw, lower=True)
+            reduced_cov = cov_raw[np.ix_(mask, mask)]
+            pantheon_cov = la.cholesky(reduced_cov, lower=True)
         else:
             pantheon_cov = None
         pantheon_cov = comm.bcast(pantheon_cov, root=0)
     else:
-        # Non-MPI serial fallback
         cov_raw = np.loadtxt("./Observations/PantheonP.cov")[1:].reshape(1701, 1701)
         pantheon_cov = la.cholesky(cov_raw, lower=True)
 
