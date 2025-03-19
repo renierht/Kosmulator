@@ -20,7 +20,7 @@ if sys.version_info[0] == 2:
 # Constants for the simulation
 #model_names = ["f1CDM","f1CDM_v"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
 model_names = ["LCDM"]
-observations =  [['PantheonP'],['OHD','CC'], ['OHD']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
+observations =  [['DESI']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 10
 nsteps: int = 100
@@ -170,8 +170,8 @@ if rank == 0:
         burn=burn,
         model_name=model_names,
     )
-    #print(f"CONFIG: {CONFIG}", flush=True)
-    #print(f"data: {data}", flush=True)
+    print(f"CONFIG: {CONFIG}", flush=True)
+    print(f"data: {data}", flush=True)
 else:
     CONFIG, data, models_local = None, None, None
 
@@ -188,17 +188,19 @@ pantheon_required = any(
 if pantheon_required:
     if comm is not None:
         if rank == 0:
-            # Use the mask stored in your PantheonP data to compute the reduced covariance
+            # Always use the precomputed mask from the PantheonP data.
             mask = data["PantheonP"]["mask"]
             cov_raw = np.loadtxt("./Observations/PantheonP.cov")[1:].reshape(1701, 1701)
             reduced_cov = cov_raw[np.ix_(mask, mask)]
-            pantheon_cov = la.cholesky(reduced_cov, lower=True)
+            pantheon_cov = la.cholesky(reduced_cov, lower=True, overwrite_a=True)
         else:
             pantheon_cov = None
         pantheon_cov = comm.bcast(pantheon_cov, root=0)
     else:
+        mask = data["PantheonP"]["mask"]
         cov_raw = np.loadtxt("./Observations/PantheonP.cov")[1:].reshape(1701, 1701)
-        pantheon_cov = la.cholesky(cov_raw, lower=True)
+        reduced_cov = cov_raw[np.ix_(mask, mask)]
+        pantheon_cov = la.cholesky(reduced_cov, lower=True, overwrite_a=True)
 
 # 🔹 Step 3: Now create the Schwimmbad MPI pool AFTER broadcasting
 if use_mpi:
@@ -250,11 +252,15 @@ if __name__ == "__main__":
         print(f"\033[33m{'#'*48}\033[0m", flush=True)
         
         # Re-read the Pantheon+ covariance matrix from the provided file path.
-        cov_raw = np.loadtxt(data["PantheonP"]["cov_path"])[1:].reshape(1701, 1701)
-        data["PantheonP"]["cov"] = la.cholesky(cov_raw, lower=True)
-        if "PantheonP" in data and "cov" not in data["PantheonP"]:
-            data["PantheonP"]["cov"] = pantheon_cov 
+        if "PantheonP" in data:
+            cov_raw = np.loadtxt(data["PantheonP"]["cov_path"])[1:].reshape(1701, 1701)
+            mask = data["PantheonP"]["mask"]
+            reduced_cov = cov_raw[np.ix_(mask, mask)]
+            data["PantheonP"]["cov"] = la.cholesky(reduced_cov, lower=True, overwrite_a=True)
         
+        if "PantheonP" in data and "cov" not in data["PantheonP"]:
+            data["PantheonP"]["cov"] = pantheon_cov
+
         best_fit_values, All_LaTeX_Tables, statistical_results = MP.generate_plots(
             All_Samples, CONFIG, PLOT_SETTINGS, data, true_model
         )

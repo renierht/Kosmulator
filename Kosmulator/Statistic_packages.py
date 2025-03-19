@@ -1,4 +1,5 @@
 import numpy as np
+import numba as nb
 import scipy.linalg as la 
 from Plots.Plots import autocorrPlot  # Custom module for autocorrelation plotting
 import User_defined_modules as UDM   # Custom user-defined cosmology functions
@@ -20,24 +21,40 @@ def Calc_chi(Type, type_data, type_data_error, model):
     result = Covariance_matrix(model, type_data, type_data_error) if Type == "CC" else np.sum(((type_data - model) ** 2) / (type_data_error ** 2))
     return result
 
+@nb.njit
+def compute_delta(mb, M):
+    # Simple vectorized subtraction; numba will compile this loop.
+    delta = np.empty_like(mb)
+    for i in range(mb.shape[0]):
+        delta[i] = mb[i] - M
+    return delta
 
-def Calc_PantP_chi(mb, trig, cepheid, cov, model, param_dict, mask=None):
+def Calc_PantP_chi(mb, trig, cepheid, cov, model, param_dict):
     """
     Calculate chi-squared for Pantheon+ data using a covariance matrix,
-    applying a mask to reduce the data arrays if provided.
+    with numexpr used to speed up the elementwise arithmetic.
+
+    Args:
+        mb: Array of corrected apparent magnitudes.
+        trig: Indicator array (e.g., 1 for calibrators).
+        cepheid: Cepheid distances for calibrators.
+        cov: Precomputed Cholesky-decomposed covariance matrix.
+        model: Model predictions (for non-calibrators).
+        param_dict: Dictionary containing parameters (e.g. 'M_abs').
+
+    Returns:
+        The chi-square value as a float.
     """
-    M = param_dict.get('M_abs', -19.20)  # Default absolute magnitude
-    meub = ne.evaluate("mb - M", local_dict={'mb': mb, 'M': M})
-    # If a mask is provided, reduce the arrays accordingly.
-    if mask is not None:
-        meub = meub[mask]
-        trig = trig[mask]
-        cepheid = cepheid[mask]
-        model = model[mask]
+    # Retrieve the absolute magnitude.
+    M = param_dict.get('M_abs', -19.20)
+    # Compute moduli: if trig equals 1, use cepheid distances; otherwise, use the model.
     moduli = np.where(trig == 1, cepheid, model)
-    delta = ne.evaluate("meub - moduli", local_dict={'meub': meub, 'moduli': moduli})
+    # Compute delta = (mb - M) - moduli using numexpr for fast elementwise arithmetic.
+    delta = ne.evaluate("mb - M - moduli")
+    # Solve the triangular system quickly, disabling finite checks.
     residuals = la.solve_triangular(cov, delta, lower=True, check_finite=False)
-    return ne.evaluate("sum(residuals**2)")
+    # Return the sum of squared residuals.
+    return np.sum(residuals**2)
 
 def Calc_BAO_chi(data, Model_func, param_dict, Type):
     """
@@ -78,6 +95,63 @@ def Calc_BAO_chi(data, Model_func, param_dict, Type):
 
     # Compute chi-square
     return np.dot(zz12, np.dot(np.linalg.inv(covd1), zz12))
+
+def Calc_DESI_chi(data, Model_func, param_dict, Type):
+    """
+    Compute the DESI chi-squared for various data types.
+    
+    data: dict with keys 'redshift', 'measurement', 'measurement_error', 'type', and 'cov'
+    Model_func: cosmological model function (e.g., LCDM_MODEL)
+    param_dict: dictionary of cosmological parameters (must include "H_0" and "r_d")
+    Type: (not used here, kept for interface consistency)
+    
+    The function supports:
+      - Type 3: DV/rs
+      - Type 4: DV in Mpc
+      - Type 5: DA/rs
+      - Type 6: 1/(H(z) rs)
+      - Type 7: rs/DV
+      - Type 8: Dm/rs, with Dm = DA*(1+z)
+    """
+    # Extract arrays
+    z     = data["redshift"]
+    meas  = data["measurement"]
+    types = data["type"]
+    cov_matrix = data["cov"]
+
+    # Drag scale (sound horizon) from parameters:
+    rs = param_dict["r_d"]
+    
+    # Compute theoretical prediction for each data point
+    theo = np.zeros_like(z)
+    for i in range(len(z)):
+        if types[i] == 3:
+            # Type 3: DV/rs – use dvrd which returns (DV/r_d)
+            theo[i] = UDM.dvrd(z[i], Model_func, param_dict, "OHD")
+        elif types[i] == 4:
+            # Type 4: DV in Mpc – convert dimensionless DV/r_d back to Mpc
+            theo[i] = UDM.dvrd(z[i], Model_func, param_dict, "OHD") * param_dict["r_d"]
+        elif types[i] == 5:
+            # Type 5: DA/rs – use dArd which returns (DA/r_d)
+            theo[i] = UDM.dArd(z[i], Model_func, param_dict, "SNe")
+        elif types[i] == 6:
+            # Type 6: 1/(H(z)*rs) – calculate directly as 1/H(z)/r_d
+            H_z = Model_func(z[i], param_dict, "OHD")
+            theo[i] = 1.0 / H_z / param_dict["r_d"]
+        elif types[i] == 7:
+            # Type 7: rs/DV – since dvrd returns DV/r_d, then rs/DV = 1/(DV/r_d)
+            theo[i] = 1.0 / UDM.dvrd(z[i], Model_func, param_dict, "OHD")
+        elif types[i] == 8:
+            # Type 8: D_m/rs, with D_m = comoving distance – use dmrd which returns (D_m/r_d)
+            theo[i] = UDM.dmrd(z[i], Model_func, param_dict, "SNe")
+        else:
+            raise ValueError("DESI data type {} not understood.".format(types[i]))
+
+    # Residuals
+    diff = theo - meas
+    chi2 = np.dot(np.dot(diff, cov_matrix), diff) 
+    return chi2
+
 
 def Covariance_matrix(model, type_data, type_data_error):
     """

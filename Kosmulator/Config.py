@@ -26,14 +26,63 @@ def load_data(file_path):
 def prepare_pantheonP_data(data, z_min=0.01):
     """
     Pre-filter the PantheonP data: select SNe with redshift > z_min
-    or flagged as calibrators.
+    or flagged as calibrators, and replace main arrays with their masked versions.
     """
     # Create a boolean mask for good SNe.
     mask = (data["zHD"] > z_min) | (data["IS_CALIBRATOR"] > 0)
     data["mask"] = mask
     data["indices"] = np.where(mask)[0]
-    # Do not compute or attach the heavy reduced covariance here.
+    
+    # Overwrite original arrays with masked arrays.
+    data["zHD"] = data["zHD"][mask]
+    data["m_b_corr"] = data["m_b_corr"][mask]
+    data["IS_CALIBRATOR"] = data["IS_CALIBRATOR"][mask]
+    data["CEPH_DIST"] = data["CEPH_DIST"][mask]
+    
     return data
+
+def load_DESI_data(file_path):
+    """
+    Load DESI VI data from the file and return a dictionary of arrays.
+    Only the chosen data points (the last 10 lines, corresponding to type 8 and 6)
+    are returned.
+    """
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+
+    # Find the marker that indicates the beginning of the chosen data
+    marker = "#Theese are the chosen one to compute:"
+    start_index = 0
+    for i, line in enumerate(lines):
+        if marker in line:
+            start_index = i + 1  # Data starts after this marker
+            break
+
+    # Parse the chosen data points
+    redshifts = []
+    values = []
+    errors = []
+    types = []
+
+    for line in lines[start_index:]:
+        if line.strip() == "" or line.startswith("#"):
+            continue
+        parts = line.split()
+        # Assuming the file columns are: EXP, z_eff, value, error, type
+        redshifts.append(float(parts[1]))
+        values.append(float(parts[2]))
+        errors.append(float(parts[3]))
+        types.append(int(parts[4]))
+
+    return {
+        "redshift": np.array(redshifts),
+        "measurement": np.array(values),
+        "measurement_error": np.array(errors),
+        "type": np.array(types)
+    }
+
+def load_DESI_cov(file_path):
+    return np.loadtxt(file_path)
 
 def load_all_data(config):
     """
@@ -44,20 +93,28 @@ def load_all_data(config):
         for obs in obs_list:
             file_path = os.path.join("./Observations", f"{obs}.dat")
             if obs == "PantheonP":
-                df = pd.read_csv(file_path, sep='\s+')
+                df = pd.read_csv(file_path, sep=r'\s+')
                 pantheon_data = {
                     "zHD": df["zHD"].values,
                     "m_b_corr": df["m_b_corr"].values,
-                    "m_b_corr_err_DIAG": df["m_b_corr_err_DIAG"].values,
+                    #"m_b_corr_err_DIAG": df["m_b_corr_err_DIAG"].values,
                     "IS_CALIBRATOR": df["IS_CALIBRATOR"].values,
                     "CEPH_DIST": df["CEPH_DIST"].values,
-                    "biasCor_m_b": df["biasCor_m_b"].values,
+                    #"biasCor_m_b": df["biasCor_m_b"].values,
                     "cov_path": "./Observations/PantheonP.cov",
                 }
+                del df
                 # Preprocess PantheonP data (now without computing the heavy covariance)
                 observation_data[obs] = prepare_pantheonP_data(pantheon_data)
             elif obs == "BAO":
                 observation_data[obs] = {"covd1": np.loadtxt(file_path)}
+            elif obs == "DESI":
+                # For DESI, load the DESI VI data and covariance matrix
+                desi_data = load_DESI_data(os.path.join("./Observations", "Isma_desi_VI.txt"))
+                desi_cov  = load_DESI_cov(os.path.join("./Observations", "Isma_desi_covtot_VI.txt"))
+                # Store the DESI data in a similar format as other observations
+                observation_data[obs] = desi_data
+                observation_data[obs]["cov"] = la.cholesky(desi_cov, lower=True)
             else:
                 observation_data[obs] = load_data(file_path)
     return observation_data
@@ -78,6 +135,7 @@ def create_config(models, true_values=None, prior_limits=None, observation=None,
         "OHD": "OHD",
         "CC": "CC",
         "BAO": "BAO",
+        "DESI": "DESI",
         "f_sigma_8": "f_sigma_8",
         "f": "f",
     }
@@ -130,7 +188,8 @@ def Add_required_parameters(models, observations):
     """
 
     params_map = {
-        "BAO": ["H_0","r_d"], 
+        "BAO": ["H_0","r_d"],
+        "DESI": ["H_0", "r_d"],
         "PantheonP": ["H_0","M_abs"], 
         "f_sigma_8": ["sigma_8", "gamma"], 
         "f": ["gamma"],

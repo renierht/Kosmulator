@@ -32,14 +32,18 @@ def model_likelihood(theta, obs_data, obs_type, CONFIG, MODEL_func, obs, obs_ind
     if obs == "BAO":
         chi = SP.Calc_BAO_chi(obs_data, MODEL_func, param_dict, obs_type)
         return -0.5 * chi
+
+    if obs == "DESI":
+        chi = SP.Calc_DESI_chi(obs_data, MODEL_func, param_dict, obs_type)
+        return -0.5 * chi
         
     # Handle specific cases for observations
     if obs == "PantheonP":
-        redshift = obs_data['zHD']
-        mb = obs_data['m_b_corr']
-        trig = obs_data['IS_CALIBRATOR']
-        cepheid = obs_data['CEPH_DIST']
-        cov_mat = obs_data.get("cached_cov")
+        redshift = obs_data["zHD"]
+        mb = obs_data["m_b_corr"]
+        trig = obs_data["IS_CALIBRATOR"]
+        cepheid = obs_data["CEPH_DIST"]
+        cov_mat = obs_data.get("cov")
     else:
         redshift = obs_data["redshift"]
         type_data = obs_data["type_data"]
@@ -72,8 +76,7 @@ def model_likelihood(theta, obs_data, obs_type, CONFIG, MODEL_func, obs, obs_ind
 
     # Compute chi-square likelihood
     if obs == "PantheonP":
-        mask = obs_data.get("mask", None)
-        chi = SP.Calc_PantP_chi(mb, trig, cepheid, cov_mat, model, param_dict, mask=mask)
+        chi = SP.Calc_PantP_chi(mb, trig, cepheid, cov_mat, model, param_dict)
     else:
         chi = SP.Calc_chi(obs_type, type_data, type_data_error, model)
     return -0.5 * chi
