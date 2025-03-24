@@ -109,12 +109,13 @@ def load_all_data(config):
             elif obs == "BAO":
                 observation_data[obs] = {"covd1": np.loadtxt(file_path)}
             elif obs == "DESI":
-                # For DESI, load the DESI VI data and covariance matrix
                 desi_data = load_DESI_data(os.path.join("./Observations", "Isma_desi_VI.txt"))
-                desi_cov  = load_DESI_cov(os.path.join("./Observations", "Isma_desi_covtot_VI.txt"))
-                # Store the DESI data in a similar format as other observations
+                # Read the matrix directly, assuming it is the inverse covariance matrix.
+                inv_cov = np.loadtxt(os.path.join("./Observations", "Isma_desi_covtot_VI.txt"))
+                desi_data["inv_cov"] = inv_cov
+                # Also store it under "cov" so that other functions (e.g. statistical_analysis) find it.
+                desi_data["cov"] = inv_cov
                 observation_data[obs] = desi_data
-                observation_data[obs]["cov"] = la.cholesky(desi_cov, lower=True)
             else:
                 observation_data[obs] = load_data(file_path)
     return observation_data

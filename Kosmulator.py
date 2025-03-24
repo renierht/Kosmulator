@@ -22,13 +22,13 @@ if sys.version_info[0] == 2:
 model_names = ["LCDM"]
 observations =  [['DESI']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
-nwalkers: int = 10
-nsteps: int = 100
-burn: int = 10
+nwalkers: int = 20
+nsteps: int = 300
+burn: int = 30
 convergence = 0.01
 
 prior_limits = {
-    "Omega_m": (0.10, 0.4),
+    "Omega_m": (0.01, 0.4),
     "H_0": (60.0, 80.0),
     "r_d": (100.0, 200.0),
     "M_abs": (-22.0, -15.0),

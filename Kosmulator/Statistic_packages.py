@@ -21,14 +21,6 @@ def Calc_chi(Type, type_data, type_data_error, model):
     result = Covariance_matrix(model, type_data, type_data_error) if Type == "CC" else np.sum(((type_data - model) ** 2) / (type_data_error ** 2))
     return result
 
-@nb.njit
-def compute_delta(mb, M):
-    # Simple vectorized subtraction; numba will compile this loop.
-    delta = np.empty_like(mb)
-    for i in range(mb.shape[0]):
-        delta[i] = mb[i] - M
-    return delta
-
 def Calc_PantP_chi(mb, trig, cepheid, cov, model, param_dict):
     """
     Calculate chi-squared for Pantheon+ data using a covariance matrix,
@@ -98,60 +90,74 @@ def Calc_BAO_chi(data, Model_func, param_dict, Type):
 
 def Calc_DESI_chi(data, Model_func, param_dict, Type):
     """
-    Compute the DESI chi-squared for various data types.
+    Compute the DESI log-likelihood for various data types, following MontePython's implementation.
     
-    data: dict with keys 'redshift', 'measurement', 'measurement_error', 'type', and 'cov'
+    data: dict with keys 'redshift', 'measurement', 'measurement_error', 'type', and 'inv_cov' (also available as 'cov')
     Model_func: cosmological model function (e.g., LCDM_MODEL)
     param_dict: dictionary of cosmological parameters (must include "H_0" and "r_d")
-    Type: (not used here, kept for interface consistency)
-    
-    The function supports:
-      - Type 3: DV/rs
-      - Type 4: DV in Mpc
-      - Type 5: DA/rs
-      - Type 6: 1/(H(z) rs)
-      - Type 7: rs/DV
-      - Type 8: Dm/rs, with Dm = DA*(1+z)
+    Type: not used here (for interface consistency)
     """
     # Extract arrays
-    z     = data["redshift"]
-    meas  = data["measurement"]
+    z = data["redshift"]
+    meas = data["measurement"]
     types = data["type"]
-    cov_matrix = data["cov"]
+    inv_cov = data["inv_cov"]
+    #print(f"z: {z}, meas: {meas}, types: {types}, inv_cov: {inv_cov}")
 
-    # Drag scale (sound horizon) from parameters:
-    rs = param_dict["r_d"]
     
-    # Compute theoretical prediction for each data point
+    # Compute comoving distances using the "SNe" branch (which integrates 1/E(z))
+    comoving = UDM.Comoving_distance_vectorized(Model_func, z, param_dict, "DESI")
+    # Compute Hubble parameter at each redshift using the "OHD" branch and multiply by H_0:
+    H_vals = param_dict["H_0"] * np.array([Model_func(zi, param_dict, "OHD") for zi in z])
+    #comoving = UDM.Comoving_distance_vectorized(Model_func, z, param_dict, Type)
+    #H_vals = np.array([Model_func(zi, param_dict, Type) for zi in z])
+    DA = comoving / (1 + z)
+    dr = z / H_vals
+    dv = (DA**2 * (1 + z)**2 * dr)**(1. / 3.)
+    
+    print (param_dict)
+
+    param_dict2 = {'Omega_m': 0.29, 'H_0': 68, 'r_d': 150.0}
+    comoving2 = UDM.Comoving_distance_vectorized(Model_func, z, param_dict2, "DESI")
+    # Compute Hubble parameter at each redshift using the "OHD" branch and multiply by H_0:
+    H_vals2 = param_dict2["H_0"] * np.array([Model_func(zi, param_dict2, "OHD") for zi in z])
+    #comoving = UDM.Comoving_distance_vectorized(Model_func, z, param_dict, Type)
+    #H_vals = np.array([Model_func(zi, param_dict, Type) for zi in z])
+    DA2 = comoving2 
+    DM2 = DA2*(1+z)
+    dr2 = z / H_vals2
+    dv2 = (DA2**2 * (1 + z)**2 * dr2)**(1. / 3.)
+    print (f"comoving: {comoving2}, H_vals2: {H_vals}, DA2: {DA2}, DM2: {DM2}, dr2: {dr2}, dv2: {dv2}")
+    
+
+    rs = param_dict["r_d"]
+
+    # Compute theoretical prediction for each data point based on type:
     theo = np.zeros_like(z)
     for i in range(len(z)):
         if types[i] == 3:
-            # Type 3: DV/rs – use dvrd which returns (DV/r_d)
-            theo[i] = UDM.dvrd(z[i], Model_func, param_dict, "OHD")
+            theo[i] = dv[i] / rs
         elif types[i] == 4:
-            # Type 4: DV in Mpc – convert dimensionless DV/r_d back to Mpc
-            theo[i] = UDM.dvrd(z[i], Model_func, param_dict, "OHD") * param_dict["r_d"]
+            theo[i] = dv[i]
         elif types[i] == 5:
-            # Type 5: DA/rs – use dArd which returns (DA/r_d)
-            theo[i] = UDM.dArd(z[i], Model_func, param_dict, "SNe")
+            theo[i] = DA[i] / rs
         elif types[i] == 6:
-            # Type 6: 1/(H(z)*rs) – calculate directly as 1/H(z)/r_d
-            H_z = Model_func(z[i], param_dict, "OHD")
-            theo[i] = 1.0 / H_z / param_dict["r_d"]
+            theo[i] = 1.0 / H_vals[i] / rs
         elif types[i] == 7:
-            # Type 7: rs/DV – since dvrd returns DV/r_d, then rs/DV = 1/(DV/r_d)
-            theo[i] = 1.0 / UDM.dvrd(z[i], Model_func, param_dict, "OHD")
+            theo[i] = rs / dv[i]
         elif types[i] == 8:
-            # Type 8: D_m/rs, with D_m = comoving distance – use dmrd which returns (D_m/r_d)
-            theo[i] = UDM.dmrd(z[i], Model_func, param_dict, "SNe")
+            theo[i] = DA[i] * (1 + z[i]) / rs
         else:
-            raise ValueError("DESI data type {} not understood.".format(types[i]))
+            raise ValueError(f"DESI data type {types[i]} not understood.")
 
-    # Residuals
+    # Compute residuals (the difference between theoretical prediction and measurement)
     diff = theo - meas
-    chi2 = np.dot(np.dot(diff, cov_matrix), diff) 
-    return chi2
 
+    # Compute chi-squared using the inverse covariance matrix:
+    chi2 = np.dot(np.dot(diff, inv_cov), diff)
+
+    # Return the log-likelihood (as in MontePython)
+    return -0.5 * chi2
 
 def Covariance_matrix(model, type_data, type_data_error):
     """
@@ -171,13 +177,13 @@ def Covariance_matrix(model, type_data, type_data_error):
     result = np.sum(delta_H ** 2 * Cov_inv_diag)  # Avoid explicit matrix inversion
     
     return result
-  
+
 def AutoCorr(pos, iterations, sampler, model_name, color, obs, PLOT_SETTINGS, convergence=0.01, last_obs=False):
     """
     Compute and monitor the autocorrelation time during MCMC sampling.
     """
     index, autocorr, old_tau = 0, np.empty(iterations), np.inf
-    
+
     for sample in sampler.sample(pos, iterations=iterations, progress=True):
         if sampler.iteration % 100:
             continue
@@ -186,7 +192,7 @@ def AutoCorr(pos, iterations, sampler, model_name, color, obs, PLOT_SETTINGS, co
         index += 1
         converged = np.all(tau * 100 < sampler.iteration) and np.all(np.abs(old_tau - tau) / tau < convergence)
         n = 100 * np.arange(1, index + 1)
-        if converged: 
+        if converged:
             if last_obs:
                 autocorrPlot(autocorr, index,  model_name, color, obs, PLOT_SETTINGS, close_plot = True, nsteps = iterations)
             break # Stop sampling if convergence criteria are met
@@ -197,7 +203,7 @@ def AutoCorr(pos, iterations, sampler, model_name, color, obs, PLOT_SETTINGS, co
              break
         else:
              old_tau = tau
-             autocorrPlot(autocorr, index,  model_name, color, obs, PLOT_SETTINGS, close_plot = False, nsteps = iterations)   
+             autocorrPlot(autocorr, index,  model_name, color, obs, PLOT_SETTINGS, close_plot = False, nsteps = iterations)
 
 def calculate_asymmetric_from_samples(samples, parameters, observations):
     """
@@ -311,6 +317,9 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 elif obs == "BAO":
                     chi_squared = Calc_BAO_chi(obs_data, MODEL_func, param_dict, "BAO")
                     num_data_points_total += len(obs_data["covd1"])
+                elif obs == "DESI":
+                    chi_squared = Calc_DESI_chi(obs_data, MODEL_func, param_dict, "DESI")
+                    num_data_points_total += len(obs_data["cov"])
                 elif obs_type == "SNe":
                     redshift = obs_data["redshift"]
                     type_data = obs_data["type_data"]
@@ -454,7 +463,5 @@ def interpret_delta_aic_bic(delta_aic, delta_bic):
         feedback += "  - Delta BIC: Strong evidence against this model.\n"
 
     return feedback
-
-
 
 

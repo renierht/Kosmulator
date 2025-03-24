@@ -34,8 +34,8 @@ def model_likelihood(theta, obs_data, obs_type, CONFIG, MODEL_func, obs, obs_ind
         return -0.5 * chi
 
     if obs == "DESI":
-        chi = SP.Calc_DESI_chi(obs_data, MODEL_func, param_dict, obs_type)
-        return -0.5 * chi
+        likelihood = SP.Calc_DESI_chi(obs_data, MODEL_func, param_dict, obs_type) #We alreade added the -0.5*chi in Statistic_packages.py
+        return likelihood
         
     # Handle specific cases for observations
     if obs == "PantheonP":

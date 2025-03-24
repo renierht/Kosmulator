@@ -309,7 +309,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, color_schemes):
             if len(set(obs_types)) > 1 and not (set(obs_types) == {'OHD', 'CC'} or set(obs_types) == {'CC', 'OHD'}):
                 print(f"{red_start}Skipping{reset_color} combination plot for {obs_set} due to mixed observation types (excluding OHD+CC).")
                 continue
-            if "BAO" in obs_types:
+            if "BAO" or "DESI" in obs_types:
                 print(f"{red_start}Skipping{reset_color} the best-fit plot for {obs_set} data.")
                 continue
 

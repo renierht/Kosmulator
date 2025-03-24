@@ -221,6 +221,7 @@ def Calculate_return_values(model, Type):
                    "f_sigma_8": model,  # Growth rate of structure including sigma_8 as a parameter
                    "f": model,   # Growth rate of structure
                    "BAO": 1 / model,  # Baryon Acoustic Oscillations (inverse of model)}
+                   "DESI": 1/ model,  # Dark Energy Spectroscopic instrument
                    }.get(Type, None)
 
 ##############################################################
