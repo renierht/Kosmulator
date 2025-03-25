@@ -4,8 +4,7 @@ __pycache__/
 *.pyc
 MCMC_chains/
 Observations/~BROMIUM/
-Plots/auto_corr/
-Plots/corner_plots/
-Plots/Best_fits/
+Plots/Saved_plots/
 saved_tables/
+Statistical_analysis_tables/
 *.log

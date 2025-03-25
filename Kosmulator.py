@@ -19,11 +19,11 @@ if sys.version_info[0] == 2:
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
 model_names = ["LCDM"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
-observations =  [['CC','BAO']]
+observations =  [['CC','OHD','BAO','f'], ['CC'], ['OHD','CC'],['BAO'],['f']]
 #observations =  [['CC'],['BAO'],['PantheonP'],['f_sigma_8'],['f'], ['f','f_sigma'], ['CC','BAO','PantheonP'], ['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP','f_sigma_8']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 20
-nsteps: int = 2000
+nsteps: int = 1000
 burn: int = 50
 convergence = 0.01
 
@@ -104,14 +104,16 @@ PLOT_SETTINGS = {
     "color_schemes": full_colors[:len(observations)],
     "line_styles": ["-", "--", ":", "-."],
     "marker_size": 4,
-    "legend_font_size": 12,
+    "legend_font_size": 50,
     "title_font_size": 12,
-    "label_font_size": 12,
+    "label_font_size": 10,
+    "tick_font_size": 4,
     "latex_enabled": latex_enabled,
     "dpi": 300,
     "autocorr_save_path": f"./Plots/Saved_plots/{output_suffix_path}/auto_corr/",
     "cornerplot_save_path": f"./Plots/Saved_plots/{output_suffix_path}/corner_plots/",
     "bestfit_save_path": f"./Plots/Saved_plots/{output_suffix_path}/Best_fits/",
+    "output_suffix": output_suffix_path,
     "Table": plot_table,
     "table_anchor": (0.98, 1.0),  # pushes the table further up
 

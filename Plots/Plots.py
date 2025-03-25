@@ -27,9 +27,10 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
     interpretations_dict = {}
 
     # Create a main folder for saving tables
-    main_folder = "saved_tables"
+    output_suffix = PLOT_SETTINGS.get("output_suffix", "default_run")
+    main_folder = f"Statistical_analysis_tables/{output_suffix}"
     os.makedirs(main_folder, exist_ok=True)
-
+    
     # 1. Generate corner plots for all models
     for model_name, Samples in All_Samples.items():
         print(f"\nCreating corner plot for model: {model_name}...")
@@ -91,17 +92,10 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
     # 5. Save results to files
     for model in stats_dict.keys():
-        # Create a folder for the model
         model_folder = os.path.join(main_folder, model)
         os.makedirs(model_folder, exist_ok=True)
-
-        # Save statistical results
         save_stats_to_file(model, model_folder, stats_dict[model])
-
-        # Save interpretations
         save_interpretations_to_file(model, model_folder, interpretations_dict[model])
-
-        # Save LaTeX tables
         save_latex_table_to_file(model, model_folder, All_LaTeX_Tables[model])
 
     # 6. Print final statistical tables to the console using the improved print functio
@@ -163,7 +157,7 @@ def autocorrPlot(autocorr, index, model_name, color, obs, PLOT_SETTINGS, close_p
         return
     
     # Ensure output directory exists
-    folder_path = PLOT_SETTINGS["autocorr_save_path"] 
+    folder_path = f"{PLOT_SETTINGS['autocorr_save_path']}"
     os.makedirs(folder_path, exist_ok=True)
     
     # Prepare data    
@@ -183,7 +177,8 @@ def autocorrPlot(autocorr, index, model_name, color, obs, PLOT_SETTINGS, close_p
     plt.xlabel("Number of steps", fontsize=PLOT_SETTINGS.get("label_font_size", 12))
     plt.ylabel(r"Mean $\hat{\tau}$", fontsize=PLOT_SETTINGS.get("label_font_size", 12))
     plt.legend(fontsize=PLOT_SETTINGS.get("legend_font_size", 10))
-    plt.savefig(f"./Plots/auto_corr/{model_name}.png", dpi=PLOT_SETTINGS.get("dpi", 200))
+    print("Saving autocorr plot to:", folder_path)
+    plt.savefig(f"{folder_path}/{model_name}.png", dpi=PLOT_SETTINGS.get("dpi", 200))
 
 def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     """Generate a corner plot from MCMC samples with optional LaTeX table."""
@@ -217,9 +212,12 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     max_size = 20
     font_size = base_size + ((num_params - 2) / (6 - 2)) * (max_size - base_size)
     font_size = max(font_size, base_size)
-    g.settings.title_limit_fontsize = font_size
+    g.settings.title_limit_fontsize = PLOT_SETTINGS.get("legend__font_size", 12) + ((num_params - 2) / (6 - 2)) * (max_size - PLOT_SETTINGS.get("legend__font_size", 12)) 
     g.settings.legend_fontsize = font_size
     g.settings.fontsize = font_size
+    g.settings.axes_labelsize = font_size
+    g.settings.axes_fontsize = PLOT_SETTINGS.get("tick_font_size", 12) + ((num_params - 2) / (6 - 2)) * (max_size - PLOT_SETTINGS.get("tick_font_size", 12))
+    g.settings.scaling = False
 
     # Prepare distributions and labels
     distributions, labels = [], []
@@ -326,7 +324,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
             # Explicitly allow plotting for valid single observation types
             if len(obs_types) == 1 and obs_types[0] not in valid_single_obs_types:
                 print(f"{red_start}Skipping{reset_color} the best-fit plot for {obs_set} (unsupported single observation).")
-            continue
+                continue
             
             setup_folder(folder_path)
 
