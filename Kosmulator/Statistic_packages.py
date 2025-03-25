@@ -444,23 +444,27 @@ def interpret_delta_aic_bic(delta_aic, delta_bic):
 
     # Interpret delta AIC
     if delta_aic < 0:
-        feedback += f"  - Delta AIC: The model has a better fit than the reference model (Delta AIC = {delta_aic:.2f}).\n"
+        feedback += f"Delta AIC: Model strongly preferred (ΔAIC = {delta_aic:.2f}).\n"
     elif delta_aic <= 2:
-        feedback += "  - Delta AIC: The models are equally plausible.\n"
+        feedback += "Delta AIC: Models equally plausible.\n"
     elif 4 <= delta_aic < 7:
-        feedback += "  - Delta AIC: Moderate evidence against this model.\n"
+        feedback += "Delta AIC: Moderate evidence against the model.\n"
     elif delta_aic >= 10:
-        feedback += "  - Delta AIC: Strong evidence against this model.\n"
+        feedback += "Delta AIC: Strong evidence against the model.\n"
+    else:
+        feedback += f"Delta AIC: Weak evidence against the model (ΔAIC = {delta_aic:.2f}).\n"
 
     # Interpret delta BIC
     if delta_bic < 0:
-        feedback += f"  - Delta BIC: The model is strongly preferred over the reference model (Delta BIC = {delta_bic:.2f}).\n"
+        feedback += f"Delta BIC: Model strongly preferred (ΔBIC = {delta_bic:.2f}).\n"
     elif delta_bic <= 2:
-        feedback += "  - Delta BIC: The models are equally plausible.\n"
+        feedback += "Delta BIC: Models equally plausible.\n"
     elif 4 <= delta_bic < 7:
-        feedback += "  - Delta BIC: Moderate evidence against this model.\n"
+        feedback += "Delta BIC: Moderate evidence against the model.\n"
     elif delta_bic >= 10:
-        feedback += "  - Delta BIC: Strong evidence against this model.\n"
+        feedback += "Delta BIC: Strong evidence against the model.\n"
+    else:
+        feedback += f"Delta BIC: Weak evidence against the model (ΔBIC = {delta_bic:.2f}).\n"
 
     return feedback
 

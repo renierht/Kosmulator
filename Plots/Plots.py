@@ -41,7 +41,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
     # 2. Generate best-fit plots
     print("\n\nCreating best-fit plots...\n")
-    best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS["color_schemes"])
+    best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS)
 
     # 3. Perform statistical analysis
     print(f"\n\n\033[33m{'#'*48}\033[0m")
@@ -77,11 +77,15 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
             stats_dict[model].append(stats_row)
 
             # Store interpretations
+            lines = delta_aic_bic_feedback.splitlines()
+            aic_interpretation = lines[0].strip() if len(lines) > 0 else "No AIC interpretation available."
+            bic_interpretation = lines[1].strip() if len(lines) > 1 else "No BIC interpretation available."
+
             interpretations_row = {
                 "Observation": obs,
                 "Reduced Chi2 Diagnostics": diagnostics.strip(),
-                "AIC Interpretation": delta_aic_bic_feedback.splitlines()[0].strip(),
-                "BIC Interpretation": delta_aic_bic_feedback.splitlines()[1].strip(),
+                "AIC Interpretation": aic_interpretation,
+                "BIC Interpretation": bic_interpretation,
             }
             interpretations_dict[model].append(interpretations_row)
 
@@ -159,7 +163,7 @@ def autocorrPlot(autocorr, index, model_name, color, obs, PLOT_SETTINGS, close_p
         return
     
     # Ensure output directory exists
-    folder_path = PLOT_SETTINGS.get("autocorr_save_path", "./Plots/auto_corr/")
+    folder_path = PLOT_SETTINGS["autocorr_save_path"] 
     os.makedirs(folder_path, exist_ok=True)
     
     # Prepare data    
@@ -186,7 +190,7 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     print("\n\033[4;31mNote\033[0m: GetDist's read chains ignore burn-in, since EMCEE already applies a burn fraction.")
     
     # Ensure output folder exists
-    folder_path = f"./Plots/corner_plots/{model_name}/"
+    folder_path = f"{PLOT_SETTINGS['cornerplot_save_path']}/{model_name}/"
     os.makedirs(folder_path, exist_ok=True)
     
     # Extract plot settings
@@ -290,11 +294,12 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     # Return the aligned LaTeX table, parameter labels, and observation names
     return structured_values, aligned_latex_table, CONFIG["parameters"][0], ["+".join(obs) for obs in CONFIG["observations"]]
 
-def best_fit_plots(All_best_fit_values, CONFIG, data, color_schemes):
+def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
     """
     Generate best-fit plots for each model and observation combination.
     """
     red_start, reset_color = "\033[31m", "\033[0m"  # ANSI codes for warnings
+    color_schemes = PLOT_SETTINGS["color_schemes"]
 
     for model_name, model_best_fit in All_best_fit_values.items():
         observations = CONFIG[model_name]["observations"]
@@ -302,17 +307,27 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, color_schemes):
 
         for obs_index, obs_set in enumerate(observations):
             obs_name = "_".join(obs_set)
-            folder_path = f"./Plots/Best_fits/{model_name}/{obs_name}/"
+            folder_path = f"{PLOT_SETTINGS['bestfit_save_path']}/{model_name}/{obs_name}/"
+            os.makedirs(folder_path, exist_ok=True)
             obs_types = observation_types[obs_index]
 
             # Skip certain plots
-            if len(set(obs_types)) > 1 and not (set(obs_types) == {'OHD', 'CC'} or set(obs_types) == {'CC', 'OHD'}):
-                print(f"{red_start}Skipping{reset_color} combination plot for {obs_set} due to mixed observation types (excluding OHD+CC).")
-                continue
-            if "BAO" or "DESI" in obs_types:
-                print(f"{red_start}Skipping{reset_color} the best-fit plot for {obs_set} data.")
+            valid_single_obs_types = {'PantheonP', 'CC', 'f_sigma_8', 'f', 'OHD', 'JLA', 'Pantheon'}
+
+            # Skip BAO data or mixed data types (excluding OHD+CC combinations)
+            if "BAO" in obs_types:
+                print(f"{red_start}Skipping{reset_color} the best-fit plot for {obs_set} (BAO data).")
                 continue
 
+            if len(set(obs_types)) > 1 and not set(obs_types).issubset({'OHD', 'CC'}):
+                print(f"{red_start}Skipping{reset_color} combination plot for {obs_set} due to mixed observation types (excluding OHD+CC).")
+                continue
+
+            # Explicitly allow plotting for valid single observation types
+            if len(obs_types) == 1 and obs_types[0] not in valid_single_obs_types:
+                print(f"{red_start}Skipping{reset_color} the best-fit plot for {obs_set} (unsupported single observation).")
+            continue
+            
             setup_folder(folder_path)
 
             # Extract best-fit values and prepare data

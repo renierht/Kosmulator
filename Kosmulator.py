@@ -18,14 +18,13 @@ if sys.version_info[0] == 2:
 
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
-#model_names = ["f1CDM","f1CDM_v"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
-model_names = ["LCDM"]
-#observations =  [['CC']]
-observations =  [['PantheonP','CC','BAO','f_sigma_8','f'], ['PantheonP'],['CC'],['BAO'],['f_sigma_8'],['f']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
+model_names = ["LCDM"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
+observations =  [['CC','BAO']]
+#observations =  [['CC'],['BAO'],['PantheonP'],['f_sigma_8'],['f'], ['f','f_sigma'], ['CC','BAO','PantheonP'], ['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP','f_sigma_8']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
-nwalkers: int = 100
-nsteps: int = 10000
-burn: int = 500
+nwalkers: int = 20
+nsteps: int = 2000
+burn: int = 50
 convergence = 0.01
 
 prior_limits = {
@@ -99,6 +98,8 @@ overwrite = args.overwrite
 full_colors = ['r', 'b', 'green', 'cyan', 'purple', 'grey', 'yellow', 'm',
                'k', 'gray', 'orange', 'pink', 'crimson', 'darkred', 'salmon']
 
+output_suffix_path = OUTPUT_SUFFIX if OUTPUT_SUFFIX else "default_run"
+
 PLOT_SETTINGS = {
     "color_schemes": full_colors[:len(observations)],
     "line_styles": ["-", "--", ":", "-."],
@@ -108,7 +109,9 @@ PLOT_SETTINGS = {
     "label_font_size": 12,
     "latex_enabled": latex_enabled,
     "dpi": 300,
-    "autocorr_save_path": "./Plots/auto_corr/",
+    "autocorr_save_path": f"./Plots/Saved_plots/{output_suffix_path}/auto_corr/",
+    "cornerplot_save_path": f"./Plots/Saved_plots/{output_suffix_path}/corner_plots/",
+    "bestfit_save_path": f"./Plots/Saved_plots/{output_suffix_path}/Best_fits/",
     "Table": plot_table,
     "table_anchor": (0.98, 1.0),  # pushes the table further up
 
