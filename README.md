@@ -6,7 +6,7 @@ observationaldata, and visualize results.
 ## Requirements
 1) EMCEE python packages (controls the MCMC simulation) (https://emcee.readthedocs.io/en/stable/user/install/)
 2) Getdist (Plotting packages) (https://getdist.readthedocs.io/en/latest/intro.html)
-3) Numpy, Matplotlip, Scipy, h5py, Pandas (https://numpy.org/install/, https://matplotlib.org/stable/install/index.html, https://scipy.org/install/, https://pypi.org/project/h5py/, https://pypi.org/project/pandas/)
+3) Numpy, Matplotlib, Scipy, h5py, Pandas (https://numpy.org/install/, https://matplotlib.org/stable/install/index.html, https://scipy.org/install/, https://pypi.org/project/h5py/, https://pypi.org/project/pandas/)
 4) Generic Python packages: time, sys, os, platform, inspect, warnings, re, shutil (already part of the Python library)
 5) LaTeX (MikTeX/TexLive) - This is a required dependency for enhanced plot quality. Follow the instructions below to install LaTeX for your operating system.
 
@@ -71,8 +71,7 @@ Kosmulator/
 │   ├── Statistic_packages.py   # Statistical functions and models
 │   ├── MCMC_setup.py   		# Calls the EMCEE function based on your CONFIG setup
 ├── Observations/            	# Observational data directory
-├── MCMC_Chains/             	# Save directory for MCMC simulation chains
-├── Plots/          				# Save directory for the analysed output Plots\
+├── Plots/          				# Save directory for the analysed output Plots
 │   ├── Plots.py                # User-facing script for generating plots
 │   ├── Plot_functions.py       # Random functions to improve plots.	
 ├── Kosmulator.py  				# User-facing script to set up simulations
@@ -92,6 +91,7 @@ Kosmulator/
 		# the MCMC simulation will combine their likelihoods and minimized the combined likelihood.
 
 ## Multiprocessing runs:
+```bash
 With MPI:                      mpiexec -n num_cores python Kosmulator.py --OUTPUT_SUFFIX="Your project name" --latex_enabled=True --overwrite=True --plot_table=True
 With python multiprocessing:   python Kosmulator.py --OUTPUT_SUFFIX="Your project name" --num_cores=num_cores --latex_enabled=True --overwrite=True --plot_table=True
 Using nohup to close terminal: nohup mpiexec -n num_cores python Kosmulator.py --OUTPUT_SUFFIX="Your project name" --latex_enabled=True --overwrite=True --plot_table=True > model_name.log 2>&1 & 
@@ -101,6 +101,7 @@ Using nohup to close terminal: nohup mpiexec -n num_cores python Kosmulator.py -
 --overwrite:     Flag to overwrite previosuly saved chain or use the original (usefull for making new plots from existing chains)
 --plot_table:    Flag to enable or disable plotting the table with the calculated parameter values on the corner plot
 --num_cores:     The amount of cores that you want to use on you system. If num_cores=1, then the simulation will run in series.
+```
  
 ## LaTeX Dependencies for Plot Rendering
 Kosmulator uses Matplotlib's LaTeX rendering to generate high-quality formatted plots. If you encounter an error such as:
