@@ -57,7 +57,7 @@ then run the command python Kosmulator.py in your terminal. If it ran successful
 - **Built-in Statistical Tools**: Use pre-built Gaussian statistical models for observational data, with the addition of a covariance matrix calculation for cosmic chronometer and BAO data.
 - **Customizable Models**: Extend the functionality by adding new observational models or datasets. Currently we have SNe Type 1A, OHD, CC, BAO, and RSD data.
 - **Visualization**: Generate basic auto correlation and MCMC informative plots to analyze the simulation results. Feel free to add different plots
-- **Resume Simulations**: Restart simulations using saved MCMC chains. N.B. Chains can be restarted, but not necessarily recommended.
+- **Re-use save chains**.
 
 
 ## Project Structure
@@ -91,6 +91,17 @@ Kosmulator/
 		# If you want to test your model against multiple observations. If the list contains multiple entries
 		# the MCMC simulation will combine their likelihoods and minimized the combined likelihood.
 
+## Multiprocessing runs:
+With MPI:                      mpiexec -n num_cores python Kosmulator.py --OUTPUT_SUFFIX="Your project name" --latex_enabled=True --overwrite=True --plot_table=True
+With python multiprocessing:   python Kosmulator.py --OUTPUT_SUFFIX="Your project name" --num_cores=num_cores --latex_enabled=True --overwrite=True --plot_table=True
+Using nohup to close terminal: nohup mpiexec -n num_cores python Kosmulator.py --OUTPUT_SUFFIX="Your project name" --latex_enabled=True --overwrite=True --plot_table=True > model_name.log 2>&1 & 
+
+--OUTPUT_SUFFIX: The name under which the folder will be created:
+--latex_enabled: Flag to switch latex usages for the Plots on and off
+--overwrite:     Flag to overwrite previosuly saved chain or use the original (usefull for making new plots from existing chains)
+--plot_table:    Flag to enable or disable plotting the table with the calculated parameter values on the corner plot
+--num_cores:     The amount of cores that you want to use on you system. If num_cores=1, then the simulation will run in series.
+ 
 ## LaTeX Dependencies for Plot Rendering
 Kosmulator uses Matplotlib's LaTeX rendering to generate high-quality formatted plots. If you encounter an error such as:
 ---RuntimeError: latex was not able to process the following string: ...
