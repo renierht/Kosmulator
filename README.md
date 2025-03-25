@@ -125,6 +125,9 @@ Observations:
 6) fsigma8:				1) F. Skara and L. Perivolaropoulos, L., 2020. Tension of the EG statistic and redshift space distortion data with the Planck-Λ CDM model and implications for weakening gravity. PRD, 101(6), p.063521.
 7) sigma8:				1) L. Perenon, J. Bel, R. Maartens et al. 2019. Optimising growth of structure constraints on modified gravity. JCAP, 2019(06), p.020. https://doi.org/10.1088/1475-7516/2019/06/020
 
+## Citation
+The current version does not have a dedicated research paper, you can just cite the original paper and note that Kosmulator is an updated MCMC simulation from the one used in that paper. There is plans for the future to have a dedicated research paper for Kosmulator when all features such as compatibility with classy have been built-in.
+
 ## Acknowledgements
 I would like to thank the EMCEE: Hammer group for making their MCMC simulation software publically available. This code would not be possible without their hard work. I would also like to thank the **ChatGPT** software for assisting with debugging, improving the code structure, and optimizing features.
 
