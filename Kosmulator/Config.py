@@ -235,14 +235,20 @@ def create_output_directory(model_name, observations, suffix=""):
     Args:
         model_name (str): Name of the model.
         observations (list): List of observation names.
-        suffix (str): Suffix string to append to the base folder name.
+        suffix (str): Suffix string to create a subdirectory.
 
     Returns:
         tuple: (save_dir, output_paths)
     """
     if not observations:
         raise ValueError("No observations provided.")
-    save_dir = f"MCMC_Chains{suffix}/{model_name}/"
+    
+    base_dir = "MCMC_Chains"
+    if suffix:
+        save_dir = os.path.join(base_dir, suffix, model_name)
+    else:
+        save_dir = os.path.join(base_dir, model_name)
+
     os.makedirs(save_dir, exist_ok=True)
 
     output_paths = {}
@@ -251,6 +257,7 @@ def create_output_directory(model_name, observations, suffix=""):
         obs_dir = os.path.join(save_dir, obs)
         os.makedirs(obs_dir, exist_ok=True)
         output_paths[obs] = obs_dir
+
     return save_dir, output_paths
 
 def generate_label(obs):

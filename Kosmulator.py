@@ -20,6 +20,7 @@ if sys.version_info[0] == 2:
 # Constants for the simulation
 #model_names = ["f1CDM","f1CDM_v"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
 model_names = ["LCDM"]
+#observations =  [['CC']]
 observations =  [['PantheonP','CC','BAO','f_sigma_8','f'], ['PantheonP'],['CC'],['BAO'],['f_sigma_8'],['f']]#['CC','BAO','PantheonP','f_sigma_8']]#,['PantheonP'],['CC','BAO','PantheonP','f','f_sigma_8'],['CC','BAO','PantheonP','f_sigma_8'],['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 100
