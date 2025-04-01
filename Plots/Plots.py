@@ -171,13 +171,12 @@ def autocorrPlot(autocorr, index, model_name, color, obs, PLOT_SETTINGS, close_p
     else:
         plt.plot(n, y, color = color)
     
-    plt.ylim(0, max(100, autocorr[:index].max() + 10))
+    plt.ylim(0, max(nsteps/100, autocorr[:index].max() + 10))
     plt.xlim(50, nsteps)
     plt.title(f"Auto-Correlator: Check for convergence - {model_name} model")
     plt.xlabel("Number of steps", fontsize=PLOT_SETTINGS.get("label_font_size", 12))
     plt.ylabel(r"Mean $\hat{\tau}$", fontsize=PLOT_SETTINGS.get("label_font_size", 12))
     plt.legend(fontsize=PLOT_SETTINGS.get("legend_font_size", 10))
-    print("Saving autocorr plot to:", folder_path)
     plt.savefig(f"{folder_path}/{model_name}.png", dpi=PLOT_SETTINGS.get("dpi", 200))
 
 def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
@@ -397,7 +396,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
             # Save the plot
             plt.tight_layout()
             plt.subplots_adjust(hspace=0)
-            plt.savefig(f"{folder_path}/{model_name}_Combined.png", dpi=300)
+            plt.savefig(f"{folder_path}/{model_name}_Combined.png", dpi=PLOT_SETTINGS.get("dpi", 300))
             plt.close()
 
 

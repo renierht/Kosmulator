@@ -18,13 +18,13 @@ if sys.version_info[0] == 2:
 
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
-model_names = ["LCDM"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
-observations =  [['CC','OHD','BAO','f'], ['CC'], ['OHD','CC'],['BAO'],['f']]
-#observations =  [['CC'],['BAO'],['PantheonP'],['f_sigma_8'],['f'], ['f','f_sigma'], ['CC','BAO','PantheonP'], ['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP','f_sigma_8']]
+model_names = ["BetaRn"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
+#observations =  [['CC','BAO','PantheonP']]
+observations =  [['PantheonP','CC','BAO','f_sigma_8','f'],['CC'],['BAO'],['PantheonP'],['f'],['f_sigma_8']]# ['CC','BAO','PantheonP','f_sigma_8']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
-nwalkers: int = 20
-nsteps: int = 1000
-burn: int = 50
+nwalkers: int = 100
+nsteps: int = 15000
+burn: int = 1000
 convergence = 0.01
 
 prior_limits = {
@@ -35,7 +35,7 @@ prior_limits = {
     "zeta": (0.0,0.3),
     "gamma": (0.4, 0.7),
     "sigma_8": (0.5, 1.0),
-    "n": (0.0,0.5), #0.0,0.5
+    "n": (0.15,1.0), #0.0,0.5
     "p": (0.0, 1.0),
     "Gamma": (2.0, 10.0),
     "q0": (-0.8, -0.01),
@@ -104,12 +104,12 @@ PLOT_SETTINGS = {
     "color_schemes": full_colors[:len(observations)],
     "line_styles": ["-", "--", ":", "-."],
     "marker_size": 4,
-    "legend_font_size": 50,
+    "legend_font_size": 55,
     "title_font_size": 12,
-    "label_font_size": 10,
-    "tick_font_size": 4,
+    "label_font_size": 40,
+    "tick_font_size": 5,
     "latex_enabled": latex_enabled,
-    "dpi": 300,
+    "dpi": 200,
     "autocorr_save_path": f"./Plots/Saved_plots/{output_suffix_path}/auto_corr/",
     "cornerplot_save_path": f"./Plots/Saved_plots/{output_suffix_path}/corner_plots/",
     "bestfit_save_path": f"./Plots/Saved_plots/{output_suffix_path}/Best_fits/",
@@ -149,7 +149,6 @@ if true_model in model_names:
 model_names.insert(0, true_model)  # Insert it at the front
 
 # --- MPI Setup ---
-# --- MPI Setup ---
 try:
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -176,8 +175,8 @@ if rank == 0:
         burn=burn,
         model_name=model_names,
     )
-    print(f"CONFIG: {CONFIG}", flush=True)
-    print(f"data: {data}", flush=True)
+    #print(f"CONFIG: {CONFIG}", flush=True)
+    #print(f"data: {data}", flush=True)
 else:
     CONFIG, data, models_local = None, None, None
 
