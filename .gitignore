@@ -8,3 +8,4 @@ Plots/Saved_plots/
 saved_tables/
 Statistical_analysis_tables/
 *.log
+.DS_Store
