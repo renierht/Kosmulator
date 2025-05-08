@@ -18,12 +18,12 @@ if sys.version_info[0] == 2:
 
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
-model_names = ["BetaRn"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
+model_names = ["f2CDM"]#,"f1CDM","f1CDM_v","f2CDM","f2CDM_v","f3CDM","f3CDM_v"]
 #observations =  [['CC','BAO','PantheonP']]
-observations =  [['PantheonP','CC','BAO','f_sigma_8','f'],['CC'],['BAO'],['PantheonP'],['f'],['f_sigma_8']]# ['CC','BAO','PantheonP','f_sigma_8']]
-true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
+observations =  [['PantheonP','f_sigma_8']]
+true_model = "f2CDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 100
-nsteps: int = 15000
+nsteps: int = 10000
 burn: int = 1000
 convergence = 0.01
 
@@ -35,7 +35,7 @@ prior_limits = {
     "zeta": (0.0,0.3),
     "gamma": (0.4, 0.7),
     "sigma_8": (0.5, 1.0),
-    "n": (0.15,1.0), #0.0,0.5
+    "n": (0.0,0.5), #0.0,0.5
     "p": (0.0, 1.0),
     "Gamma": (2.0, 10.0),
     "q0": (-0.8, -0.01),
@@ -104,9 +104,9 @@ PLOT_SETTINGS = {
     "color_schemes": full_colors[:len(observations)],
     "line_styles": ["-", "--", ":", "-."],
     "marker_size": 4,
-    "legend_font_size": 55,
+    "legend_font_size": 20,
     "title_font_size": 12,
-    "label_font_size": 40,
+    "label_font_size": 20,
     "tick_font_size": 5,
     "latex_enabled": latex_enabled,
     "dpi": 200,

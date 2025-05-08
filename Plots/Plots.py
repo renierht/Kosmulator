@@ -240,7 +240,7 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         labels.append(obs)
 
     formatted_labels = [
-        obs.replace("PantheonP", "Pantheon+").replace("f_sigma_8", r"$f_{\sigma_8}$")
+        obs.replace("PantheonP", "PantheonP+SH0ES").replace("f_sigma_8", r"$f_{\sigma_8}$")
         for obs in labels
     ]
     
