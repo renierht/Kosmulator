@@ -18,10 +18,10 @@ if sys.version_info[0] == 2:
 
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
-model_names = ["f2CDM"]#,"f1CDM","f1CDM_v","f2CDM","f2CDM_v","f3CDM","f3CDM_v"]
+model_names = ["LCDM"]#,"f1CDM","f1CDM_v","f2CDM","f2CDM_v","f3CDM","f3CDM_v"]
 #observations =  [['CC','BAO','PantheonP']]
-observations =  [['PantheonP','f_sigma_8']]
-true_model = "f2CDM" # True model will always run first irregardless of model names, due to the statistical analysis
+observations =  [['PantheonP','f_sigma_8'], ['PantheonP','f']]
+true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 100
 nsteps: int = 10000
 burn: int = 1000

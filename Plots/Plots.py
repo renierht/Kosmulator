@@ -239,11 +239,8 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         distributions.append(distribution)
         labels.append(obs)
 
-    formatted_labels = [
-        obs.replace("PantheonP", "PantheonP+SH0ES").replace("f_sigma_8", r"$f_{\sigma_8}$")
-        for obs in labels
-    ]
-    
+    formatted_labels = [obs.replace("PantheonP", "PantheonP+SH0ES").replace("f_sigma_8", r"$f\sigma_{8}$").replace('f',r'\textit{f}') for obs in labels]
+
     results, latex_table, structured_values = SP.calculate_asymmetric_from_samples(
         Samples, CONFIG["parameters"], CONFIG["observations"]
     )
