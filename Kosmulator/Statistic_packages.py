@@ -4,6 +4,51 @@ import scipy.linalg as la
 from Plots.Plots import autocorrPlot  # Custom module for autocorrelation plotting
 import User_defined_modules as UDM   # Custom user-defined cosmology functions
 import numexpr as ne
+##############################Robert added packages#############################
+from classy import Class
+import os
+from Kosmulator import Class_run as CR
+import Kosmulator
+import User_defined_modules as UDM
+from clik.lkl import clik as PlanckLikelihood
+#from Kosmulator.MCMC_setup import global_model_name
+################################################################################
+
+##############################Robert added likelihood###########################
+def Calc_cmbtt_chi(param_dict,l, Dl, Dl_minus, Dl_plus,model_name):
+    model_dir = os.path.join("./Class", model_name)
+    like = PlanckLikelihood("./Observations/camspec_10.7HM_1400_TT_small.clik")
+    
+    l_theory = np.arange(2, 2501)
+    cl = UDM.LCDM_MODEL(0, param_dict, Type="CMB")  # 'Type' doesn't matter for Cls
+    
+    Dl_theory = cl['tt'][2:2501] * l_theory * (l_theory + 1) * 1e12
+
+    chi2 = np.sum(((Dl - Dl_theory)**2) / (Dl_minus**2 + Dl_plus**2))
+    return chi2
+
+def Calc_cmbee_chi(param_dict,l, Dl, Dl_minus, Dl_plus,model_name):
+    model_dir = os.path.join("./Class", model_name)
+    
+    l_theory = np.arange(2, 1997)
+    cl = UDM.LCDM_MODEL(0, param_dict, Type="CMB")  # 'Type' doesn't matter for Cls
+    
+    Dl_theory = cl['ee'][2:1997] * l_theory * (l_theory + 1) * 1e12
+
+    chi2 = np.sum(((Dl - Dl_theory)**2) / (Dl_minus**2 + Dl_plus**2))
+    return chi2
+
+def Calc_cmbte_chi(param_dict,l, Dl, Dl_minus, Dl_plus,model_name):
+    model_dir = os.path.join("./Class", model_name)
+    
+    l_theory = np.arange(2, 1997)
+    cl = UDM.LCDM_MODEL(0, param_dict, Type="CMB")  # 'Type' doesn't matter for Cls
+    
+    Dl_theory = cl['te'][2:1997] * l_theory * (l_theory + 1) * 1e12
+
+    chi2 = np.sum(((Dl - Dl_theory)**2) / (Dl_minus**2 + Dl_plus**2))
+    return chi2
+################################################################################
 
 def Calc_chi(Type, type_data, type_data_error, model):
     """
@@ -347,6 +392,26 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                         model_val = Omega_zeta ** param_dict["gamma"]
                     chi_squared = Calc_chi(obs_type, type_data, type_data_error, model_val)
                     num_data_points_total += len(type_data)
+                ###################################Robert added code####################
+                elif obs == "CMB_TT" or obs == "CMB_EE" or obs == "CMB_TE":
+                    # Handle CMB data (TT, EE, TE)
+                    l = obs_data["l"]  # The multipoles (l)
+                    Dl = obs_data["Dl"]  # The power spectrum values (Cl in mK^2)
+                    Dl_minus = obs_data["Dl_minus"]  # The error bars for Cl
+                    Dl_plus = obs_data["Dl_plus"]  # The error bars for Cl
+
+                    # Now calculate the chi-squared for CMB data
+                    chi_squared = 0
+                    if obs == "CMB_TT":
+                        chi_squared = Calc_cmbtt_chi(param_dict, l, Dl, Dl_minus, Dl_plus, model_name)
+                    elif obs == "CMB_EE":
+                        chi_squared = Calc_cmbee_chi(param_dict, l, Dl, Dl_minus, Dl_plus, model_name)
+                    elif obs == "CMB_TE":
+                        chi_squared = Calc_cmbte_chi(param_dict, l, Dl, Dl_minus, Dl_plus, model_name)
+                    
+                    chi_squared_total += chi_squared
+                    num_data_points_total += len(Dl)
+                #######################################################################
                 else:
                     raise ValueError(f"Unsupported observation type: {obs_type}")
                 

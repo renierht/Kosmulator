@@ -5,12 +5,14 @@ import sys
 import time
 import argparse
 from Kosmulator import Config, EMCEE, Statistic_packages
+from Kosmulator import Class_run as CR
 from Plots import Plots as MP  # Custom module for creating plots (e.g., autocorrelation plot)
 import User_defined_modules as UDM  # Custom module with user-defined functions for cosmological calculations
 from Kosmulator.MCMC_setup import run_mcmc_for_all_models
 from Plots.Plot_functions import print_aligned_latex_table
 import scipy.linalg as la
 import gc
+import h5py
 
 # Safeguard: Check Python version and warn if outdated
 if sys.version_info[0] == 2:
@@ -18,44 +20,62 @@ if sys.version_info[0] == 2:
 
 #'OHD', 'JLA', 'Pantheon', 'PantheonP', 'CC', 'BAO', 'f_sigma_8', 'f'
 # Constants for the simulation
-model_names = ["f2CDM"]#,"f1CDM","f1CDM_v","f2CDM","f2CDM_v","f3CDM","f3CDM_v"]
-#observations =  [['CC','BAO','PantheonP']]
-observations =  [['PantheonP','f_sigma_8']]
-true_model = "f2CDM" # True model will always run first irregardless of model names, due to the statistical analysis
+model_names = ["LCDM"]#"f3CDM","f3CDM_v"]#"f1CDM","f1CDM_v"]#,"f2CDM","f2CDM_v",]
+observations =  [['CMB_TT']]
+#observations =  [['CC'],['BAO'],['PantheonP'],['f_sigma_8'],['f'], ['f','f_sigma'], ['CC','BAO','PantheonP'], ['CC','BAO','PantheonP','f'], ['CC','BAO','PantheonP','f_sigma_8']]
+true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
 nwalkers: int = 100
-nsteps: int = 10000
+nsteps: int = 20000
 burn: int = 1000
 convergence = 0.01
 
 prior_limits = {
-    "Omega_m": (0.01, 0.4),
-    "H_0": (60.0, 80.0),
+    "h_0": (0.5,0.9),
+    "tau_reio": (0.04,0.12),
+    "Omega_dh^2": (0.05, 0.4),
+    "Omega_bh^2": (0.02, 0.03),
+    "Omega_m": (0.05, 0.8),
+    "H_0": (50.0, 90.0),
+    "Omega_b": (0.02, 0.03),
     "r_d": (100.0, 200.0),
     "M_abs": (-22.0, -15.0),
     "zeta": (0.0,0.3),
     "gamma": (0.4, 0.7),
     "sigma_8": (0.5, 1.0),
-    "n": (0.0,0.5), #0.0,0.5
+    "n": (-2,1), #0.0,0.5
     "p": (0.0, 1.0),
     "Gamma": (2.0, 10.0),
     "q0": (-0.8, -0.01),
     "q1": (-0.75, 1.0),
     "beta": (0.01, 5.0),
     "alpha": (0.1, 100.0),
+    "A_s": (-30, 0.1**2),
+    "ln_A_s": (-21, -14),
+    "n_s": (0.8,1.2),
     "Omega_w": (0.0, 1.0),
+    "Omega_de": (0.0, 1.0),
+    "w":(-1.4, -0.3),
 }
 
 true_values = {
+    "h_0": 0.69,
+    "tau_reio": 0.054,
+    "Omega_dh^2": 0.12,
+    "Omega_bh^2": 0.0224,
     "Omega_m": 0.315,
     "H_0": 67.4,
     "gamma": 0.55,
     "sigma_8": 0.8,
     "q0": -0.537,
-    "ns": 0.96,
+    #"ns": 0.96,
+    "n_s": 0.9624,
     "As": 3.1,
+    "ln_A_s": 2.3e-9,
     "Omega_b": 0.045,
     "rd": 147.5,
     "M_abs": -19.2,
+    "w": -1,
+    "Omega_de": 0.69,
 }
 
 # Create an argument parser
@@ -104,12 +124,12 @@ PLOT_SETTINGS = {
     "color_schemes": full_colors[:len(observations)],
     "line_styles": ["-", "--", ":", "-."],
     "marker_size": 4,
-    "legend_font_size": 20,
+    "legend_font_size": 50,
     "title_font_size": 12,
-    "label_font_size": 20,
-    "tick_font_size": 5,
+    "label_font_size": 10,
+    "tick_font_size": 4,
     "latex_enabled": latex_enabled,
-    "dpi": 200,
+    "dpi": 300,
     "autocorr_save_path": f"./Plots/Saved_plots/{output_suffix_path}/auto_corr/",
     "cornerplot_save_path": f"./Plots/Saved_plots/{output_suffix_path}/corner_plots/",
     "bestfit_save_path": f"./Plots/Saved_plots/{output_suffix_path}/Best_fits/",
@@ -149,6 +169,7 @@ if true_model in model_names:
 model_names.insert(0, true_model)  # Insert it at the front
 
 # --- MPI Setup ---
+# --- MPI Setup ---
 try:
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -175,8 +196,8 @@ if rank == 0:
         burn=burn,
         model_name=model_names,
     )
-    #print(f"CONFIG: {CONFIG}", flush=True)
-    #print(f"data: {data}", flush=True)
+    print(f"CONFIG: {CONFIG}", flush=True)
+    print(f"data: {data}", flush=True)
 else:
     CONFIG, data, models_local = None, None, None
 
@@ -244,6 +265,9 @@ if __name__ == "__main__":
         pantheon_cov=pantheon_cov,
     )
 
+    #if "CMB" in data:
+    #    CR.run_model(models_local)
+
     if pantheon_cov is not None:
         del pantheon_cov
         gc.collect()
@@ -283,3 +307,4 @@ if __name__ == "__main__":
         print(f"\033[33m#### Thank you for using Kosmulator :D\033[0m")
         print(f"\033[33m#### \033[0m")
         print(f"\033[33m{'#'*75}\033[0m")
+

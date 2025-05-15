@@ -29,6 +29,12 @@ def compute_model(model_name, redshift_values, params, obs_type="SNe"):
                 ]
                 y_label = "$f$"
                 return model, y_label
+        #########################Robert Added code###############################
+        elif obs_type == "CMB_TT" or obs == "CMB_EE" or obs == "CMB_TE":
+                model = UDM.CMB_model(0, model_func, params)  # <-- You need to define this function in UDM
+                y_label = "Cl"
+                return model, y_label
+        ####################################################################
         else:
             # Distance modulus (SNe)
             comoving_distances = UDM.Comoving_distance_vectorized(model_func, redshift_values, params, obs_type)

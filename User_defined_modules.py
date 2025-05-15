@@ -4,6 +4,10 @@ from scipy.optimize import fsolve
 from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import root
 
+#######################Robert imported packages#################
+from classy import Class
+################################################################
+
 ##############################################################
 # Define your cosmological model used for MCMC analysis
 ##############################################################
@@ -18,10 +22,41 @@ def LCDM_MODEL(z, param_dict, Type="SNe"):
     Returns:
         float or np.ndarray: Theoretical model prediction based on the observation type.
     """
-    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
-    model = np.sqrt(param_dict['Omega_m'] * (1 + z)**3 + 1 - param_dict['Omega_m'])
-    result = Calculate_return_values(model, Type)
-    return result if len(result) > 1 else result[0]  # Return scalar if input was scalar
+    if Type == 'CMB':
+
+        so_path = "./Class/LCDM"
+        
+        cosmo = Class()
+        #Omega_m,Omega_b,w,H_0,ln_A_s,n_s= theta
+
+        #A_s = np.exp(ln_A_s)
+        params = {
+            'output': 'tCl,pCl,lCl',
+            'l_max_scalars': 2500,
+            'lensing': 'yes',
+            'tau_reio': param_dict['tau_reio'],
+            'A_s': np.exp(param_dict['ln_A_s']),
+            'n_s': param_dict['n_s'], 
+            'h': param_dict['h_0'],
+            'omega_b': param_dict['Omega_bh^2'],
+            'omega_cdm': param_dict['Omega_dh^2'],
+        }
+
+        cosmo.set(params)
+        cosmo.compute()
+        
+        cl = cosmo.lensed_cl()
+        
+        cosmo.struct_cleanup()
+        cosmo.empty()
+        result = cl
+        return cl
+
+    else:
+        z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
+        model = np.sqrt(param_dict['Omega_b'] * (1 + z)**3 + (param_dict['Omega_m']-param_dict['Omega_b']) * (1 + z)**3 + 1 - param_dict['Omega_m'])
+        result = Calculate_return_values(model, Type)
+        return result if len(result) > 1 else result[0] # Return scalar if input was scalar
     
 def LCDM_v_MODEL(z, param_dict, Type="SNe"):
     z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
@@ -151,7 +186,39 @@ def BetaR_alphaR_MODEL(z, param_dict, Type="SNe"):
     model = np.sqrt((1/param_dict["alpha"])*(param_dict["Omega_m"]*(1+z)**3-(param_dict["beta"]/6)))
     result = Calculate_return_values(model, Type)
     return result if len(result) > 1 else result[0]  # Return scalar if input was scalar
-    
+
+def NEDE(z, param_dict, Type="CMB"):
+    """
+    Lambda Cold Dark Matter (LCDM) model.
+    Args:
+        z (float or np.ndarray): Redshift value(s).
+        param_dict (dict): Dictionary containing cosmological parameters.
+        Type (str): Type of observation ('SNe', 'OHD', 'CC', f_sigma_8', or 'BAO').
+
+    Returns:
+        float or np.ndarray: Theoretical model prediction based on the observation type.
+    """
+    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
+    model = np.sqrt((1/param_dict["alpha"])*(param_dict["Omega_m"]*(1+z)**3-(param_dict["beta"]/6)))
+    result = Calculate_return_values(model, Type)
+    return result if len(result) > 1 else result[0]
+
+def Elastic(z, param_dict, Type="CMB"):
+    """
+    Lambda Cold Dark Matter (LCDM) model.
+    Args:
+        z (float or np.ndarray): Redshift value(s).
+        param_dict (dict): Dictionary containing cosmological parameters.
+        Type (str): Type of observation ('SNe', 'OHD', 'CC', f_sigma_8', or 'BAO').
+
+    Returns:
+        float or np.ndarray: Theoretical model prediction based on the observation type.
+    """
+    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
+    model = np.sqrt((1/param_dict["alpha"])*(param_dict["Omega_m"]*(1+z)**3-(param_dict["beta"]/6)))
+    result = Calculate_return_values(model, Type)
+    return result if len(result) > 1 else result[0]
+
 ##############################################################
 # Functions to control Models for the entire program
 ##############################################################
@@ -179,6 +246,8 @@ def Get_model_function(model_name):
         "f3CDM_v": f3CDM_v_MODEL,
         "BetaRn": BetaRn_MODEL,
         "aRBR": BetaR_alphaR_MODEL,
+        "NEDE": NEDE,
+        "Elastic": Elastic,
     }
     if model_name not in models:
         raise ValueError(f"Model '{model_name}' not recognized. Available models: {list(models.keys())}")
@@ -188,7 +257,7 @@ def Get_model_function(model_name):
 def Get_model_names(model_name):
     # Set up free parameter list for your new models. N.B. Only include the parameters that you have in your model
     all_models = {
-        "LCDM"     : {"parameters": ["Omega_m"]},
+        "LCDM"     : {"parameters": ["Omega_dh^2"]},
         "f1CDM"  : {"parameters": ["Omega_m", "n"]},
         "f2CDM"  : {"parameters": ["Omega_m", "p"]},
         "f3CDM"  : {"parameters": ["Omega_m", "Gamma"]},
@@ -200,6 +269,9 @@ def Get_model_names(model_name):
         
         "BetaRn" : {"parameters": ["Omega_m", "q0", "q1", "beta", "n"]},
         "aRBR" : {"parameters": ["Omega_m", "alpha", "beta"]},
+
+        "NEDE": {"parameters": ["Omega_mh", "Omega_b", "w"]},
+        "Elastic": {"parameters": ["Omega_m", "Omega_b", "w"]},
     }
     models = {name: all_models[name] for name in model_name if name in all_models}
     return models
@@ -221,7 +293,10 @@ def Calculate_return_values(model, Type):
                    "f_sigma_8": model,  # Growth rate of structure including sigma_8 as a parameter
                    "f": model,   # Growth rate of structure
                    "BAO": 1 / model,  # Baryon Acoustic Oscillations (inverse of model)}
-                   "DESI": 1/ model,  # Dark Energy Spectroscopic instrument
+                   "DESI": 1/ model, # Dark Energy Spectroscopic instrument
+                   "CMB_TT": model, #Plank 2018 Cosmic microwave background (TT)
+                   "CMB_EE": model, #Plank 2018 Cosmic microwave background (EE)
+                   "CMB_TE": model, #Plank 2018 Cosmic microwave background (TT)                 
                    }.get(Type, None)
 
 ##############################################################
@@ -258,6 +333,18 @@ def Comoving_distance_vectorized(MODEL_func, redshifts, param_dict, Type):
         comoving_distances[i] = integrate.quad(MODEL_func, 0, z, args=(param_dict, Type))[0]
 
     return comoving_distances * Hubble(param_dict)
+
+##############################################################
+# Robert added code for CMB
+##############################################################
+def CMB_model(z, model_func, param_dict):
+    """
+    Placeholder for a CMB observable model. You can compute something like the angular diameter distance to recombination, sound horizon, etc.
+    """
+    cl = LCDM_MODEL(z, param_dict, Type="CMB")
+    return cl
+
+
     
 ##############################################################
 # Functions for cosmological calculations, specifically used
