@@ -20,11 +20,11 @@ if sys.version_info[0] == 2:
 # Constants for the simulation
 model_names = ["LCDM"]#,"f1CDM","f1CDM_v","f2CDM","f2CDM_v","f3CDM","f3CDM_v"]
 #observations =  [['CC','BAO','PantheonP']]
-observations =  [['PantheonP','f_sigma_8'], ['PantheonP','f']]
+observations =  [['OHD','f_sigma_8'], ['f']]
 true_model = "LCDM" # True model will always run first irregardless of model names, due to the statistical analysis
-nwalkers: int = 100
-nsteps: int = 10000
-burn: int = 1000
+nwalkers: int = 20
+nsteps: int = 500
+burn: int = 50
 convergence = 0.01
 
 prior_limits = {
