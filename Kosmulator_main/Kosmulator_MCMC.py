@@ -275,20 +275,17 @@ def emcee_prob(theta, data, Type, CONFIG, MODEL_func, model_name, obs, obs_index
     """Scalar log-posterior for emcee. Returns (log_post, log_like_blob)."""
     arr = np.atleast_2d(theta)
     lp = log_prior_all(arr, CONFIG, obs_index)
-    
-    # Check priors
+
     if not np.all(np.isfinite(lp)):
-        # Return -inf for posterior, and NaN for likelihood (blob)
-        return -np.inf, np.nan 
-    
-    ll = log_likelihood_all(
-        arr, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index
-    )
-    
-    log_post = float(lp + ll)
-    log_like = float(ll)
-    
-    return log_post, log_like
+        return -np.inf, np.nan
+
+    ll = log_likelihood_all(arr, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index)
+
+    # Force scalar for single-walker call
+    lp0 = float(np.asarray(lp, dtype=float).ravel()[0])
+    ll0 = float(np.asarray(ll, dtype=float).ravel()[0])
+
+    return lp0 + ll0, ll0
 
 def batch_post(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index):
     """Vectorised log-posterior used by Zeus (and emcee diagnostics)."""
@@ -360,7 +357,13 @@ def neg_log_prob(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_ind
     ll = log_likelihood_all(
         arr, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index
     )
-    return -float(lp + ll)
+    tot = np.asarray(lp) + np.asarray(ll)
+
+    # minimize() requires a scalar objective; if vectorised returns arrays, reduce them.
+    if tot.ndim > 0:
+        tot = np.sum(tot)
+
+    return -float(tot)
 
 
 def optimise_initial_guess(

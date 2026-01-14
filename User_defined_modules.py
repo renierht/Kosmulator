@@ -52,6 +52,7 @@ from Kosmulator_main.utils import (
     integral_term_array as _integral_term_arr,
     asarray as _asarray,                    # safe np.asarray wrapper, used everywhere
     ensure_background_params as _ensure_background_params,
+    _scalar_or_array as _scalar_or_array
 )
 
 Number = Union[float, np.ndarray]
@@ -96,8 +97,7 @@ def LCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
         out = np.full_like(z, np.nan)
     else:
         out = np.sqrt(E2)
-
-    return out if out.size > 1 else float(out)
+    return _scalar_or_array(out)
 
 
 def LCDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
@@ -105,7 +105,7 @@ def LCDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
     z_arr = _asarray(z)
     out = [LCDM_MODEL_vectorised(zi, p) for zi in z_arr]
     out = np.array(out, dtype=float)
-    return out if out.size > 1 else float(out)
+    return _scalar_or_array(out)
 
 
 def f1CDM_MODEL_vectorised(
@@ -163,7 +163,7 @@ def f1CDM_MODEL_vectorised(
 
     E[~np.isfinite(E)] = np.nan
     E[E <= 0] = np.nan
-    return E if E.size > 1 else float(E)
+    return _scalar_or_array(E)
 
 
 def f1CDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
@@ -171,7 +171,7 @@ def f1CDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
     z_arr = _asarray(z)
     out = [f1CDM_MODEL_vectorised(zi, p) for zi in z_arr]
     out = np.array(out, dtype=float)
-    return out if out.size > 1 else float(out)
+    return _scalar_or_array(out)
 
 
 # ============================================================================

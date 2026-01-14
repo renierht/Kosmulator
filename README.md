@@ -4,44 +4,314 @@ The package is designed to be modular and user-friendly, allowing researchers to
 observationaldata, and visualize results.
 
 ## Requirements
-1) EMCEE python packages (controls the MCMC simulation) (https://emcee.readthedocs.io/en/stable/user/install/)
-2) Getdist (Plotting packages) (https://getdist.readthedocs.io/en/latest/intro.html)
-3) Numpy, Matplotlib, Scipy, h5py, Pandas (https://numpy.org/install/, https://matplotlib.org/stable/install/index.html, https://scipy.org/install/, https://pypi.org/project/h5py/, https://pypi.org/project/pandas/)
-4) Generic Python packages: time, sys, os, platform, inspect, warnings, re, shutil (already part of the Python library)
-5) LaTeX (MikTeX/TexLive) - This is a required dependency for enhanced plot quality. Follow the instructions below to install LaTeX for your operating system.
 
-## LaTeX Dependencies for Plot Rendering and installation
-Kosmulator uses Matplotlib's LaTeX rendering to generate high-quality formatted plots, ensure LaTeX is installed on your system.
+Kosmulator is a research-grade cosmological inference framework and depends on several scientific Python libraries, numerical backends, and external tools.
+It is strongly recommended to install Kosmulator inside a dedicated conda environment.
+
+------------------------------------------------------------
+1) MCMC Samplers
+------------------------------------------------------------
+
+Kosmulator supports both EMCEE and ZEUS as sampling backends.
+
+- EMCEE (ensemble MCMC sampler)
+  Documentation: https://emcee.readthedocs.io/en/stable/user/install/
+
+- ZEUS (slice-sampling ensemble MCMC)
+  Documentation: https://github.com/minaskar/zeus
+
+Recommended installation via conda:
+
+    conda install -c conda-forge emcee zeus-mcmc
+
+
+------------------------------------------------------------
+2) Plotting and Chain Analysis
+------------------------------------------------------------
+
+- GetDist (posterior analysis and plotting)
+  Documentation: https://getdist.readthedocs.io/en/latest/intro.html
+
+Install via pip:
+
+    pip install getdist
+
+
+------------------------------------------------------------
+3) Core Scientific Python Stack
+------------------------------------------------------------
+
+Kosmulator requires the following numerical and data-handling packages:
+
+- NumPy
+- SciPy
+- Matplotlib
+- h5py
+- Pandas
+
+Recommended installation via conda:
+
+    conda install numpy scipy matplotlib h5py pandas
+
+These packages are used throughout Kosmulator for:
+- likelihood evaluation
+- numerical integration
+- interpolation
+- plotting
+- I/O of cosmological datasets
+
+
+------------------------------------------------------------
+4) Standard Python Library Modules
+------------------------------------------------------------
+
+The following modules are used internally but require no installation,
+as they are part of the Python standard library:
+
+    time, sys, os, platform, inspect, warnings, re, shutil
+
+
+------------------------------------------------------------
+LaTeX Dependencies for Plot Rendering
+------------------------------------------------------------
+
+Kosmulator uses Matplotlib’s LaTeX rendering backend to produce
+publication-quality plots (axis labels, legends, annotations, tables).
 
 Verify LaTeX installation with:
-```bash
-latex --version
-```
+
+    latex --version
+
+If LaTeX is installed correctly, this command should return version
+information.
 
 
-If requirement not met or rf you encounter an error such as:
-RuntimeError: latex was not able to process the following string: ... (your system is missing some required LaTeX packages (e.g., type1ec.sty)
-Follow os installation or update below:
-- **Windows**: [MiKTeX Installation Guide](https://miktex.org/howto/install-miktex, ensure that you enable the option for automatic installation of missing packages)
-- **macOS**: Install via Homebrew:
-  ```bash
-  brew install mactex
-  ```
-- **Linux**: Install the full TeX Live package:
-  ```bash
-  sudo apt install texlive-full
-  sudo apt-get install texlive-latex-recommended texlive-fonts-recommended (if missing packages are required)
-  ```
-If you prefer not to install a full LaTeX distribution, you can disable LaTeX rendering by setting "latex_enabled": False in your PLOT_SETTINGS within the configuration. This will disable the LaTeX formatting for your plots.
+------------------------------------------------------------
+Common LaTeX Errors
+------------------------------------------------------------
 
-## Installation 
-Install package directly from GitHub
+If LaTeX is not installed or is missing required packages, you may
+encounter errors such as:
 
-git clone https://github.com/renierht/Kosmulator.git
+    RuntimeError: latex was not able to process the following string
 
-cd Kosmulator
+or messages referencing missing files (e.g. type1ec.sty).
 
-python setup.py install
+
+------------------------------------------------------------
+Install LaTeX by Operating System
+------------------------------------------------------------
+
+Windows:
+- Install MiKTeX:
+  https://miktex.org/howto/install-miktex
+- IMPORTANT: Enable automatic installation of missing packages during setup.
+
+macOS:
+- Install via Homebrew:
+
+    brew install mactex
+
+Linux (Ubuntu / Debian):
+- Install the full TeX Live distribution:
+
+    sudo apt install texlive-full
+
+- If additional packages are still missing:
+
+    sudo apt-get install texlive-latex-recommended texlive-fonts-recommended
+
+
+------------------------------------------------------------
+Disabling LaTeX Rendering (Optional)
+------------------------------------------------------------
+
+If you prefer not to install LaTeX, you can disable LaTeX rendering
+in Kosmulator by setting:
+
+    "latex_enabled": False
+
+inside your PLOT_SETTINGS configuration.
+
+Plots will still be generated, but without LaTeX formatting.
+
+
+------------------------------------------------------------
+Installation
+------------------------------------------------------------
+
+1) Clone the repository:
+
+    git clone https://github.com/renierht/Kosmulator.git
+    cd Kosmulator
+
+
+2) (Recommended) Create a conda environment:
+
+    conda create -n Kosmulator python=3.11
+    conda activate Kosmulator
+
+
+3) Install Python dependencies:
+
+    conda install -c conda-forge numpy scipy matplotlib h5py pandas emcee zeus-mcmc cython astropy
+    pip install getdist
+
+
+4) Install Kosmulator:
+
+    python setup.py install
+
+------------------------------------------------------------
+Installing CLASS (Cosmic Linear Anisotropy Solving System)
+------------------------------------------------------------
+
+Kosmulator relies on the CLASS Boltzmann solver via its Python interface
+(classy). CLASS is NOT installed automatically and must be compiled
+locally to ensure full compatibility with Kosmulator, modified gravity
+models, and external likelihoods (e.g. CLIK).
+
+The recommended and supported installation method is to:
+1) Clone CLASS locally
+2) Compile the C/C++ backend
+3) Install the Python interface (classy) into your active conda environment
+
+Do NOT rely on pre-built wheels or system-wide CLASS installations.
+
+
+------------------------------------------------------------
+Prerequisites
+------------------------------------------------------------
+
+Before installing CLASS, ensure the following are available:
+
+- A working C/C++ compiler (gcc / g++)
+- make
+- Python 3.10 or newer
+- pip
+- NumPy and Cython installed in the active environment
+
+On Linux (Ubuntu/Debian), install build tools with:
+
+    sudo apt install build-essential
+
+On macOS:
+
+    xcode-select --install
+
+
+------------------------------------------------------------
+Step 1: Clone the CLASS Repository
+------------------------------------------------------------
+
+From your chosen working directory:
+
+    git clone https://github.com/lesgourg/class_public.git CLASS
+
+This creates a local CLASS directory that Kosmulator will interface with.
+
+
+------------------------------------------------------------
+Step 2: Activate Your Conda Environment
+------------------------------------------------------------
+
+CLASS must be built inside the same environment that will run Kosmulator.
+
+Example:
+
+    conda activate Kosmulator
+
+
+------------------------------------------------------------
+Step 3: Compile the CLASS C Backend
+------------------------------------------------------------
+
+Navigate into the CLASS directory and build:
+
+    cd CLASS
+    make clean
+    make -j
+
+If compilation is successful, you should see a binary named `class`
+and a static library `libclass.a`.
+
+
+------------------------------------------------------------
+Step 4: Install the Python Interface (classy)
+------------------------------------------------------------
+
+Still inside the CLASS directory, install the Python bindings:
+
+    python -m pip install .
+
+This will compile and install the `classy` module into your active
+conda environment.
+
+If a previous installation exists and causes conflicts, you may need:
+
+    python -m pip install . --no-build-isolation
+
+
+------------------------------------------------------------
+Step 5: Verify the Installation
+------------------------------------------------------------
+
+Run the following Python test:
+
+python - << 'PY'
+from classy import Class
+cosmo = Class()
+cosmo.set({
+     "h": 0.67,
+     "omega_b": 0.02237,
+     "omega_cdm": 0.12,
+     "A_s": 2.1e-9,
+     "n_s": 0.965,
+     "tau_reio": 0.054,
+     "output": "tCl,pCl,lCl,mPk",
+     "l_max_scalars": 2000,
+})
+cosmo.compute()
+print("OK: age =", cosmo.age(), "sigma8 =", cosmo.sigma8())
+cosmo.struct_cleanup()
+cosmo.empty()
+PY
+
+If this runs without errors and prints cosmological values,
+CLASS and classy are installed correctly.
+
+
+------------------------------------------------------------
+Important Notes for Kosmulator Users
+------------------------------------------------------------
+
+- Kosmulator requires a FULL CLASS build with:
+  - background
+  - perturbations
+  - power spectra
+  - growth functions
+- Building CLASS inside the Kosmulator environment is mandatory.
+- Mixing system-installed CLASS with conda Python environments
+  will almost always lead to runtime failures.
+- CLASS version mismatches can silently break likelihood calculations.
+
+If Kosmulator fails to import `classy`, re-check:
+- that the correct conda environment is active
+- that `classy` is installed inside that environment
+- that no other CLASS installations exist on your system PATH
+
+
+
+------------------------------------------------------------
+Important Notes
+------------------------------------------------------------
+
+- Kosmulator requires a working installation of CLASS and CLIK.
+- CLASS and CLIK are NOT installed automatically.
+- Kosmulator will not run correctly without these external backends.
+- Installation instructions for CLASS and CLIK are provided in the
+  following sections of the README.
+
 
 # Test Run
 In Kosmulator.py --  set model_names to ['LCDM'], 

@@ -18,7 +18,12 @@ from Kosmulator_main import constants as K
 
 import numpy as np
 from scipy import linalg as la
-from scipy.integrate import cumtrapz
+try:
+    # SciPy >= 1.10+ prefers the new name
+    from scipy.integrate import cumulative_trapezoid as cumtrapz
+except ImportError:
+    # Older SciPy
+    from scipy.integrate import cumtrapz
 
 from Kosmulator_main.constants import (
     DEFAULT_PLOT_COLORS,
@@ -1972,6 +1977,15 @@ def asarray(z):
     """Ensure input is a 1D float ndarray."""
     return np.atleast_1d(z).astype(float)
 
+def _scalar_or_array(x):
+    """
+    Return a Python float if x has exactly one element; otherwise return an ndarray.
+    Robust to x being np.scalar, (1,), or (1,1), etc.
+    """
+    x = np.asarray(x)
+    if x.size == 1:
+        return x.squeeze().item()
+    return x
 
 def ensure_background_params(p: dict) -> dict:
     """
