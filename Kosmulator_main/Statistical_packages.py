@@ -467,16 +467,22 @@ def cmb_hil_loglike(pd: Dict[str, float], model_name: str, floor: float = -1e10)
     # 5) Evaluate likelihood
     try:
         with U.quiet_cstdio():
-            val = float(like(vec))
+            out = like(vec)
+
+        # clik sometimes returns array([-198.0]) instead of scalar
+        if isinstance(out, np.ndarray):
+            if out.ndim == 0:
+                val = float(out.item())
+            else:
+                val = float(out.ravel()[0])
+        else:
+            val = float(out)
+
         logger.debug("[cmb_hil] like=%.3e", val)
         return val
     except Exception as e:
         logger.error("cmb_hil_loglike: clik evaluation failed: %s", e)
         return float(floor)
-
-
-
-
 
 
 # -----------------------------------------------------------------------------
@@ -544,14 +550,23 @@ def cmb_hilTT_loglike(pd: Dict[str, float], model_name: str) -> float:
     # 5) Evaluate
     try:
         with U.quiet_cstdio():
-            val = float(like(vec))
+            out = like(vec)
+
+        # clik sometimes returns array([val]) instead of scalar
+        if isinstance(out, np.ndarray):
+            if out.ndim == 0:
+                val = float(out.item())
+            else:
+                val = float(out.ravel()[0])
+        else:
+            val = float(out)
+
         logger.debug("[cmb_hilTT] lmax=%d len(vec)=%d like=%.3e", lmax, vec.size, val)
         return val
     except Exception as e:
         logger.error("cmb_hilTT_loglike: clik evaluation failed: %s", e)
         return -1e10
-
-
+\
 
 # -----------------------------------------------------------------------------
 # Planck lensing likelihood (RAW / CMB-marged)
@@ -753,16 +768,17 @@ def cmb_lensing_loglike(pd: Dict[str, float], model_name: str) -> float:
     # ------------------------------------------------------------------
     try:
         with U.quiet_cstdio():
-            val = float(like(vec))
+            out = like(vec)
 
-        #logger.info(
-        #    "[cmb_lensing_loglike OK] mode=%s Lpp=%d vec_len=%d nuis=%s like=%g",
-        #    mode_now,
-        #    int(Lpp_req),
-        #    int(vec.size),
-        #   ",".join(nuis_names) if nuis_names else "-",
-        #   val,
-        #)
+        # clik sometimes returns array([val]) instead of scalar
+        if isinstance(out, np.ndarray):
+            if out.ndim == 0:
+                val = float(out.item())
+            else:
+                val = float(out.ravel()[0])
+        else:
+            val = float(out)
+
         return val
     except Exception as e:
         logger.warning(
@@ -775,9 +791,6 @@ def cmb_lensing_loglike(pd: Dict[str, float], model_name: str) -> float:
             e,
         )
         return -1e10
-
-
-
 
 
 # -----------------------------------------------------------------------------
@@ -835,14 +848,28 @@ def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
 
     cl_ee = np.ascontiguousarray(ee * TCMB2, dtype=np.float64)
     v = np.ascontiguousarray(np.concatenate([cl_ee, nuis]), dtype=np.float64)
+    #logger.warning("cl_ee: type=%s dtype=%s shape=%s", type(cl_ee), getattr(cl_ee, "dtype", None), getattr(cl_ee, "shape", None))
+    #logger.warning("nuis:  type=%s dtype=%s shape=%s", type(nuis), getattr(nuis, "dtype", None), getattr(nuis, "shape", None))
+    #logger.warning("v:     type=%s dtype=%s shape=%s", type(v), getattr(v, "dtype", None), getattr(v, "shape", None))
 
     try:
-        with U.quiet_cstdio():
-            val = float(like(v))
-        return val
+        out = like(v)  # call clik first
+        #logger.warning("clik out: type=%s repr=%r", type(out), out)
     except Exception as e:
-        logger.error("cmb_lowl_loglike: like(v) failed: %s", e)
-        return float(-1e10)
+        logger.error("cmb_lowl_loglike: like(v) threw: %s", e)
+        return -np.inf
+
+    # Now normalize the output to a python float safely
+    try:
+        out_arr = np.asarray(out)
+        if out_arr.ndim == 0:
+            return float(out_arr.item())
+        # common case: array([x]) -> take first element
+        return float(out_arr.reshape(-1)[0])
+    except Exception as e:
+        logger.error("cmb_lowl_loglike: could not convert clik output to float. out=%r type=%s err=%s",
+                     out, type(out), e)
+        return -np.inf
 
 
 

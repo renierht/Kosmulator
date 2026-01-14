@@ -319,6 +319,10 @@ def _build_python_extension(model_dir: str) -> None:
         cwd=str(model_dir_path / "python"),
         check=True,
     )
+    subprocess.run([sys.executable, "setup.py", "build_ext", "--inplace"],
+                   cwd=str(model_dir_path / "python"),
+                   check=True)
+    _ensure_python_external_symlink(model_dir)
 
 
 def run_model(model_name: str) -> None:
@@ -426,6 +430,28 @@ def _copy_built_so_to_cache(model_name: str, src_hash: str) -> Optional[str]:
     except Exception:
         return None
 
+def _ensure_python_external_symlink(model_dir: str) -> None:
+    """
+    CLASS sometimes looks for data files relative to the python/ folder
+    (e.g. python/external/bbn/sBBN_2025.dat). Ensure that path exists.
+    """
+    py_dir = Path(model_dir) / "python"
+    src = Path("..") / "external"          # relative symlink target from python/
+    dst = py_dir / "external"
+
+    try:
+        if dst.is_symlink() or dst.exists():
+            # If it's already correct, leave it; otherwise replace
+            if dst.is_symlink() and os.readlink(dst) == str(src):
+                return
+            if dst.is_dir() and not dst.is_symlink():
+                # If someone copied an external/ dir here, keep it
+                return
+            dst.unlink()
+        os.symlink(str(src), str(dst))
+    except Exception:
+        # Non-fatal; CLASS will error later if it truly can't find files
+        pass
 
 def ensure_class_ready(
     model_name: str,
