@@ -1,10 +1,96 @@
+# =========================
+# OS / Finder noise
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Python bytecode / caches
+# =========================
+__pycache__/
+*.py[cod]
+.cache/
+*.npy
+*.npz
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Builds / packaging outputs
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+
+# =========================
+# Compiled extensions (CLASS, C-extensions)
+# =========================
+*.so
+*.pyd
+*.dylib
+
+# =========================
+# CLASS-specific build/cache
+# =========================
+Class/.cache/
+Class/build/
+Class/python/build/
+Class/python/__pycache__/
+
+# =========================
+# Runtime outputs (do not commit)
+# =========================
+MCMC_Chains/
+MCMC_chains/
+Plots/Saved_plots/
+Statistical_analysis_tables/
+saved_tables/
+
+# =========================
+# Temporary / cloud sync folders
+# =========================
 tmpdrive/
 .tmp.driveupload/
-__pycache__/
-*.pyc
-MCMC_chains/
-Observations/~BROMIUM/
-Plots/Saved_plots/
-saved_tables/
-Statistical_analysis_tables/
+
+# =========================
+# LaTeX build artifacts
+# =========================
+*.aux
 *.log
+*.synctex.gz
+*.toc
+*.out
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+
+# =========================
+# Testing / coverage
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# =========================
+# IDEs
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# History / scratch
+# =========================
+.Rhistory
+

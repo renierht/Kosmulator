@@ -1,408 +1,515 @@
+# User_defined_modules.py  — clean, extensible, vectorized
+# --------------------------------------------------------
+"""
+Central place for *user cosmology models* and small wrappers.
+
+This is where you:
+  1. Implement E(z) for a new background model (flat or not).
+  2. (Optionally) define any prior / sanity restriction for its parameters.
+  3. Register the model name + parameter list in the model registry.
+  4. (Optional) expose CMB Cl wrappers for that model.
+
+QUICK START for adding a new model
+----------------------------------
+Example outline:
+
+    def MyMG_MODEL_vectorised(z, p):
+        z = _asarray(z)
+        # compute E(z) = H(z)/H0 here using params in p
+        return Ez
+
+    def restrict_MyMG_param(x: float) -> bool:
+        return x < 1.0   # example guard rail
+
+    # Scroll down to the "Model registry / discovery" section and add:
+    # _MODEL_REGISTRY["MyMG_v"] = (MyMG_MODEL_vectorised, ["Omega_m", "my_param"])
+    #
+    # and (optionally) in the "Model restrictions" section:
+    # restrictions_map["MyMG_v"] = {"my_param": restrict_MyMG_param}
+
+The rest of the file is mostly helpers that other modules (likelihoods,
+plotting, rd_helpers) already use; users typically only touch the
+"Core E(z) models", the restrictions, and the model registry.
+"""
+
+from __future__ import annotations
+
+from typing import Union, Dict, Callable, List, Tuple
+
+import logging
 import numpy as np
-from scipy import integrate
 from scipy.optimize import fsolve
-from scipy.interpolate import RegularGridInterpolator
-from scipy.optimize import root
+import classy
 
-##############################################################
-# Define your cosmological model used for MCMC analysis
-##############################################################
-def LCDM_MODEL(z, param_dict, Type="SNe"):
+from Kosmulator_main.constants import C_KM_S
+import logging
+logger = logging.getLogger(__name__)
+
+# These come from your MCMC runtime (vectorized implementations)
+from Kosmulator_main.utils import (
+    Comoving_distance_vectorized as _vect_comove,
+    matter_density_z_array as _omega_m_z_arr,
+    integral_term_array as _integral_term_arr,
+    asarray as _asarray,                    # safe np.asarray wrapper, used everywhere
+    ensure_background_params as _ensure_background_params,
+)
+
+Number = Union[float, np.ndarray]
+
+__all__ = [
+    # background models
+    "LCDM_MODEL_vectorised",
+    "LCDM_MODEL_non_vectorised",
+    "f1CDM_MODEL_vectorised",
+    "f1CDM_MODEL_non_vectorised",
+    # registry helpers
+    "Get_model_function",
+    "Get_model_names",
+    "Get_model_restrictions",
+    "register_model",
+    # common wrappers
+    "Hubble",
+    "Comoving_distance_vectorized",
+    "matter_density_z_array",
+    "integral_term_array",
+]
+
+# ============================================================================
+#  Core E(z) models (dimensionless expansion rate E(z) = H(z)/H0)
+#  ---------------------------------------------------------------------------
+#  This is the main place users add their own background models.
+# ============================================================================
+
+
+def LCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
     """
-    Lambda Cold Dark Matter (LCDM) model.
-    Args:
-        z (float or np.ndarray): Redshift value(s).
-        param_dict (dict): Dictionary containing cosmological parameters.
-        Type (str): Type of observation ('SNe', 'OHD', 'CC', f_sigma_8', or 'BAO').
+    Flat ΛCDM:  E^2(z) = Ω_m (1+z)^3 + (1 - Ω_m)
 
-    Returns:
-        float or np.ndarray: Theoretical model prediction based on the observation type.
+    Parameters in `p`:
+      • Omega_m
     """
-    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
-    model = np.sqrt(param_dict['Omega_m'] * (1 + z)**3 + 1 - param_dict['Omega_m'])
-    result = Calculate_return_values(model, Type)
-    return result if len(result) > 1 else result[0]  # Return scalar if input was scalar
-    
-def LCDM_v_MODEL(z, param_dict, Type="SNe"):
-    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
-    model = np.sqrt(param_dict['Omega_m'] * (1 + z)**(3-3*param_dict['zeta']) + 1 - param_dict['Omega_m'])
-    result = Calculate_return_values(model, Type)
-    return result if len(result) > 1 else result[0]  # Return scalar if input was scalar
+    z = _asarray(z)
+    Om = float(p["Omega_m"])
+    E2 = Om * (1 + z) ** 3 + (1 - Om)
 
-def f1CDM_MODEL(z, param_dict, Type="SNe"):
-    """
-    Solve the nonlinear algebraic equation for E(z).
-    """
-    
-    z = np.atleast_1d(z)  # Ensure z is treated as an array
-    def hubble_nonlinear(E, z, Omega_m, n):
-        return E**2 - (Omega_m * (1 + z)**3 + (1 - Omega_m) * E**(2 * n))
-
-    # Extract model parameters
-    Omega_m = param_dict["Omega_m"]
-    n = param_dict["n"]
-
-    # Solve for E(z) (vectorized)
-    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, n))[0] for zi in z])
-
-    # Return processed results based on Type
-    result = Calculate_return_values(E_solution, Type)
-    return result if len(result) > 1 else result[0]
-
-def f1CDM_v_MODEL(z, param_dict, Type="SNe"):
-    z = np.atleast_1d(z)  # Ensure z is treated as an array
-    def hubble_nonlinear(E, z, Omega_m, n, zeta):
-        return E**2 - (Omega_m * (1 + z)**(3-3*zeta) + (1 - Omega_m) * E**(2 * n))
-
-    Omega_m = param_dict["Omega_m"]
-    n = param_dict["n"]
-    zeta = param_dict["zeta"]
-
-    # Solve for E(z) (vectorized)
-    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, n, zeta))[0] for zi in z])
-
-    result = Calculate_return_values(E_solution, Type)
-    return result if len(result) > 1 else result[0]
-    
-def f2CDM_MODEL(z, param_dict, Type="SNe"):
-    z = np.atleast_1d(z)  # Ensure z is treated as an array
-    def hubble_nonlinear(E, z, Omega_m, p):
-        return E**2 - Omega_m * (1 + z)**3 -((1-Omega_m)/(1-(1+p)* np.exp(-p)))*(1-(1+p)*E*np.exp(-p*E))
-
-    Omega_m = param_dict["Omega_m"]
-    p = param_dict["p"]
-
-    # Solve for E(z) (vectorized)
-    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, p))[0] for zi in z])
-
-    result = Calculate_return_values(E_solution, Type)
-    return result if len(result) > 1 else result[0]
-    
-def f2CDM_v_MODEL(z, param_dict, Type="SNe"):
-    z = np.atleast_1d(z)  # Ensure z is treated as an array
-    def hubble_nonlinear(E, z, Omega_m, p, zeta):
-        return E**2 - Omega_m * (1 + z)**(3-3*zeta) -((1-Omega_m)/(1-(1+p)* np.exp(-p)))*(1-(1+p)*E*np.exp(-p*E))
-
-    Omega_m = param_dict["Omega_m"]
-    p = param_dict["p"]
-    zeta = param_dict["zeta"]
-
-    # Solve for E(z) (vectorized)
-    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, p, zeta))[0] for zi in z])
-
-    result = Calculate_return_values(E_solution, Type)
-    return result if len(result) > 1 else result[0]
-    
-def f3CDM_MODEL(z, param_dict, Type="SNe"):
-    z = np.atleast_1d(z)  # Ensure z is treated as an array
-    def hubble_nonlinear(E, z, Omega_m, Gamma):
-        return E**2 - Omega_m * (1 + z)**3 - ((1 - Omega_m)/(2-np.log(Gamma)))*(2-np.log(Gamma*E))
-
-    Omega_m = param_dict["Omega_m"]
-    Gamma = param_dict["Gamma"]
-
-    # Solve for E(z) (vectorized)
-    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, Gamma))[0] for zi in z])
-
-    result = Calculate_return_values(E_solution, Type)
-    return result if len(result) > 1 else result[0]
-    
-def f3CDM_v_MODEL(z, param_dict, Type="SNe"):
-    z = np.atleast_1d(z)  # Ensure z is treated as an array
-    def hubble_nonlinear(E, z, Omega_m, Gamma,zeta):
-        return E**2 - Omega_m * (1 + z)**(3-3*zeta) - ((1 - Omega_m)/(2-np.log(Gamma)))*(2-np.log(Gamma*E))
-
-    Omega_m = param_dict["Omega_m"]
-    Gamma = param_dict["Gamma"]
-    zeta = param_dict["zeta"]
-
-    # Solve for E(z) (vectorized)
-    E_solution = np.array([fsolve(hubble_nonlinear, x0=1.0, args=(zi, Omega_m, Gamma, zeta))[0] for zi in z])
-
-    result = Calculate_return_values(E_solution, Type)
-    return result if len(result) > 1 else result[0]
-
-def BetaRn_MODEL(z, param_dict, Type = "SNe"):
-    '''
-    Beta R^n model for cosmology.
-    '''
-    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
-    qz = param_dict["q0"]+param_dict["q1"]*((z)/(z+1))
-    jz = qz*(2*qz+1)+((param_dict["q1"])/(z+1))
-    term1 = (param_dict["Omega_m"]*(1+z)**3)
-    term2bottom = qz*param_dict["n"]*param_dict["beta"]*(6**(param_dict["n"]-1))*((1-qz)**(param_dict["n"]-1))
-    term3bottom = (1+((1-qz)/(param_dict["n"]*qz)) - ((param_dict["n"]-1)/(qz-(qz**2)))*(2+qz-jz))
-    model = ((term1)/(term2bottom*term3bottom))**((1)/(2*param_dict["n"]))
-    result = Calculate_return_values(model, Type)
-    return result if len(result) > 1 else result[0]
-    
-def BetaR_alphaR_MODEL(z, param_dict, Type="SNe"):
-    """
-    Lambda Cold Dark Matter (LCDM) model.
-    Args:
-        z (float or np.ndarray): Redshift value(s).
-        param_dict (dict): Dictionary containing cosmological parameters.
-        Type (str): Type of observation ('SNe', 'OHD', 'CC', f_sigma_8', or 'BAO').
-
-    Returns:
-        float or np.ndarray: Theoretical model prediction based on the observation type.
-    """
-    z = np.atleast_1d(z)  # Ensure z is an array for consistent operations
-    model = np.sqrt((1/param_dict["alpha"])*(param_dict["Omega_m"]*(1+z)**3-(param_dict["beta"]/6)))
-    result = Calculate_return_values(model, Type)
-    return result if len(result) > 1 else result[0]  # Return scalar if input was scalar
-    
-##############################################################
-# Functions to control Models for the entire program
-##############################################################
-def Get_model_function(model_name):
-    '''
-    Retrieve the correct model function based on the model name.
-
-    Args:
-        model_name (str)    : Name of the cosmological model (e.g., 'LCDM', 'betaRn').
-
-    Returns:
-        function            : The corresponding model function.
-
-    Raises:
-        ValueError          : If the model name is not recognized.
-    '''
-    models = {
-        "LCDM": LCDM_MODEL,
-        "f1CDM": f1CDM_MODEL,
-        "f2CDM": f2CDM_MODEL,
-        "f3CDM": f3CDM_MODEL,
-        "LCDM_v": LCDM_v_MODEL,
-        "f1CDM_v": f1CDM_v_MODEL,
-        "f2CDM_v": f2CDM_v_MODEL,
-        "f3CDM_v": f3CDM_v_MODEL,
-        "BetaRn": BetaRn_MODEL,
-        "aRBR": BetaR_alphaR_MODEL,
-    }
-    if model_name not in models:
-        raise ValueError(f"Model '{model_name}' not recognized. Available models: {list(models.keys())}")
-    
-    return models[model_name]    
-    
-def Get_model_names(model_name):
-    # Set up free parameter list for your new models. N.B. Only include the parameters that you have in your model
-    all_models = {
-        "LCDM"     : {"parameters": ["Omega_m"]},
-        "f1CDM"  : {"parameters": ["Omega_m", "n"]},
-        "f2CDM"  : {"parameters": ["Omega_m", "p"]},
-        "f3CDM"  : {"parameters": ["Omega_m", "Gamma"]},
-        
-        "LCDM_v"     : {"parameters": ["Omega_m","zeta"]},
-        "f1CDM_v"  : {"parameters": ["Omega_m", "n","zeta"]},
-        "f2CDM_v"  : {"parameters": ["Omega_m", "p","zeta"]},
-        "f3CDM_v"  : {"parameters": ["Omega_m", "Gamma","zeta"]},
-        
-        "BetaRn" : {"parameters": ["Omega_m", "q0", "q1", "beta", "n"]},
-        "aRBR" : {"parameters": ["Omega_m", "alpha", "beta"]},
-    }
-    models = {name: all_models[name] for name in model_name if name in all_models}
-    return models
-
-def Calculate_return_values(model, Type):
-    '''
-    Shared logic for computing return values based on the observation type.
-
-    Args:
-        model (float): Calculated model value.
-        Type (str): Type of observation ('SNe', 'OHD', 'CC', 'f_sigma_8', or 'BAO').
-
-    Returns:
-        float or None: Theoretical model prediction based on the observation type.
-    '''
-    return {"SNe": 1 / model,  # Supernovae (inverse of model)
-                   "OHD": model,      # Observational Hubble Data
-                   "CC": model,       # Cosmic Chronometers
-                   "f_sigma_8": model,  # Growth rate of structure including sigma_8 as a parameter
-                   "f": model,   # Growth rate of structure
-                   "BAO": 1 / model,  # Baryon Acoustic Oscillations (inverse of model)}
-                   "DESI": 1/ model,  # Dark Energy Spectroscopic instrument
-                   }.get(Type, None)
-
-##############################################################
-# General used functions
-##############################################################
-
-def Hubble(param_dict):
-    '''
-    Calculate the Hubble distance in units of km/s/Mpc.
-
-    Args:
-        param_dict (dict): Dictionary containing cosmological parameters,
-                           specifically 'H_0' (Hubble constant in km/s/Mpc).
-
-    Returns:
-        float: Hubble distance in km/s/Mpc.
-    '''
-    return 300000 / param_dict['H_0']
-
-def Comoving_distance_vectorized(MODEL_func, redshifts, param_dict, Type):
-    """
-    Compute the comoving distances for an array of redshifts (vectorized version).
-    Args:
-        MODEL_func (callable): Function that calculates the Hubble parameter at a given redshift.
-        redshifts (array-like): Array of redshifts to compute the comoving distance for.
-        param_dict (dict): Dictionary containing cosmological parameters.
-        Type (str): Type of observation.
-
-    Returns:
-        np.ndarray: Array of comoving distances in Mpc.
-    """
-    comoving_distances = np.zeros_like(redshifts)
-    for i, z in enumerate(redshifts):
-        comoving_distances[i] = integrate.quad(MODEL_func, 0, z, args=(param_dict, Type))[0]
-
-    return comoving_distances * Hubble(param_dict)
-    
-##############################################################
-# Functions for cosmological calculations, specifically used
-# for observations involving sigma8 or fsigma8.
-##############################################################  
-# Define the integral term for f_sigma8(z)
-def integral_term(z, MODEL_func, param_dict, Type="f_sigma_8"):
-    """
-    Compute the integral term in the f_sigma_8 definition:
-    Integral = ∫ (Omega_zeta^gamma / (1 + z)) dz from 0 to z.
-
-    Args:
-        z (float or array-like): Upper limit of the integral (current redshift).
-        MODEL_func (function): Function to compute H(z) or related model values.
-        param_dict (dict): Dictionary containing cosmological parameters.
-        Type (str, optional): Type of observation. Defaults to "f_sigma_8".
-
-    Returns:
-        float or array-like: Value of the integral term for scalar or array input.
-    """
-    gamma = param_dict["gamma"]
-
-    def integrand(z_prime):
-        Omega_zeta = matter_density_z(z_prime, MODEL_func, param_dict, Type)
-        return (Omega_zeta ** gamma) / (1 + z_prime)
-
-    # Handle scalar input
-    if np.isscalar(z):
-        integral_value, _ = integrate.quad(integrand, 0, z)
-        return integral_value
-
-    # Handle array input
-    elif isinstance(z, (list, np.ndarray)):
-        results = []
-        for z_val in z:
-            integral_value, _ = integrate.quad(integrand, 0, z_val)
-            results.append(integral_value)
-        return np.array(results)
-    
+    if (not np.isfinite(E2).all()) or (E2.min() <= 0):
+        out = np.full_like(z, np.nan)
     else:
-        raise ValueError("Input z must be a scalar or array-like.")
-    
-def matter_density_z(z, MODEL_func, param_dict, Type = "f_sigma_8"):
-    '''
-    Compute the matter density parameter Omega(z) at redshift z.
+        out = np.sqrt(E2)
 
-    Args:
-        z (float): Redshift.
-        param_dict (dict)       : Dictionary containing cosmological parameters.
-        Type (str, optional)    : Type of observation. Defaults to "f_sigma_8".
+    return out if out.size > 1 else float(out)
 
-    Returns:
-        float                   : Omega(z), the ratio of matter density to critical density at z.
-    '''
-    #Model_value = MODEL_func(z, param_dict, Type)
-    matter_density_z = (param_dict['Omega_m'] * (1 + z)**3) / (MODEL_func(z, param_dict, Type)**2)
-    return matter_density_z
 
-##############################################################
-# Functions for cosmological calculations, specifically used
-# for observations involving BAO.
-##############################################################
-def dmrd(redshifts, MODEL_func, param_dict, Type):
+def LCDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """Slow but simple non-vectorised LCDM wrapper (kept for completeness)."""
+    z_arr = _asarray(z)
+    out = [LCDM_MODEL_vectorised(zi, p) for zi in z_arr]
+    out = np.array(out, dtype=float)
+    return out if out.size > 1 else float(out)
+
+
+def f1CDM_MODEL_vectorised(
+    z: Number,
+    p: Dict[str, float],
+    tol: float = 1e-8,
+    maxiter: int = 60,
+) -> Number:
+    r"""
+    f1CDM: E^2 = Ω_m (1+z)^3 + (1 - Ω_m) E^{2n}
+
+    Parameters in `p`:
+      • Omega_m
+      • n          (f(T)-like exponent; constrained by `restrict_f1CDM_v`)
     """
-    Compute the dimensionless comoving distance D_M / r_d for one or more redshifts.
+    z = _asarray(z)
+    Om = float(p["Omega_m"])
+    n = float(p["n"])
 
-    Args:
-        redshifts (float or array-like): Redshift(s).
-        MODEL_func (callable): Function for Hubble parameter or related quantities.
-        param_dict (dict): Dictionary of cosmological parameters.
-        Type (str): Type of observation.
+    # Seed with ΛCDM
+    E = np.sqrt(Om * (1 + z) ** 3 + (1 - Om))
 
-    Returns:
-        float or np.ndarray: D_M / r_d for the given redshift(s).
+    converged = np.zeros_like(E, dtype=bool)
+    for _ in range(maxiter):
+        f = E**2 - (Om * (1 + z) ** 3 + (1 - Om) * E ** (2.0 * n))
+        df = 2.0 * E - (1.0 - Om) * (2.0 * n) * np.where(
+            E > 0, E ** (2.0 * n - 1.0), np.inf
+        )
+        step = f / np.where(df == 0.0, np.inf, df)
+        E -= step
+        converged |= np.abs(step) < tol
+        if np.all(np.abs(step) < tol):
+            break
+
+    # Fallback for any bad points
+    bad = (~converged) | (~np.isfinite(E)) | (E <= 0)
+    if np.any(bad):
+        logging.getLogger(__name__).warning(
+            "f1CDM: %d/%d points hit fallback (maxiter=%d).",
+            int(bad.sum()),
+            int(bad.size),
+            maxiter,
+        )
+
+        def eq(Eval, zi):
+            return Eval**2 - (Om * (1 + zi) ** 3 + (1 - Om) * Eval ** (2.0 * n))
+
+        seeds = np.maximum(1.0, np.sqrt(Om * (1 + z[bad]) ** 3 + (1 - Om)))
+        try:
+            E[bad] = np.array(
+                [fsolve(eq, x0=float(x0), args=(zi,))[0] for x0, zi in zip(seeds, z[bad])]
+            )
+        except Exception:
+            E[bad] = np.nan
+
+    E[~np.isfinite(E)] = np.nan
+    E[E <= 0] = np.nan
+    return E if E.size > 1 else float(E)
+
+
+def f1CDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """Non-vectorised f1CDM wrapper (mainly for debugging / testing)."""
+    z_arr = _asarray(z)
+    out = [f1CDM_MODEL_vectorised(zi, p) for zi in z_arr]
+    out = np.array(out, dtype=float)
+    return out if out.size > 1 else float(out)
+
+
+# ============================================================================
+#  CMB wrappers (CLASS C_ℓ)
+#  ---------------------------------------------------------------------------
+#  These are used by the CMB likelihood. They take *full* cosmological
+#  parameter dicts (not just Omega_m, n, etc.) and return raw C_ℓ arrays.
+# ============================================================================
+
+# Internal cache for CLASS; defined here so the CMB wrappers can share it.
+_class_cache = None
+
+
+# User_defined_modules.py
+def LCDM_v_CMB(p: dict, mode: str = "hil"):
     """
-    #dmrd = Comoving_distance(MODEL_func, redshift, param_dict, Type) / param_dict['r_d']
-    comoving_distances = Comoving_distance_vectorized(MODEL_func, np.atleast_1d(redshifts), param_dict, Type)
-    return comoving_distances / param_dict['r_d']
+    Canonical CMB helper for LCDM_v.
 
-def dhrd(redshift, MODEL_func, param_dict, Type):
-    '''
-    Compute the dimensionless Hubble distance D_H / r_d.
+    mode:
+      - "lowl" → cheap low-ℓ EE-only setup (no lensing, lmax ~ 30)
+      - anything else → full high-ℓ, lensed spectra for Plik + (optionally) lensing
 
-    Args:
-        redshift (float): Redshift.
-        MODEL_func (callable): Function for Hubble parameter or related quantities.
-        param_dict (dict): Dictionary of cosmological parameters.
-        Type (str): Type of observation.
-
-    Returns:
-        float: D_H / r_d, dimensionless Hubble distance.
-    '''
-    dhrd = Hubble(param_dict) * MODEL_func(redshift, param_dict, Type) / param_dict['r_d']
-    return dhrd
-    
-def dvrd(redshifts, MODEL_func, param_dict, Type):
+    Returns
+    -------
+    dict or None
+      CLASS C_ell dict (raw_cl or lensed_cl) or None on failure.
     """
-    Compute the dimensionless volume-averaged distance D_V / r_d for one or more redshifts.
+    # Make sure all background quantities are present
+    # (Ω_m, Ω_b, Ω_bh^2, Ω_dh^2 given H_0)
+    p = _ensure_background_params(p)
 
-    Args:
-        redshifts (float or array-like): Redshift(s).
-        MODEL_func (callable): Function for Hubble parameter or related quantities.
-        param_dict (dict): Dictionary of cosmological parameters.
-        Type (str): Type of observation.
+    m = (mode or "").lower()
+    is_lowl = m.startswith("low")
 
-    Returns:
-        float or np.ndarray: D_V / r_d for the given redshift(s).
+    # Guardrail: bail out early if dark matter becomes negative / nonsensical
+    Om = float(p.get("Omega_m", 0.0))
+    Ob = float(p.get("Omega_b", 0.0))
+    if Om <= 0 or Ob <= 0 or Ob >= Om:
+        return None
+
+    global _class_cache
+    if _class_cache is None:
+        _class_cache = classy.Class()  # <--- Now looks up the CURRENT binary
+    cosmo = _class_cache
+    
+    # IMPORTANT:
+    #   For low-ℓ SimAll EE we do NOT need lensing Cls at all.
+    #   Requesting lCl in low-ℓ mode is unnecessary and can increase fragility.
+    if is_lowl:
+        output_str = "tCl,pCl"
+        class_params = {
+            "l_max_scalars": 31,
+            "lensing": "no",
+        }
+    else:
+        output_str = "tCl,pCl,lCl"
+        class_params = {
+            "l_max_scalars": 2509,  # enough for Planck high-ℓ
+            "lensing": "yes",
+        }
+
+    base_params = {
+        "output": output_str,
+        "n_s": float(p["n_s"]),
+        "h": float(p["H_0"]) / 100.0,
+        "omega_b": float(p["Omega_bh^2"]),
+        "omega_cdm": float(p["Omega_dh^2"]),
+        "tau_reio": float(p["tau_reio"]),
+        "A_s": float(np.exp(p["ln10^10_As"]) * 1e-10),
+    }
+
+    # Silence CLASS verbosity
+    VERBOSE_OFF_SAFE = {
+        "input_verbose": 0,
+        "background_verbose": 0,
+        "thermodynamics_verbose": 0,
+        "perturbations_verbose": 0,
+        "transfer_verbose": 0,
+        "primordial_verbose": 0,
+        "lensing_verbose": 0,
+        "output_verbose": 0,
+    }
+
+    cosmo_params = {**base_params, **class_params, **VERBOSE_OFF_SAFE}
+
+    try:
+        # Hard-reset CLASS internal state between calls.
+        # This is CRITICAL when mixing low-ℓ and high-ℓ likelihoods in one run.
+        try:
+            cosmo.struct_cleanup()
+        except Exception:
+            pass
+        try:
+            cosmo.empty()
+        except Exception:
+            pass
+
+        cosmo.set(cosmo_params)
+        cosmo.compute()
+
+        # Low-ℓ: raw_cl is fine and cheaper.
+        # High-ℓ: use lensed_cl for Plik / TT-only.
+        return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
+
+    except classy.CosmoComputationError as e:
+        logger.error("CLASS CosmoComputationError: %s | cosmo_params=%s", e, cosmo_params)
+        return None
+    except Exception as e:
+        logger.exception("Unexpected error in LCDM_v_CMB: %s | cosmo_params=%s", e, cosmo_params)
+        return None
+
+
+def f1CDM_v_CMB(p: dict, mode: str = "hil"):
     """
-    #dvrd = (Hubble(param_dict) * ((redshift * (Comoving_distance(MODEL_func, redshift, param_dict, Type) / Hubble(param_dict))**2)/ (1 / MODEL_func(redshift, param_dict, Type))) ** (1 / 3)) / param_dict['r_d']
-    redshifts = np.atleast_1d(redshifts)
-    
-    # Compute comoving distances and Hubble parameter for all redshifts
-    comoving_distances = Comoving_distance_vectorized(MODEL_func, redshifts, param_dict, Type)
-    H_vals = np.array([MODEL_func(z, param_dict, Type) for z in redshifts])
-
-    # Calculate D_V for each redshift
-    dvrd_vals = (
-        Hubble(param_dict)
-        * ((redshifts * (comoving_distances / Hubble(param_dict))**2) / (1 / H_vals)) ** (1 / 3)
-    ) / param_dict['r_d']
-
-    return dvrd_vals
-    
-def dArd(redshifts, MODEL_func, param_dict, Type):
+    Simplified CMB helper for f1CDM_v. 
+    Fixes the 'unread parameter' error by mapping n -> n_fT directly.
     """
-    Compute the dimensionless angular diameter distance D_A / r_d for one or more redshifts.
+    import classy
+    p = _ensure_background_params(p)
+    
+    # Mode setup
+    m = (mode or "").lower()
+    is_lowl = m.startswith("low")
+    
+    global _class_cache
+    if _class_cache is None:
+        _class_cache = classy.Class()
+    cosmo = _class_cache
 
-    Args:
-        redshifts (float or array-like): Redshift(s).
-        MODEL_func (callable): Function for Hubble parameter or related quantities.
-        param_dict (dict): Dictionary of cosmological parameters.
-        Type (str): Type of observation.
+    # 1. BUILD THE PARAMS MANUALLY
+    fT_value = p.get("n", p.get("n_fT", 0.0))
 
-    Returns:
-        float or np.ndarray: D_A / r_d for the given redshift(s).
+    class_params = {
+        "output": "tCl,pCl,lCl" if not is_lowl else "tCl,pCl",
+        "l_max_scalars": 2509 if not is_lowl else 31,
+        "lensing": "yes" if not is_lowl else "no",
+        "n_s": float(p["n_s"]),
+        "h": float(p["H_0"]) / 100.0,
+        "omega_b": float(p["Omega_bh^2"]),
+        "omega_cdm": float(p["Omega_dh^2"]),
+        "tau_reio": float(p["tau_reio"]),
+        "A_s": float(np.exp(p["ln10^10_As"]) * 1e-10),
+        "n_fT": float(fT_value), 
+    }
+
+    # 2. ADD VERBOSITY SILENCERS
+    class_params.update({
+        "input_verbose": 0, "background_verbose": 0, "thermodynamics_verbose": 0,
+        "perturbations_verbose": 0, "transfer_verbose": 0, "primordial_verbose": 0,
+        "lensing_verbose": 0, "output_verbose": 0,
+    })
+
+    try:
+        cosmo.struct_cleanup()
+        cosmo.empty()
+        
+        # 3. SET AND COMPUTE
+        cosmo.set(class_params)
+        cosmo.compute()
+        
+        return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
+    except Exception as e:
+        # If it still fails, we want to know why in the terminal
+        # print(f"DEBUG: CLASS failed with params {class_params}. Error: {e}")
+        return None
+
+# ============================================================================
+#  Model registry / discovery
+#  ---------------------------------------------------------------------------
+#  This is the single source of truth that maps a string name → (func, params)
+#  and is used everywhere (MCMC, plotting, likelihoods).
+#
+#  To add a new model:
+#    1. Implement `MyMG_MODEL_vectorised(z, p)` above.
+#    2. Add an entry here:
+#
+#       _MODEL_REGISTRY["MyMG_v"] = (MyMG_MODEL_vectorised,
+#                                    ["Omega_m", "my_param"])
+#
+#    3. Optionally add a restriction in the restrictions_map above.
+# ============================================================================
+
+_MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
+    # Background-only models
+    "LCDM_v":   (LCDM_MODEL_vectorised,      ["Omega_m"]),
+    "LCDM_nv":  (LCDM_MODEL_non_vectorised,  ["Omega_m"]),
+    "f1CDM_v":  (f1CDM_MODEL_vectorised,     ["Omega_m", "n"]),
+    "f1CDM_nv": (f1CDM_MODEL_non_vectorised, ["Omega_m", "n"]),
+
+    # CMB-specific models for CLASS Cls (used by CMB likelihoods)
+    "LCDM_v_CMB": (
+        LCDM_v_CMB,
+        ["Omega_m", "Omega_b", "H_0", "n_s", "tau_reio", "ln10^10_As"],
+    ),
+    "f1CDM_v_CMB": (
+        f1CDM_v_CMB,
+        ["Omega_m", "Omega_b", "H_0", "n_s", "tau_reio", "ln10^10_As", "n"],
+    ),
+    # Example for a new MG model:
+    # "MyMG_v": (MyMG_MODEL_vectorised, ["Omega_m", "my_param"]),
+}
+
+
+def register_model(name: str, func: Callable, parameters: List[str]) -> None:
     """
-    #dArd = (Comoving_distance(MODEL_func, redshift, param_dict, Type) / (1 + redshift)) / param_dict['r_d']
-    redshifts = np.atleast_1d(redshifts)
+    Register a new model at runtime.
+
+    Typical usage (after defining MyMG_MODEL_vectorised):
+
+        register_model("MyMG_v", MyMG_MODEL_vectorised, ["Omega_m", "my_param"])
+
+    This simply updates the internal `_MODEL_REGISTRY`.
+    """
+    if not callable(func):
+        raise TypeError("func must be callable")
+    _MODEL_REGISTRY[name] = (func, list(parameters))
+
+
+def Get_model_function(model_name: str) -> Callable[[Number, Dict[str, float]], Number]:
+    """
+    Look up the model function by name.
+
+    This is what the MCMC / likelihood layer calls to get E(z).
+    """
+    try:
+        return _MODEL_REGISTRY[model_name][0]
+    except KeyError:
+        raise ValueError(
+            f"Unknown model '{model_name}'. Available: {list(_MODEL_REGISTRY.keys())}"
+        )
+
+
+def Get_model_names(model_name: Union[str, List[str]]) -> Dict[str, Dict[str, List[str]]]:
+    """
+    Return a mapping model → { 'parameters': [ ... ] } for one or more names.
+
+    This is mainly used for UI / logging / consistency checks.
+    """
+    names = [model_name] if isinstance(model_name, str) else list(model_name)
+    out: Dict[str, Dict[str, List[str]]] = {}
+    for nm in names:
+        if nm in _MODEL_REGISTRY:
+            out[nm] = {"parameters": _MODEL_REGISTRY[nm][1]}
+    return out
     
-    # Compute comoving distances
-    comoving_distances = Comoving_distance_vectorized(MODEL_func, redshifts, param_dict, Type)
-
-    # Calculate D_A / r_d
-    dArd_vals = (comoving_distances / (1 + redshifts)) / param_dict['r_d']
-
-    return dArd_vals
-
     
+
+
+# ============================================================================
+#  Model restrictions (simple param-level guard rails)
+#  ---------------------------------------------------------------------------
+#  These are optional "prior" predicates used to avoid crazy / unstable
+#  regions in parameter space. They are consumed via Get_model_restrictions.
+# ============================================================================
+
+
+def restrict_LCDM_Omega_m(x: float) -> bool:
+    """Keep Ω_m in a physically sensible range; very loose lower bound."""
+    return x > 0.0002
+
+
+def restrict_f1CDM_v(x: float) -> bool:
+    """
+    Guard-rail prior for f1CDM exponent n.
+
+    Empirically, n < 0.5 keeps E(z) well-behaved and the root-finding stable.
+    """
+    return x < 0.5
+
+
+# Global map that Get_model_restrictions reads from.
+restrictions_map: Dict[str, Dict[str, Callable[[float], bool]]] = {
+    "LCDM":    {"Omega_m": restrict_LCDM_Omega_m},
+    "LCDM_v":  {"Omega_m": restrict_LCDM_Omega_m},
+    "LCDM_nv": {"Omega_m": restrict_LCDM_Omega_m},
+    "f1CDM_v": {"n": restrict_f1CDM_v},
+    # Example for a new model:
+    # "MyMG_v": {"my_param": restrict_MyMG_param},
+}
+
+
+def Get_model_restrictions(
+    model_name: Union[str, List[str]]
+) -> Union[Dict[str, Callable[[float], bool]], Dict[str, Dict[str, Callable[[float], bool]]]]:
+    """
+    Return param->predicate restrictions for given model(s).
+
+    If a list is given, return a mapping model->param->predicate.
+    All callables are top-level functions to allow MPI pickling.
+
+    Users can extend this by adding entries to `restrictions_map`.
+    """
+    if isinstance(model_name, list):
+        return {m: restrictions_map.get(m, {}) for m in model_name}
+    return restrictions_map.get(model_name, {})
+
+
+# ============================================================================
+#  Common wrappers used across likelihoods / BAO / growth
+#  ---------------------------------------------------------------------------
+#  These provide a stable, central API for distances and growth-related
+#  arrays that both Statistical_packages and Plot_functions re-use.
+# ============================================================================
+
+
+def Hubble(p: Dict[str, float]) -> float:
+    """Hubble distance, in Mpc (c / H0)."""
+    return C_KM_S / float(p["H_0"])
+
+
+def Comoving_distance_vectorized(MODEL_func: Callable, redshifts: Number, p: Dict[str, float]) -> Number:
+    """
+    Safe wrapper around the vectorised comoving distance, with background
+    parameter injection for CMB-calibrated chains.
+
+    Signature is shared with Statistical_packages.Comoving_distance_vectorized.
+    """
+    p = _ensure_background_params(p)
+    return _vect_comove(MODEL_func, redshifts, p)
+
+
+def matter_density_z_array(z: Number, param_dict: Dict[str, float], MODEL_func: Callable) -> Number:
+    """
+    Vector Ω_m(z); signature matches SP.matter_density_z_array(z, p, model).
+
+    Exposed here so that plotting and likelihood code can share one
+    implementation, and users don't have to worry about it.
+    """
+    return _omega_m_z_arr(z, param_dict, MODEL_func)
+
+
+def integral_term_array(
+    z: Number, param_dict: Dict[str, float], MODEL_func: Callable, gamma: float
+) -> Number:
+    """
+    Vector growth integral ∫ Ω_m(z')^γ / (1+z') dz'.
+
+    This is used both in the fσ8 likelihood and in the plotting code
+    (compute_sigma8z), so we expose a single shared wrapper here.
+    """
+    return _integral_term_arr(z, param_dict, MODEL_func, float(gamma))

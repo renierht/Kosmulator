@@ -1,0 +1,6 @@
+ndim int 4
+component_type str pointsource
+ndef int 2
+lmax int 2508
+lmin int 30
+component_name str ps
