@@ -350,9 +350,10 @@ def load_classy_so(so_path: str, *args, **kwargs):
     This matches the extension's compiled name (PyInit_classy), avoiding
     PyInit__classy mismatches that can happen when loading under a submodule.
     """
-    import importlib
     import importlib.machinery
     import importlib.util
+    import os
+    import sys
 
     so_dir = os.path.dirname(os.path.abspath(so_path))
     if so_dir not in sys.path:
@@ -364,17 +365,27 @@ def load_classy_so(so_path: str, *args, **kwargs):
             sys.modules.pop(key, None)
 
     mod_name = "classy"
+
+    # IMPORTANT: make it a *package* so importlib.resources.files("classy") works
     spec = importlib.util.spec_from_file_location(
         mod_name,
         so_path,
         loader=importlib.machinery.ExtensionFileLoader(mod_name, so_path),
+        submodule_search_locations=[so_dir],
     )
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not create spec for '{mod_name}' at: {so_path}")
 
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore[arg-type]
+
+    # Register early (helps some importlib/resource edge cases)
     sys.modules[mod_name] = mod
+
+    spec.loader.exec_module(mod)  # type: ignore[arg-type]
+
+    # Extra belt-and-braces: ensure it's package-like
+    if not hasattr(mod, "__path__"):
+        mod.__path__ = [so_dir]  # type: ignore[attr-defined]
 
     if not hasattr(mod, "Class"):
         raise ImportError("Loaded 'classy' extension lacks attribute 'Class'")
@@ -383,16 +394,35 @@ def load_classy_so(so_path: str, *args, **kwargs):
 
 
 def _copy_built_so_to_cache(model_name: str, src_hash: str) -> Optional[str]:
-    """Copy the just-built classy .so for this model into the cache directory."""
+    """Copy the just-built classy .so AND required runtime data into the cache directory."""
     try:
-        so_path = find_classy_so(model_name)
-        dest = _cache_dir_for(model_name, src_hash)
-        os.makedirs(dest, exist_ok=True)
-        target = os.path.join(dest, os.path.basename(so_path))
         import shutil as _shutil
 
-        _shutil.copy2(so_path, target)
-        return target
+        model_dir = os.path.join("./Class", model_name)
+        so_path = find_classy_so(model_name)
+
+        dest = _cache_dir_for(model_name, src_hash)
+        os.makedirs(dest, exist_ok=True)
+
+        # 1) copy the .so
+        target_so = os.path.join(dest, os.path.basename(so_path))
+        _shutil.copy2(so_path, target_so)
+
+        # 2) copy CLASS runtime data dirs needed at runtime (BBN tables live here)
+        src_external = os.path.join(model_dir, "external")
+        dst_external = os.path.join(dest, "external")
+        if os.path.isdir(src_external):
+            # dirs_exist_ok=True requires py3.8+
+            _shutil.copytree(src_external, dst_external, dirs_exist_ok=True)
+
+        # (optional) if you ever need it:
+        # src_include = os.path.join(model_dir, "include")
+        # dst_include = os.path.join(dest, "include")
+        # if os.path.isdir(src_include):
+        #     _shutil.copytree(src_include, dst_include, dirs_exist_ok=True)
+
+        return target_so
+
     except Exception:
         return None
 
