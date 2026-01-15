@@ -660,7 +660,8 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     "units": "scaled1e6",
                     "S": 1.137,
                     "weighted_mean": {"DH": 25.47, "sigma": 0.29},
-                    "bbn_model": "alterbbn",  # request high-precision BBN backend
+                    "bbn_model": "alterbbn_grid",  # request high-precision BBN backend
+                    "bbn_force_rebuild": True,
 
                     # Precomputed grid path; comment this out to run AlterBBN live.
                     # Running AlterBBN live can be ~10x slower for MCMC.
@@ -699,7 +700,11 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     ),
                 }
 
-                from Statistical_packages import ensure_bbn_backend
+                try:
+                    from .Statistical_packages import ensure_bbn_backend
+                except ImportError:
+                    # fallback if someone runs from inside Kosmulator_main as a script
+                    from Statistical_packages import ensure_bbn_backend
                 observation_data[obs] = ensure_bbn_backend(
                     observation_data[obs],
                     logger=logger,

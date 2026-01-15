@@ -566,7 +566,7 @@ def cmb_hilTT_loglike(pd: Dict[str, float], model_name: str) -> float:
     except Exception as e:
         logger.error("cmb_hilTT_loglike: clik evaluation failed: %s", e)
         return -1e10
-\
+
 
 # -----------------------------------------------------------------------------
 # Planck lensing likelihood (RAW / CMB-marged)
@@ -1267,6 +1267,8 @@ def Calc_BBN_DH_chi(
         or obs.get("bbn_model", "approx")
     )
 
+    strict = bool(obs.get("strict_bbn", False) or obs.get("require_alterbbn", False))
+
     try:
         if backend == "alterbbn":
             DH_th = bbn_predict_alterbbn(param_dict, obs)
@@ -1274,10 +1276,20 @@ def Calc_BBN_DH_chi(
             DH_th = bbn_predict_grid(param_dict, obs)
         else:
             DH_th = bbn_predict_approx(param_dict)
-    except Exception:
-        # Robust fallback
-        DH_th = bbn_predict_approx(param_dict)
 
+    except Exception as e:
+        # If the user explicitly requested AlterBBN, fail loudly in strict mode
+        if strict and backend in ("alterbbn", "alterbbn_grid"):
+            raise RuntimeError(
+                "BBN_DH requested AlterBBN backend, but it failed.\n"
+                f"backend={backend}\n"
+                "Fix: ensure KOSMO_BBN_LIB points to a valid libkosmo_bbn.so, and that "
+                "Kosmulator_main/alterbbn_ctypes.py can import & load it.\n"
+                f"Original error: {e!r}"
+            ) from e
+
+        # Otherwise keep the robust fallback
+        DH_th = bbn_predict_approx(param_dict)
     units = obs.get("units", "absolute")
     scale = 1e-6 if units == "scaled1e6" else 1.0
     S = float(obs.get("S", 1.0))
@@ -1316,6 +1328,32 @@ def Calc_BBN_DH_chi(
 # -----------------------------------------------------------------------------
 # BBN backend initialisation (approx / alterbbn / alterbbn_grid)
 # -----------------------------------------------------------------------------
+def _import_run_bbn():
+    """
+    Import run_bbn from alterbbn_ctypes.
+    Search order:
+    1) Normal python import (module on PYTHONPATH)
+    2) Repo-bundled helper: <Kosmulator>/AlterBBN_files/alterbbn_ctypes.py
+    """
+    # 1) normal import
+    try:
+        from alterbbn_ctypes import run_bbn  # type: ignore
+        return run_bbn
+    except Exception as e0:
+        # 2) load from AlterBBN_files (no need to copy into Kosmulator_main)
+        here = Path(__file__).resolve()
+        kosmulator_root = here.parent.parent  # .../Kosmulator
+        candidate = kosmulator_root / "AlterBBN_files" / "alterbbn_ctypes.py"
+        if candidate.exists():
+            spec = importlib.util.spec_from_file_location("alterbbn_ctypes", str(candidate))
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                sys.modules["alterbbn_ctypes"] = mod  # allow downstream imports
+                spec.loader.exec_module(mod)
+                if hasattr(mod, "run_bbn"):
+                    return mod.run_bbn
+        # if still failing, re-raise original error (more informative)
+        raise e0
 
 def ensure_bbn_backend(
     bbn_data: dict,
@@ -1438,7 +1476,8 @@ def ensure_bbn_backend(
         raise ValueError(f"Unsupported grid ndim={G.ndim}")
 
     # --- Try loading a pre-built grid
-    if want_grid and path:
+    force = bool(out.get("bbn_force_rebuild", False))
+    if want_grid and path and not force:
         try:
             npz = np.load(path, allow_pickle=False)
             g_obh2 = np.asarray(npz["obh2"], float)
@@ -1527,12 +1566,24 @@ def ensure_bbn_backend(
         except Exception as e:
             if log:
                 log.warning("Failed to load BBN grid at %s; will attempt build. Reason: %s", path, e)
+    else:
+        if force and log:
+            log.info("BBN grid: force rebuild requested (bbn_force_rebuild=True).")
 
     # --- Build grid if needed
     if want_grid:
         try:
             from alterbbn_ctypes import run_bbn
         except Exception as e:
+            strict = bool(out.get("bbn_strict", False))
+            run_bbn = _import_run_bbn()
+            if strict:
+                raise RuntimeError(
+                    "AlterBBN requested but alterbbn_ctypes could not be imported.\n"
+                    "Fix: (1) build AlterBBN + libkosmo_bbn.so, (2) set env var KOSMO_BBN_LIB, "
+                    "and (3) keep alterbbn_ctypes.py either on PYTHONPATH or in Kosmulator/AlterBBN_files/.\n"
+                    f"Original import error: {e}"
+                )
             if model == "alterbbn_grid":
                 if log:
                     log.warning("alterbbn_ctypes unavailable; reverting to approx (grid requested). %s", e)
