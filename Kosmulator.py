@@ -74,8 +74,8 @@ model_names: List[str] = ["LCDM_v"]
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
     #['JLA'],
-    ['OHD'],
-    #['CC'],
+    #['OHD'],
+    ['CC'],
     #['PantheonP'],
     #['PantheonPS'],
     #['f_sigma_8'],
@@ -90,7 +90,7 @@ observations: List[List[str]] = [
     #["CMB_lowl", "CMB_hil_TT"],
     #["DESI_DR2", 'CC','PantheonP','f_sigma_8'],
     #["DESI_DR2",'BBN_PryMordial'],
-    ["DESI_DR2","BBN_DH_AlterBBN"],
+    #["DESI_DR2","BBN_DH_AlterBBN"],
     #["DESI_DR2","CMB_lowl"],
     #["DESI_DR2","CMB_lowl","BBN_PryMordial"],
     #["CMB_lowl"],
