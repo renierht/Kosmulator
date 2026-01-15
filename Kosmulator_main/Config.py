@@ -661,7 +661,7 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     "S": 1.137,
                     "weighted_mean": {"DH": 25.47, "sigma": 0.29},
                     "bbn_model": "alterbbn_grid",  # request high-precision BBN backend
-                    "bbn_force_rebuild": True,
+                    "bbn_force_rebuild": False,
 
                     # Precomputed grid path; comment this out to run AlterBBN live.
                     # Running AlterBBN live can be ~10x slower for MCMC.
