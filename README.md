@@ -81,7 +81,7 @@ while others are required only when specific observational datasets are used.
   Kosmulator supports approximate BBN likelihoods without AlterBBN, as well as physically motivated predictions using live AlterBBN calls or precomputed grids.
 
 - **LaTeX (TeX Live / MiKTeX)**  
-  Strongly recommended for publication-quality plots and LaTeX-ready tables. See Latex installation section at the end for additional information
+  Strongly recommended for publication-quality plots and LaTeX-ready tables. See Latex installation section at the end for additional information.
 
 ---
 
@@ -427,7 +427,9 @@ For questions or feedback, please contact:
 
 - Renier Hough - [25026097@mynwu.ac.za] 
 
-- Robert Rugg - [31770312@mynwu.ac.za]
+- Robert Rugg - [31770312@mynwu.ac.za] for help with CLIK, CLASS and the CMB observations.
+
+- Shambel Sahlu - [shambel.sahlu@nithecs.ac.za] for help with the observations and the physics models which were included.
 
 ## Acknowledgements
 I would like to thank the **EMCEE: Hammer** and **Zeus-MCMC** groups for making their MCMC simulation software publically available. This code would not be possible without their hard work. 
