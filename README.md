@@ -149,52 +149,6 @@ python Kosmulator.py
 
 ---
 
-## Project Structure
-
-```plaintext
-Kosmulator/
-├── Kosmulator.py                # Main user-facing entry point (run inference)
-├── User_defined_modules.py      # User-defined cosmological and gravity models
-│
-├── Kosmulator_main/             # Core inference engine
-│   ├── __init__.py              # Package initialisation and versioning
-│   ├── constants.py             # Global constants and runtime policies
-│   ├── Config.py                # Dataset loading and parameter injection
-│   ├── MCMC_setup.py            # High-level MCMC orchestration
-│   ├── Kosmulator_MCMC.py       # Sampler execution (EMCEE / Zeus)
-│   ├── Statistical_packages.py  # Likelihoods and statistical backends
-│   ├── Class_run.py             # CLASS integration and caching
-│   ├── rd_helpers.py            # Sound-horizon (r_d) handling
-│   ├── Post_processing.py       # Post-processing and statistical summaries
-│   └── utils.py                 # Shared utilities and CLI helpers
-│
-├── Class/                       # Local CLASS builds (per-model)
-│   ├── LCDM_v/                  # CLASS source and build for ΛCDM
-│   └── f1CDM_v/                 # CLASS source and build for modified gravity
-│
-├── AlterBBN_files/              # AlterBBN wrapper and interface code
-│   ├── kosmo_bbn.c              # C interface for AlterBBN
-│   └── alterbbn_ctypes.py       # Python ctypes wrapper
-│
-├── Observations/                # Observational datasets and likelihood files
-│   ├── *.dat / *.txt            # Late-time cosmology data
-│   ├── *.clik                  # Planck CMB likelihood directories
-│   └── BBN/                     # Precomputed BBN grids
-│
-├── Plots/                       # Plotting and visualisation
-│   ├── Plots.py                 # Plot orchestration (corner, best-fit, etc.)
-│   ├── Plot_functions.py        # Plotting helper functions
-│   └── Saved_plots/             # Generated plots
-│
-├── MCMC_Chains/                 # Stored MCMC chains
-├── Statistical_analysis_tables/ # Statistical summaries and LaTeX-ready tables
-│
-├── setup.py                     # Packaging and installation
-├── pyproject.toml               # Modern Python build configuration
-├── LICENSE                      # Project license
-└── README.md                    # Project documentation
-```
-		
 ## Command-Line Arguments to personalise your MCMC run
 Kosmulator exposes a small set of CLI flags to control parallelism, sampler behaviour, diagnostics, and plotting.
 You can view them any time with:
@@ -270,6 +224,56 @@ nohup mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "You
 ```
 
 ---
+
+## Project Structure
+
+```plaintext
+Kosmulator/
+├── Kosmulator.py                # Main user-facing entry point (run inference)
+├── User_defined_modules.py      # User-defined cosmological and gravity models
+│
+├── Kosmulator_main/             # Core inference engine
+│   ├── __init__.py              # Package initialisation and versioning
+│   ├── constants.py             # Global constants and runtime policies
+│   ├── Config.py                # Dataset loading and parameter injection
+│   ├── MCMC_setup.py            # High-level MCMC orchestration
+│   ├── Kosmulator_MCMC.py       # Sampler execution (EMCEE / Zeus)
+│   ├── Statistical_packages.py  # Likelihoods and statistical backends
+│   ├── Class_run.py             # CLASS integration and caching
+│   ├── rd_helpers.py            # Sound-horizon (r_d) handling
+│   ├── Post_processing.py       # Post-processing and statistical summaries
+│   └── utils.py                 # Shared utilities and CLI helpers
+│
+├── Class/                       # Local CLASS builds (per-model)
+│   ├── LCDM_v/                  # CLASS source and build for ΛCDM
+│   └── f1CDM_v/                 # CLASS source and build for modified gravity
+│
+├── AlterBBN_files/              # AlterBBN wrapper and interface code
+│   ├── kosmo_bbn.c              # C interface for AlterBBN
+│   └── alterbbn_ctypes.py       # Python ctypes wrapper
+│
+├── Observations/                # Observational datasets and likelihood files
+│   ├── *.dat / *.txt            # Late-time cosmology data
+│   ├── *.clik                  # Planck CMB likelihood directories
+│   └── BBN/                     # Precomputed BBN grids
+│
+├── Plots/                       # Plotting and visualisation
+│   ├── Plots.py                 # Plot orchestration (corner, best-fit, etc.)
+│   ├── Plot_functions.py        # Plotting helper functions
+│   └── Saved_plots/             # Generated plots
+│
+├── MCMC_Chains/                 # Stored MCMC chains
+├── Statistical_analysis_tables/ # Statistical summaries and LaTeX-ready tables
+│
+├── setup.py                     # Packaging and installation
+├── pyproject.toml               # Modern Python build configuration
+├── LICENSE                      # Project license
+└── README.md                    # Project documentation
+```
+		
+
+---
+
 ## References
 
 ### Original MCMC code which developed into Kosmulator
