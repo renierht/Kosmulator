@@ -49,8 +49,8 @@ The package is designed to be **modular**, **flexible**, and **user-friendly**, 
 
 ## Requirements
 
-Kosmulator is written in Python and supports a modular backend system.  
-Some dependencies are always required, while others are required only when specific observational datasets are used.
+Kosmulator is written in Python and supports a modular backend system. Some dependencies are always required, 
+while others are required only when specific observational datasets are used.
 
 ### Core Python Dependencies (required for all runs)
 
@@ -68,13 +68,11 @@ Some dependencies are always required, while others are required only when speci
 
 - **CLASS (classy)**  
   Used to compute background and perturbation quantities and CMB power spectra.
-
 - **Planck CLIK likelihoods**  
   Required for Planck CMB likelihoods (TT, TTTEEE, low-ℓ, lensing).  
   The corresponding `.clik` likelihood directories must be available locally.
-
-- **Astropy** (used by some CLIK workflows)
-- **Cython** (used by some CLIK workflows)
+- **Astropy** 
+- **Cython** 
 
 ### Optional Dependencies
 
@@ -98,7 +96,7 @@ Check that LaTeX is available on your system by running:
 latex --version
 ```
 
-If LaTeX is not installed or required packages are missing, you may encounter errors such as:
+If LaTeX is not installed (or if required packages are missing), you may encounter errors such as:
 RuntimeError: latex was not able to process the following string ... (your system is missing some required LaTeX packages, e.g. type1ec.sty)
 
 Follow os installation or update below:
@@ -112,7 +110,7 @@ Follow os installation or update below:
   sudo apt install texlive-full
   sudo apt install texlive-latex-recommended texlive-fonts-recommended (if missing packages are required)
   ```
-LaTeX rendering remains optional and can just be ignored is you prefer not to install a full LaTeX distribution.
+LaTeX rendering is optional. If you prefer not to install a full LaTeX distribution, simply leave LaTeX disabled (default), i.e. do not pass --latex_enabled
 
 ## Installation
 Clone the repository and install Kosmulator in a clean Python environment (recommended):
@@ -125,67 +123,53 @@ To verify your installation and check optional backends (CLASS, Planck CLIK, Alt
 ```bash
 kosmulator-doctor
 ```
+Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced Setup section.
 
-## Test Run
-
-To verify that Kosmulator is installed and functioning correctly, perform a minimal test run.
-
-In `Kosmulator.py`, set:
-
-```python
-model_names = ["LCDM_v"]
-observations = [["OHD"]]
-
-nwalkers = 10
-nsteps   = 200
-burn     = 10
-```
-then run the command 
+## Quick Test
+Run Kosmulator in your terminal.
 ``` bash
 python Kosmulator.py 
 ```
-in your terminal. If it ran successfully, it has been installed correctly!
+If it ran successfully, it has been installed correctly!
 
-## Features
+## Configure Kosmulator Guide
 
-- **Flexible Cosmological Inference Framework**  
-  Define and run Bayesian inference pipelines for ΛCDM, modified gravity, and alternative cosmological models using a modular, model-agnostic architecture.
+### Step 1: Define a New Model
+Modify User_defined_modules.py to register your model parameters, and background expansion.
+	- Implement E(z) for a new background model (flat or not).
+	- (Optionally) define additional sanity restrictions for your model's free parameters.
+	- Register the model name + parameter list in the model registry.
+	- (Optional) expose CMB Cl wrappers for that model. Needed to fit to CMB observation
 
-- **Multiple MCMC Backends**  
-  Supports both **Zeus** and **EMCEE (The MCMC Hammer)**, with automatic or user-controlled sampler selection and convergence diagnostics.
+### Step 2: Select Datasets 
+In `Kosmulator.py`, select observation datasets. Observations are specified as lists of likelihood groups.
+```python
+# Run 1: JLA only | Run 2: OHD only | Run 3: Joint CC, OHD, and Pantheon
+observations = [ ["JLA"], ["OHD"], ["CC", "OHD", "Pantheon"] ]
+```
 
-- **Vectorised Likelihood Evaluation**  
-  Efficient, vectorised likelihood computations for fast sampling across large parameter spaces and combined datasets.
+### Step 3: Select model and configure MCMC Run
+In `Kosmulator.py`, configure the MCMC sampler and specify the model names you want to analyse:
 
-- **Wide Range of Observational Data**  
-  Built-in support for:
-  - Type Ia Supernovae (JLA, Pantheon, Pantheon+, Union3, DES-Y5)
-  - Baryon Acoustic Oscillations (BAO)
-  - DESI (DR2)
-  - Cosmic Chronometers / OHD
-  - Growth of structure (fσ₈)
-  - Cosmic Microwave Background (Planck 2015 & 2018 via CLIK)
-  - Big Bang Nucleosynthesis (D/H, including AlterBBN-based likelihoods)
+Specify the model names you want to analyse:
+```python
+# Models implemented in User_defined_modules.py
+model_names: List[str] = ["Your_model_name"] 
 
-- **Automatic Parameter Injection & Dataset Awareness**  
-  Parameters (including nuisance parameters) are automatically added or fixed based on the selected observational datasets, reducing configuration errors and boilerplate.
+true_model: str = "LCDM_v"  # Against which model you want to test it
 
-- **Sound Horizon (rₙ) Policy Management**  
-  Centralised handling of the sound horizon with support for fixed, free, CLASS-derived, or BBN-calibrated treatments depending on the data combination.
+# Sampler settings
+nwalkers: int = 16
+nsteps: int = 500
+burn: int = 10
+convergence: float = 0.01  # How accurate do you want the auto-correlator to be before stopping the run
+```
 
-- **CLASS Integration with Caching**  
-  Seamless integration with **CLASS**, including model-specific binary caching for fast reuse across runs and multiprocessing environments.
-
-- **Publication-Ready Output & Visualisation**  
-  Generate corner plots, best-fit theory comparisons, autocorrelation diagnostics, and LaTeX-ready statistical tables with a consistent directory structure.
-
-- **Chain Reuse and Resume Capability**  
-  Automatically reload, resume, or extend existing MCMC chains to ensure reproducibility and efficient experimentation.
-
-- **Environment Diagnostics**  
-  Includes a built-in `kosmulator-doctor` command to verify Python dependencies, CLASS, Planck CLIK likelihoods, and optional AlterBBN support.
-
-
+### Step 4. Execute you MCMC simulation
+Run the script in the terminal:
+```bash
+python Kosmulator.py
+```
 
 ## Project Structure
 
@@ -233,60 +217,7 @@ Kosmulator/
 └── README.md                    # Project documentation
 ```
 		
-## Setting Up a Model
-
-Kosmulator separates **model definition**, **inference configuration**, and **data selection** to keep the framework flexible and extensible.
-
-### Step 1: Define Your Model
-
-All cosmological and modified-gravity models are defined in  
-`User_defined_modules.py`.
-
-Each model is registered as a dictionary entry specifying:
-- model parameters
-- background expansion and distance relations
-- growth or fσ₈ behaviour (if applicable)
-- optional CMB-specific helpers
-
-This design allows Kosmulator to remain model-agnostic while supporting a wide range of cosmologies.
-
----
-
-### Step 2: Configure the Inference Run
-
-In `Kosmulator.py`, configure the MCMC settings and select which models and datasets to run.
-
-Specify the model names you want to analyse:
-```python
-model_names = ["LCDM_v", "your_model_name"]
-```
-
-### Step 3: Select Observational Datasets
-Observations are specified as lists of likelihood groups. Each inner list defines a combined likelihood that will be minimised jointly.
-```python
-nwalkers = 10
-nsteps   = 200
-burn     = 10
-```
-In this example:
- - The first run uses only JLA supernovae
- - The second run uses only OHD data
- - The third run combines CC, OHD, and Pantheon into a single joint likelihood
- 
-### Step 4: Select your MCMC setup values and run the program
-Choose how long/accurate of a MCMC run you desire
-```python
-nwalkers = 10
-nsteps   = 200
-burn     = 10
-```
-and then run the script:
-```bash
-python Kosmulator.py
-```
-
-## Command-Line Arguments
-
+## Command-Line Arguments to personalise your MCMC run
 Kosmulator exposes a small set of CLI flags to control parallelism, sampler behaviour, diagnostics, and plotting.
 You can view them any time with:
 
