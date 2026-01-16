@@ -269,6 +269,7 @@ Using nohup (run in background after closing terminal)
 nohup mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "Your_Project_Name" --latex_enabled --overwrite --plot_table > kosmulator_run.log 2>&1 &
 ```
 
+---
 ## References
 
 ### Original MCMC code which developed into Kosmulator
@@ -278,8 +279,6 @@ nohup mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "You
    *Viability tests of f(R)-gravity models with Supernovae Type Ia data*.  
    European Physical Journal C, 80(8), 787.  
    https://doi.org/10.1140/epjc/s10052-020-8342-7
-
----
 
 ### MCMC Samplers
 
@@ -298,7 +297,6 @@ nohup mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "You
 ---
 
 ### Type Ia Supernovae
-
 #### JLA
 1. Hicken, M., Challis, P., Jha, S., et al. (2009).  
    *CfA3: 185 Type Ia Supernova Light Curves from the CfA*.  
@@ -331,7 +329,6 @@ nohup mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "You
 ---
 
 ### Expansion Rate Measurements
-
 #### Cosmic Chronometers (CC)
 1. Moresco, M., Jimenez, R., Verde, L., et al. (2020).  
    *Setting the Stage for Cosmic Chronometers II*.  
@@ -354,14 +351,12 @@ nohup mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "You
    arXiv:2601.07345.  
    https://doi.org/10.48550/arXiv.2601.07345
 
-
 #### Observational Hubble Data (OHD)
 - **TODO:** Add canonical OHD compilation reference(s)
 
 ---
 
 ### Large-Scale Structure
-
 #### Baryon Acoustic Oscillations (BAO) / DESI
 1. Adame, A. G., Aguilar, J., Ahlen, S., et al. (2024).  
    *DESI 2024 VI: Cosmological Constraints from Baryon Acoustic Oscillations*.  
@@ -383,6 +378,7 @@ nohup mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "You
 
 ---
 
+### Early-time observations
 #### Cosmic Microwave Background (CMB — Planck)
 
 Kosmulator uses the standard **Planck likelihood datasets** distributed by the
@@ -394,67 +390,45 @@ library.
    Astronomy & Astrophysics, **641**, A6.  
    https://doi.org/10.1051/0004-6361/201833910
 
-2. Planck Collaboration (2016).  
-   *Planck 2015 results. XI. CMB power spectra, likelihoods, and robustness of parameters*.  
-   Astronomy & Astrophysics, **594**, A11.  
-   https://doi.org/10.1051/0004-6361/201526926
-
-3. Planck Collaboration (2020).  
-   *Planck 2018 results. V. CMB power spectra and likelihoods*.  
-   Astronomy & Astrophysics, **641**, A5.  
-   https://doi.org/10.1051/0004-6361/201936386
-
----
-
-### Big Bang Nucleosynthesis (BBN)
+#### Big Bang Nucleosynthesis (BBN)
 1. Cooke, R. J., Pettini, M., Jorgenson, R. A., Murphy, M. T., & Steidel, C. C. (2014).  
    *Precision Measures of the Primordial Abundance of Deuterium*.  
    The Astrophysical Journal, **781**(1), 31.  
    https://doi.org/10.1088/0004-637X/781/1/31
 
-## Citation
-The current version does not have a dedicated research paper, you can just cite the original paper and note that Kosmulator is an updated MCMC simulation from the one used in that paper. There is plans for the future to have a dedicated research paper for Kosmulator when all features such as compatibility with classy have been built-in.
+---
 
 ## Citation
+Kosmulator is an actively developed research framework.
+At present, there is no dedicated software paper describing the current version of Kosmulator.
 
-Kosmulator is an actively developed research framework.  
-At present, there is **no dedicated software paper** describing the current version of Kosmulator.
+If you use Kosmulator in your work, please cite:
 
-If you use Kosmulator in your work, please cite the original publication in which the codebase was first introduced:
+Hough, R. T., Abebe, A., & Ferreira, S. E. S. (2020). EPJC, 80(8), 787.
+https://doi.org/10.1140/epjc/s10052-020-8342-7
 
-> Hough, R. T., Abebe, A., & Ferreira, S. E. S. (2020).  
-> *Viability tests of f(R)-gravity models with Supernovae Type Ia data*.  
-> European Physical Journal C, 80(8), 787.  
-> https://doi.org/10.1140/epjc/s10052-020-8342-7
-
-When citing this work, please note that **Kosmulator has since been substantially extended and refactored**, and now supports:
-- multiple MCMC backends (Zeus and EMCEE),
-- vectorised likelihood evaluation,
-- CLASS and Planck CMB likelihood integration,
-- modern large-scale structure and BBN datasets.
-
-A **dedicated Kosmulator software paper**, based on an upcoming **conference proceeding**, is currently in preparation and will be added here once publicly available.
+A dedicated Kosmulator software reference (conference proceeding) is in preparation and will be added here once publicly available.
 
 ## Contributions
-
 Contributions are welcome.
 
 If you would like to contribute, please fork the repository and submit a pull request.
-Bug fixes, documentation improvements, new observational datasets, and extensions to
-cosmological or modified-gravity models are all encouraged.
+Bug fixes, documentation improvements, new observational datasets, and extensions to cosmological or modified-gravity models are encouraged.
 
-If you prefer, you may also contact the author directly with tested code or proposed
-improvements for inclusion in the main repository.
+If you prefer, you may also contact the author directly with tested code or proposed improvements for inclusion in the main repository.
 
 ## Contact
-For questions or feedback, please reach out to either me (Renier Hough [25026097@mynwu.ac.za]) or to my collaborator (Robert Rugg [31770312@mynwu.ac.za]).
+For questions or feedback, please contact:
+	- Renier Hough - [25026097@mynwu.ac.za] 
+	- Robert Rugg - [31770312@mynwu.ac.za]
 
-## LaTeX Dependencies for Plot Rendering
+
+## Additional installation processes
+### LaTeX Dependencies for Plot Rendering
 
 Kosmulator uses **Matplotlib’s LaTeX rendering** to generate publication-quality plots and tables.  
 To enable this functionality, a working LaTeX installation is required.
 
-### Verifying LaTeX Installation
 Check that LaTeX is available on your system by running:
 ```bash
 latex --version
@@ -476,7 +450,7 @@ Follow os installation or update below:
   ```
 LaTeX rendering is optional. If you prefer not to install a full LaTeX distribution, simply leave LaTeX disabled (default), i.e. do not pass --latex_enabled
 
-## Example Installation: Kosmulator with CLASS and Planck CLIK (Full Setup)
+### Advanced Kosmulator Installation: Kosmulator, CLIK, CLASS, and AlterBBN (Full Setup)
 
 This section provides a **complete, reproducible installation example** for running
 Kosmulator with **CLASS**, **Planck CMB likelihoods (CLIK / plc_3.1)**, and **optional AlterBBN** support.
