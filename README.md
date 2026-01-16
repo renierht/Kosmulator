@@ -81,7 +81,7 @@ while others are required only when specific observational datasets are used.
   Kosmulator supports approximate BBN likelihoods without AlterBBN, as well as physically motivated predictions using live AlterBBN calls or precomputed grids.
 
 - **LaTeX (TeX Live / MiKTeX)**  
-  Strongly recommended for publication-quality plots and LaTeX-ready tables. See Latex installation section additional information
+  Strongly recommended for publication-quality plots and LaTeX-ready tables. See Latex installation section at the end for additional information
 
 ---
 
@@ -96,7 +96,7 @@ To verify your installation and check optional backends (CLASS, Planck CLIK, Alt
 ```bash
 kosmulator-doctor
 ```
-Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced Setup section.
+Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced installation section at the end for additional information.
 
 ---
 
