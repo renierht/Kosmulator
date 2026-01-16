@@ -256,38 +256,22 @@ python Kosmulator.py --help
 ---
 
 ## Multiprocessing run examples
-### With MPI (recommended on clusters)
+With MPI (recommended on clusters)
 ```bash
-mpiexec -n <num_cores> python Kosmulator.py \
-  --use_mpi \
-  --output_suffix "Your_Project_Name" \
-  --latex_enabled \
-  --overwrite \
-  --plot_table
+mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "Your_Project_Name" --latex_enabled --overwrite --plot_table
 ```
-### With Python multiprocessing (local / workstation)
+With Python multiprocessing (local / workstation)
 ```bash
-python Kosmulator.py \
-  --num_cores <num_cores> \
-  --output_suffix "Your_Project_Name" \
-  --latex_enabled \
-  --overwrite \
-  --plot_table
+python Kosmulator.py --num_cores <num_cores> --output_suffix "Your_Project_Name" --latex_enabled --overwrite --plot_table
 ```
-### Using nohup (run in background after closing terminal)
+Using nohup (run in background after closing terminal)
 ```bash
-nohup mpiexec -n <num_cores> python Kosmulator.py \
-  --use_mpi \
-  --output_suffix "Your_Project_Name" \
-  --latex_enabled \
-  --overwrite \
-  --plot_table \
-  > kosmulator_run.log 2>&1 &
+nohup mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "Your_Project_Name" --latex_enabled --overwrite --plot_table > kosmulator_run.log 2>&1 &
 ```
 
 ## References
 
-### Kosmulator
+### Original MCMC code which developed into Kosmulator
 
 1. **Original Kosmulator implementation**  
    Hough, R. T., Abebe, A., & Ferreira, S. E. S. (2020).  
