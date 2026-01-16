@@ -21,11 +21,11 @@ The package is designed to be **modular**, **flexible**, and **user-friendly**, 
   Built-in support for:
   - Type Ia Supernovae (JLA, Pantheon, Pantheon+, Union3, DES-Y5)
   - Baryon Acoustic Oscillations (BAO)
-  - DESI (DR2)
+  - DESI (DR1 and DR2)
   - Cosmic Chronometers / OHD
-  - Growth of structure (fσ₈)
-  - Cosmic Microwave Background (Planck 2015 & 2018 via CLIK)
-  - Big Bang Nucleosynthesis (D/H, including AlterBBN-based likelihoods)
+  - Growth of structure (fσ₈ and f)
+  - Cosmic Microwave Background (Planck 2018 via CLIK)
+  - Big Bang Nucleosynthesis (D/H, BBN_PryMordial, including AlterBBN-based likelihoods)
 
 - **Automatic Parameter Injection & Dataset Awareness**  
   Parameters (including nuisance parameters) are automatically added or fixed based on selected observational datasets.
@@ -54,7 +54,7 @@ while others are required only when specific observational datasets are used.
 
 #### Core Python Dependencies (required for all runs)
 
-- **Python ≥ 3.9**
+- **Python ≥ 3.9** - Recommend Python 3.11
 - **NumPy**
 - **SciPy**
 - **Matplotlib**
@@ -274,7 +274,8 @@ Kosmulator/
 
 ---
 
-## References
+## References. 
+NB! Remember to cite the observation's original papers when using their data in Kosmulator
 
 ### Original MCMC code which developed into Kosmulator
 
@@ -428,8 +429,11 @@ For questions or feedback, please contact:
 
 - Robert Rugg - [31770312@mynwu.ac.za]
 
----
+## Acknowledgements
+I would like to thank the **EMCEE: Hammer** and **Zeus-MCMC** groups for making their MCMC simulation software publically available. This code would not be possible without their hard work. 
+I would also like to thank the **ChatGPT** and **Gemini** AI software for assisting with debugging, improving the code structure, and optimizing features.
 
+---
 
 ## Installation process example
 ### LaTeX Dependencies for Plot Rendering
