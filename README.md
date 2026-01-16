@@ -203,12 +203,15 @@ You can view them any time with:
 python Kosmulator.py --help
 ```
 
-### General/ Output
-Argument	Type	Default	Description
---output_suffix	str	Test_run	Suffix for output directories and files (chains, plots, tables).
---overwrite	flag	False	Delete any existing .h5 chains and run MCMC from scratch.
---resume	flag	False	Resume incomplete chains (instead of only loading existing results).
---init-log	choice	terse	Initialisation logging style: terse, normal, or verbose.
+#### General/ Output
+
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `--output_suffix` | str | `Test_run` | Suffix for output directories and files (chains, plots, tables). |
+| `--overwrite` | flag | `False` | Delete any existing `.h5` chains and run MCMC from scratch. |
+| `--resume` | flag | `False` | Resume incomplete chains (instead of only loading existing results). |
+| `--init-log` | choice | `terse` | Initialisation logging style: `terse`, `normal`, or `verbose`. |
+
 
 ### Parallelism
 Argument	Type	Default	Description
