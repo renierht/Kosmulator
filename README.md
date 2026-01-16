@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assest/Kosmulator.png" alt="Kosmulator logo" width="300">
+  <img src="assets/Kosmulator.png" alt="Kosmulator logo" width="300">
 </p>
 
 # Kosmulator: A Python framework for cosmological inference with MCMC
