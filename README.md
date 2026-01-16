@@ -212,35 +212,48 @@ python Kosmulator.py --help
 | `--resume` | flag | `False` | Resume incomplete chains (instead of only loading existing results). |
 | `--init-log` | choice | `terse` | Initialisation logging style: `terse`, `normal`, or `verbose`. |
 
+#### Parallelism
 
-### Parallelism
-Argument	Type	Default	Description
---num_cores	int	8	Number of cores to use for multiprocessing.
---use_mpi	flag	False	Force use of an MPI pool (if MPI is available).
-Sampler / Engine Control
-Argument	Type	Default	Description
---engine-mode	choice	mixed	Sampler strategy: mixed, single, or fastest.
---force_zeus	flag	False	Force the Zeus sampler.
---force_emcee	flag	False	Force the emcee sampler (ignore Zeus even if available).
---force_vectorisation	flag	False	Treat all models as vectorised (overrides detection).
---disable_vectorisation	flag	False	Disable vectorised likelihood evaluation even if available (forces scalar evaluation).
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `--num_cores` | int | `8` | Number of CPU cores to use for multiprocessing. |
+| `--use_mpi` | flag | `False` | Force use of an MPI pool (if MPI is available). |
 
-### Convergence / Autocorrelation (mainly affects Zeus early-stop behaviour)
-Argument	Type	Default	Description
---tau-consecutive (alias: --consecutive-required)	int	3	For Zeus early-stop: require this many consecutive callback checks with |Δτ|/τ < target.
---autocorr-check-every	int	100	Check autocorrelation every N iterations.
---autocorr-buffer	int	None	Extra iterations after burn-in before convergence checks start. If not set, Kosmulator uses max(1000, burn/5) as a default buffer.
+#### Sampler / Engine Control
 
-### Plotting / Presentation
-Argument	Type	Default	Description
---latex_enabled	flag	False	Enable LaTeX rendering in plots.
---plot_table	flag	False	Generate parameter-table plots.
---corner-show-all-cmb-params	flag	False	Corner plot: show all CMB parameters (including nuisance). Default behaviour shows only key cosmological parameters.
---corner-table-full	flag	False	Corner plot top table: keep the full parameter list (including CMB nuisances).
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `--engine-mode` | choice | `mixed` | Sampler strategy: `mixed`, `single`, or `fastest`. |
+| `--force_zeus` | flag | `False` | Force the Zeus sampler. |
+| `--force_emcee` | flag | `False` | Force the emcee sampler (ignore Zeus even if available). |
+| `--force_vectorisation` | flag | `False` | Treat all models as vectorised (overrides detection). |
+| `--disable_vectorisation` | flag | `False` | Disable vectorised likelihood evaluation even if available (forces scalar evaluation). |
 
-### Likelihood Debugging
-Argument	Type	Default	Description
---print_loglike [N]	int (optional)	disabled	Print likelihood diagnostics (components + TOTAL) for one walker. If passed without N, defaults to 1 (prints every call). If N is provided, prints every Nth likelihood call.
+#### Convergence / Autocorrelation  
+*(mainly affects Zeus early-stop behaviour)*
+
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `--tau-consecutive` (alias: `--consecutive-required`) | int | `3` | For Zeus early-stop: require this many consecutive callback checks with \|Δτ\|/τ < target. |
+| `--autocorr-check-every` | int | `100` | Check autocorrelation every `N` iterations. |
+| `--autocorr-buffer` | int | `None` | Extra iterations after burn-in before convergence checks start. If not set, Kosmulator uses `max(1000, burn/5)` as a default buffer. |
+
+#### Plotting / Presentation
+
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `--latex_enabled` | flag | `False` | Enable LaTeX rendering in plots. |
+| `--plot_table` | flag | `False` | Generate parameter-table plots. |
+| `--corner-show-all-cmb-params` | flag | `False` | Corner plot: show all CMB parameters (including nuisance). Default behaviour shows only key cosmological parameters. |
+| `--corner-table-full` | flag | `False` | Corner plot top table: keep the full parameter list (including CMB nuisances). |
+
+#### Likelihood Debugging
+
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `--print_loglike [N]` | int (optional) | disabled | Print likelihood diagnostics (components + TOTAL) for one walker. If passed without `N`, defaults to `1` (prints every call). If `N` is provided, prints every `N`th likelihood call. |
+
+---
 
 ## Multiprocessing run examples
 ### With MPI (recommended on clusters)
