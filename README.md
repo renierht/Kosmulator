@@ -294,11 +294,18 @@ NB! Remember to cite the observation's original papers when using their data in 
    https://doi.org/10.1086/670067
 
 2. **Zeus**  
-   Karamanis, M., Beutler, F., Peacock, J. A., et al. (2021).  
-   *zeus: A Python implementation of ensemble slice sampling for efficient Bayesian parameter inference*.  
-   MNRAS, 508(3), 3549–3561.  
-   https://doi.org/10.1093/mnras/stab2485
+   Karamanis, M., Beutler, F., Peacock, J. A.,(2021).  
+   *zeus: A Python implementation of Ensemble Slice Sampling for efficient Bayesian parameter inference*.  
+   ArXiv pre-print.  
+   https://arxiv.org/abs/2105.03468
 
+@article{karamanis2021zeus,
+         title={zeus: A Python implementation of Ensemble Slice Sampling for efficient Bayesian parameter inference},
+         author={Karamanis, Minas and Beutler, Florian and Peacock, John A},
+         journal={arXiv preprint arXiv:2105.03468},
+         year={2021}
+        }
+		
 ---
 
 ### Type Ia Supernovae
