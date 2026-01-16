@@ -472,7 +472,7 @@ If you prefer, you may also contact the author directly with tested code or prop
 ## Contact
 For questions or feedback, please contact:
 
-- Renier Hough - [25026097@mynwu.ac.za] 
+- Renier Hough - [25026097@mynwu.ac.za] - Main contributor
 
 - Robert Rugg - [31770312@mynwu.ac.za] for help with CLIK, CLASS and the CMB observations.
 
