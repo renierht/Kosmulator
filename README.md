@@ -402,7 +402,7 @@ library.
 Kosmulator is an actively developed research framework.
 At present, there is no dedicated software paper describing the current version of Kosmulator.
 
-If you use Kosmulator in your work, please cite:
+If you use Kosmulator in your work, please cite the original paper:
 
 Hough, R. T., Abebe, A., & Ferreira, S. E. S. (2020). EPJC, 80(8), 787.
 https://doi.org/10.1140/epjc/s10052-020-8342-7
@@ -419,11 +419,15 @@ If you prefer, you may also contact the author directly with tested code or prop
 
 ## Contact
 For questions or feedback, please contact:
-	- Renier Hough - [25026097@mynwu.ac.za] 
-	- Robert Rugg - [31770312@mynwu.ac.za]
+
+- Renier Hough - [25026097@mynwu.ac.za] 
+
+- Robert Rugg - [31770312@mynwu.ac.za]
+
+---
 
 
-## Additional installation processes
+## Installation process example
 ### LaTeX Dependencies for Plot Rendering
 
 Kosmulator uses **Matplotlib’s LaTeX rendering** to generate publication-quality plots and tables.  
@@ -450,6 +454,8 @@ Follow os installation or update below:
   ```
 LaTeX rendering is optional. If you prefer not to install a full LaTeX distribution, simply leave LaTeX disabled (default), i.e. do not pass --latex_enabled
 
+---
+
 ### Advanced Kosmulator Installation: Kosmulator, CLIK, CLASS, and AlterBBN (Full Setup)
 
 This section provides a **complete, reproducible installation example** for running
@@ -463,11 +469,11 @@ This is a *kitchen-sink* setup intended for advanced users who require:
 
 > **Platform assumed:** Ubuntu / WSL  
 > Paths shown use `/mnt/d/`; adjust paths as needed for your system.  
-> macOS installation is similar, with different compiler toolchains.
+> macOS installation should be similar, with only different gcc and gfortran compilers.
 
 ---
 
-### Assumptions
+#### Assumptions
 
 You want:
 1. CLASS built and importable via Python (`import classy`)
@@ -477,22 +483,22 @@ You want:
 
 ---
 
-### 0) Create a Clean Workspace
+#### 0) Create a Clean Workspace
 
 ```bash
 mkdir -p /mnt/d/Kosmulator_test
 cd /mnt/d/Kosmulator_test
 ```
 
-### 1) Clone Required Repositories
-#### 1.1 Clone Kosmulator, CLASS, and AlterBBN (optional)
+#### 1) Clone Required Repositories
+##### 1.1 Clone Kosmulator, CLASS, and AlterBBN (optional)
 ```bash
 git clone https://github.com/renierht/Kosmulator.git
 git clone https://github.com/lesgourg/class_public.git CLASS
 git clone https://github.com/espensem/AlterBBN.git
 ```
 
-#### 1.2 Download Planck Likelihood Code and Data
+##### 1.2 Download Planck Likelihood Code and Data
 ```bash
 mkdir -p /mnt/d/Kosmulator_test/Clik
 cd /mnt/d/Kosmulator_test/Clik
@@ -507,11 +513,11 @@ tar -xzf COM_Likelihood_Data-baseline_R3.00.tar.gz
 tar -xzf COM_Likelihood_Code-v3.0_R3.10.tar.gz
 ```
 
-### 2) Create and Populate the Conda Environment
+#### 2) Create and Populate a Conda Environment
 ```bash
 cd /mnt/d/Kosmulator_test
 
-conda create -n Kosmulator_test python=3.11 -y
+conda create -n Kosmulator_test python=3.11 -y  # We recommned using Python 3.11!
 conda activate Kosmulator_test
 
 conda install -c conda-forge -y \
@@ -521,7 +527,7 @@ conda install -c conda-forge -y \
 pip install getdist
 ```
 
-### 3) Install System Build Dependencies (Ubuntu / WSL)
+#### 3) Install System Build Dependencies (Ubuntu / WSL) - #MacOS will most likely differ here!
 ```bash
 sudo apt update
 sudo apt install -y \
@@ -531,7 +537,7 @@ sudo apt install -y \
 sudo apt install -y ripgrep (optional)
 ```
 
-### 4) Build and Install CLASS
+#### 4) Build and Install CLASS
 ```bash
 cd /mnt/d/Kosmulator_test/CLASS
 make clean
@@ -539,7 +545,7 @@ make -j
 python -m pip install .
 ```
 
-#### 4.1 Quick CLASS Sanity Test
+##### 4.1 Quick CLASS Sanity Test
 ```bash
 python - <<'PY'
 from classy import Class
@@ -561,7 +567,7 @@ cosmo.empty()
 PY
 ```
 
-### 5) Build and Install Planck CLIK
+#### 5) Build and Install Planck CLIK
 NOTE: this is the plc_3.1 tree produced by the Planck Likelihood Code tarball.
 
 ```bash
@@ -570,8 +576,9 @@ python waf configure --install_all_deps
 python waf install
 ```
 
-#### 5.1 Persist CLIK Environment Variables
-This ensures every time you `conda activate Kosmulator_test`, CLIKROOT and the necessary PYTHONPATH/LD_LIBRARY_PATH are set correctly.
+##### 5.1 Persist CLIK Environment Variables
+This ensures every time you use `conda activate Kosmulator_test`, CLIKROOT and the necessary PYTHONPATH/LD_LIBRARY_PATH are set correctly. 
+May differ based on your OS distribution
 ```bash
 mkdir -p $CONDA_PREFIX/etc/conda/activate.d
 
@@ -630,8 +637,8 @@ PY
 SH
 ```
 
-#### 5.2 Reactivate and Quick CLIK test:
-This ensures every time you `conda activate Kosmulator_test`, CLIKROOT and the necessary PYTHONPATH/LD_LIBRARY_PATH are set correctly.
+##### 5.2 Reactivate and Quick CLIK test:
+This is just to check if the CLIK installation worked and can persist after switching conda environment off.
 ```bash
 conda deactivate
 conda activate Kosmulator_test
@@ -643,7 +650,7 @@ print("OK: CLIK imported successfully")
 PY
 ```
 
-### 6) Optional: AlterBBN Installation
+#### 6) Optional: AlterBBN Installation
 Note:
   AlterBBN is required ONLY for the BBN_DH_AlterBBN likelihood.
   Other BBN-related options (e.g. BBN_DH approx, BBN_PryMordial) do NOT require AlterBBN.
@@ -667,7 +674,7 @@ gcc -O3 -fPIC -shared -o build/libkosmo_bbn.so kosmo_bbn.c -Isrc -Lsrc -lbbn -lm
 export KOSMO_BBN_LIB="/mnt/d/Kosmulator_test/AlterBBN/build/libkosmo_bbn.so"
 ```
 
-#### 6.1 Quick AlterBBN Sanity Test:
+##### 6.1 Quick AlterBBN Sanity Test:
 ```bash
 python - <<'PY'
 from alterbbn_ctypes import run_bbn
@@ -675,22 +682,22 @@ print("D/H =", run_bbn(0.022, 3.046, 879.4)['D_H'])
 PY
 ```
 
-#### 6.2 Allow AlterBBN to persist through deactivation
+##### 6.2 Allow AlterBBN to persist through deactivation
 ```bash
 echo 'export KOSMO_BBN_LIB="/mnt/d/Kosmulator_test/AlterBBN/build/libkosmo_bbn.so"' >> ~/.bashrc
 source ~/.bashrc
 ```
 P.S. Remember to reactivate environment
 
-#### 6.3 Optional: AlterBBN standalone executable
+##### 6.3 Optional: AlterBBN standalone executable
 ```bash
 make primary.c 
 ./primary.x
 ```
 
 
-### 7) Final Sanity Checks. Use if installation fail. AI can help to identify the issues with the printouts
-#### 7.1 Confirm you’re running the right Python + classy + clik
+#### 7) Final Sanity Checks. Use if installation fail. AI can help to identify the issues with the printouts
+##### 7.1 Confirm you’re running the right Python + classy + clik
 ```bash
 which python
 python -c "import sys; print(sys.executable)"
@@ -698,7 +705,7 @@ python -c "import classy; import clik; print('classy:', classy.__file__); print(
 python -c "import os; print('CLIKROOT=', os.environ.get('CLIKROOT')); print('PYTHONPATH=', os.environ.get('PYTHONPATH','')[:200],'...')"
 ```
 
-#### 7.2 Confirm clik submodules resolve
+##### 7.2 Confirm clik submodules resolve
 ```bash
 python - <<'PY'
 import clik
@@ -709,7 +716,7 @@ print("lkl_lensing OK:", clik.lkl_lensing.__file__)
 PY
 ```
 
-#### 7.1 Which CLASS does Kosmulator use (from within repo)
+##### 7.3 Which CLASS does Kosmulator use (from within repo)
 ```bash
 cd /mnt/d/Kosmulator_test/Kosmulator
 python - <<'PY'
@@ -719,7 +726,7 @@ print("classy:", classy.__file__)
 PY
 ```
 
-#### 7.1 Grep/ripgrep searches to confirm bindings and likelihood paths
+##### 7.4 Grep/ripgrep searches to confirm bindings and likelihood paths
 ```bash
 cd /mnt/d/Kosmulator_test/Kosmulator
 
@@ -732,7 +739,7 @@ Grep fallback form (if rg is missing):
 grep -RIn --exclude-dir=.git "CLIKROOT\|plik\|commander\|simall\|smica\|plc_3\.0\|baseline\|low_l\|hi_l\|lensing\|\.clik" .
 ```
 
-#### 7.1 Locate clik install + inspect shared library dependencies
+##### 7.5 Locate clik install + inspect shared library dependencies
 ```bash
 python -c "import clik, inspect; print('clik file:', clik.__file__)"
 python -c "import clik, os; print(clik.__file__)"
@@ -756,7 +763,7 @@ subprocess.run(["ldd", str(so)])
 PY
 ```
 
-#### 7.1 Does clik actually load the Planck .clik likelihoods you ship in Kosmulator?
+##### 7.6 Does clik actually load the Planck .clik likelihoods you ship in Kosmulator?
 ```bash
 python - <<'PY'
 import os, clik
@@ -780,4 +787,3 @@ PY
   * a missing dependency of libclik.so (check with `ldd`), or
   * incorrect CLIKROOT / PYTHONPATH / LD_LIBRARY_PATH, or
   * the .clik directory path you’re loading isn’t readable / incomplete.
-- If `rg` is missing, install ripgrep (`sudo apt install -y ripgrep`) or use grep -RIn.
