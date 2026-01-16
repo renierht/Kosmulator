@@ -1,16 +1,58 @@
 # Kosmulator: A Python framework for cosmological inference with MCMC
-Kosmulator is a Python package utilising Zeus and EMCEE (The MCMC Hammer) to perform efficient, vectorised Markov Chain Monte Carlo (MCMC) simulations for studying modified gravity and alternative cosmological models.
 
-The package is designed to be modular, flexible, and user-friendly, allowing researchers to easily configure inference runs, combine multiple sets of cosmological observations, and produce high-quality statistical summaries and visualisations.
+Kosmulator is a Python package utilising **Zeus** and **EMCEE (The MCMC Hammer)** to perform efficient, vectorised Markov Chain Monte Carlo (MCMC) simulations for studying **modified gravity** and **alternative cosmological models**.
+
+The package is designed to be **modular**, **flexible**, and **user-friendly**, allowing researchers to easily configure inference runs, combine multiple sets of cosmological observations, and produce high-quality statistical summaries and visualisations.
+
+---
+
+## Features
+
+- **Flexible Cosmological Inference Framework**  
+  Run Bayesian inference pipelines for ΛCDM, modified gravity, and alternative cosmologies using a modular, model-agnostic architecture.
+
+- **Multiple MCMC Backends**  
+  Supports both **Zeus** and **EMCEE**, with automatic or user-controlled sampler selection and convergence diagnostics.
+
+- **Vectorised Likelihood Evaluation**  
+  Efficient vectorised likelihood computations for fast sampling across large parameter spaces and combined datasets.
+
+- **Wide Range of Observational Data**  
+  Built-in support for:
+  - Type Ia Supernovae (JLA, Pantheon, Pantheon+, Union3, DES-Y5)
+  - Baryon Acoustic Oscillations (BAO)
+  - DESI (DR2)
+  - Cosmic Chronometers / OHD
+  - Growth of structure (fσ₈)
+  - Cosmic Microwave Background (Planck 2015 & 2018 via CLIK)
+  - Big Bang Nucleosynthesis (D/H, including AlterBBN-based likelihoods)
+
+- **Automatic Parameter Injection & Dataset Awareness**  
+  Parameters (including nuisance parameters) are automatically added or fixed based on selected observational datasets.
+
+- **Sound Horizon (r_d) Policy Management**  
+  Centralised handling of the sound horizon with support for fixed, free, CLASS-derived, or BBN-calibrated treatments depending on data combinations.
+
+- **CLASS Integration with Caching**  
+  Seamless integration with **CLASS**, including model-specific binary caching for fast reuse across runs and multiprocessing environments.
+
+- **Publication-Ready Output & Visualisation**  
+  Generates corner plots, best-fit theory comparisons, autocorrelation diagnostics, and LaTeX-ready statistical tables with a consistent directory structure.
+
+- **Chain Reuse and Resume Capability**  
+  Reload, resume, or extend existing MCMC chains for reproducibility and efficient experimentation.
+
+- **Environment Diagnostics**  
+  Includes a built-in `kosmulator-doctor` command to verify Python dependencies, CLASS, Planck CLIK likelihoods, and optional AlterBBN support.
+
+---
 
 ## Requirements
 
-Kosmulator is written in Python and supports a modular backend system.
-Some dependencies are always required, while others are required only
-when specific observational datasets are used.
+Kosmulator is written in Python and supports a modular backend system.  
+Some dependencies are always required, while others are required only when specific observational datasets are used.
 
-### Core Python Dependencies
-These are required for all Kosmulator runs:
+### Core Python Dependencies (required for all runs)
 
 - **Python ≥ 3.9**
 - **NumPy**
@@ -18,14 +60,11 @@ These are required for all Kosmulator runs:
 - **Matplotlib**
 - **h5py**
 - **Pandas**
-- **Astropy** (used for CLIK)
-- **cython** (used for CLIK)
-- **GetDist** (for corner plots and statistical visualisation)
+- **GetDist** (corner plots and statistical visualisation)
 - **EMCEE** (MCMC sampler)
-- **Zeus** (alternative vectorised MCMC sampler)
+- **Zeus** (vectorised MCMC sampler)
 
-### CMB-Specific Dependencies
-Required **only when Cosmic Microwave Background (CMB) likelihoods are used**:
+### CMB-Specific Dependencies (required only when CMB likelihoods are used)
 
 - **CLASS (classy)**  
   Used to compute background and perturbation quantities and CMB power spectra.
@@ -34,16 +73,19 @@ Required **only when Cosmic Microwave Background (CMB) likelihoods are used**:
   Required for Planck CMB likelihoods (TT, TTTEEE, low-ℓ, lensing).  
   The corresponding `.clik` likelihood directories must be available locally.
 
+- **Astropy** (used by some CLIK workflows)
+- **Cython** (used by some CLIK workflows)
+
 ### Optional Dependencies
 
 - **AlterBBN**  
   Optional backend for Big Bang Nucleosynthesis (BBN) D/H likelihoods.  
-  Kosmulator supports approximate BBN likelihoods without AlterBBN, as well as
-  physically motivated predictions using live AlterBBN calls or precomputed grids.
+  Kosmulator supports approximate BBN likelihoods without AlterBBN, as well as physically motivated predictions using live AlterBBN calls or precomputed grids.
 
 - **LaTeX (TeX Live / MiKTeX)**  
   Strongly recommended for publication-quality plots and LaTeX-ready tables.
 
+---
 
 ## LaTeX Dependencies for Plot Rendering
 
