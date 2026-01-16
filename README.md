@@ -376,7 +376,7 @@ Kosmulator/
 
 #### Observational Hubble Data (OHD)
 Note: This is a compilation paper of all the individual data-point. Also cite the original papers. Citations can be found in this paper.
-- Sharov, G. S., & Vasiliev, V. O. (2018).  
+1. Sharov, G. S., & Vasiliev, V. O. (2018).  
    *How predictions of cosmological models depend on Hubble parameter data sets*.  
    arXiv:1807.07323.  
    https://doi.org/10.48550/arXiv.1807.07323
@@ -439,7 +439,7 @@ Kosmulator is an actively developed research framework.
 At present, there is no dedicated software paper describing the current version of Kosmulator.
 
 If you use Kosmulator in your work, please cite the original paper:
-
+```bash
 @ARTICLE{2020EPJC...80..787H,
        author = {{Hough}, R.~T. and {Abebe}, A. and {Ferreira}, S.~E.~S.},
         title = "{Viability tests of f(R)-gravity models with Supernovae Type 1A data}",
@@ -458,7 +458,7 @@ archivePrefix = {arXiv},
        adsurl = {https://ui.adsabs.harvard.edu/abs/2020EPJC...80..787H},
       adsnote = {Provided by the SAO/NASA Astrophysics Data System}
 }
-
+```
 A dedicated Kosmulator software reference (conference proceeding) is in preparation and will be added here once publicly available.
 
 ## Contributions
