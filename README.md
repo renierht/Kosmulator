@@ -274,8 +274,8 @@ Kosmulator/
 
 ---
 
-## References. 
-NB! Remember to cite the observation's original papers when using their data in Kosmulator
+## References
+**NB!** Remember to cite the observation’s **original papers** when using their data in Kosmulator.
 
 ### Original MCMC code which developed into Kosmulator
 
@@ -284,6 +284,8 @@ NB! Remember to cite the observation's original papers when using their data in 
    *Viability tests of f(R)-gravity models with Supernovae Type Ia data*.  
    European Physical Journal C, 80(8), 787.  
    https://doi.org/10.1140/epjc/s10052-020-8342-7
+
+---
 
 ### MCMC Samplers
 
@@ -319,7 +321,10 @@ NB! Remember to cite the observation's original papers when using their data in 
    https://doi.org/10.1088/0067-0049/192/1/1
 
 #### Pantheon
-- **TODO:** Add Pantheon (Scolnic et al. 2018) reference
+1. Scolnic, D. M., Jones, D. O., Rest, A., et al. (2018).  
+   *The Complete Light-curve Sample of Spectroscopically Confirmed SNe Ia from Pan-STARRS1 and Cosmological Constraints from the Combined Pantheon Sample*.  
+   ApJ, 859(2), 101.  
+   https://doi.org/10.3847/1538-4357/aab9bb
 
 #### Pantheon+
 1. Brout, D., Scolnic, D., Popovic, B., et al. (2022).  
@@ -327,9 +332,17 @@ NB! Remember to cite the observation's original papers when using their data in 
    ApJ, 938(2), 110.  
    https://doi.org/10.3847/1538-4357/ac8e04
 
-#### Other SN Compilations
-- **TODO:** Union3
-- **TODO:** DES-Y5 Supernova sample
+#### Union3
+1. Rubin, D., Aldering, G., Betoule, M., et al. (2025).  
+   *Union through UNITY: Cosmology with 2000 SNe Using a Unified Bayesian Framework*.  
+   ApJ, 986(2), 231.  
+   https://doi.org/10.3847/1538-4357/adc0a5
+
+#### DESY5
+1. DES Collaboration; Abbott, T. M. C., et al. (2024).  
+   *The Dark Energy Survey: Cosmology Results with ~1500 New High-redshift Type Ia Supernovae Using the Full 5 yr Data Set*.  
+   ApJL, 973(1), L14.  
+   https://doi.org/10.3847/2041-8213/ad6f9f
 
 ---
 
@@ -340,40 +353,58 @@ NB! Remember to cite the observation's original papers when using their data in 
    ApJ, 898(1), 82.  
    https://doi.org/10.3847/1538-4357/ab9eb0
    
-2. Loubser, S. I., Alabi, A. B., Hilton, M., Ma, Y.-Z., Tang, X., Hatamkhani, N.,  
+2. Qi, J.-Z., Meng, P., Zhang, J.-F., & Zhang, X. (2023).  
+   *Model-independent measurement of cosmic curvature with the latest H(z) and SNe Ia data: A comprehensive investigation*.  
+   Phys. Rev. D, 108(6), 063522.  
+   https://doi.org/10.1103/PhysRevD.108.063522
+   
+3. Loubser, S. I., Alabi, A. B., Hilton, M., Ma, Y.-Z., Tang, X., Hatamkhani, N.,  
    Cress, C., Skelton, R. E., & Nkosi, S. A. (2025).  
    *An independent estimate of H(z) at z = 0.5 from the stellar ages of brightest cluster galaxies*.  
    Monthly Notices of the Royal Astronomical Society, **540**(4), 3135–3149.  
    https://doi.org/10.1093/mnras/staf915
    
-3. Loubser, S. I. (2025).  
+4. Loubser, S. I. (2025).  
    *Measuring the expansion history of the Universe with DESI cosmic chronometers*.  
    Monthly Notices of the Royal Astronomical Society, **544**(4), 3064–3075.  
    https://doi.org/10.1093/mnras/staf1939
    
-4. Wang, Z.-F., Lei, L., & Fan, Y.-Z. (2026).  
+5. Wang, Z.-F., Lei, L., & Fan, Y.-Z. (2026).  
    *New H(z) measurement at redshift z = 0.12 with DESI Data Release 1*.  
    arXiv:2601.07345.  
    https://doi.org/10.48550/arXiv.2601.07345
 
 #### Observational Hubble Data (OHD)
-- **TODO:** Add canonical OHD compilation reference(s)
+Note: This is a compilation paper of all the individual data-point. Also cite the original papers. Citations can be found in this paper.
+- Sharov, G. S., & Vasiliev, V. O. (2018).  
+   *How predictions of cosmological models depend on Hubble parameter data sets*.  
+   arXiv:1807.07323.  
+   https://doi.org/10.48550/arXiv.1807.07323
 
 ---
 
 ### Large-Scale Structure
 #### Baryon Acoustic Oscillations (BAO) / DESI
 1. Adame, A. G., Aguilar, J., Ahlen, S., et al. (2024).  
-   *DESI 2024 VI: Cosmological Constraints from Baryon Acoustic Oscillations*.  
-   arXiv:2404.03002  
+   *DESI 2024 VI: Cosmological constraints from the measurements of baryon acoustic oscillations*.  
+   arXiv:2404.03002.  
    https://arxiv.org/abs/2404.03002
 
-- **TODO:** Add pre-DESI BAO compilation references if desired (e.g. 6dF, SDSS, BOSS)
+2. Lodha, K., Shafieloo, A., Calderon, R., et al. (DESI Collaboration) (2025).  
+   *DESI 2024: Constraints on physics-focused aspects of dark energy using DESI DR1 BAO data*.  
+   Phys. Rev. D, 111(2), 023532.  
+   https://doi.org/10.1103/PhysRevD.111.023532
+
+3. Abdul Karim, M., Aguilar, J., Ahlen, S., et al. (DESI Collaboration) (2025).  
+   *DESI DR2 results. II. Measurements of baryon acoustic oscillations and cosmological constraints*.  
+   Phys. Rev. D, 112(8), 083515.  
+   https://doi.org/10.1103/tr6y-kpc6  
 
 #### Growth of Structure (fσ₈)
-1. Skara, F., & Perivolaropoulos, L. (2020).  
-   *Tension of the EG statistic and RSD data with Planck ΛCDM*.  
-   Phys. Rev. D, 101(6), 063521.
+1. Kazantzidis, L., & Perivolaropoulos, L. (2018).  
+   *Evolution of the fσ8 tension with the Planck15/ΛCDM determination and implications for modified gravity theories*.  
+   Phys. Rev. D, 97(10), 103503.  
+   https://doi.org/10.1103/PhysRevD.97.103503
 
 #### σ₈ Constraints
 1. Perenon, L., Bel, J., Maartens, R., et al. (2019).  
@@ -409,8 +440,24 @@ At present, there is no dedicated software paper describing the current version 
 
 If you use Kosmulator in your work, please cite the original paper:
 
-Hough, R. T., Abebe, A., & Ferreira, S. E. S. (2020). EPJC, 80(8), 787.
-https://doi.org/10.1140/epjc/s10052-020-8342-7
+@ARTICLE{2020EPJC...80..787H,
+       author = {{Hough}, R.~T. and {Abebe}, A. and {Ferreira}, S.~E.~S.},
+        title = "{Viability tests of f(R)-gravity models with Supernovae Type 1A data}",
+      journal = {European Physical Journal C},
+     keywords = {General Relativity and Quantum Cosmology, Astrophysics - Cosmology and Nongalactic Astrophysics},
+         year = 2020,
+        month = aug,
+       volume = {80},
+       number = {8},
+          eid = {787},
+        pages = {787},
+          doi = {10.1140/epjc/s10052-020-8342-7},
+archivePrefix = {arXiv},
+       eprint = {1911.05983},
+ primaryClass = {gr-qc},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2020EPJC...80..787H},
+      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+}
 
 A dedicated Kosmulator software reference (conference proceeding) is in preparation and will be added here once publicly available.
 
