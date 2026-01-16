@@ -52,7 +52,7 @@ The package is designed to be **modular**, **flexible**, and **user-friendly**, 
 Kosmulator is written in Python and supports a modular backend system. Some dependencies are always required, 
 while others are required only when specific observational datasets are used.
 
-### Core Python Dependencies (required for all runs)
+#### Core Python Dependencies (required for all runs)
 
 - **Python ≥ 3.9**
 - **NumPy**
@@ -64,7 +64,7 @@ while others are required only when specific observational datasets are used.
 - **EMCEE** (MCMC sampler)
 - **Zeus** (vectorised MCMC sampler)
 
-### CMB-Specific Dependencies (required only when CMB likelihoods are used)
+#### CMB-Specific Dependencies (required only when CMB likelihoods are used)
 
 - **CLASS (classy)**  
   Used to compute background and perturbation quantities and CMB power spectra.
@@ -74,43 +74,16 @@ while others are required only when specific observational datasets are used.
 - **Astropy** 
 - **Cython** 
 
-### Optional Dependencies
+#### Optional Dependencies
 
 - **AlterBBN**  
   Optional backend for Big Bang Nucleosynthesis (BBN) D/H likelihoods.  
   Kosmulator supports approximate BBN likelihoods without AlterBBN, as well as physically motivated predictions using live AlterBBN calls or precomputed grids.
 
 - **LaTeX (TeX Live / MiKTeX)**  
-  Strongly recommended for publication-quality plots and LaTeX-ready tables.
+  Strongly recommended for publication-quality plots and LaTeX-ready tables. See Latex installation section additional information
 
 ---
-
-## LaTeX Dependencies for Plot Rendering
-
-Kosmulator uses **Matplotlib’s LaTeX rendering** to generate publication-quality plots and tables.  
-To enable this functionality, a working LaTeX installation is required.
-
-### Verifying LaTeX Installation
-Check that LaTeX is available on your system by running:
-```bash
-latex --version
-```
-
-If LaTeX is not installed (or if required packages are missing), you may encounter errors such as:
-RuntimeError: latex was not able to process the following string ... (your system is missing some required LaTeX packages, e.g. type1ec.sty)
-
-Follow os installation or update below:
-- **Windows**: [MiKTeX Installation Guide](https://miktex.org/howto/install-miktex, ensure that you enable the option for automatic installation of missing packages)
-- **macOS**: Install MacTeX via Homebrew:
-  ```bash
-  brew install mactex
-  ```
-- **Linux**: Install TeX Live:
-  ```bash
-  sudo apt install texlive-full
-  sudo apt install texlive-latex-recommended texlive-fonts-recommended (if missing packages are required)
-  ```
-LaTeX rendering is optional. If you prefer not to install a full LaTeX distribution, simply leave LaTeX disabled (default), i.e. do not pass --latex_enabled
 
 ## Installation
 Clone the repository and install Kosmulator in a clean Python environment (recommended):
@@ -125,6 +98,9 @@ kosmulator-doctor
 ```
 Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced Setup section.
 
+---
+
+
 ## Quick Test
 Run Kosmulator in your terminal.
 ``` bash
@@ -134,21 +110,21 @@ If it ran successfully, it has been installed correctly!
 
 ## Configure Kosmulator Guide
 
-### Step 1: Define a New Model
+#### Step 1: Define a New Model
 Modify User_defined_modules.py to register your model parameters, and background expansion.
 	- Implement E(z) for a new background model (flat or not).
 	- (Optionally) define additional sanity restrictions for your model's free parameters.
 	- Register the model name + parameter list in the model registry.
 	- (Optional) expose CMB Cl wrappers for that model. Needed to fit to CMB observation
 
-### Step 2: Select Datasets 
+#### Step 2: Select Datasets 
 In `Kosmulator.py`, select observation datasets. Observations are specified as lists of likelihood groups.
 ```python
 # Run 1: JLA only | Run 2: OHD only | Run 3: Joint CC, OHD, and Pantheon
 observations = [ ["JLA"], ["OHD"], ["CC", "OHD", "Pantheon"] ]
 ```
 
-### Step 3: Select model and configure MCMC Run
+#### Step 3: Select model and configure MCMC Run
 In `Kosmulator.py`, configure the MCMC sampler and specify the model names you want to analyse:
 
 Specify the model names you want to analyse:
@@ -165,11 +141,13 @@ burn: int = 10
 convergence: float = 0.01  # How accurate do you want the auto-correlator to be before stopping the run
 ```
 
-### Step 4. Execute you MCMC simulation
+#### Step 4. Execute you MCMC simulation
 Run the script in the terminal:
 ```bash
 python Kosmulator.py
 ```
+
+---
 
 ## Project Structure
 
@@ -470,6 +448,33 @@ improvements for inclusion in the main repository.
 
 ## Contact
 For questions or feedback, please reach out to either me (Renier Hough [25026097@mynwu.ac.za]) or to my collaborator (Robert Rugg [31770312@mynwu.ac.za]).
+
+## LaTeX Dependencies for Plot Rendering
+
+Kosmulator uses **Matplotlib’s LaTeX rendering** to generate publication-quality plots and tables.  
+To enable this functionality, a working LaTeX installation is required.
+
+### Verifying LaTeX Installation
+Check that LaTeX is available on your system by running:
+```bash
+latex --version
+```
+
+If LaTeX is not installed (or if required packages are missing), you may encounter errors such as:
+RuntimeError: latex was not able to process the following string ... (your system is missing some required LaTeX packages, e.g. type1ec.sty)
+
+Follow os installation or update below:
+- **Windows**: [MiKTeX Installation Guide](https://miktex.org/howto/install-miktex, ensure that you enable the option for automatic installation of missing packages)
+- **macOS**: Install MacTeX via Homebrew:
+  ```bash
+  brew install mactex
+  ```
+- **Linux**: Install TeX Live:
+  ```bash
+  sudo apt install texlive-full
+  sudo apt install texlive-latex-recommended texlive-fonts-recommended (if missing packages are required)
+  ```
+LaTeX rendering is optional. If you prefer not to install a full LaTeX distribution, simply leave LaTeX disabled (default), i.e. do not pass --latex_enabled
 
 ## Example Installation: Kosmulator with CLASS and Planck CLIK (Full Setup)
 
