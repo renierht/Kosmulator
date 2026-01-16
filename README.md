@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assest/Kosmulator.png" alt="Kosmulator logo" width="300">
+</p>
+
 # Kosmulator: A Python framework for cosmological inference with MCMC
 
 Kosmulator is a Python package utilising **Zeus** and **EMCEE (The MCMC Hammer)** to perform efficient, vectorised Markov Chain Monte Carlo (MCMC) simulations for studying **modified gravity** and **alternative cosmological models**.
