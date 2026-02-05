@@ -178,10 +178,23 @@ def model_likelihood(
     else:
         return -np.inf
 
+    # --- Calculate Chi^2 ---
     if obs in ("PantheonP", "PantheonPS"):
+        # Pantheon+ has its own complex covariance logic
         chi2 = SP.Calc_PantP_chi(mb, trig, cep, cov, model, param_dict)
+
+    elif obs_type == "SNe":
+        # ALL other SNe (JLA, DESY5, Union3) go here.
+        chi2 = SP.Calc_Generic_SNe_chi(
+            obs_data=obs_data,      # <--- CHANGED from current_data to obs_data
+            model=model,            # <--- Ensure this matches your local var (usually 'model' or 'model_val')
+            param_dict=param_dict   # <--- Ensure this matches your local var (usually 'param_dict')
+        )
+
     else:
+        # Fallback for CC, f_sigma_8, OHD, etc.
         chi2 = SP.Calc_chi(obs_type, type_data, type_err, model)
+
     return -0.5 * chi2
 
 

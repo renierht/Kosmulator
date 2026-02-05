@@ -37,6 +37,7 @@ from Kosmulator_main.Statistical_packages import (
     Calc_DESI_chi,
     Calc_chi,
     Calc_BBN_DH_chi,
+    Calc_Generic_SNe_chi,
 )
 from Kosmulator_main import Statistical_packages as SP
 
@@ -101,19 +102,33 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
             """
             Decide whether a sample key corresponds to a given observation entry.
 
-            - Normal behaviour: exact match on "A+B" or "A_B".
-            - Special case: the resolved label "PantheonP_SH0ES" maps to the
-              PantheonPS row (the Pantheon+SH0ES data set).
+            Accept:
+              - "A+B" or "A_B"
+              - Pantheon aliasing:
+                  PantheonP_SH0ES  <-> PantheonPS
+                  Pantheon+SH0ES   -> PantheonPS   (defensive; should be display-only)
+              - Works inside combined keys too (e.g., "CC+PantheonP_SH0ES").
             """
             joined_plus = "+".join(entry)
             joined_ud   = "_".join(entry)
 
-            # Exact matches first
-            if key == joined_plus or key == joined_ud:
+            def _norm(s: str) -> str:
+                return (
+                    str(s)
+                    .replace("PantheonP_SH0ES", "PantheonPS")
+                    .replace("Pantheon+SH0ES", "PantheonPS")
+                )
+
+            k = _norm(key)
+
+            # Compare against both join styles, with normalization on both sides
+            if k == _norm(joined_plus) or k == _norm(joined_ud):
                 return True
 
-            # Special alias: old key "PantheonP_SH0ES" corresponds to PantheonPS
-            if key == "PantheonP_SH0ES" and joined_plus == "PantheonPS":
+            # Also allow +/- separator swaps after normalization
+            if k.replace("+", "_") == _norm(joined_ud):
+                return True
+            if k.replace("_", "+") == _norm(joined_plus):
                 return True
 
             return False
@@ -288,10 +303,15 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
             # Recover the full observation list that corresponds to this best-fit key.
             obs_entry = None
             for j, obs_list in enumerate(CONFIG[model_name]["observations"]):
-                key_j = U.generate_label(
-                    obs_list, config_model=CONFIG[model_name], obs_index=j
-                )
-                if key_j == obs_name:
+                def _norm_obs_key(s: str) -> str:
+                    # Normalize Pantheon aliasing first (so we don't destroy underscores inside tokens)
+                    s = str(s).replace("PantheonP_SH0ES", "PantheonPS").replace("Pantheon+SH0ES", "PantheonPS")
+                    # Normalize join style for comparison
+                    s = s.replace("_", "+")
+                    return s
+
+                key_j = U.generate_label(obs_list, config_model=CONFIG[model_name], obs_index=j)
+                if _norm_obs_key(key_j) == _norm_obs_key(obs_name):
                     obs_entry = obs_list
                     obs_index = j
                     break
@@ -361,16 +381,18 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
 
                 elif obs_type == "SNe":
                     redshift = obs_data["redshift"]
-                    type_data = obs_data["type_data"]
-                    type_data_error = obs_data["type_data_error"]
                     comoving_distances = UDM.Comoving_distance_vectorized(
                         MODEL_func, redshift, param_dict
                     )
                     model_val = 25 + 5 * np.log10(comoving_distances * (1 + redshift))
-                    chi_squared = Calc_chi(
-                        obs_type, type_data, type_data_error, model_val
+                    
+                    # --- FIXED: Use the generic function to handle Union3 Covariance ---
+                    chi_squared = Calc_Generic_SNe_chi(
+                        obs_data=obs_data,
+                        model=model_val,
+                        param_dict=param_dict
                     )
-                    num_data_points_total += len(type_data)
+                    num_data_points_total += len(redshift)
 
                 elif obs_type in ["OHD", "CC"]:
                     redshift = obs_data["redshift"]

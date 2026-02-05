@@ -118,12 +118,21 @@ def _latex_model_name(name: str, latex_enabled: bool, settings: dict) -> str:
     return f"${name}$"
     
 def _displayize_key(key: str) -> str:
-    """Turn internal keys into human-friendly obs labels."""
-    parts = str(key).split("+")
+    """
+    Turn internal keys into human-friendly *plain-text* obs labels
+    (used for console + saved stats tables).
+
+    Policy:
+      PantheonPS / PantheonP_SH0ES  -> Pantheon++SH0ES
+      PantheonP                    -> Pantheon+
+    """
+    # Normalise separators so keys like CC_PantheonPS also behave
+    s = str(key).replace("_", "+")
+    parts = s.split("+")
     mapped = []
     for p in parts:
-        if p == "PantheonP_SH0ES":
-            mapped.append("Pantheon+SH0ES")
+        if p in ("PantheonPS", "PantheonP_SH0ES", "Pantheon+SH0ES"):
+            mapped.append("Pantheon++SH0ES")
         elif p == "PantheonP":
             mapped.append("Pantheon+")
         else:
@@ -763,24 +772,110 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         cfg_generate_label(obs_set, config_model=CONFIG, obs_index=i)
         for i, obs_set in enumerate(CONFIG["observations"])
     ]
+    def _token_variants(tok: str) -> list[str]:
+        # Bidirectional aliasing (important!)
+        if tok == "PantheonPS":
+            return ["PantheonPS", "PantheonP_SH0ES", "PantheonP_SH0ES"]  # keep explicit
+        if tok == "PantheonP_SH0ES":
+            return ["PantheonP_SH0ES", "PantheonPS"]
+        if tok == "Pantheon+SH0ES":
+            return ["PantheonP_SH0ES", "PantheonPS", "Pantheon+SH0ES"]
+        return [tok]
 
+    def _keys_for_obs_tokens(tokens: list[str]) -> list[str]:
+        """
+        Build plausible sample keys from an observation token list without
+        corrupting underscores inside tokens.
+        """
+        # Expand only the Pantheon-like tokens (usually 0 or 1 token)
+        pools = [_token_variants(t) for t in tokens]
+
+        # Small cartesian product (safe here)
+        combos = [[]]
+        for pool in pools:
+            combos = [c + [v] for c in combos for v in pool]
+
+        cands = []
+        for toks in combos:
+            cands.append("+".join(toks))
+            cands.append("_".join(toks))
+
+        # De-dup preserve order
+        out, seen = [], set()
+        for c in cands:
+            if c not in seen:
+                seen.add(c)
+                out.append(c)
+        return out
+
+    def _resolve_samples_key(obs_tokens: list[str], Samples: dict) -> str | None:
+        for cand in _keys_for_obs_tokens(obs_tokens):
+            if cand in Samples:
+                return cand
+        return None
+    
+    def _norm_obs_key(s: str) -> str:
+        return (
+            str(s)
+            .replace("PantheonP_SH0ES", "PantheonPS")
+            .replace("Pantheon+SH0ES", "PantheonPS")
+        )
+
+    def _key_variants(k: str) -> list[str]:
+        """
+        Generate plausible keys to match against dicts (Samples / structured_values).
+        IMPORTANT: include the raw key first, then normalized alias forms.
+        """
+        raw = str(k)
+        norm = _norm_obs_key(raw)
+
+        cands = [
+            raw,
+            raw.replace("+", "_"),
+            raw.replace("_", "+"),
+            norm,
+            norm.replace("+", "_"),
+            norm.replace("_", "+"),
+        ]
+
+        out, seen = [], set()
+        for c in cands:
+            if c not in seen:
+                seen.add(c)
+                out.append(c)
+        return out
+
+    def _to_raw_key(k: str) -> str:
+        # Only normalize separators; keep Pantheon tag as-is for raw keys
+        return str(k).replace("_", "+")
+
+    def _raw_of(res_key: str) -> str:
+        return _to_raw_key(res_key)
+        
+    found_map = {} 
     distributions, obs_raw_keys = [], []
-    for i, (obs_key, sample) in enumerate(Samples.items()):
-        if obs_key not in resolved_keys:
-            raise ValueError(
-                f"Observation '{obs_key}' not in resolved observation keys: {resolved_keys}"
-            )
-        obs_index = resolved_keys.index(obs_key)
+    palette = PLOT_SETTINGS.get("color_schemes", ["r","b","g","c","m"])
+    use_latex = bool(PLOT_SETTINGS.get("latex_enabled", False))
 
-        names  = CONFIG["parameters"][obs_index]
-        labels = greek_Symbols(names) if PLOT_SETTINGS.get("latex_enabled", False) else names
+    for i, obs_tokens in enumerate(CONFIG["observations"]):
+        found = _resolve_samples_key(obs_tokens, Samples)
+        if found is None:
+            # Helpful error
+            raise ValueError(
+                f"Could not find samples for obs_tokens={obs_tokens}. "
+                f"Tried={_keys_for_obs_tokens(obs_tokens)}. "
+                f"Available={list(Samples.keys())}"
+            )
+
+        sample = Samples[found]
+        names  = CONFIG["parameters"][i]
+        labels = greek_Symbols(names) if use_latex else names
 
         ms = MCSamples(samples=sample, names=names, labels=labels)
-        palette = PLOT_SETTINGS.get("color_schemes", ["r","b","g","c","m"])
         ms.plotColor = palette[i % len(palette)]
-
         distributions.append(ms)
-        obs_raw_keys.append(obs_key)
+
+        obs_raw_keys.append(found)
 
     # Parameters used for the CORNER (union order). Omega_m will not appear here if Config removed it.
     header_params = list(full_param_order)
@@ -815,46 +910,38 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
 
     # 4) pretty legend labels (LaTeX or plain depending on settings)
     use_latex = bool(PLOT_SETTINGS.get("latex_enabled", False))
-    legend_labels = [pretty_obs_name(k, latex_on=use_latex) for k in obs_raw_keys]
-
-    # 5) stats + aligned latex rows (for base params)
-    resolved_keys = [
-        cfg_generate_label(obs_set, config_model=CONFIG, obs_index=i)
-        for i, obs_set in enumerate(CONFIG["observations"])
-    ]
-
-    # Helper to map resolved → raw key for stats
-    def _to_raw_key(k: str) -> str:
-        return k
-
-    # Helper to map resolved → raw for later lookups
-    def _raw_of(res_key: str) -> str:
-        return res_key
+    legend_labels = [pretty_obs_name(k, latex_on=use_latex) for k in resolved_keys]
 
     # Preserve the CONFIG observation order for the stats call
     samples_for_stats = {}
-    for rk in resolved_keys:
-        if rk in Samples:
-            samples_for_stats[_to_raw_key(rk)] = Samples[rk]
-        elif _to_raw_key(rk) in Samples:
-            samples_for_stats[_to_raw_key(rk)] = Samples[_to_raw_key(rk)]
-        # else silently skip
+    obs_keys_out = []  # the keys you will use downstream (best-fit + printing)
 
+    for i, obs_tokens in enumerate(CONFIG["observations"]):
+        found = _resolve_samples_key(obs_tokens, Samples)
+        if found is None:
+            continue
+
+        # Canonical downstream key: "+" join of CONFIG tokens (stable, order-safe)
+        out_key = "+".join(obs_tokens)
+        obs_keys_out.append(out_key)
+        samples_for_stats[out_key] = Samples[found]
+
+    results = {}
+    latex_table = []       # Must be a LIST, not a dict
+    structured_values = {}
     # ---- compute stats ONCE (not inside the loop)
     with _filter_stdout(only_first_substring="Removed"):
         results, latex_table, structured_values = PP.calculate_asymmetric_from_samples(
-            samples_for_stats if samples_for_stats else Samples,
-            CONFIG["parameters"],
-            CONFIG["observations"],
-        )
+        samples_for_stats,
+        CONFIG["parameters"],
+        CONFIG["observations"],
+    )
 
     # Align the table (rows match CONFIG["parameters"][i] order)
     aligned_latex_table = align_table_to_parameters(latex_table, CONFIG["parameters"])
 
     # Labels shown *above the printed table* (start as the aligned parameter list union per row)
-    # Use the union order that the aligned table already follows:
     table_param_labels = CONFIG["parameters"][0][:]
-    # Build union across groups in first-seen order:
     seen = set(table_param_labels)
     for plist in CONFIG["parameters"][1:]:
         for p in plist:
@@ -862,50 +949,89 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
                 table_param_labels.append(p)
                 seen.add(p)
 
-    # ---- Prepare derived Omega_m column (printed table only) ----
-    derived_col: list[str] = []
-    for i, res_key in enumerate(resolved_keys):
-        raw_key = _raw_of(res_key)
-        # prefer mapped samples_for_stats, else fall back to Samples
-        obs_samples = samples_for_stats.get(raw_key, Samples.get(raw_key, Samples.get(res_key)))
+    # ---- Fill/derive r_d in the printed table when it's not a sampled parameter ----
+    derived_rd_col: list[str] = []
+
+    for i, obs_key in enumerate(obs_keys_out):   # <- use obs_keys_out (guaranteed to match samples_for_stats)
+        obs_samples = samples_for_stats.get(obs_key)
         if obs_samples is None:
-            derived_col.append("—")
+            derived_rd_col.append("—")
             continue
 
         names = CONFIG["parameters"][i]
+
+        # If r_d is already sampled for this group, we don't need to derive it here.
+        if "r_d" in names:
+            derived_rd_col.append("—")
+            continue
+
+        # Need H0 and Omega_bh^2
         try:
             jH  = names.index("H_0")
             jbh = names.index("Omega_bh^2")
-            jdh = names.index("Omega_dh^2")
         except ValueError:
-            # Missing ingredients → mark as unavailable (e.g., runs without CMB)
-            derived_col.append("—")
+            derived_rd_col.append("—")
             continue
 
         H0  = np.asarray(obs_samples[:, jH],  dtype=float)
         obh = np.asarray(obs_samples[:, jbh], dtype=float)
-        odh = np.asarray(obs_samples[:, jdh], dtype=float)
-        h   = np.maximum(H0, 1e-12) / 100.0
-        Om  = (obh + odh) / (h * h)
 
-        p16, p50, p84 = np.percentile(Om, [16, 50, 84])
+        # Omega_m either directly present, or reconstruct from (Omega_bh^2, Omega_dh^2)
+        Om = None
+        if "Omega_m" in names:
+            jOm = names.index("Omega_m")
+            Om = np.asarray(obs_samples[:, jOm], dtype=float)
+        elif "Omega_dh^2" in names:
+            jdh = names.index("Omega_dh^2")
+            odh = np.asarray(obs_samples[:, jdh], dtype=float)
+            h   = np.maximum(H0, 1e-12) / 100.0
+            Om  = (obh + odh) / (h * h)
+        else:
+            derived_rd_col.append("—")
+            continue
+
+        # Subsample if huge (keeps plotting snappy)
+        N = H0.size
+        stride = max(1, N // 50000)
+        H0s  = H0[::stride]
+        obhs = obh[::stride]
+        Oms  = Om[::stride]
+
+        rds = np.array(
+            [compute_rd({"H_0": float(h0), "Omega_m": float(om), "Omega_bh^2": float(ob)})
+             for h0, om, ob in zip(H0s, Oms, obhs)],
+            dtype=float
+        )
+
+        p16, p50, p84 = np.percentile(rds, [16, 50, 84])
         lo, hi = p50 - p16, p84 - p50
-        derived_col.append(PP._format_pm(p50, lo, hi))
+        derived_rd_col.append(PP._format_pm(p50, lo, hi))
 
-    # Only append the column if at least one row has a real value
-    if any(c != "—" for c in derived_col):
-        table_param_labels.append("Omega_m (derived)")
-        for row, cell in zip(aligned_latex_table, derived_col):
-            row.append(cell)
+    # Append or fill r_d column
+    if any(c != "—" for c in derived_rd_col):
+        if "r_d" in table_param_labels:
+            jrd = table_param_labels.index("r_d")
+            for i, cell in enumerate(derived_rd_col):
+                if cell != "—" and jrd < len(aligned_latex_table[i]):
+                    aligned_latex_table[i][jrd] = cell
+        else:
+            table_param_labels.append("r_d")
+            for row, cell in zip(aligned_latex_table, derived_rd_col):
+                row.append(cell)
+
+
 
     # --- Remap 'structured_values' keys from RAW → RESOLVED (downstream consumables use resolved)
-    best_struct_resolved = {}
-    for rk in resolved_keys:
-        if rk in structured_values:
-            best_struct_resolved[rk] = structured_values[rk]
-        elif _raw_of(rk) in structured_values:
-            best_struct_resolved[rk] = structured_values[_raw_of(rk)]
-    structured_values = best_struct_resolved
+    #best_struct_resolved = {}
+    #for rk in resolved_keys:
+     #   found = None
+      #  for cand in _key_variants(rk):
+       #     if cand in structured_values:
+        #        found = cand
+         #       break
+        #if found is not None:
+         #   best_struct_resolved[rk] = structured_values[found]
+    #structured_values = best_struct_resolved
 
     # --- Ensure line_args exists (needed by triangle_plot)
     line_styles = PLOT_SETTINGS.get("line_styles", ["-","--",":","-."])
@@ -989,7 +1115,7 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     plt.close(fig)
 
     # Return for later printing
-    obs_names_out = [_displayize_key(k) for k in resolved_keys]
+    obs_names_out = obs_keys_out[:]   # NOT resolved_keys
     return structured_values, aligned_latex_table, table_param_labels, obs_names_out
 
 
@@ -1238,7 +1364,10 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                         "CMB_hil", "CMB_lowl", "CMB_lensing"
                     } for x in obs_list_raw)
                     has_bao = any(x in {"BAO", "DESI_DR1", "DESI_DR2"} for x in obs_list_raw)
-                    has_unanch = any(x in {"JLA", "Pantheon", "f", "f_sigma_8"} for x in obs_list_raw)
+                    has_unanch = any(x in {
+                        "JLA", "Pantheon", "PantheonP", "PantheonPS", 
+                        "DESY5", "Union3", "f", "f_sigma_8"
+                    } for x in obs_list_raw)
 
                     if has_cal:
                         rs_med = _rd_from_params(params_med)
@@ -1397,14 +1526,39 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                     # Best dataset highest among observations, but still below band/model
                     z_obs = Z_OBS_BASE + (len(part_sorted) - 1 - oi)
 
+                    # --- VISUALIZATION MASK ---
+                    MASK_BIGERR_OBS = ("Union3", "DESY5")   # extend if needed
+
+                    if (y_err is not None) and (obs_type in MASK_BIGERR_OBS):
+                        _y_err = np.asarray(y_err, dtype=float)
+
+                        # Defensive: if someone passes asymmetric errors, build a scalar error for masking
+                        if _y_err.ndim == 2 and _y_err.shape[0] == 2:
+                            err_for_mask = 0.5 * (np.abs(_y_err[0]) + np.abs(_y_err[1]))
+                        else:
+                            err_for_mask = _y_err
+
+                        vis_mask = np.isfinite(err_for_mask) & (err_for_mask < 10.0)
+
+                        x_plot     = np.asarray(x_dat)[vis_mask]
+                        y_plot     = np.asarray(y_dat)[vis_mask]
+                        y_mod_plot = np.asarray(y_mod_pts)[vis_mask]
+
+                        # Keep original yerr shape for errorbar, just masked consistently
+                        y_err_plot = _y_err[:, vis_mask] if (_y_err.ndim == 2 and _y_err.shape[0] == 2) else _y_err[vis_mask]
+                    else:
+                        x_plot, y_plot = np.asarray(x_dat), np.asarray(y_dat)
+                        y_mod_plot     = np.asarray(y_mod_pts)
+                        y_err_plot     = y_err
+
                     ax.errorbar(
-                        x_dat, y_dat, yerr=y_err, fmt="o", ms=3.5, lw=1.0,
+                        x_plot, y_plot, yerr=y_err_plot, fmt="o", ms=3.5, lw=1.0,
                         color=color, ecolor=color, capsize=0, alpha=0.95, zorder=z_obs,
                         label=disp_obs,
                     )
 
                     overlay_flag = bool(PLOT_SETTINGS.get("overlay_model_for_bao_desi", False))
-                    SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonP_SH0ES", "DESY5", "Union3")
+                    SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
 
                     if obs_type in ("BAO", "DESI_DR1", "DESI_DR2"):
                         if overlay_flag:
@@ -1424,10 +1578,10 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                             zorder=min(z_obs + 1, Z_BAND - 1),
                         )
 
-                    # Residuals
-                    res = np.asarray(y_dat) - np.asarray(y_mod_pts)
+                    # Residuals (using masked plotting arrays)
+                    res_plot = np.asarray(y_plot) - np.asarray(y_mod_plot)
                     axr.errorbar(
-                        x_dat, res, yerr=y_err, fmt="o", ms=3.0, lw=1.0,
+                        x_plot, res_plot, yerr=y_err_plot, fmt="o", ms=3.0, lw=1.0,
                         color=color, ecolor=color, capsize=0, alpha=0.95, zorder=z_obs,
                     )
 
@@ -1437,7 +1591,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                 # Legend: model first, then datasets (deduped)
                 handles, labels_here = _model_first_legend(ax, model_disp)
 
-                SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonP_SH0ES", "DESY5", "Union3")
+                SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
                 if all(o in SNE_TYPES for o in part_sorted):
                     legend_loc = "lower right"
                     legend_anchor = (0.98, 0.02)

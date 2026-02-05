@@ -20,6 +20,9 @@ import logging
 from numbers import Number
 from typing import Callable, Dict, Any, Optional
 import inspect
+import sys
+from pathlib import Path
+import importlib.util
 
 import numpy as np
 import scipy.linalg as la
@@ -940,6 +943,34 @@ def Calc_chi(
         return Covariance_matrix(model, type_data, type_data_error)
 
     residual = type_data - model
+    return float(np.sum((residual ** 2) / (type_data_error ** 2)))
+    
+
+def Calc_Generic_SNe_chi(
+    obs_data: dict,               # <-- Now takes the whole dict
+    model: np.ndarray,
+    param_dict: Dict[str, float],
+) -> float:
+    """
+    Generic SNe χ² evaluator.
+    Supports diagonal errors (JLA/DESY5) AND full covariance (Union3).
+    """
+    type_data = obs_data["type_data"]
+    
+    # 1. Marginalize M_abs (if present)
+    #    (JLA doesn't have it -> M=0 -> Data is Absolute)
+    #    (DESY5/Union3 have it -> M!=0 -> Data is Apparent)
+    M = param_dict.get("M_abs", 0.0)
+    residual = (type_data - M) - model
+
+    # 2. Check for Covariance (Union3)
+    if "inv_cov" in obs_data:
+        inv_cov = obs_data["inv_cov"]
+        # Matrix Chi2: R.T @ C^-1 @ R
+        return float(residual @ inv_cov @ residual)
+
+    # 3. Fallback to Diagonal Errors (JLA/DESY5)
+    type_data_error = obs_data["type_data_error"]
     return float(np.sum((residual ** 2) / (type_data_error ** 2)))
 
 

@@ -171,18 +171,16 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
     # Branch 1: CSV-style (DESY5) — header has commas
     # --------------------------------------------------
     if "," in first:
-        arr = np.genfromtxt(
-            path,
-            names=True,
-            delimiter=",",
-            dtype=None,
-            encoding=None,
-        )
+        # Robust CSV loader (DESY5): avoid numpy dtype inference on mixed-type columns
+        df = pd.read_csv(path, sep=",", comment="#", engine="python")
+        if df is None or df.empty:
+            raise ValueError(f"{file_path} parsed as CSV but is empty.")
 
-        if arr.dtype.names is None:
-            raise ValueError(f"{file_path} has no named columns; cannot parse as SNe.")
-
-        name_map = {n.lower(): n for n in arr.dtype.names}
+        # Normalise column names
+        cols_raw = list(df.columns)
+        cols_norm = [str(c).strip() for c in cols_raw]
+        df.columns = cols_norm
+        name_map = {c.lower(): c for c in df.columns}
 
         # redshift
         z_name = None
@@ -192,8 +190,7 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
                 break
         if z_name is None:
             raise ValueError(
-                f"Could not find a zCMB-like column in {file_path} "
-                f"(columns={arr.dtype.names})"
+                f"Could not find a zCMB-like column in {file_path} (columns={df.columns.tolist()})"
             )
 
         # distance modulus / magnitude
@@ -204,8 +201,7 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
                 break
         if mu_name is None:
             raise ValueError(
-                f"Could not find a MU/mb column in {file_path} "
-                f"(columns={arr.dtype.names})"
+                f"Could not find a MU/mb column in {file_path} (columns={df.columns.tolist()})"
             )
 
         # error on distance modulus
@@ -215,22 +211,30 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
                 err_name = name_map[cand]
                 break
 
-        z = np.asarray(arr[z_name], dtype=float)
-        mu = np.asarray(arr[mu_name], dtype=float)
+        # Coerce only the numeric columns we actually need
+        z = pd.to_numeric(df[z_name], errors="coerce").to_numpy(dtype=float)
+        mu = pd.to_numeric(df[mu_name], errors="coerce").to_numpy(dtype=float)
 
         if err_name is not None:
-            sigma = np.asarray(arr[err_name], dtype=float)
+            sigma = pd.to_numeric(df[err_name], errors="coerce").to_numpy(dtype=float)
         else:
-            sigma = np.ones_like(z)
+            sigma = np.ones_like(z, dtype=float)
 
-        if not np.any(sigma > 0):
-            sigma = np.ones_like(z)
+        # Clean rows
+        good = np.isfinite(z) & np.isfinite(mu) & np.isfinite(sigma) & (sigma > 0)
+        z = z[good]
+        mu = mu[good]
+        sigma = sigma[good]
+
+        if z.size == 0:
+            raise ValueError(f"{file_path}: no valid rows after cleaning numeric columns.")
 
         return {
             "redshift": z,
             "type_data": mu,
             "type_data_error": sigma,
         }
+
 
     # --------------------------------------------------
     # Branch 2: whitespace + variable columns (Union3)
@@ -661,7 +665,7 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     "S": 1.137,
                     "weighted_mean": {"DH": 25.47, "sigma": 0.29},
                     "bbn_model": "alterbbn_grid",  # request high-precision BBN backend
-                    "bbn_force_rebuild": False,
+                   #"bbn_force_rebuild": True,
 
                     # Precomputed grid path; comment this out to run AlterBBN live.
                     # Running AlterBBN live can be ~10x slower for MCMC.
@@ -747,10 +751,49 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
             elif obs in ("DESY5", "Union3"):
                 if obs == "DESY5":
                     sne_path = os.path.join(K.OBSERVATIONS_BASE, "DESY5.dat")
+                    cov_path = os.path.join(K.OBSERVATIONS_BASE, "DESY5_covsys_000.txt")
                 else:  # "Union3"
                     sne_path = os.path.join(K.OBSERVATIONS_BASE, "Union3.txt")
+                    cov_path = os.path.join(K.OBSERVATIONS_BASE, "Union3_mag_covmat.txt")
 
-                observation_data[obs] = load_named_sne_with_zcmb(sne_path)
+                data_sne = load_named_sne_with_zcmb(sne_path)
+
+                if cov_path and os.path.exists(cov_path):
+                    # 1. Load the raw matrix
+                    cov_loaded, _ = load_DESI_cov(cov_path)
+                    
+                    n_data = len(data_sne["type_data"])
+                    if cov_loaded.shape != (n_data, n_data):
+                        logger.error(f"{obs} Covariance shape {cov_loaded.shape} != Data length {n_data}")
+                        raise ValueError(f"{obs} Covariance dimension mismatch! Check for commented rows.")
+
+                    # 2. CRITICAL FIX: Explicitly handle DESY5
+                    # DESY5 uses a systematic-only matrix, so we MUST add the diagonal statistical errors.
+                    # Union3 uses a full matrix, so we use it as-is.
+                    
+                    if obs == "DESY5" or np.mean(np.diag(cov_loaded)) < 1e-3: 
+                        sigma_stat = data_sne["type_data_error"]
+                        
+                        # Add diagonal stats: C_total = C_sys + diag(sigma_stat^2)
+                        # This adds 280^2 to the bad SN, correctly de-weighting it.
+                        cov_total = cov_loaded + np.diag(sigma_stat**2)
+                        
+                        logger.info(f"Augmented {obs} covariance with diagonal statistical errors.")
+                    else:
+                        # Union3 path
+                        cov_total = cov_loaded
+                    
+                    # 3. Invert the corrected TOTAL matrix
+                    try:
+                        inv_cov_total = np.linalg.inv(cov_total)
+                    except np.linalg.LinAlgError:
+                        # Fallback for numerical stability
+                        inv_cov_total = np.linalg.pinv(cov_total, rcond=1e-12)
+
+                    data_sne["cov"] = cov_total
+                    data_sne["inv_cov"] = inv_cov_total
+
+                observation_data[obs] = data_sne
             # ------------------
             # Default loader
             # ------------------
@@ -1246,7 +1289,7 @@ def Add_required_parameters(
         'PantheonP': ['H_0', 'M_abs'],
         'PantheonPS':['H_0', 'M_abs'],
         'DESY5': ['H_0'],
-        'Union3': ['H_0'],
+        'Union3':     ['H_0'],
         'f_sigma_8': ['Omega_m','sigma_8', 'gamma'],
         'f': ['Omega_m','gamma'],
         'JLA': ['H_0'],

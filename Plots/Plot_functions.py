@@ -186,12 +186,36 @@ def texify_label(text: Optional[str], PLOT_SETTINGS: Mapping[str, Any]) -> Optio
 
 
 def pretty_obs_name(obs_key: str, latex_on: bool = True) -> str:
-    parts = obs_key.split("+")
-    def one(p: str) -> str:
-        pair = OBS_PRETTY_MAP.get(p)
-        if pair is None: return p
+    """
+    Pretty-print observation keys.
+
+    Requirements:
+      - Tables / saved stats (latex_on=False):
+          PantheonPS        -> Pantheon++SH0ES
+          PantheonP         -> Pantheon+
+      - Plots (latex_on=True):
+          PantheonPS        -> Pantheon$^{+}$+SH0ES
+          PantheonP         -> Pantheon$^{+}$
+    """
+
+    def _one_token(tok: str) -> str:
+        t = tok.strip()
+
+        # ---- Pantheon aliases ----
+        if t in ("PantheonPS", "PantheonP_SH0ES"):
+            return (r"Pantheon$^{+}$+SH0ES") if latex_on else "Pantheon++SH0ES"
+        if t == "PantheonP":
+            return (r"Pantheon$^{+}$") if latex_on else "Pantheon+"
+
+        # Fall back to your global mapping (keeps existing behavior)
+        pair = OBS_PRETTY_MAP.get(t)
+        if pair is None:
+            return t
         return pair[0] if latex_on else pair[1]
-    return " + ".join(one(p) for p in parts)
+
+    # combined groups are joined with "+"
+    parts = str(obs_key).split("+")
+    return " + ".join(_one_token(p) for p in parts)
 
 
 # =============================================================================
@@ -326,6 +350,9 @@ def add_corner_table(
     if fig is None:
         fig = plt.gcf()
 
+    if not latex_table or not any(isinstance(r, (list, tuple)) and len(r) for r in latex_table):
+        return None
+    
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -1207,7 +1234,7 @@ def model_curve_for_type(
         Ez = MODEL_funcs["E"](zgrid, p, model_name)
         return p["H_0"] * Ez, r"$H(z)$ (km s$^{-1}$ Mpc$^{-1}$)"
 
-    if obs_type in ("PantheonP", "Pantheon", "JLA", "DESY5", "Union3"):
+    if obs_type in ("PantheonP", "PantheonPS", "Pantheon", "JLA", "DESY5", "Union3"):
         Dc = MODEL_funcs["Dc"](zgrid, p, model_name)
         mu = 25.0 + 5.0 * np.log10(np.clip((1.0 + zgrid) * Dc, 1e-12, None))
         return mu, r"Distance modulus $\mu$ (mag)"
@@ -1318,9 +1345,18 @@ def evaluator_for_points(
         Ez = MODEL_funcs["E"](z, param_dict, model_name)
         return param_dict["H_0"] * Ez
 
-    if obs_type in ("PantheonP", "Pantheon", "JLA", "DESY5", "Union3"):
-        Dc = MODEL_funcs["Dc"](z, param_dict, model_name)
-        return 25.0 + 5.0 * np.log10(np.clip((1.0 + z) * Dc, 1e-12, None))
+    if obs_type in ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3"):
+        z = np.asarray(z, dtype=float)
+        d_c = MODEL_funcs["Dc"](z, param_dict, model_name)     # comoving distance [Mpc]
+        d_l = d_c * (1.0 + z)                                  # luminosity distance [Mpc]
+        d_l = np.asarray(d_l, dtype=float)
+
+        # Defensive: avoid log10 problems
+        if (not np.isfinite(d_l).all()) or (np.nanmin(d_l) <= 0):
+            return np.full_like(z, np.nan, dtype=float)
+
+        mu = 25.0 + 5.0 * np.log10(d_l)
+        return mu
 
     if obs_type == "f":
         return MODEL_funcs["f"](z, param_dict, model_name)

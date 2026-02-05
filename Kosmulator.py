@@ -69,23 +69,30 @@ logging.basicConfig(level=logging.INFO)
 # ----------------------------------------------------------------------
 
 # Models implemented in User_defined_modules.py
-model_names: List[str] = ["LCDM_v"]
+model_names: List[str] = ["f1CDM_v"]
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
     #['JLA'],
+    #['JLA','CC'],
     #['OHD'],
-    ['CC'],
+    #['CC'],
     #['PantheonP'],
     #['PantheonPS'],
+    ['PantheonPS','CC'],
     #['f_sigma_8'],
     #['f'],
     #['DESI_DR1'],
     #['DESI_DR2'],
     #['BAO'],
     #['Union3'],
-    #['DESY5'],
+    #["DESY5"],
+    #['Union3','CC'],
+    #["DESY5",'CC'],
     #["JLA","CC","OHD"],
+    ['PantheonPS','CC','DESI_DR2'],
+    #['PantheonP','DESI_DR2','BBN_DH_AlterBBN'],
+    #['PantheonPS','DESI_DR2','BBN_DH_AlterBBN'],
     #["JLA","Pantheon","PantheonP","DESY5","Union3"],
     #["CMB_lowl", "CMB_hil_TT"],
     #["DESI_DR2", 'CC','PantheonP','f_sigma_8'],
@@ -108,15 +115,15 @@ observations: List[List[str]] = [
 true_model: str = "LCDM_v"
 
 # Sampler settings
-nwalkers: int = 16
-nsteps: int = 500
-burn: int = 10
+nwalkers: int = 36
+nsteps: int = 100000
+burn: int = 500
 convergence: float = 0.01
 
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
-    "Omega_b": (0.001, 0.1),
+    "Omega_b": (0.01, 0.06),
     "H_0": (40.0, 100.0),
     "r_d": (0.01, 1000.0),
     "M_abs": (-30.0, -5.0),
@@ -126,7 +133,7 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "q0": (-0.8, -0.01),
     "q1": (-0.75, 1.0),
     "beta": (0.01, 5.0),
-    "tau_reio": (0.03, 0.06),
+    "tau_reio": (0.04, 0.09),
     "Omega_dh^2": (0.05, 0.2),
     "Omega_bh^2": (0.015, 0.031),
     "ln10^10_As": (2.5, 3.5),

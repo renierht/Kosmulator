@@ -64,6 +64,7 @@ while others are required only when specific observational datasets are used.
 - **Matplotlib**
 - **h5py**
 - **Pandas**
+- **mpi4py
 - **GetDist** (corner plots and statistical visualisation)
 - **EMCEE** (MCMC sampler)
 - **Zeus** (vectorised MCMC sampler)
@@ -585,7 +586,7 @@ conda install -c conda-forge -y \
   numpy scipy matplotlib h5py pandas \
   emcee zeus-mcmc cython astropy
 
-pip install getdist
+pip install getdist mpi4py
 ```
 
 #### 3) Install System Build Dependencies (Ubuntu / WSL) - #MacOS will most likely differ here!
