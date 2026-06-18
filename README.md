@@ -438,12 +438,31 @@ library.
    https://doi.org/10.1088/0004-637X/781/1/31
 
 ---
-
 ## Citation
-Kosmulator is an actively developed research framework.
-At present, there is no dedicated software paper describing the current version of Kosmulator.
 
-If you use Kosmulator in your work, please cite the original paper:
+Kosmulator is an actively developed research framework.
+If you use Kosmulator in your work, please cite the dedicated software paper:
+
+```bash
+@ARTICLE{2026arXiv260208424H,
+       author = {{Hough}, Renier T. and {Rugg}, Robert and {Sahlu}, Shambel and {Abebe}, Amare},
+        title = "{Kosmulator: A Python framework for cosmological inference with MCMC}",
+      journal = {arXiv e-prints},
+     keywords = {Cosmology and Nongalactic Astrophysics, General Relativity and Quantum Cosmology},
+         year = 2026,
+        month = feb,
+          eid = {arXiv:2602.08424},
+        pages = {arXiv:2602.08424},
+          doi = {10.48550/arXiv.2602.08424},
+archivePrefix = {arXiv},
+       eprint = {2602.08424},
+ primaryClass = {astro-ph.CO},
+       adsurl = {[https://ui.adsabs.harvard.edu/abs/2026arXiv260208424H](https://ui.adsabs.harvard.edu/abs/2026arXiv260208424H)},
+      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+}
+```
+
+Additionally, please cite the original paper detailing the initial implementation of the code:
 ```bash
 @ARTICLE{2020EPJC...80..787H,
        author = {{Hough}, R.~T. and {Abebe}, A. and {Ferreira}, S.~E.~S.},
@@ -464,7 +483,6 @@ archivePrefix = {arXiv},
       adsnote = {Provided by the SAO/NASA Astrophysics Data System}
 }
 ```
-A dedicated Kosmulator software reference (conference proceeding) is in preparation and will be added here once publicly available.
 
 ## Contributions
 Contributions are welcome.
@@ -631,9 +649,15 @@ PY
 
 #### 5) Build and Install Planck CLIK
 NOTE: this is the plc_3.1 tree produced by the Planck Likelihood Code tarball.
+Before building, we must apply a known bug fix to the lensing module (a legacy artifact from the 2015 to 2018 transition).
 
 ```bash
 cd /mnt/d/Kosmulator_test/Clik/code/plc_3.0/plc-3.1
+
+# Apply the 2018 lensing parameter mapping bug fix
+sed -i.bak '79,83c\      pars_proxy=nm.PyArray_ContiguousFromAny(apars,nm.NPY_DOUBLE,1,1)' src/python/clik/lkl_lensing.pyx
+
+# Configure and compile CLIK
 python waf configure --install_all_deps
 python waf install
 ```

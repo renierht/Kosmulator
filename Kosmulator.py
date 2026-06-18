@@ -69,7 +69,7 @@ logging.basicConfig(level=logging.INFO)
 # ----------------------------------------------------------------------
 
 # Models implemented in User_defined_modules.py
-model_names: List[str] = ["f1CDM_v"]
+model_names: List[str] = ["LCDM_v"]
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
@@ -79,7 +79,7 @@ observations: List[List[str]] = [
     #['CC'],
     #['PantheonP'],
     #['PantheonPS'],
-    ['PantheonPS','CC'],
+    #['PantheonPS','CC'],
     #['f_sigma_8'],
     #['f'],
     #['DESI_DR1'],
@@ -90,7 +90,7 @@ observations: List[List[str]] = [
     #['Union3','CC'],
     #["DESY5",'CC'],
     #["JLA","CC","OHD"],
-    ['PantheonPS','CC','DESI_DR2'],
+    #['PantheonPS','CC','DESI_DR2'],
     #['PantheonP','DESI_DR2','BBN_DH_AlterBBN'],
     #['PantheonPS','DESI_DR2','BBN_DH_AlterBBN'],
     #["JLA","Pantheon","PantheonP","DESY5","Union3"],
@@ -102,7 +102,7 @@ observations: List[List[str]] = [
     #["DESI_DR2","CMB_lowl","BBN_PryMordial"],
     #["CMB_lowl"],
     #['CMB_hil'],
-    #['CMB_lensing'],
+    ['CMB_lensing', 'CMB_lowl'],
     #['CMB_hil_TT'],
     #["CC", "DESI_DR1"],
     #["JLA","DESY5","Union3"],

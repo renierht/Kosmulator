@@ -2311,17 +2311,17 @@ def issue_observation_warnings(CONFIG, models, *, token_mode: bool = True) -> No
             # ------------------------------------------------------------------
             # CMB_lensing solo warnings (currently RAW-only)
             # ------------------------------------------------------------------
-            if (rraw == "cmb_lensing") or ("cmb_lensing" in rlow):
-                msg = (
-                    "CMB_lensing run solo: using RAW (non-marginalised) Planck "
-                    "lensing likelihood. The CMB-marginalised lensing mode is "
-                    "not yet wired into Kosmulator and will be added in a future "
-                    "update. You can safely combine CMB_lensing with CMB_lowl, "
-                    "CMB_hil, or CMB_hil_TT; those combinations use the standard "
-                    "RAW lensing treatment as in Planck TT/TE/EE+lensing."
-                )
-                _warn_once(f"CMBLensing_solo::{resolved}", msg)
-                continue
+            #if (rraw == "cmb_lensing") or ("cmb_lensing" in rlow):
+             #   msg = (
+               #     "CMB_lensing run solo: using RAW (non-marginalised) Planck "
+                #    "lensing likelihood. The CMB-marginalised lensing mode is "
+                 #   "not yet wired into Kosmulator and will be added in a future "
+                  #  "update. You can safely combine CMB_lensing with CMB_lowl, "
+                   # "CMB_hil, or CMB_hil_TT; those combinations use the standard "
+                    #"RAW lensing treatment as in Planck TT/TE/EE+lensing."
+                #)
+                #_warn_once(f"CMBLensing_solo::{resolved}", msg)
+                #continue
                 
             # ------------------------------------------------------------------
             # f / f_sigma_8 solo warnings

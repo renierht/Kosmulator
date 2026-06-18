@@ -78,23 +78,47 @@ def model_likelihood(
     if obs == "CMB_lowl":
         return SP.cmb_lowl_loglike(param_dict, model_name)
     if obs == "CMB_lensing":
-        # Decide "raw" vs "cmbmarged" based on what this group contains.
-        # Plumbing for cmbmarged stays in place but we currently always run RAW
-        # (the CMB-marged lensing likelihood is not yet wired in fully).
+        # Determine if we are using the RAW or CMBMARGED lensing likelihood.
         groups = CONFIG.get("observations", [])
         group = groups[obs_index] if obs_index < len(groups) else obs
         if not isinstance(group, (list, tuple)):
             group = [group]
 
-        has_primary_cmb = any(g in {"CMB_hil", "CMB_hil_TT", "CMB_lowl"} for g in group)
-        # For now we *always* use RAW, but we keep the plumbing ready:
-        mode = "raw"  # if has_primary_cmb else "cmbmarged"   # <- future switch
+        # Check if any primary Planck CMB likelihood is present in this specific group
+        primary_cmb_tags = {"CMB_hil", "CMB_hil_TT", "CMB_lowl"}
+        has_primary_cmb = any(str(g).strip() in primary_cmb_tags for g in group)
+
+        # Rule: If primary CMB is present, use raw. If primary CMB is absent, use marged.
+        mode = "raw" if has_primary_cmb else "cmbmarged"
         SP.set_lensing_mode(mode)
 
         grp_str = "+".join(map(str, group))
         _last = getattr(SP, "_last_lensing_mode_logged", None)
         if mode != _last:
-            log.info("[CMB-lensing switch] group=%s \u2192 mode=%s", grp_str, mode)
+            import multiprocessing as mp
+            import sys
+            
+            # 1. Bulletproof check to ensure only the true master core prints
+            is_mpi_master = True
+            try:
+                from mpi4py import MPI
+                if MPI.COMM_WORLD.Get_size() > 1:
+                    is_mpi_master = (MPI.COMM_WORLD.Get_rank() == 0)
+            except Exception:
+                pass
+                
+            is_local_master = (mp.current_process().name == "MainProcess")
+
+            # 2. Only log and flush if we are on the main coordinating core
+            if is_mpi_master and is_local_master:
+                log.info("[CMB-lensing switch] group=%s \u2192 mode=%s", grp_str, mode)
+                
+                # 3. Safely flush the standard output and log handlers
+                sys.stdout.flush()
+                for handler in log.handlers:
+                    handler.flush()
+            
+            # 4. Update the local variable on EVERY core so they don't try to print again
             SP._last_lensing_mode_logged = mode
 
         # This returns a scalar log-likelihood

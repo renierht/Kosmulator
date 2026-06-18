@@ -755,7 +755,12 @@ def get_clik_lensing_cmbmarg():
         _clik_instance_lensing_cmbmarg = clik.clik_lensing(path_marg)
 
     if not _DID_LOG_LENSING_CMBMARG:
-        logger.info("Loaded lensing (CMB-marged) clik from '%s'", path_marg)
+        import multiprocessing as mp
+        # Check if this specific worker is the main coordinating process
+        if mp.current_process().name == "MainProcess":
+            logger.info("Loaded lensing (CMB-marged) clik from '%s'", path_marg)
+        
+        # Set the flag to True for EVERY worker so they all stop trying
         _DID_LOG_LENSING_CMBMARG = True
 
     return _clik_instance_lensing_cmbmarg
