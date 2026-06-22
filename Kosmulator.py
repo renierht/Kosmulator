@@ -69,7 +69,7 @@ logging.basicConfig(level=logging.INFO)
 # ----------------------------------------------------------------------
 
 # Models implemented in User_defined_modules.py
-model_names: List[str] = ["LCDM_v"]
+model_names: List[str] = ["IDE_de_v"]
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
@@ -90,7 +90,7 @@ observations: List[List[str]] = [
     #['Union3','CC'],
     #["DESY5",'CC'],
     #["JLA","CC","OHD"],
-    #['PantheonPS','CC','DESI_DR2'],
+    ['PantheonPS','CC','DESI_DR2'],
     #['PantheonP','DESI_DR2','BBN_DH_AlterBBN'],
     #['PantheonPS','DESI_DR2','BBN_DH_AlterBBN'],
     #["JLA","Pantheon","PantheonP","DESY5","Union3"],
@@ -102,7 +102,7 @@ observations: List[List[str]] = [
     #["DESI_DR2","CMB_lowl","BBN_PryMordial"],
     #["CMB_lowl"],
     #['CMB_hil'],
-    ['CMB_lensing', 'CMB_lowl'],
+    #['CMB_lensing', 'CMB_lowl'],
     #['CMB_hil_TT'],
     #["CC", "DESI_DR1"],
     #["JLA","DESY5","Union3"],
@@ -117,7 +117,7 @@ true_model: str = "LCDM_v"
 # Sampler settings
 nwalkers: int = 36
 nsteps: int = 100000
-burn: int = 500
+burn: int = 2000
 convergence: float = 0.01
 
 # Top-hat priors
@@ -144,6 +144,14 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "alpha": (0.00, 1.00),
     "B": (0.00, 0.333),
     "f1": (0.01, 100.0),
+
+    # --- IDE Parameters ---
+    "w": (-2.0, -0.3),
+    "delta": (0.0, 0.5),
+    # --- IDE Toggle Switches (Locked as constants) ---
+    "allow_math_crash": (0.0, 0.0),   # Recommended: Do not change!
+    "allow_big_rip": (0.0, 0.0),      # Change to (1.0, 1.0) to allow Big Rip
+    "allow_neg_energy": (0.0, 0.0),   # Change to (1.0, 1.0) to allow negative early energy
 }
 
 # Reference “true” values (for diagnostics/plots)
@@ -168,6 +176,13 @@ true_values: Dict[str, float] = {
     "N_eff": K.N_EFF_DEFAULT,
     "tau_n": K.TAU_N_DEFAULT,
     "Omega_b": 0.05,
+
+    # --- IDE Reference Values ---
+    "w": -1.0,
+    "delta": 0.0,
+    "allow_math_crash": 0.0,
+    "allow_big_rip": 0.0,
+    "allow_neg_energy": 0.0,
 }
 
 # ----------------------------------------------------------------------
@@ -187,6 +202,27 @@ def _ensure_true_model_first(names: List[str], tm: str) -> List[str]:
 
 def main() -> None:
     from Kosmulator_main.utils import print_init_banner  # type: ignore[import]
+
+    # --- IDE SAFETY CHECK: Completely reject CMB for IDE models ---
+    # Check if any selected model is an IDE model
+    is_ide_run = any("IDE" in str(m) for m in model_names)
+
+    # Check if any selected observation group contains CMB data
+    flat_obs = [obs for grp in observations for obs in grp]
+    has_cmb = any("CMB" in str(obs) for obs in flat_obs)
+
+    if is_ide_run and has_cmb:
+        raise RuntimeError(
+            "\n" + "="*85 + "\n"
+            "   CONFIGURATION ERROR: IDE Models + CMB Not Supported!\n"
+            "="*85 + "\n"
+            "You have requested a CMB likelihood while running an Interacting Dark Energy (IDE) model.\n"
+            "CMB perturbation theory requires a modified CLASS backend, which is currently disabled.\n\n"
+            "FIX: Restrict your observations strictly to background cosmology (e.g., CC, SNe, BAO)\n"
+            "when running 'IDE_de_v' or 'IDE_dm_v' models.\n"
+            + "="*85 + "\n"
+        )
+    # --------------------------------------------------------------
 
     try:
         from mpi4py import MPI  # type: ignore[import]

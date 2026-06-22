@@ -173,6 +173,90 @@ def f1CDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
     out = np.array(out, dtype=float)
     return _scalar_or_array(out)
 
+def IDE_de_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """
+    Interacting Dark Energy (Q proportional to rho_de) with Toggleable Bounds.
+    E^2(z) = [Om + (delta*Ode)/(w+delta)](1+z)^3 + Ode[w/(w+delta)](1+z)^{3(1+w+delta)}
+    """
+    z = _asarray(z)
+    Om = float(p["Omega_m"])
+    w = float(p["w"])
+    delta = float(p["delta"])
+    Ode = 1.0 - Om
+
+    # --- PLUG AND PLAY SWITCHES ---
+    allow_math_crash = p.get("allow_math_crash", 0.0)
+    allow_big_rip    = p.get("allow_big_rip", 0.0)
+    allow_neg_energy = p.get("allow_neg_energy", 0.0)
+
+    # 1. Math Guardrail: Prevent division by zero
+    if not allow_math_crash:
+        if np.isclose(w + delta, 0.0):
+            return _scalar_or_array(np.full_like(z, np.nan))
+
+    # 2. Physics Guardrail: Big Rip avoidance
+    if not allow_big_rip:
+        if (1.0 + w + delta) < 0:
+            return _scalar_or_array(np.full_like(z, np.nan))
+
+    # 3. Physics Guardrail: Ensure dark matter positivity
+    if not allow_neg_energy:
+        if (Om + (delta * Ode) / (w + delta)) < 0:
+            return _scalar_or_array(np.full_like(z, np.nan))
+
+    # Core background calculation
+    term_m = (Om + (delta * Ode) / (w + delta)) * (1 + z)**3
+    term_de = Ode * (w / (w + delta)) * (1 + z)**(3 * (1 + w + delta))
+    E2 = term_m + term_de
+
+    if (not np.isfinite(E2).all()) or (E2.min() <= 0):
+        out = np.full_like(z, np.nan)
+    else:
+        out = np.sqrt(E2)
+    return _scalar_or_array(out)
+
+
+def IDE_dm_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """
+    Interacting Dark Energy (Q proportional to rho_dm) with Toggleable Bounds.
+    E^2(z) = Om[w/(w+delta)](1+z)^{3(1-delta)} + [Ode + (delta*Om)/(w+delta)](1+z)^{3(1+w)}
+    """
+    z = _asarray(z)
+    Om = float(p["Omega_m"])
+    w = float(p["w"])
+    delta = float(p["delta"])
+    Ode = 1.0 - Om
+
+    # --- PLUG AND PLAY SWITCHES ---
+    allow_math_crash = p.get("allow_math_crash", 0.0)
+    allow_big_rip    = p.get("allow_big_rip", 0.0)
+    allow_neg_energy = p.get("allow_neg_energy", 0.0)
+
+    # 1. Math Guardrail: Prevent division by zero
+    if not allow_math_crash:
+        if np.isclose(w + delta, 0.0):
+            return _scalar_or_array(np.full_like(z, np.nan))
+
+    # 2. Physics Guardrail: Big Rip and runaway avoidance
+    if not allow_big_rip:
+        if w < -1.0 or delta > 1.0:
+            return _scalar_or_array(np.full_like(z, np.nan))
+
+    # 3. Physics Guardrail: Ensure dark energy positivity
+    if not allow_neg_energy:
+        if (Ode + (delta * Om) / (w + delta)) < 0:
+            return _scalar_or_array(np.full_like(z, np.nan))
+
+    # Core background calculation
+    term_m = Om * (w / (w + delta)) * (1 + z)**(3 * (1 - delta))
+    term_de = (Ode + (delta * Om) / (w + delta)) * (1 + z)**(3 * (1 + w))
+    E2 = term_m + term_de
+
+    if (not np.isfinite(E2).all()) or (E2.min() <= 0):
+        out = np.full_like(z, np.nan)
+    else:
+        out = np.sqrt(E2)
+    return _scalar_or_array(out)
 
 # ============================================================================
 #  CMB wrappers (CLASS C_ℓ)
@@ -360,6 +444,8 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
     "LCDM_nv":  (LCDM_MODEL_non_vectorised,  ["Omega_m"]),
     "f1CDM_v":  (f1CDM_MODEL_vectorised,     ["Omega_m", "n"]),
     "f1CDM_nv": (f1CDM_MODEL_non_vectorised, ["Omega_m", "n"]),
+    "IDE_de_v": (IDE_de_MODEL_vectorised, ["Omega_m", "w", "delta"]),
+    "IDE_dm_v": (IDE_dm_MODEL_vectorised, ["Omega_m", "w", "delta"]),
 
     # CMB-specific models for CLASS Cls (used by CMB likelihoods)
     "LCDM_v_CMB": (
@@ -441,14 +527,19 @@ def restrict_f1CDM_v(x: float) -> bool:
     """
     return x < 0.5
 
+def restrict_IDE_delta(x: float) -> bool:
+    """Enforce physical thermodynamic flow from Dark Energy to Dark Matter."""
+    return x >= 0.0
 
 # Global map that Get_model_restrictions reads from.
 restrictions_map: Dict[str, Dict[str, Callable[[float], bool]]] = {
-    "LCDM":    {"Omega_m": restrict_LCDM_Omega_m},
-    "LCDM_v":  {"Omega_m": restrict_LCDM_Omega_m},
-    "LCDM_nv": {"Omega_m": restrict_LCDM_Omega_m},
+    #"LCDM":    {"Omega_m": restrict_LCDM_Omega_m},
+    #"LCDM_v":  {"Omega_m": restrict_LCDM_Omega_m},
+    #"LCDM_nv": {"Omega_m": restrict_LCDM_Omega_m},
     "f1CDM_v": {"n": restrict_f1CDM_v},
     # Example for a new model:
+    "IDE_de_v": {"delta": restrict_IDE_delta},
+    "IDE_dm_v": {"delta": restrict_IDE_delta},
     # "MyMG_v": {"my_param": restrict_MyMG_param},
 }
 
