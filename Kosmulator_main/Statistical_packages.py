@@ -1177,7 +1177,8 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
 
     if np.isnan(theo).any():
         unknown = sorted(set(types[np.isnan(theo)]))
-        raise ValueError(f"DESI: unhandled type code(s): {unknown}. Supported: 3,5,6,7,8")
+        #raise ValueError(f"DESI: unhandled type code(s): {unknown}. Supported: 3,5,6,7,8")
+        return np.inf
 
     diff = theo - meas
 

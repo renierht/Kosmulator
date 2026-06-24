@@ -173,90 +173,208 @@ def f1CDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
     out = np.array(out, dtype=float)
     return _scalar_or_array(out)
 
-def IDE_de_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
+# ============================================================================
+#  Safeguard Switchboard (Table II)
+#  ---------------------------------------------------------------------------
+#  Toggle these flags to enforce physical boundaries during MCMC sampling.
+#  Mathematical bounds (Table I) are hardcoded and always enforced.
+# ============================================================================
+ALLOW_NEGATIVE_ENERGIES = True
+ALLOW_BIG_RIP = True
+
+# ============================================================================
+
+#  Safeguard Switchboard (Table II)
+
+#  ---------------------------------------------------------------------------
+
+#  Toggle these flags to enforce physical boundaries during MCMC sampling.
+
+#  Mathematical bounds (Table I) are hardcoded and always enforced.
+
+# ============================================================================
+
+ALLOW_NEGATIVE_ENERGIES = False
+
+ALLOW_BIG_RIP = False
+
+
+
+def Linear_IDE_1_vectorised(z: Number, p: Dict[str, float], bypass_switchboard: bool = False) -> Number:
     """
-    Interacting Dark Energy (Q proportional to rho_de) with Toggleable Bounds.
-    E^2(z) = [Om + (delta*Ode)/(w+delta)](1+z)^3 + Ode[w/(w+delta)](1+z)^{3(1+w+delta)}
+    Linear IDE Model 1 (General Model): Q = 3H(\delta_{dm}\rho_{dm} + \delta_{de}\rho_{de})
+    Parameters in `p`:
+      • Omega_m
+      • w (dark energy equation of state)
+      • delta_dm
+      • delta_de
     """
-    z = _asarray(z)
+    z_arr = _asarray(z)
+
     Om = float(p["Omega_m"])
+    Ob = float(p.get("Omega_b", 0.048)) # Defaulting to paper's baseline if not sampled
+    Or = float(p.get("Omega_r", 0.0))
     w = float(p["w"])
-    delta = float(p["delta"])
-    Ode = 1.0 - Om
+    ddm = float(p.get("delta_dm", 0.0))
+    dde = float(p.get("delta_de", 0.0))
 
-    # --- PLUG AND PLAY SWITCHES ---
-    allow_math_crash = p.get("allow_math_crash", 0.0)
-    allow_big_rip    = p.get("allow_big_rip", 0.0)
-    allow_neg_energy = p.get("allow_neg_energy", 0.0)
+    Odm0 = Om - Ob
+    Ode0 = 1.0 - Om - Or
 
-    # 1. Math Guardrail: Prevent division by zero
-    if not allow_math_crash:
-        if np.isclose(w + delta, 0.0):
-            return _scalar_or_array(np.full_like(z, np.nan))
+    # Base physical safeguard: present-day densities must be positive
+    if Odm0 <= 0 or Ode0 <= 0:
+        return np.full_like(z_arr, np.nan)
 
-    # 2. Physics Guardrail: Big Rip avoidance
-    if not allow_big_rip:
-        if (1.0 + w + delta) < 0:
-            return _scalar_or_array(np.full_like(z, np.nan))
+    r0 = Odm0 / Ode0
 
-    # 3. Physics Guardrail: Ensure dark matter positivity
-    if not allow_neg_energy:
-        if (Om + (delta * Ode) / (w + delta)) < 0:
-            return _scalar_or_array(np.full_like(z, np.nan))
+    # -----------------------------------------------------------
 
-    # Core background calculation
-    term_m = (Om + (delta * Ode) / (w + delta)) * (1 + z)**3
-    term_de = Ode * (w / (w + delta)) * (1 + z)**(3 * (1 + w + delta))
-    E2 = term_m + term_de
+    # Physical Bounds (Table II) - Executed only for General Model
+
+    # -----------------------------------------------------------
+    if not bypass_switchboard:
+        if not ALLOW_NEGATIVE_ENERGIES:
+            if ddm < 0 or dde < 0 or (ddm*r0 + dde) > (-w*r0 / (1.0 + r0)):
+                return np.full_like(z_arr, np.nan)
+
+        if not ALLOW_BIG_RIP:
+            if w == -1.0:
+                if ddm != 0: return np.full_like(z_arr, np.nan)
+            elif (w + 1.0) > 0:
+                if (ddm / (w + 1.0) - dde) > (w + 1.0): return np.full_like(z_arr, np.nan)
+            else: # Phantom regime crossover
+                if (ddm - dde*(w + 1.0)) < (w + 1.0)**2: return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Mathematical Bounds (Table I) - ALWAYS ENFORCED
+    # -----------------------------------------------------------
+    if w == 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    Delta2 = (ddm + dde + w)**2 - 4.0 * dde * ddm
+
+    # Avoid imaginary densities and division by zero
+    if Delta2 <= 0:
+        return np.full_like(z_arr, np.nan)
+
+    Delta = np.sqrt(Delta2)
+
+    # -----------------------------------------------------------
+    # Analytical E(z) Calculation (Equation 3)
+    # -----------------------------------------------------------
+    term1_coeff = - (Ode0 * (ddm - dde + w - Delta) + Odm0 * (ddm - dde - w - Delta)) / (2.0 * Delta)
+    term1_exp = -1.5 * (ddm - dde - w - 2.0 + Delta)
+
+    term2_coeff =  (Ode0 * (ddm - dde + w + Delta) + Odm0 * (ddm - dde - w + Delta)) / (2.0 * Delta)
+    term2_exp = -1.5 * (ddm - dde - w - 2.0 - Delta)
+
+    E2 = (term1_coeff * (1.0 + z_arr)**term1_exp +
+          term2_coeff * (1.0 + z_arr)**term2_exp +
+          Ob * (1.0 + z_arr)**3 +
+          Or * (1.0 + z_arr)**4)
 
     if (not np.isfinite(E2).all()) or (E2.min() <= 0):
-        out = np.full_like(z, np.nan)
+        out = np.full_like(z_arr, np.nan)
     else:
         out = np.sqrt(E2)
     return _scalar_or_array(out)
 
-
-def IDE_dm_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
-    """
-    Interacting Dark Energy (Q proportional to rho_dm) with Toggleable Bounds.
-    E^2(z) = Om[w/(w+delta)](1+z)^{3(1-delta)} + [Ode + (delta*Om)/(w+delta)](1+z)^{3(1+w)}
-    """
-    z = _asarray(z)
-    Om = float(p["Omega_m"])
+def Linear_IDE_2_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """Linear IDE Model 2: Q = 3H\delta(\rho_{dm} + \rho_{de})"""
     w = float(p["w"])
     delta = float(p["delta"])
-    Ode = 1.0 - Om
+    Om = float(p["Omega_m"])
+    Ob = float(p.get("Omega_b", 0.048))
 
-    # --- PLUG AND PLAY SWITCHES ---
-    allow_math_crash = p.get("allow_math_crash", 0.0)
-    allow_big_rip    = p.get("allow_big_rip", 0.0)
-    allow_neg_energy = p.get("allow_neg_energy", 0.0)
+    Odm0 = Om - Ob
+    Ode0 = 1.0 - Om - float(p.get("Omega_r", 0.0))
+    if Ode0 <= 0 or Odm0 <= 0: return np.full_like(_asarray(z), np.nan)
+    r0 = Odm0 / Ode0
 
-    # 1. Math Guardrail: Prevent division by zero
-    if not allow_math_crash:
-        if np.isclose(w + delta, 0.0):
-            return _scalar_or_array(np.full_like(z, np.nan))
+    if not ALLOW_NEGATIVE_ENERGIES:
+        if delta < 0 or delta > (-w * r0 / ((1.0 + r0)**2)):
+            return np.full_like(_asarray(z), np.nan)
+    if not ALLOW_BIG_RIP:
+        if w == 0.0 or delta < (1.0 + 1.0/w):
+            return np.full_like(_asarray(z), np.nan)
 
-    # 2. Physics Guardrail: Big Rip and runaway avoidance
-    if not allow_big_rip:
-        if w < -1.0 or delta > 1.0:
-            return _scalar_or_array(np.full_like(z, np.nan))
+    p_gen = p.copy()
+    p_gen["delta_dm"] = delta
+    p_gen["delta_de"] = delta
+    return Linear_IDE_1_vectorised(z, p_gen, bypass_switchboard=True)
 
-    # 3. Physics Guardrail: Ensure dark energy positivity
-    if not allow_neg_energy:
-        if (Ode + (delta * Om) / (w + delta)) < 0:
-            return _scalar_or_array(np.full_like(z, np.nan))
 
-    # Core background calculation
-    term_m = Om * (w / (w + delta)) * (1 + z)**(3 * (1 - delta))
-    term_de = (Ode + (delta * Om) / (w + delta)) * (1 + z)**(3 * (1 + w))
-    E2 = term_m + term_de
+def Linear_IDE_3_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """Linear IDE Model 3: Q = 3H\delta(\rho_{dm} - \rho_{de})"""
+    w = float(p["w"])
+    delta = float(p["delta"])
 
-    if (not np.isfinite(E2).all()) or (E2.min() <= 0):
-        out = np.full_like(z, np.nan)
-    else:
-        out = np.sqrt(E2)
-    return _scalar_or_array(out)
+    if not ALLOW_NEGATIVE_ENERGIES:
+        # Table II: "No viable domain" - inherently yields negative energies
+        return np.full_like(_asarray(z), np.nan)
+
+    if not ALLOW_BIG_RIP:
+        if w == -2.0: return np.full_like(_asarray(z), np.nan) # prevent div/0
+        if delta > ((1.0 + w)/(2.0 + w)):
+            return np.full_like(_asarray(z), np.nan)
+
+    p_gen = p.copy()
+    p_gen["delta_dm"] = delta
+    p_gen["delta_de"] = -delta
+    return Linear_IDE_1_vectorised(z, p_gen, bypass_switchboard=True)
+
+
+def Linear_IDE_4_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """Linear IDE Model 4: Q = 3H\delta\rho_{dm}"""
+    w = float(p["w"])
+    delta = float(p["delta"])
+    Om = float(p["Omega_m"])
+    Ob = float(p.get("Omega_b", 0.048))
+
+    Odm0 = Om - Ob
+    Ode0 = 1.0 - Om - float(p.get("Omega_r", 0.0))
+    if Ode0 <= 0 or Odm0 <= 0: return np.full_like(_asarray(z), np.nan)
+    r0 = Odm0 / Ode0
+
+    if not ALLOW_NEGATIVE_ENERGIES:
+        if delta < 0 or delta > (-w / (1.0 + r0)):
+            return np.full_like(_asarray(z), np.nan)
+    if not ALLOW_BIG_RIP:
+        if w <= -1.0:
+            return np.full_like(_asarray(z), np.nan)
+
+    p_gen = p.copy()
+    p_gen["delta_dm"] = delta
+    p_gen["delta_de"] = 0.0
+    return Linear_IDE_1_vectorised(z, p_gen, bypass_switchboard=True)
+
+
+def Linear_IDE_5_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """Linear IDE Model 5: Q = 3H\delta\rho_{de}"""
+    w = float(p["w"])
+    delta = float(p["delta"])
+    Om = float(p["Omega_m"])
+    Ob = float(p.get("Omega_b", 0.048))
+
+    Odm0 = Om - Ob
+    Ode0 = 1.0 - Om - float(p.get("Omega_r", 0.0))
+    if Ode0 <= 0 or Odm0 <= 0: return np.full_like(_asarray(z), np.nan)
+
+    r0 = Odm0 / Ode0
+
+    if not ALLOW_NEGATIVE_ENERGIES:
+        if delta < 0 or delta > (-w * (1.0 + 1.0/r0)):
+            return np.full_like(_asarray(z), np.nan)
+
+    if not ALLOW_BIG_RIP:
+        if delta < (-w - 1.0):
+            return np.full_like(_asarray(z), np.nan)
+
+    p_gen = p.copy()
+    p_gen["delta_dm"] = 0.0
+    p_gen["delta_de"] = delta
+
+    return Linear_IDE_1_vectorised(z, p_gen, bypass_switchboard=True)
 
 # ============================================================================
 #  CMB wrappers (CLASS C_ℓ)
@@ -444,8 +562,13 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
     "LCDM_nv":  (LCDM_MODEL_non_vectorised,  ["Omega_m"]),
     "f1CDM_v":  (f1CDM_MODEL_vectorised,     ["Omega_m", "n"]),
     "f1CDM_nv": (f1CDM_MODEL_non_vectorised, ["Omega_m", "n"]),
-    "IDE_de_v": (IDE_de_MODEL_vectorised, ["Omega_m", "w", "delta"]),
-    "IDE_dm_v": (IDE_dm_MODEL_vectorised, ["Omega_m", "w", "delta"]),
+
+    # Interacting Dark Energy Models (Linear)
+    "Linear_IDE_1": (Linear_IDE_1_vectorised, ["Omega_m", "w", "delta_dm", "delta_de"]),
+    "Linear_IDE_2": (Linear_IDE_2_vectorised, ["Omega_m", "w", "delta"]),
+    "Linear_IDE_3": (Linear_IDE_3_vectorised, ["Omega_m", "w", "delta"]),
+    "Linear_IDE_4": (Linear_IDE_4_vectorised, ["Omega_m", "w", "delta"]),
+    "Linear_IDE_5": (Linear_IDE_5_vectorised, ["Omega_m", "w", "delta"]),
 
     # CMB-specific models for CLASS Cls (used by CMB likelihoods)
     "LCDM_v_CMB": (

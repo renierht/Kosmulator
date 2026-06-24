@@ -69,7 +69,7 @@ logging.basicConfig(level=logging.INFO)
 # ----------------------------------------------------------------------
 
 # Models implemented in User_defined_modules.py
-model_names: List[str] = ["IDE_de_v"]
+model_names: List[str] = ["Linear_IDE_1"]
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
@@ -77,7 +77,7 @@ observations: List[List[str]] = [
     #['JLA','CC'],
     #['OHD'],
     #['CC'],
-    #['PantheonP'],
+    ['PantheonPS', 'DESI_DR2', 'CC'],
     #['PantheonPS'],
     #['PantheonPS','CC'],
     #['f_sigma_8'],
@@ -90,7 +90,7 @@ observations: List[List[str]] = [
     #['Union3','CC'],
     #["DESY5",'CC'],
     #["JLA","CC","OHD"],
-    ['PantheonPS','CC','DESI_DR2'],
+    #['PantheonPS','CC','DESI_DR2'],
     #['PantheonP','DESI_DR2','BBN_DH_AlterBBN'],
     #['PantheonPS','DESI_DR2','BBN_DH_AlterBBN'],
     #["JLA","Pantheon","PantheonP","DESY5","Union3"],
@@ -112,21 +112,33 @@ observations: List[List[str]] = [
     #["f_sigma_8", "PantheonP"],
 ]
 
-true_model: str = "LCDM_v"
+true_model: str = "Linear_IDE_1"
 
 # Sampler settings
 nwalkers: int = 36
 nsteps: int = 100000
-burn: int = 2000
+burn: int = 30000
 convergence: float = 0.01
 
-# Top-hat priors
+
 prior_limits: Dict[str, Tuple[float, float]] = {
-    "Omega_m": (0.01, 1.0),
-    "Omega_b": (0.01, 0.06),
-    "H_0": (40.0, 100.0),
+    # Core Cosmological Parameters (Table III limits)
+    "Omega_dm": (0.001, 0.9),      # Fractional density of dark matter
+    "Omega_b": (0.001, 0.3),       # Fractional density of baryons
+    "Omega_m": (0.1, 0.5),       # Implied total matter bounds if sampled directly
+    "H_0": (60.0, 90.0),          # Hubble constant bounds
+    "M_abs": (-20.5, -18.0),       # Supernova absolute magnitude (M)
+    "w": (-2.0, -0.33),           # Dark energy equation of state
+
+    # Interacting Dark Energy Coupling Parameters
+    # Approximating the (-∞, +∞) unbounded priors for linear models
+    "delta_dm": (-2.0, 2.0),
+    "delta_de": (-2.0, 2.0),
+    "delta": (-10.0, 10.0),
+
+    # Standard Nuisance / CMB Parameters (Unchanged for safety)
     "r_d": (0.01, 1000.0),
-    "M_abs": (-30.0, -5.0),
+    "r_d": (147.499, 147.501),
     "gamma": (0.01, 1.0),
     "sigma_8": (0.01, 1.0),
     "n": (0.0, 0.6),
@@ -144,20 +156,24 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "alpha": (0.00, 1.00),
     "B": (0.00, 0.333),
     "f1": (0.01, 100.0),
-
-    # --- IDE Parameters ---
-    "w": (-2.0, -0.3),
-    "delta": (0.0, 0.5),
-    # --- IDE Toggle Switches (Locked as constants) ---
-    "allow_math_crash": (0.0, 0.0),   # Recommended: Do not change!
-    "allow_big_rip": (0.0, 0.0),      # Change to (1.0, 1.0) to allow Big Rip
-    "allow_neg_energy": (0.0, 0.0),   # Change to (1.0, 1.0) to allow negative early energy
 }
 
-# Reference “true” values (for diagnostics/plots)
+# ----------------------------------------------------------------------
+# Reference “true” values (Based on paper's best fits)
+# ----------------------------------------------------------------------
 true_values: Dict[str, float] = {
-    "Omega_m": 0.315,
-    "H_0": 67.4,
+    # Aligned with the mean values from Table V (Pantheon+, DESI DR2, CC & BBN)
+    "Omega_dm": 0.26,
+    "Omega_b": 0.047,
+    "Omega_m": 0.307,
+    "H_0": 70.0,
+    "M_abs": -19.35,
+    "w": -1.0,
+    "delta_dm": 0.0,
+    "delta_de": 0.0,
+    "delta": 0.0,
+
+    # Standard fallbacks
     "gamma": K.GAMMA_FS8_SINGLETON,
     "sigma_8": 0.8,
     "q0": -0.537,
@@ -165,7 +181,6 @@ true_values: Dict[str, float] = {
     "q1": 0.125,
     "beta": 2.505,
     "r_d": K.R_D_SINGLETON,
-    "M_abs": -19.2,
     "tau_reio": 0.054,
     "Omega_dh^2": 0.12,
     "Omega_bh^2": 0.0224,
@@ -175,14 +190,6 @@ true_values: Dict[str, float] = {
     "100theta_s": 1.04110,
     "N_eff": K.N_EFF_DEFAULT,
     "tau_n": K.TAU_N_DEFAULT,
-    "Omega_b": 0.05,
-
-    # --- IDE Reference Values ---
-    "w": -1.0,
-    "delta": 0.0,
-    "allow_math_crash": 0.0,
-    "allow_big_rip": 0.0,
-    "allow_neg_energy": 0.0,
 }
 
 # ----------------------------------------------------------------------

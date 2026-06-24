@@ -870,8 +870,13 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         sample = Samples[found]
         names  = CONFIG["parameters"][i]
         labels = greek_Symbols(names) if use_latex else names
-
-        ms = MCSamples(samples=sample, names=names, labels=labels)
+        
+        analysis_settings = {
+            'fine_bins_2D': 1024,
+            'smooth_scale_2D': 2.0,
+            'smooth_scale_1D': 2.0
+        }
+        ms = MCSamples(samples=sample, names=names, labels=labels, settings=analysis_settings)
         ms.plotColor = palette[i % len(palette)]
         distributions.append(ms)
 
@@ -906,6 +911,9 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
 
         # Rebuild header with CMB nuisances removed; non-CMB params remain intact
         header_params = [p for p in header_params if p not in cmb_to_drop]
+    
+    if "r_d" in header_params:
+        header_params.remove("r_d")
     # ----------------------------------------------------------------
 
     # 4) pretty legend labels (LaTeX or plain depending on settings)
