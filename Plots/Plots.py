@@ -1570,13 +1570,18 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                                 zorder=min(z_obs + 1, Z_BAND - 1),
                             )
                     elif obs_type not in SNE_TYPES:
-                        order = np.argsort(np.asarray(x_dat))
-                        ax.plot(
-                            np.asarray(x_dat)[order],
-                            np.asarray(y_mod_pts)[order],
-                            color=MODEL_COLOR, linestyle="-", linewidth=1.2, alpha=0.8,
-                            zorder=min(z_obs + 1, Z_BAND - 1),
-                        )
+                        overlay_point_model = bool(PLOT_SETTINGS.get("overlay_model_at_data_points", False))
+                        if overlay_point_model:
+                            order = np.argsort(np.asarray(x_dat))
+                            ax.plot(
+                                np.asarray(x_dat)[order],
+                                np.asarray(y_mod_pts)[order],
+                                color=MODEL_COLOR,
+                                linestyle="-",
+                                linewidth=1.2,
+                                alpha=0.8,
+                                zorder=min(z_obs + 1, Z_BAND - 1),
+                            )
 
                     # Residuals (using masked plotting arrays)
                     res_plot = np.asarray(y_plot) - np.asarray(y_mod_plot)
