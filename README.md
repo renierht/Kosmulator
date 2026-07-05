@@ -40,7 +40,7 @@ $$
 
 For a flat FLRW universe containing radiation, baryons, dark matter, and dark energy, the normalized Hubble function is
 
-$$
+```math
 \begin{aligned}
 h(z)=\{&
 -\frac{1}{2\Delta}
@@ -56,7 +56,7 @@ h(z)=\{&
 &+\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
 \}^{1/2},
 \end{aligned}
-$$
+```
 where
 
 $$
