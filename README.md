@@ -160,7 +160,7 @@ For $\delta<0$, energy flows from dark matter to dark energy and dark energy bec
 
 The normalized Hubble function is
 
-$$
+```math
 \begin{aligned}
 h(z)=\{&
 \left[\Omega_{\rm dm,0}
@@ -177,7 +177,7 @@ h(z)=\{&
 +\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
 \}^{1/2}.
 \end{aligned}
-$$
+```
 
 For $\delta<0$, energy flows from dark matter to dark energy and dark matter becomes negative in the future. For a sufficiently small positive coupling, energy flows from dark energy to dark matter and all dark-sector densities can remain positive.
 
