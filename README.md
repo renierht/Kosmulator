@@ -2,874 +2,276 @@
   <img src="assets/Kosmulator.png" alt="Kosmulator logo" width="300">
 </p>
 
-# Kosmulator: A Python framework for cosmological inference with MCMC
+# Kosmulator IDE branch: Interacting Dark Energy extensions
 
-Kosmulator is a Python package utilising **Zeus** and **EMCEE (The MCMC Hammer)** to perform efficient, vectorised Markov Chain Monte Carlo (MCMC) simulations for studying **modified gravity** and **alternative cosmological models**.
+For installation instructions, general information about Kosmulator, model selection, dataset selection, sampler configuration, and setting parameter bounds, users should refer to the [`main` branch](https://github.com/renierht/Kosmulator). This branch specifically contains modifications of Kosmulator for **Interacting Dark Energy (IDE)** background models.
 
-The package is designed to be **modular**, **flexible**, and **user-friendly**, allowing researchers to easily configure inference runs, combine multiple sets of cosmological observations, and produce high-quality statistical summaries and visualisations.
-
----
-
-## Features
-
-- **Flexible Cosmological Inference Framework**  
-  Run Bayesian inference pipelines for ΛCDM, modified gravity, and alternative cosmologies using a modular, model-agnostic architecture.
-
-- **Multiple MCMC Backends**  
-  Supports both **Zeus** and **EMCEE**, with automatic or user-controlled sampler selection and convergence diagnostics.
-
-- **Vectorised Likelihood Evaluation**  
-  Efficient vectorised likelihood computations for fast sampling across large parameter spaces and combined datasets.
-
-- **Wide Range of Observational Data**  
-  Built-in support for:
-  - Type Ia Supernovae (JLA, Pantheon, Pantheon+, Union3, DES-Y5)
-  - Baryon Acoustic Oscillations (BAO)
-  - DESI (DR1 and DR2)
-  - Cosmic Chronometers / OHD
-  - Growth of structure (fσ₈ and f)
-  - Cosmic Microwave Background (Planck 2018 via CLIK)
-  - Big Bang Nucleosynthesis (D/H, BBN_PryMordial, including AlterBBN-based likelihoods)
-
-- **Automatic Parameter Injection & Dataset Awareness**  
-  Parameters (including nuisance parameters) are automatically added or fixed based on selected observational datasets.
-
-- **Sound Horizon (r_d) Policy Management**  
-  Centralised handling of the sound horizon with support for fixed, free, CLASS-derived, or BBN-calibrated treatments depending on data combinations.
-
-- **CLASS Integration with Caching**  
-  Seamless integration with **CLASS**, including model-specific binary caching for fast reuse across runs and multiprocessing environments.
-
-- **Publication-Ready Output & Visualisation**  
-  Generates corner plots, best-fit theory comparisons, autocorrelation diagnostics, and LaTeX-ready statistical tables with a consistent directory structure.
-
-- **Chain Reuse and Resume Capability**  
-  Reload, resume, or extend existing MCMC chains for reproducibility and efficient experimentation.
-
-- **Environment Diagnostics**  
-  Includes a built-in `kosmulator-doctor` command to verify Python dependencies, CLASS, Planck CLIK likelihoods, and optional AlterBBN support.
+The purpose of this branch is to add analytical background solutions for five linear and three non-linear IDE kernels, together with parameter-domain checks that can be used to exclude imaginary or undefined dark-sector densities, negative energy densities, future big-rip singularities, and early-time perturbative instabilities according to the doom-factor analysis.
 
 ---
 
-## Requirements
+## IDE background equations
 
-Kosmulator is written in Python and supports a modular backend system. Some dependencies are always required, 
-while others are required only when specific observational datasets are used.
+Phenomenological IDE models modify the separate conservation equations of dark matter and dark energy by introducing an interaction four-vector $Q^\nu$. At background level, only the energy-transfer kernel $Q$ is required, and the dark-sector conservation equations become
 
-#### Core Python Dependencies (required for all runs)
+$$
+\dot{\rho}_{\rm dm}+3H\rho_{\rm dm}=Q,
+\qquad
+\dot{\rho}_{\rm de}+3H\rho_{\rm de}(1+w)=-Q.
+$$
 
-- **Python ≥ 3.9** - Recommend Python 3.11
-- **NumPy**
-- **SciPy**
-- **Matplotlib**
-- **h5py**
-- **Pandas**
-- **mpi4py
-- **GetDist** (corner plots and statistical visualisation)
-- **EMCEE** (MCMC sampler)
-- **Zeus** (vectorised MCMC sampler)
+Here $\rho_{\rm dm}$ and $\rho_{\rm de}$ are the dark matter and dark energy densities, $H$ is the Hubble function, and $w$ is the dark energy equation-of-state parameter. With this sign convention, $Q>0$ corresponds to energy transfer from dark energy to dark matter, while $Q<0$ corresponds to energy transfer from dark matter to dark energy.
 
-#### CMB-Specific Dependencies (required only when CMB likelihoods are used)
+The interaction kernel $Q$ is usually taken to be proportional to $H$, one or more dark-sector densities, and a dimensionless coupling parameter $\delta$. In most one-coupling models, $w$ is also kept as a free parameter, so the interacting model typically introduces two additional/free dark-sector parameters to constrain: $\delta$ and $w$. The most general linear model in this branch contains two coupling parameters, $\delta_{\rm dm}$ and $\delta_{\rm de}$, together with $w$.
 
-- **CLASS (classy)**  
-  Used to compute background and perturbation quantities and CMB power spectra.
-- **Planck CLIK likelihoods**  
-  Required for Planck CMB likelihoods (TT, TTTEEE, low-ℓ, lensing).  
-  The corresponding `.clik` likelihood directories must be available locally.
-- **Astropy** 
-- **Cython** 
+Throughout this README we define
 
-#### Optional Dependencies
-
-- **AlterBBN**  
-  Optional backend for Big Bang Nucleosynthesis (BBN) D/H likelihoods.  
-  Kosmulator supports approximate BBN likelihoods without AlterBBN, as well as physically motivated predictions using live AlterBBN calls or precomputed grids.
-
-- **LaTeX (TeX Live / MiKTeX)**  
-  Strongly recommended for publication-quality plots and LaTeX-ready tables. See Latex installation section at the end for additional information.
+$$
+h(z) \equiv E(z) \equiv \frac{H(z)}{H_0},
+\qquad
+r_0 \equiv \frac{\Omega_{\rm dm,0}}{\Omega_{\rm de,0}}.
+$$
 
 ---
 
-## Installation
-Clone the repository and install Kosmulator in a clean Python environment (recommended):
-```bash
-git clone https://github.com/renierht/Kosmulator.git
-cd Kosmulator
-pip install -e .
-```
-To verify your installation and check optional backends (CLASS, Planck CLIK, AlterBBN), run:
-```bash
-kosmulator-doctor
-```
-Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced installation section at the end for additional information.
+## IDE kernels implemented in this branch
+
+### Linear IDE model 1: $Q=3H(\delta_{\rm dm}\rho_{\rm dm}+\delta_{\rm de}\rho_{\rm de})$
+
+For a flat FLRW universe containing radiation, baryons, dark matter, and dark energy, the normalized Hubble function is
+
+$$
+\begin{aligned}
+h(z)=\Bigg\{&
+-\frac{1}{2\Delta}
+\Big[\Omega_{\rm de,0}(\delta_{\rm dm}-\delta_{\rm de}+w-\Delta)
++\Omega_{\rm dm,0}(\delta_{\rm dm}-\delta_{\rm de}-w-\Delta)\Big]
+(1+z)^{-\frac{3}{2}(\delta_{\rm dm}-\delta_{\rm de}-w-2+\Delta)}
+\\[1mm]
+&+\frac{1}{2\Delta}
+\Big[\Omega_{\rm de,0}(\delta_{\rm dm}-\delta_{\rm de}+w+\Delta)
++\Omega_{\rm dm,0}(\delta_{\rm dm}-\delta_{\rm de}-w+\Delta)\Big]
+(1+z)^{-\frac{3}{2}(\delta_{\rm dm}-\delta_{\rm de}-w-2-\Delta)}
+\\[1mm]
+&+\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
+\Bigg\}^{1/2},
+\end{aligned}
+$$
+
+where
+
+$$
+\Delta=\sqrt{(\delta_{\rm dm}+\delta_{\rm de}+w)^2-4\delta_{\rm de}\delta_{\rm dm}}.
+$$
+
+The sign of $\delta_{\rm dm}$ determines the initial direction of energy transfer, while $\delta_{\rm de}$ determines the late-time direction of energy transfer. A positive coupling corresponds to energy transfer from dark energy to dark matter. If $\delta_{\rm dm}$ and $\delta_{\rm de}$ have opposite signs, the interaction changes direction during the cosmic evolution. Negative dark energy appears in the past when $\delta_{\rm dm}<0$, while negative dark matter appears in the future when $\delta_{\rm de}<0$.
+
+### Linear IDE model 2: $Q=3H\delta(\rho_{\rm dm}+\rho_{\rm de})$
+
+The Hubble function is obtained from the general linear solution above by setting
+
+$$
+\delta_{\rm dm}=\delta_{\rm de}=\delta.
+$$
+
+For $\delta<0$, corresponding to energy transfer from dark matter to dark energy, this model exhibits negative dark energy densities in the past and negative dark matter densities in the future. For a sufficiently small positive coupling, all dark-sector densities remain positive, provided the positive-energy bounds below are satisfied.
+
+### Linear IDE model 3: $Q=3H\delta(\rho_{\rm dm}-\rho_{\rm de})$
+
+The Hubble function is obtained from the general linear solution by setting
+
+$$
+\delta_{\rm dm}=\delta,
+\qquad
+\delta_{\rm de}=-\delta.
+$$
+
+This is a sign-switching interaction. If $\delta<0$, the initial energy flow is from dark matter to dark energy and reverses later, with negative dark energy appearing in the past. If $\delta>0$, the initial energy flow is from dark energy to dark matter and later reverses, with negative dark matter appearing in the future. This kernel has no viable domain in which both dark-sector densities remain positive for all times.
+
+### Linear IDE model 4: $Q=3H\delta\rho_{\rm dm}$
+
+The Hubble function is obtained from the general linear solution by setting
+
+$$
+\delta_{\rm dm}=\delta,
+\qquad
+\delta_{\rm de}=0.
+$$
+
+For $\delta<0$, energy flows from dark matter to dark energy and dark energy becomes negative in the past. For a sufficiently small positive coupling, energy flows from dark energy to dark matter and all dark-sector densities can remain positive.
+
+### Linear IDE model 5: $Q=3H\delta\rho_{\rm de}$
+
+The Hubble function is obtained from the general linear solution by setting
+
+$$
+\delta_{\rm de}=\delta,
+\qquad
+\delta_{\rm dm}=0.
+$$
+
+For $\delta<0$, energy flows from dark matter to dark energy and dark matter becomes negative in the future. For a sufficiently small positive coupling, energy flows from dark energy to dark matter and all dark-sector densities can remain positive.
+
+### Non-linear IDE model 1: $Q=3H\delta\left(\dfrac{\rho_{\rm dm}\rho_{\rm de}}{\rho_{\rm dm}+\rho_{\rm de}}\right)$
+
+The normalized Hubble function is
+
+$$
+\begin{aligned}
+h(z)=\Bigg\{&
+\Big[\Omega_{\rm dm,0}(1+z)^{3(1-\delta)}
++\Omega_{\rm de,0}(1+z)^{3(1+w)}\Big]
+\left[
+\frac{1+r_0(1+z)^{-3(w+\delta)}}{1+r_0}
+\right]^{-\frac{\delta}{w+\delta}}
+\\[1mm]
+&+\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
+\Bigg\}^{1/2}.
+\end{aligned}
+$$
+
+This interaction always gives positive dark-sector densities, independently of the sign or magnitude of $\delta$.
+
+### Non-linear IDE model 2: $Q=3H\delta\left(\dfrac{\rho_{\rm dm}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$
+
+The normalized Hubble function is
+
+$$
+\begin{aligned}
+h(z)=\Bigg\{&
+\Bigg[\Omega_{\rm dm,0}
++\Omega_{\rm de,0}
+\left(
+\frac{[w+\delta r_0](1+z)^{3w}-\delta r_0}{w}
+\right)\Bigg]
+(1+z)^{3\left(1-\frac{w\delta}{w-\delta}\right)}
+\\[1mm]
+&\times
+\left[
+\frac{[w+\delta r_0](1+z)^{3w}+r_0(w-\delta)}{w(1+r_0)}
+\right]^{\frac{\delta}{w-\delta}}
++\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
+\Bigg\}^{1/2}.
+\end{aligned}
+$$
+
+For $\delta<0$, energy flows from dark matter to dark energy and dark energy becomes negative in the past. For a sufficiently small positive coupling, energy flows from dark energy to dark matter and all dark-sector densities can remain positive.
+
+### Non-linear IDE model 3: $Q=3H\delta\left(\dfrac{\rho_{\rm de}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$
+
+The normalized Hubble function is
+
+$$
+\begin{aligned}
+h(z)=\Bigg\{&
+\Bigg[\Omega_{\rm dm,0}
+\left(
+\frac{(wr_0+\delta)(1+z)^{-3w}-\delta}{wr_0}
+\right)
++\Omega_{\rm de,0}\Bigg]
+(1+z)^{3\left(1+\frac{w^2}{w-\delta}\right)}
+\\[1mm]
+&\times
+\left[
+\frac{(wr_0+\delta)(1+z)^{-3w}+w-\delta}{w(1+r_0)}
+\right]^{\frac{\delta}{w-\delta}}
++\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
+\Bigg\}^{1/2}.
+\end{aligned}
+$$
+
+For $\delta<0$, energy flows from dark matter to dark energy and dark matter becomes negative in the future. For a sufficiently small positive coupling, energy flows from dark energy to dark matter and all dark-sector densities can remain positive.
 
 ---
 
+## Enforced regularity bounds
 
-## Quick Test
-Run Kosmulator in your terminal.
-``` bash
-python Kosmulator.py 
-```
-If it ran successfully, it has been installed correctly!
+Bounds have been enforced on each $h(z)$ over the evaluated cosmological domain to prevent undefined or imaginary dark-sector densities from entering the likelihood calculation.
 
-## Configure Kosmulator Guide
+| Interaction $Q$ | Conditions to avoid imaginary $\rho_{\rm dm/de}$ | Conditions to avoid undefined $\rho_{\rm dm/de}$ |
+|---|---|---|
+| $3H(\delta_{\rm dm}\rho_{\rm dm}+\delta_{\rm de}\rho_{\rm de})$ | $(\delta_{\rm dm}+\delta_{\rm de}+w)^2>4\delta_{\rm de}\delta_{\rm dm}$ | $w\ne0$; $(\delta_{\rm dm}+\delta_{\rm de}+w)^2-4\delta_{\rm de}\delta_{\rm dm}\ne0$ |
+| $3H\delta(\rho_{\rm dm}+\rho_{\rm de})$ | $\delta\le -w/4$ | $w\ne0$; $\delta\ne -w/4$ |
+| $3H\delta(\rho_{\rm dm}-\rho_{\rm de})$ | $\rho_{\rm dm/de}$ always real | $w\ne0$ |
+| $3H\delta\rho_{\rm dm}$ | $\rho_{\rm dm/de}$ always real | $\delta\ne -w$ |
+| $3H\delta\rho_{\rm de}$ | $\rho_{\rm dm/de}$ always real | $\delta\ne -w$ |
+| $3H\delta\left(\dfrac{\rho_{\rm dm}\rho_{\rm de}}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | $\rho_{\rm dm/de}$ always real | $\delta\ne -w$ |
+| $3H\delta\left(\dfrac{\rho_{\rm dm}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | $\rho_{\rm dm/de}$ always real | $w<0$; $w<\delta\le -w/r_0$ |
+| $3H\delta\left(\dfrac{\rho_{\rm de}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | $\rho_{\rm dm/de}$ always real | $w<0$; $w<\delta\le -wr_0$ |
 
-#### Step 1: Define a New Model
-Modify User_defined_modules.py to register your model parameters, and background expansion.
-	- Implement E(z) for a new background model (flat or not).
-	- (Optionally) define additional sanity restrictions for your model's free parameters.
-	- Register the model name + parameter list in the model registry.
-	- (Optional) expose CMB Cl wrappers for that model. Needed to fit to CMB observation
-
-#### Step 2: Select Datasets 
-In `Kosmulator.py`, select observation datasets. Observations are specified as lists of likelihood groups.
-```python
-# Run 1: JLA only | Run 2: OHD only | Run 3: Joint CC, OHD, and Pantheon
-observations = [ ["JLA"], ["OHD"], ["CC", "OHD", "Pantheon"] ]
-```
-
-#### Step 3: Select model and configure MCMC Run
-In `Kosmulator.py`, configure the MCMC sampler and specify the model names you want to analyse:
-
-Specify the model names you want to analyse:
-```python
-# Models implemented in User_defined_modules.py
-model_names: List[str] = ["Your_model_name"] 
-
-true_model: str = "LCDM_v"  # Against which model you want to test it
-
-# Sampler settings
-nwalkers: int = 16
-nsteps: int = 500
-burn: int = 10
-convergence: float = 0.01  # How accurate do you want the auto-correlator to be before stopping the run
-```
-
-#### Step 4. Execute you MCMC simulation
-Run the script in the terminal:
-```bash
-python Kosmulator.py
-```
+**Table 1.** Conditions required to avoid imaginary or undefined energy densities for the different interaction kernels. Here $r_0=\Omega_{\rm dm,0}/\Omega_{\rm de,0}$.
 
 ---
 
-## Command-Line Arguments to personalise your MCMC run
-Kosmulator exposes a small set of CLI flags to control parallelism, sampler behaviour, diagnostics, and plotting.
-You can view them any time with:
+## Optional physical-domain switches
 
-```bash
-python Kosmulator.py --help
-```
+Additional switches have been added so that users can decide whether to allow or reject parameter points associated with:
 
-#### General/ Output
+1. negative dark matter or dark energy densities;
+2. future big-rip singularities;
+3. early-time instabilities based on the doom-factor analysis of Gavela et al. (2009).
 
-| Argument | Type | Default | Description |
+The positive-energy conditions also ensure that past big-bounce solutions and future big-crunch solutions are avoided in flat universes.
+
+| Interaction $Q$ | $\rho_{\rm dm/de}>0$ domain | $\rho_{\rm dm/de}>0$ conditions | No future big rip |
 |---|---|---|---|
-| `--output_suffix` | str | `Test_run` | Suffix for output directories and files (chains, plots, tables). |
-| `--overwrite` | flag | `False` | Delete any existing `.h5` chains and run MCMC from scratch. |
-| `--resume` | flag | `False` | Resume incomplete chains (instead of only loading existing results). |
-| `--init-log` | choice | `terse` | Initialisation logging style: `terse`, `normal`, or `verbose`. |
+| $3H(\delta_{\rm dm}\rho_{\rm dm}+\delta_{\rm de}\rho_{\rm de})$ | DE $\rightarrow$ DM | $\delta_{\rm dm}\ge0$; $\delta_{\rm de}\ge0$; $\delta_{\rm dm}r_0+\delta_{\rm de}\le -\dfrac{wr_0}{1+r_0}$ | $\delta_{\rm dm}(w+1)-\delta_{\rm de}\le w+1$ |
+| $3H\delta(\rho_{\rm dm}+\rho_{\rm de})$ | DE $\rightarrow$ DM | $0\le\delta\le -\dfrac{wr_0}{(1+r_0)^2}$ | $\delta\ge 1+\dfrac{1}{w}$ |
+| $3H\delta(\rho_{\rm dm}-\rho_{\rm de})$ | No viable domain | No viable domain | $\delta\le\dfrac{1+w}{2+w}$ |
+| $3H\delta\rho_{\rm dm}$ | DE $\rightarrow$ DM | $0\le\delta\le -\dfrac{w}{1+r_0}$ | $w>-1$ |
+| $3H\delta\rho_{\rm de}$ | DE $\rightarrow$ DM | $0\le\delta\le -\dfrac{w}{1+1/r_0}$ | $\delta\ge -w-1$ |
+| $3H\delta\left(\dfrac{\rho_{\rm dm}\rho_{\rm de}}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | DE $\leftrightarrow$ DM | $\forall\delta$ | $w\ge -1$ |
+| $3H\delta\left(\dfrac{\rho_{\rm dm}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | DE $\rightarrow$ DM | $0\le\delta\le -\dfrac{w}{r_0}$ | $w\ge -1$ |
+| $3H\delta\left(\dfrac{\rho_{\rm de}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | DE $\rightarrow$ DM | $0\le\delta\le -wr_0$ | $\delta\ge w(w+1)$ |
 
-#### Parallelism
-
-| Argument | Type | Default | Description |
-|---|---|---|---|
-| `--num_cores` | int | `8` | Number of CPU cores to use for multiprocessing. |
-| `--use_mpi` | flag | `False` | Force use of an MPI pool (if MPI is available). |
-
-#### Sampler / Engine Control
-
-| Argument | Type | Default | Description |
-|---|---|---|---|
-| `--engine-mode` | choice | `mixed` | Sampler strategy: `mixed`, `single`, or `fastest`. |
-| `--force_zeus` | flag | `False` | Force the Zeus sampler. |
-| `--force_emcee` | flag | `False` | Force the emcee sampler (ignore Zeus even if available). |
-| `--force_vectorisation` | flag | `False` | Treat all models as vectorised (overrides detection). |
-| `--disable_vectorisation` | flag | `False` | Disable vectorised likelihood evaluation even if available (forces scalar evaluation). |
-
-#### Convergence / Autocorrelation  
-*(mainly affects Zeus early-stop behaviour)*
-
-| Argument | Type | Default | Description |
-|---|---|---|---|
-| `--tau-consecutive` (alias: `--consecutive-required`) | int | `3` | For Zeus early-stop: require this many consecutive callback checks with \|Δτ\|/τ < target. |
-| `--autocorr-check-every` | int | `100` | Check autocorrelation every `N` iterations. |
-| `--autocorr-buffer` | int | `None` | Extra iterations after burn-in before convergence checks start. If not set, Kosmulator uses `max(1000, burn/5)` as a default buffer. |
-
-#### Plotting / Presentation
-
-| Argument | Type | Default | Description |
-|---|---|---|---|
-| `--latex_enabled` | flag | `False` | Enable LaTeX rendering in plots. |
-| `--plot_table` | flag | `False` | Generate parameter-table plots. |
-| `--corner-show-all-cmb-params` | flag | `False` | Corner plot: show all CMB parameters (including nuisance). Default behaviour shows only key cosmological parameters. |
-| `--corner-table-full` | flag | `False` | Corner plot top table: keep the full parameter list (including CMB nuisances). |
-
-#### Likelihood Debugging
-
-| Argument | Type | Default | Description |
-|---|---|---|---|
-| `--print_loglike [N]` | int (optional) | disabled | Print likelihood diagnostics (components + TOTAL) for one walker. If passed without `N`, defaults to `1` (prints every call). If `N` is provided, prints every `N`th likelihood call. |
+**Table 2.** Conditions required to ensure positive energy densities and avoid future big-rip singularities for the different interaction kernels. Here $r_0=\Omega_{\rm dm,0}/\Omega_{\rm de,0}$.
 
 ---
 
-## Multiprocessing run examples
-With MPI (recommended on clusters)
-```bash
-mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "Your_Project_Name" --latex_enabled --overwrite --plot_table
-```
-With Python multiprocessing (local / workstation)
-```bash
-python Kosmulator.py --num_cores <num_cores> --output_suffix "Your_Project_Name" --latex_enabled --overwrite --plot_table
-```
-Using nohup (run in background after closing terminal)
-```bash
-nohup mpiexec -n <num_cores> python Kosmulator.py --use_mpi --output_suffix "Your_Project_Name" --latex_enabled --overwrite --plot_table > kosmulator_run.log 2>&1 &
-```
+## Doom-factor stability switches
+
+The doom-factor condition is used here as a preliminary background-level stability filter. The implementation follows the narrow early-time interpretation used by Gavela et al. (2009): the sign of the doom factor $d$ is evaluated in the early-time branch, without globally discarding branches where $\rho_{\rm de}$ may become negative.
+
+| Interaction $Q$ | Doom factor $d$ | Doom-factor stability | Doom stability plus positive-energy condition |
+|---|---|---|---|
+| $3H(\delta_{\rm dm}\rho_{\rm dm}+\delta_{\rm de}\rho_{\rm de})$ | $d=\dfrac{\delta_{\rm dm}r+\delta_{\rm de}}{1+w}$ | $\delta_{\rm de}>0$; $\delta_{\rm dm}\in\mathbb{R}$; $w<-1$ | $\delta_{\rm dm}\ge0$; $\delta_{\rm de}\ge0$; $\delta_{\rm dm}r_0+\delta_{\rm de}\le -\dfrac{wr_0}{1+r_0}$; $w<-1$ |
+| $3H\delta(\rho_{\rm dm}+\rho_{\rm de})$ | $d=\dfrac{\delta(r+1)}{1+w}$ | $w<-1$ | $0<\delta\le -\dfrac{wr_0}{(1+r_0)^2}$; $w<-1$ |
+| $3H\delta(\rho_{\rm dm}-\rho_{\rm de})$ | $d=\dfrac{\delta(r-1)}{1+w}$ | $w<-1$ | No viable positive-energy domain |
+| $3H\delta\rho_{\rm dm}$ | $d=\dfrac{\delta r}{1+w}$ | $w<-1$ | $0<\delta\le -\dfrac{w}{1+r_0}$; $w<-1$ |
+| $3H\delta\rho_{\rm de}$ | $d=\dfrac{\delta}{1+w}$ | $\delta(1+w)<0$ | $0<\delta\le -\dfrac{w}{1+1/r_0}$; $w<-1$ |
+| $3H\delta\dfrac{\rho_{\rm dm}\rho_{\rm de}}{\rho_{\rm dm}+\rho_{\rm de}}$ | $d=\dfrac{\delta r}{(1+r)(1+w)}$ | $\delta(1+w)<0$ | No additional positive-energy bound; only $\delta(1+w)<0$ |
+| $3H\delta\dfrac{\rho_{\rm dm}^2}{\rho_{\rm dm}+\rho_{\rm de}}$ | $d=\dfrac{\delta r^2}{(1+r)(1+w)}$ | $w<-1$ | $0<\delta\le -\dfrac{w}{r_0}$; $w<-1$ |
+| $3H\delta\dfrac{\rho_{\rm de}^2}{\rho_{\rm dm}+\rho_{\rm de}}$ | $d=\dfrac{\delta}{(1+r)(1+w)}$ | $\delta(1+w)<0$ | $0<\delta\le -wr_0$; $w<-1$ |
+
+**Table 3.** Doom-factor stability conditions for the five linear and three non-linear interacting dark energy kernels. The doom-factor-only column follows the narrow early-time Gavela interpretation. The final column combines the early-time doom-factor condition with the corresponding positive-energy bounds.
 
 ---
 
-## Project Structure
+## Current limitations
 
-```plaintext
-Kosmulator/
-├── Kosmulator.py                # Main user-facing entry point (run inference)
-├── User_defined_modules.py      # User-defined cosmological and gravity models
-│
-├── Kosmulator_main/             # Core inference engine
-│   ├── __init__.py              # Package initialisation and versioning
-│   ├── constants.py             # Global constants and runtime policies
-│   ├── Config.py                # Dataset loading and parameter injection
-│   ├── MCMC_setup.py            # High-level MCMC orchestration
-│   ├── Kosmulator_MCMC.py       # Sampler execution (EMCEE / Zeus)
-│   ├── Statistical_packages.py  # Likelihoods and statistical backends
-│   ├── Class_run.py             # CLASS integration and caching
-│   ├── rd_helpers.py            # Sound-horizon (r_d) handling
-│   ├── Post_processing.py       # Post-processing and statistical summaries
-│   └── utils.py                 # Shared utilities and CLI helpers
-│
-├── Class/                       # Local CLASS builds (per-model)
-│   ├── LCDM_v/                  # CLASS source and build for ΛCDM
-│   └── f1CDM_v/                 # CLASS source and build for modified gravity
-│
-├── AlterBBN_files/              # AlterBBN wrapper and interface code
-│   ├── kosmo_bbn.c              # C interface for AlterBBN
-│   └── alterbbn_ctypes.py       # Python ctypes wrapper
-│
-├── Observations/                # Observational datasets and likelihood files
-│   ├── *.dat / *.txt            # Late-time cosmology data
-│   ├── *.clik                  # Planck CMB likelihood directories
-│   └── BBN/                     # Precomputed BBN grids
-│
-├── Plots/                       # Plotting and visualisation
-│   ├── Plots.py                 # Plot orchestration (corner, best-fit, etc.)
-│   ├── Plot_functions.py        # Plotting helper functions
-│   └── Saved_plots/             # Generated plots
-│
-├── MCMC_Chains/                 # Stored MCMC chains
-├── Statistical_analysis_tables/ # Statistical summaries and LaTeX-ready tables
-│
-├── setup.py                     # Packaging and installation
-├── pyproject.toml               # Modern Python build configuration
-├── LICENSE                      # Project license
-└── README.md                    # Project documentation
-```
-		
+This branch currently implements the analytical background expansion histories and the associated background-level parameter-domain checks. The perturbation equations required for consistent CMB constraints have not yet been implemented for these IDE models. For this reason, the doom-factor analysis used here should be treated as preliminary while the perturbation sector is being added.
 
 ---
 
 ## References
-**NB!** Remember to cite the observation’s **original papers** when using their data in Kosmulator.
 
-### Original MCMC code which developed into Kosmulator
+Users should also cite the original observational datasets used in any Kosmulator analysis; see the `main` branch README for the general Kosmulator and dataset references.
 
-1. **Original Kosmulator implementation**  
-   Hough, R. T., Abebe, A., & Ferreira, S. E. S. (2020).  
-   *Viability tests of f(R)-gravity models with Supernovae Type Ia data*.  
-   European Physical Journal C, 80(8), 787.  
-   https://doi.org/10.1140/epjc/s10052-020-8342-7
+### Analytical solutions and positive-energy conditions
 
----
+1. M. van der Westhuizen, A. Abebe, and E. Di Valentino, *Phys. Dark Univ.* **50**, 102119 (2025), arXiv:2509.04495 [gr-qc].
+2. M. van der Westhuizen, A. Abebe, and E. Di Valentino, *Phys. Dark Univ.* **50**, 102120 (2025), arXiv:2509.04494 [gr-qc].
+3. M. van der Westhuizen, A. Abebe, and E. Di Valentino, *Phys. Dark Univ.* **50**, 102121 (2025), arXiv:2509.04496 [gr-qc].
 
-### MCMC Samplers
+### Crunching and bouncing cosmologies
 
-1. **EMCEE**  
-   Foreman-Mackey, D., Hogg, D. W., Lang, D., et al. (2013).  
-   *emcee: The MCMC Hammer*.  
-   PASP, 125(925), 306.  
-   https://doi.org/10.1086/670067
+4. M. van der Westhuizen and A. Abebe, *Class. Quantum Grav.* (2026), https://doi.org/10.1088/1361-6382/ae849d.
 
-2. **Zeus**  
-   Karamanis, M., Beutler, F., Peacock, J. A.,(2021).  
-   *zeus: A Python implementation of Ensemble Slice Sampling for efficient Bayesian parameter inference*.  
-   ArXiv pre-print.  
-   https://arxiv.org/abs/2105.03468
-	
----
+### Doom-factor analysis
 
-### Type Ia Supernovae
-#### JLA
-1. Hicken, M., Challis, P., Jha, S., et al. (2009).  
-   *CfA3: 185 Type Ia Supernova Light Curves from the CfA*.  
-   ApJ, 700, 331.  
-   https://doi.org/10.1088/0004-637X/700/1/331
+5. M. Gavela, D. Hernandez, L. Lopez Honorez, O. Mena, and S. Rigolin, *J. Cosmol. Astropart. Phys.* **2009**(07), 034.
 
-2. Neill, J. D., Sullivan, M., Howell, D. A., et al. (2009).  
-   *The Local Hosts of Type Ia Supernovae*.  
-   ApJ, 707, 1449.  
-   https://doi.org/10.1088/0004-637X/707/2/1449
+### Previous observational constraints using these analytical solutions
 
-3. Conley, A., Guy, J., Sullivan, M., et al. (2010).  
-   *Supernova Constraints and Systematic Uncertainties from the First Three Years of the SNLS*.  
-   ApJS, 192, 1.  
-   https://doi.org/10.1088/0067-0049/192/1/1
-
-#### Pantheon
-1. Scolnic, D. M., Jones, D. O., Rest, A., et al. (2018).  
-   *The Complete Light-curve Sample of Spectroscopically Confirmed SNe Ia from Pan-STARRS1 and Cosmological Constraints from the Combined Pantheon Sample*.  
-   ApJ, 859(2), 101.  
-   https://doi.org/10.3847/1538-4357/aab9bb
-
-#### Pantheon+
-1. Brout, D., Scolnic, D., Popovic, B., et al. (2022).  
-   *The Pantheon+ Analysis: Cosmological Constraints*.  
-   ApJ, 938(2), 110.  
-   https://doi.org/10.3847/1538-4357/ac8e04
-
-#### Union3
-1. Rubin, D., Aldering, G., Betoule, M., et al. (2025).  
-   *Union through UNITY: Cosmology with 2000 SNe Using a Unified Bayesian Framework*.  
-   ApJ, 986(2), 231.  
-   https://doi.org/10.3847/1538-4357/adc0a5
-
-#### DESY5
-1. DES Collaboration; Abbott, T. M. C., et al. (2024).  
-   *The Dark Energy Survey: Cosmology Results with ~1500 New High-redshift Type Ia Supernovae Using the Full 5 yr Data Set*.  
-   ApJL, 973(1), L14.  
-   https://doi.org/10.3847/2041-8213/ad6f9f
-
----
-
-### Expansion Rate Measurements
-#### Cosmic Chronometers (CC)
-1. Moresco, M., Jimenez, R., Verde, L., et al. (2020).  
-   *Setting the Stage for Cosmic Chronometers II*.  
-   ApJ, 898(1), 82.  
-   https://doi.org/10.3847/1538-4357/ab9eb0
-   
-2. Qi, J.-Z., Meng, P., Zhang, J.-F., & Zhang, X. (2023).  
-   *Model-independent measurement of cosmic curvature with the latest H(z) and SNe Ia data: A comprehensive investigation*.  
-   Phys. Rev. D, 108(6), 063522.  
-   https://doi.org/10.1103/PhysRevD.108.063522
-   
-3. Loubser, S. I., Alabi, A. B., Hilton, M., Ma, Y.-Z., Tang, X., Hatamkhani, N.,  
-   Cress, C., Skelton, R. E., & Nkosi, S. A. (2025).  
-   *An independent estimate of H(z) at z = 0.5 from the stellar ages of brightest cluster galaxies*.  
-   Monthly Notices of the Royal Astronomical Society, **540**(4), 3135–3149.  
-   https://doi.org/10.1093/mnras/staf915
-   
-4. Loubser, S. I. (2025).  
-   *Measuring the expansion history of the Universe with DESI cosmic chronometers*.  
-   Monthly Notices of the Royal Astronomical Society, **544**(4), 3064–3075.  
-   https://doi.org/10.1093/mnras/staf1939
-   
-5. Wang, Z.-F., Lei, L., & Fan, Y.-Z. (2026).  
-   *New H(z) measurement at redshift z = 0.12 with DESI Data Release 1*.  
-   arXiv:2601.07345.  
-   https://doi.org/10.48550/arXiv.2601.07345
-
-#### Observational Hubble Data (OHD)
-Note: This is a compilation paper of all the individual data-point. Also cite the original papers. Citations can be found in this paper.
-1. Sharov, G. S., & Vasiliev, V. O. (2018).  
-   *How predictions of cosmological models depend on Hubble parameter data sets*.  
-   arXiv:1807.07323.  
-   https://doi.org/10.48550/arXiv.1807.07323
-
----
-
-### Large-Scale Structure
-#### Baryon Acoustic Oscillations (BAO) / DESI
-1. Adame, A. G., Aguilar, J., Ahlen, S., et al. (2024).  
-   *DESI 2024 VI: Cosmological constraints from the measurements of baryon acoustic oscillations*.  
-   arXiv:2404.03002.  
-   https://arxiv.org/abs/2404.03002
-
-2. Lodha, K., Shafieloo, A., Calderon, R., et al. (DESI Collaboration) (2025).  
-   *DESI 2024: Constraints on physics-focused aspects of dark energy using DESI DR1 BAO data*.  
-   Phys. Rev. D, 111(2), 023532.  
-   https://doi.org/10.1103/PhysRevD.111.023532
-
-3. Abdul Karim, M., Aguilar, J., Ahlen, S., et al. (DESI Collaboration) (2025).  
-   *DESI DR2 results. II. Measurements of baryon acoustic oscillations and cosmological constraints*.  
-   Phys. Rev. D, 112(8), 083515.  
-   https://doi.org/10.1103/tr6y-kpc6  
-
-#### Growth of Structure (fσ₈)
-1. Kazantzidis, L., & Perivolaropoulos, L. (2018).  
-   *Evolution of the fσ8 tension with the Planck15/ΛCDM determination and implications for modified gravity theories*.  
-   Phys. Rev. D, 97(10), 103503.  
-   https://doi.org/10.1103/PhysRevD.97.103503
-
-#### σ₈ Constraints
-1. Perenon, L., Bel, J., Maartens, R., et al. (2019).  
-   *Optimising Growth of Structure Constraints on Modified Gravity*.  
-   JCAP, 2019(06), 020.  
-   https://doi.org/10.1088/1475-7516/2019/06/020
-
----
-
-### Early-time observations
-#### Cosmic Microwave Background (CMB — Planck)
-
-Kosmulator uses the standard **Planck likelihood datasets** distributed by the
-**European Space Agency (ESA)** and accessed via the Planck **CLIK** likelihood
-library.
-
-1. Planck Collaboration (2018).  
-   *Planck 2018 results. VI. Cosmological parameters*.  
-   Astronomy & Astrophysics, **641**, A6.  
-   https://doi.org/10.1051/0004-6361/201833910
-
-#### Big Bang Nucleosynthesis (BBN)
-1. Cooke, R. J., Pettini, M., Jorgenson, R. A., Murphy, M. T., & Steidel, C. C. (2014).  
-   *Precision Measures of the Primordial Abundance of Deuterium*.  
-   The Astrophysical Journal, **781**(1), 31.  
-   https://doi.org/10.1088/0004-637X/781/1/31
-
----
-## Citation
-
-Kosmulator is an actively developed research framework.
-If you use Kosmulator in your work, please cite the dedicated software paper:
-
-```bash
-@ARTICLE{2026arXiv260208424H,
-       author = {{Hough}, Renier T. and {Rugg}, Robert and {Sahlu}, Shambel and {Abebe}, Amare},
-        title = "{Kosmulator: A Python framework for cosmological inference with MCMC}",
-      journal = {arXiv e-prints},
-     keywords = {Cosmology and Nongalactic Astrophysics, General Relativity and Quantum Cosmology},
-         year = 2026,
-        month = feb,
-          eid = {arXiv:2602.08424},
-        pages = {arXiv:2602.08424},
-          doi = {10.48550/arXiv.2602.08424},
-archivePrefix = {arXiv},
-       eprint = {2602.08424},
- primaryClass = {astro-ph.CO},
-       adsurl = {[https://ui.adsabs.harvard.edu/abs/2026arXiv260208424H](https://ui.adsabs.harvard.edu/abs/2026arXiv260208424H)},
-      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
-}
-```
-
-Additionally, please cite the original paper detailing the initial implementation of the code:
-```bash
-@ARTICLE{2020EPJC...80..787H,
-       author = {{Hough}, R.~T. and {Abebe}, A. and {Ferreira}, S.~E.~S.},
-        title = "{Viability tests of f(R)-gravity models with Supernovae Type 1A data}",
-      journal = {European Physical Journal C},
-     keywords = {General Relativity and Quantum Cosmology, Astrophysics - Cosmology and Nongalactic Astrophysics},
-         year = 2020,
-        month = aug,
-       volume = {80},
-       number = {8},
-          eid = {787},
-        pages = {787},
-          doi = {10.1140/epjc/s10052-020-8342-7},
-archivePrefix = {arXiv},
-       eprint = {1911.05983},
- primaryClass = {gr-qc},
-       adsurl = {https://ui.adsabs.harvard.edu/abs/2020EPJC...80..787H},
-      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
-}
-```
-
-## Contributions
-Contributions are welcome.
-
-If you would like to contribute, please fork the repository and submit a pull request.
-Bug fixes, documentation improvements, new observational datasets, and extensions to cosmological or modified-gravity models are encouraged.
-
-If you prefer, you may also contact the author directly with tested code or proposed improvements for inclusion in the main repository.
-
-## Contact
-For questions or feedback, please contact:
-
-- Renier Hough - [25026097@mynwu.ac.za] - Main contributor
-
-- Robert Rugg - [31770312@mynwu.ac.za] for help with CLIK, CLASS and the CMB observations.
-
-- Shambel Sahlu - [shambel.sahlu@nithecs.ac.za] for help with the observations and the physics models which were included.
-
-## Acknowledgements
-I would like to thank the **EMCEE: Hammer** and **Zeus-MCMC** groups for making their MCMC simulation software publically available. This code would not be possible without their hard work. 
-I would also like to thank the **ChatGPT** and **Gemini** AI software for assisting with debugging, improving the code structure, and optimizing features.
-
----
-
-## Installation process example
-### LaTeX Dependencies for Plot Rendering
-
-Kosmulator uses **Matplotlib’s LaTeX rendering** to generate publication-quality plots and tables.  
-To enable this functionality, a working LaTeX installation is required.
-
-Check that LaTeX is available on your system by running:
-```bash
-latex --version
-```
-
-If LaTeX is not installed (or if required packages are missing), you may encounter errors such as:
-RuntimeError: latex was not able to process the following string ... (your system is missing some required LaTeX packages, e.g. type1ec.sty)
-
-Follow os installation or update below:
-- **Windows**: [MiKTeX Installation Guide](https://miktex.org/howto/install-miktex, ensure that you enable the option for automatic installation of missing packages)
-- **macOS**: Install MacTeX via Homebrew:
-  ```bash
-  brew install mactex
-  ```
-- **Linux**: Install TeX Live:
-  ```bash
-  sudo apt install texlive-full
-  sudo apt install texlive-latex-recommended texlive-fonts-recommended (if missing packages are required)
-  ```
-LaTeX rendering is optional. If you prefer not to install a full LaTeX distribution, simply leave LaTeX disabled (default), i.e. do not pass --latex_enabled
-
----
-
-### Advanced Kosmulator Installation: Kosmulator, CLIK, CLASS, and AlterBBN (Full Setup)
-
-This section provides a **complete, reproducible installation example** for running
-Kosmulator with **CLASS**, **Planck CMB likelihoods (CLIK / plc_3.1)**, and **optional AlterBBN** support.
-
-This is a *kitchen-sink* setup intended for advanced users who require:
-- CLASS with Python bindings (`classy`)
-- Planck likelihoods via CLIK
-- Full CMB analyses within Kosmulator
-- Optional high-accuracy BBN predictions via AlterBBN
-
-> **Platform assumed:** Ubuntu / WSL  
-> Paths shown use `/mnt/d/`; adjust paths as needed for your system.  
-> macOS installation should be similar, with only different gcc and gfortran compilers.
-
----
-
-#### Assumptions
-
-You want:
-1. CLASS built and importable via Python (`import classy`)
-2. Planck CLIK likelihoods working (`import clik`)
-3. Kosmulator linked to local `.clik` likelihood directories
-4. *(Optional)* AlterBBN support for the `BBN_DH_AlterBBN` likelihood
-
----
-
-#### 0) Create a Clean Workspace
-
-```bash
-mkdir -p /mnt/d/Kosmulator_test
-cd /mnt/d/Kosmulator_test
-```
-
-#### 1) Clone Required Repositories
-##### 1.1 Clone Kosmulator, CLASS, and AlterBBN (optional)
-```bash
-git clone https://github.com/renierht/Kosmulator.git
-git clone https://github.com/lesgourg/class_public.git CLASS
-git clone https://github.com/espensem/AlterBBN.git
-```
-
-##### 1.2 Download Planck Likelihood Code and Data
-```bash
-mkdir -p /mnt/d/Kosmulator_test/Clik
-cd /mnt/d/Kosmulator_test/Clik
-
-wget -O COM_Likelihood_Code-v3.0_R3.10.tar.gz \
-  "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Code-v3.0_R3.10.tar.gz"
-
-wget -O COM_Likelihood_Data-baseline_R3.00.tar.gz \
-  "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Data-baseline_R3.00.tar.gz"
-
-tar -xzf COM_Likelihood_Data-baseline_R3.00.tar.gz
-tar -xzf COM_Likelihood_Code-v3.0_R3.10.tar.gz
-```
-
-#### 2) Create and Populate a Conda Environment
-```bash
-cd /mnt/d/Kosmulator_test
-
-conda create -n Kosmulator_test python=3.11 -y  # We recommned using Python 3.11!
-conda activate Kosmulator_test
-
-conda install -c conda-forge -y \
-  numpy scipy matplotlib h5py pandas \
-  emcee zeus-mcmc cython astropy
-
-pip install getdist mpi4py
-```
-
-#### 3) Install System Build Dependencies (Ubuntu / WSL) - #MacOS will most likely differ here!
-```bash
-sudo apt update
-sudo apt install -y \
-  build-essential gfortran python3-dev \
-  libcfitsio-dev pkg-config cmake
-  
-sudo apt install -y ripgrep (optional)
-```
-
-#### 4) Build and Install CLASS
-```bash
-cd /mnt/d/Kosmulator_test/CLASS
-make clean
-make -j
-python -m pip install .
-```
-
-##### 4.1 Quick CLASS Sanity Test
-```bash
-python - <<'PY'
-from classy import Class
-cosmo = Class()
-cosmo.set({
-    "h": 0.67,
-    "omega_b": 0.02237,
-    "omega_cdm": 0.12,
-    "A_s": 2.1e-9,
-    "n_s": 0.965,
-    "tau_reio": 0.054,
-    "output": "tCl,pCl,lCl,mPk",
-    "l_max_scalars": 2000,
-})
-cosmo.compute()
-print("OK: age =", cosmo.age(), "sigma8 =", cosmo.sigma8())
-cosmo.struct_cleanup()
-cosmo.empty()
-PY
-```
-
-#### 5) Build and Install Planck CLIK
-NOTE: this is the plc_3.1 tree produced by the Planck Likelihood Code tarball.
-Before building, we must apply a known bug fix to the lensing module (a legacy artifact from the 2015 to 2018 transition).
-
-```bash
-cd /mnt/d/Kosmulator_test/Clik/code/plc_3.0/plc-3.1
-
-# Apply the 2018 lensing parameter mapping bug fix
-sed -i.bak '79,83c\      pars_proxy=nm.PyArray_ContiguousFromAny(apars,nm.NPY_DOUBLE,1,1)' src/python/clik/lkl_lensing.pyx
-
-# Configure and compile CLIK
-python waf configure --install_all_deps
-python waf install
-```
-
-##### 5.1 Persist CLIK Environment Variables
-This ensures every time you use `conda activate Kosmulator_test`, CLIKROOT and the necessary PYTHONPATH/LD_LIBRARY_PATH are set correctly. 
-May differ based on your OS distribution
-```bash
-mkdir -p $CONDA_PREFIX/etc/conda/activate.d
-
-cat > $CONDA_PREFIX/etc/conda/activate.d/clik.sh <<'SH'
-export CLIKROOT=/mnt/d/Kosmulator_test/Clik/code/plc_3.0/plc-3.1
-source "$CLIKROOT/bin/clik_profile.sh"
-
-python - <<'PY'
-import importlib.machinery as m
-import os, pathlib, sys
-
-suf = m.EXTENSION_SUFFIXES[0]
-
-# Candidate roots where "clik/" might live
-candidates = []
-
-# 1) Directly from CLIKROOT (most reliable in your layout)
-clikroot = os.environ.get("CLIKROOT")
-if clikroot:
-    candidates.append(pathlib.Path(clikroot) / "lib/python/site-packages")
-
-# 2) Any PYTHONPATH entries added by clik_profile.sh
-pp = os.environ.get("PYTHONPATH", "")
-for entry in pp.split(":"):
-    if entry.strip():
-        candidates.append(pathlib.Path(entry.strip()))
-
-# 3) As a last resort: whatever is already on sys.path
-for entry in sys.path:
-    if entry:
-        candidates.append(pathlib.Path(entry))
-
-# Find the first directory that actually contains clik/
-pkg = None
-for base in candidates:
-    p = base / "clik"
-    if p.exists() and p.is_dir():
-        pkg = p
-        break
-
-# Don't break activation if we can't find it (just exit quietly)
-if pkg is None:
-    raise SystemExit(0)
-
-for base in ["lkl", "lkl_lensing"]:
-    src = pkg / base
-    dst = pkg / f"{base}{suf}"
-    if src.exists():
-        try:
-            if dst.exists() or dst.is_symlink():
-                dst.unlink()
-            os.symlink(src.name, dst)
-        except FileExistsError:
-            pass
-PY
-SH
-```
-
-##### 5.2 Reactivate and Quick CLIK test:
-This is just to check if the CLIK installation worked and can persist after switching conda environment off.
-```bash
-conda deactivate
-conda activate Kosmulator_test
-
-python - <<'PY'
-import clik
-import clik.lkl, clik.lkl_lensing
-print("OK: CLIK imported successfully")
-PY
-```
-
-#### 6) Optional: AlterBBN Installation
-Note:
-  AlterBBN is required ONLY for the BBN_DH_AlterBBN likelihood.
-  Other BBN-related options (e.g. BBN_DH approx, BBN_PryMordial) do NOT require AlterBBN.
-  Kosmulator does NOT use AlterBBN's standalone executable (primary.x).
-
-
-```bash
-cd /mnt/d/Kosmulator_test/
-
-cp Kosmulator/AlterBBN_files/kosmo_bbn.c AlterBBN/
-cp Kosmulator/AlterBBN_files/alterbbn_ctypes.py AlterBBN/
-
-cd /mnt/d/Kosmulator_test/AlterBBN
-make
-
-file kosmo_bbn.c | grep -qi "C source" || { echo "ERROR: kosmo_bbn.c is not C source"; exit 1; }
-
-mkdir -p build
-gcc -O3 -fPIC -shared -o build/libkosmo_bbn.so kosmo_bbn.c -Isrc -Lsrc -lbbn -lm
-
-export KOSMO_BBN_LIB="/mnt/d/Kosmulator_test/AlterBBN/build/libkosmo_bbn.so"
-```
-
-##### 6.1 Quick AlterBBN Sanity Test:
-```bash
-python - <<'PY'
-from alterbbn_ctypes import run_bbn
-print("D/H =", run_bbn(0.022, 3.046, 879.4)['D_H'])
-PY
-```
-
-##### 6.2 Allow AlterBBN to persist through deactivation
-```bash
-echo 'export KOSMO_BBN_LIB="/mnt/d/Kosmulator_test/AlterBBN/build/libkosmo_bbn.so"' >> ~/.bashrc
-source ~/.bashrc
-```
-P.S. Remember to reactivate environment
-
-##### 6.3 Optional: AlterBBN standalone executable
-```bash
-make primary.c 
-./primary.x
-```
-
-
-#### 7) Final Sanity Checks. Use if installation fail. AI can help to identify the issues with the printouts
-##### 7.1 Confirm you’re running the right Python + classy + clik
-```bash
-which python
-python -c "import sys; print(sys.executable)"
-python -c "import classy; import clik; print('classy:', classy.__file__); print('clik:', clik.__file__)"
-python -c "import os; print('CLIKROOT=', os.environ.get('CLIKROOT')); print('PYTHONPATH=', os.environ.get('PYTHONPATH','')[:200],'...')"
-```
-
-##### 7.2 Confirm clik submodules resolve
-```bash
-python - <<'PY'
-import clik
-import clik.lkl, clik.lkl_lensing
-print("clik OK:", clik.__file__)
-print("lkl OK:", clik.lkl.__file__)
-print("lkl_lensing OK:", clik.lkl_lensing.__file__)
-PY
-```
-
-##### 7.3 Which CLASS does Kosmulator use (from within repo)
-```bash
-cd /mnt/d/Kosmulator_test/Kosmulator
-python - <<'PY'
-import classy, sys
-print("Python:", sys.executable)
-print("classy:", classy.__file__)
-PY
-```
-
-##### 7.4 Grep/ripgrep searches to confirm bindings and likelihood paths
-```bash
-cd /mnt/d/Kosmulator_test/Kosmulator
-
-rg -n "import\s+clik|pyclik|clik\.|libclik|ctypes|cffi" Kosmulator_main Observations User_defined_modules.py
-rg -n "\.clik|clik_dir|clik_path|plik_rd12|simall_100x143" Kosmulator_main Observations
-rg -n "CLIKROOT|LD_LIBRARY_PATH|DYLD_LIBRARY_PATH|PATH=" .
-```
-Grep fallback form (if rg is missing):
-```bash
-grep -RIn --exclude-dir=.git "CLIKROOT\|plik\|commander\|simall\|smica\|plc_3\.0\|baseline\|low_l\|hi_l\|lensing\|\.clik" .
-```
-
-##### 7.5 Locate clik install + inspect shared library dependencies
-```bash
-python -c "import clik, inspect; print('clik file:', clik.__file__)"
-python -c "import clik, os; print(clik.__file__)"
-
-python - <<'PY'
-import clik, pathlib, subprocess, sys
-p = pathlib.Path(clik.__file__).resolve().parent
-print("clik package dir:", p)
-sos = sorted(p.rglob("*.so"))
-print("Found .so files:")
-for s in sos:
-    print(" ", s)
-
-if not sos:
-    print("No .so files found under", p)
-    sys.exit(1)
-
-so = sos[0]
-print("\nRunning ldd on:", so)
-subprocess.run(["ldd", str(so)])
-PY
-```
-
-##### 7.6 Does clik actually load the Planck .clik likelihoods you ship in Kosmulator?
-```bash
-python - <<'PY'
-import os, clik
-
-base = "/mnt/d/Kosmulator_test/Kosmulator/Observations"
-hil  = os.path.join(base, "plik_rd12_HM_v22b_TTTEEE.clik")
-lowl = os.path.join(base, "simall_100x143_offlike5_EE_Aplanck_B.clik")
-
-print("Trying high-l clik:", hil)
-c = clik.clik(hil)
-print("  OK: high-l loaded")
-
-print("Trying low-l clik:", lowl)
-c2 = clik.clik(lowl)
-print("  OK: low-l loaded")
-PY
-```
-
-### Notes / common pitfalls
-- If `import clik` works but loading a likelihood fails, it’s usually:
-  * a missing dependency of libclik.so (check with `ldd`), or
-  * incorrect CLIKROOT / PYTHONPATH / LD_LIBRARY_PATH, or
-  * the .clik directory path you’re loading isn’t readable / incomplete.
+6. M. van der Westhuizen, D. Figueruelo, R. Thubisi, S. Sahlu, A. Abebe, and A. Paliathanasis, *Phys. Dark Univ.* **50**, 102107 (2025), arXiv:2505.23306 [astro-ph.CO].
+7. D. Figueruelo, M. van der Westhuizen, A. Abebe, and E. Di Valentino, *Phys. Dark Univ.* **52**, 102238 (2026).

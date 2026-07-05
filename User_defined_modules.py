@@ -1,4 +1,4 @@
-# User_defined_modules.py  — clean, extensible, vectorized
+# User_defined_modules.py  â€” clean, extensible, vectorized
 # --------------------------------------------------------
 """
 Central place for *user cosmology models* and small wrappers.
@@ -84,10 +84,10 @@ __all__ = [
 
 def LCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
     """
-    Flat ΛCDM:  E^2(z) = Ω_m (1+z)^3 + (1 - Ω_m)
+    Flat Î›CDM:  E^2(z) = Î©_m (1+z)^3 + (1 - Î©_m)
 
     Parameters in `p`:
-      • Omega_m
+      â€¢ Omega_m
     """
     z = _asarray(z)
     Om = float(p["Omega_m"])
@@ -115,17 +115,17 @@ def f1CDM_MODEL_vectorised(
     maxiter: int = 60,
 ) -> Number:
     r"""
-    f1CDM: E^2 = Ω_m (1+z)^3 + (1 - Ω_m) E^{2n}
+    f1CDM: E^2 = Î©_m (1+z)^3 + (1 - Î©_m) E^{2n}
 
     Parameters in `p`:
-      • Omega_m
-      • n          (f(T)-like exponent; constrained by `restrict_f1CDM_v`)
+      â€¢ Omega_m
+      â€¢ n          (f(T)-like exponent; constrained by `restrict_f1CDM_v`)
     """
     z = _asarray(z)
     Om = float(p["Omega_m"])
     n = float(p["n"])
 
-    # Seed with ΛCDM
+    # Seed with Î›CDM
     E = np.sqrt(Om * (1 + z) ** 3 + (1 - Om))
 
     converged = np.zeros_like(E, dtype=bool)
@@ -173,46 +173,38 @@ def f1CDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
     out = np.array(out, dtype=float)
     return _scalar_or_array(out)
 
+
 # ============================================================================
-#  Safeguard Switchboard (Table II)
+
+#  Safeguard Switchboard (Table II + Doom Factor Conditions)
+
 #  ---------------------------------------------------------------------------
+
 #  Toggle these flags to enforce physical boundaries during MCMC sampling.
 #  Mathematical bounds (Table I) are hardcoded and always enforced.
+
 # ============================================================================
+
 ALLOW_NEGATIVE_ENERGIES = True
 ALLOW_BIG_RIP = True
-
-# ============================================================================
-
-#  Safeguard Switchboard (Table II)
-
-#  ---------------------------------------------------------------------------
-
-#  Toggle these flags to enforce physical boundaries during MCMC sampling.
-
-#  Mathematical bounds (Table I) are hardcoded and always enforced.
-
-# ============================================================================
-
-ALLOW_NEGATIVE_ENERGIES = False
-
-ALLOW_BIG_RIP = False
-
+ALLOW_DOOM_FACTOR_INSTABILITIES = True
 
 
 def Linear_IDE_1_vectorised(z: Number, p: Dict[str, float], bypass_switchboard: bool = False) -> Number:
     """
-    Linear IDE Model 1 (General Model): Q = 3H(\delta_{dm}\rho_{dm} + \delta_{de}\rho_{de})
+    Linear IDE Model 1 (General Model):
+    Q = 3H(δ_dm ρ_dm + δ_de ρ_de)
+
     Parameters in `p`:
       • Omega_m
-      • w (dark energy equation of state)
+      • w
       • delta_dm
       • delta_de
     """
     z_arr = _asarray(z)
 
     Om = float(p["Omega_m"])
-    Ob = float(p.get("Omega_b", 0.048)) # Defaulting to paper's baseline if not sampled
+    Ob = float(p.get("Omega_b", 0.048))
     Or = float(p.get("Omega_r", 0.0))
     w = float(p["w"])
     ddm = float(p.get("delta_dm", 0.0))
@@ -228,22 +220,47 @@ def Linear_IDE_1_vectorised(z: Number, p: Dict[str, float], bypass_switchboard: 
     r0 = Odm0 / Ode0
 
     # -----------------------------------------------------------
-
-    # Physical Bounds (Table II) - Executed only for General Model
-
+    # Physical Bounds + Doom Factor Conditions
+    # Executed only for the general model.
+    # Special cases define their own doom-factor conditions before
+    # calling this function with bypass_switchboard=True.
     # -----------------------------------------------------------
     if not bypass_switchboard:
-        if not ALLOW_NEGATIVE_ENERGIES:
-            if ddm < 0 or dde < 0 or (ddm*r0 + dde) > (-w*r0 / (1.0 + r0)):
+
+        # -------------------------------------------------------
+        # Doom Factor Stability Condition
+        # -------------------------------------------------------
+        # d = (δ_dm r + δ_de)/(1+w)
+        #
+        # Safe early-time sufficient condition:
+        #   δ_de > 0,
+        #   δ_dm ∈ R,
+        #   w < -1.
+        if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+            if dde <= 0.0 or w >= -1.0:
                 return np.full_like(z_arr, np.nan)
 
+        # -------------------------------------------------------
+        # Positive-Energy Conditions: Table II
+        # -------------------------------------------------------
+        if not ALLOW_NEGATIVE_ENERGIES:
+            if ddm < 0.0 or dde < 0.0 or (ddm*r0 + dde) > (-w*r0 / (1.0 + r0)):
+                return np.full_like(z_arr, np.nan)
+
+        # -------------------------------------------------------
+        # No Future Big Rip: Table II
+        # -------------------------------------------------------
         if not ALLOW_BIG_RIP:
             if w == -1.0:
-                if ddm != 0: return np.full_like(z_arr, np.nan)
-            elif (w + 1.0) > 0:
-                if (ddm / (w + 1.0) - dde) > (w + 1.0): return np.full_like(z_arr, np.nan)
-            else: # Phantom regime crossover
-                if (ddm - dde*(w + 1.0)) < (w + 1.0)**2: return np.full_like(z_arr, np.nan)
+                if ddm != 0.0:
+                    return np.full_like(z_arr, np.nan)
+            elif (w + 1.0) > 0.0:
+                if (ddm / (w + 1.0) - dde) > (w + 1.0):
+                    return np.full_like(z_arr, np.nan)
+            else:
+                # Phantom regime crossover
+                if (ddm - dde*(w + 1.0)) < (w + 1.0)**2:
+                    return np.full_like(z_arr, np.nan)
 
     # -----------------------------------------------------------
     # Mathematical Bounds (Table I) - ALWAYS ENFORCED
@@ -254,7 +271,7 @@ def Linear_IDE_1_vectorised(z: Number, p: Dict[str, float], bypass_switchboard: 
     Delta2 = (ddm + dde + w)**2 - 4.0 * dde * ddm
 
     # Avoid imaginary densities and division by zero
-    if Delta2 <= 0:
+    if Delta2 <= 0.0:
         return np.full_like(z_arr, np.nan)
 
     Delta = np.sqrt(Delta2)
@@ -262,113 +279,256 @@ def Linear_IDE_1_vectorised(z: Number, p: Dict[str, float], bypass_switchboard: 
     # -----------------------------------------------------------
     # Analytical E(z) Calculation (Equation 3)
     # -----------------------------------------------------------
-    term1_coeff = - (Ode0 * (ddm - dde + w - Delta) + Odm0 * (ddm - dde - w - Delta)) / (2.0 * Delta)
+    term1_coeff = - (
+        Ode0 * (ddm - dde + w - Delta)
+        + Odm0 * (ddm - dde - w - Delta)
+    ) / (2.0 * Delta)
+
     term1_exp = -1.5 * (ddm - dde - w - 2.0 + Delta)
 
-    term2_coeff =  (Ode0 * (ddm - dde + w + Delta) + Odm0 * (ddm - dde - w + Delta)) / (2.0 * Delta)
+    term2_coeff = (
+        Ode0 * (ddm - dde + w + Delta)
+        + Odm0 * (ddm - dde - w + Delta)
+    ) / (2.0 * Delta)
+
     term2_exp = -1.5 * (ddm - dde - w - 2.0 - Delta)
 
-    E2 = (term1_coeff * (1.0 + z_arr)**term1_exp +
-          term2_coeff * (1.0 + z_arr)**term2_exp +
-          Ob * (1.0 + z_arr)**3 +
-          Or * (1.0 + z_arr)**4)
+    E2 = (
+        term1_coeff * (1.0 + z_arr)**term1_exp
+        + term2_coeff * (1.0 + z_arr)**term2_exp
+        + Ob * (1.0 + z_arr)**3
+        + Or * (1.0 + z_arr)**4
+    )
 
-    if (not np.isfinite(E2).all()) or (E2.min() <= 0):
+    if (not np.isfinite(E2).all()) or (E2.min() <= 0.0):
         out = np.full_like(z_arr, np.nan)
     else:
         out = np.sqrt(E2)
+
     return _scalar_or_array(out)
 
+
 def Linear_IDE_2_vectorised(z: Number, p: Dict[str, float]) -> Number:
-    """Linear IDE Model 2: Q = 3H\delta(\rho_{dm} + \rho_{de})"""
+    """
+    Linear IDE Model 2:
+    Q = 3Hδ(ρ_dm + ρ_de)
+    """
+    z_arr = _asarray(z)
+
     w = float(p["w"])
     delta = float(p["delta"])
     Om = float(p["Omega_m"])
     Ob = float(p.get("Omega_b", 0.048))
+    Or = float(p.get("Omega_r", 0.0))
 
     Odm0 = Om - Ob
-    Ode0 = 1.0 - Om - float(p.get("Omega_r", 0.0))
-    if Ode0 <= 0 or Odm0 <= 0: return np.full_like(_asarray(z), np.nan)
+    Ode0 = 1.0 - Om - Or
+
+    if Ode0 <= 0.0 or Odm0 <= 0.0:
+        return np.full_like(z_arr, np.nan)
+
     r0 = Odm0 / Ode0
 
+    # -----------------------------------------------------------
+    # Doom Factor Stability Condition
+    # -----------------------------------------------------------
+    # d = δ(r+1)/(1+w)
+    #
+    # Table condition:
+    #   w < -1.
+    if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+        if w >= -1.0:
+            return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Positive-Energy Conditions: Table II
+    # -----------------------------------------------------------
     if not ALLOW_NEGATIVE_ENERGIES:
-        if delta < 0 or delta > (-w * r0 / ((1.0 + r0)**2)):
-            return np.full_like(_asarray(z), np.nan)
+        upper = -w * r0 / ((1.0 + r0)**2)
+
+        # If doom-factor stability is also enforced, use the combined
+        # condition 0 < δ <= upper. Otherwise allow the Table II boundary δ = 0.
+        if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+            if delta <= 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+        else:
+            if delta < 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # No Future Big Rip: Table II
+    # -----------------------------------------------------------
     if not ALLOW_BIG_RIP:
         if w == 0.0 or delta < (1.0 + 1.0/w):
-            return np.full_like(_asarray(z), np.nan)
+            return np.full_like(z_arr, np.nan)
 
     p_gen = p.copy()
     p_gen["delta_dm"] = delta
     p_gen["delta_de"] = delta
+
     return Linear_IDE_1_vectorised(z, p_gen, bypass_switchboard=True)
 
 
 def Linear_IDE_3_vectorised(z: Number, p: Dict[str, float]) -> Number:
-    """Linear IDE Model 3: Q = 3H\delta(\rho_{dm} - \rho_{de})"""
+    """
+    Linear IDE Model 3:
+    Q = 3Hδ(ρ_dm - ρ_de)
+    """
+    z_arr = _asarray(z)
+
     w = float(p["w"])
     delta = float(p["delta"])
 
-    if not ALLOW_NEGATIVE_ENERGIES:
-        # Table II: "No viable domain" - inherently yields negative energies
-        return np.full_like(_asarray(z), np.nan)
+    # -----------------------------------------------------------
+    # Doom Factor Stability Condition
+    # -----------------------------------------------------------
+    # d = δ(r-1)/(1+w)
+    #
+    # Table condition:
+    #   w < -1.
+    if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+        if w >= -1.0:
+            return np.full_like(z_arr, np.nan)
 
+    # -----------------------------------------------------------
+    # Positive-Energy Conditions: Table II
+    # -----------------------------------------------------------
+    # No viable positive-energy domain.
+    if not ALLOW_NEGATIVE_ENERGIES:
+        return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # No Future Big Rip: Table II
+    # -----------------------------------------------------------
     if not ALLOW_BIG_RIP:
-        if w == -2.0: return np.full_like(_asarray(z), np.nan) # prevent div/0
-        if delta > ((1.0 + w)/(2.0 + w)):
-            return np.full_like(_asarray(z), np.nan)
+        if w == -2.0:
+            return np.full_like(z_arr, np.nan)
+
+        if delta > ((1.0 + w) / (2.0 + w)):
+            return np.full_like(z_arr, np.nan)
 
     p_gen = p.copy()
     p_gen["delta_dm"] = delta
     p_gen["delta_de"] = -delta
+
     return Linear_IDE_1_vectorised(z, p_gen, bypass_switchboard=True)
 
 
 def Linear_IDE_4_vectorised(z: Number, p: Dict[str, float]) -> Number:
-    """Linear IDE Model 4: Q = 3H\delta\rho_{dm}"""
+    """
+    Linear IDE Model 4:
+    Q = 3Hδρ_dm
+    """
+    z_arr = _asarray(z)
+
     w = float(p["w"])
     delta = float(p["delta"])
     Om = float(p["Omega_m"])
     Ob = float(p.get("Omega_b", 0.048))
+    Or = float(p.get("Omega_r", 0.0))
 
     Odm0 = Om - Ob
-    Ode0 = 1.0 - Om - float(p.get("Omega_r", 0.0))
-    if Ode0 <= 0 or Odm0 <= 0: return np.full_like(_asarray(z), np.nan)
+    Ode0 = 1.0 - Om - Or
+
+    if Ode0 <= 0.0 or Odm0 <= 0.0:
+        return np.full_like(z_arr, np.nan)
+
     r0 = Odm0 / Ode0
 
+    # -----------------------------------------------------------
+    # Doom Factor Stability Condition
+    # -----------------------------------------------------------
+    # d = δr/(1+w)
+    #
+    # Table condition:
+    #   w < -1.
+    if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+        if w >= -1.0:
+            return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Positive-Energy Conditions: Table II
+    # -----------------------------------------------------------
     if not ALLOW_NEGATIVE_ENERGIES:
-        if delta < 0 or delta > (-w / (1.0 + r0)):
-            return np.full_like(_asarray(z), np.nan)
+        upper = -w / (1.0 + r0)
+
+        # If doom-factor stability is also enforced, use the combined
+        # condition 0 < δ <= upper. Otherwise allow the Table II boundary δ = 0.
+        if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+            if delta <= 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+        else:
+            if delta < 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # No Future Big Rip: Table II
+    # -----------------------------------------------------------
     if not ALLOW_BIG_RIP:
         if w <= -1.0:
-            return np.full_like(_asarray(z), np.nan)
+            return np.full_like(z_arr, np.nan)
 
     p_gen = p.copy()
     p_gen["delta_dm"] = delta
     p_gen["delta_de"] = 0.0
+
     return Linear_IDE_1_vectorised(z, p_gen, bypass_switchboard=True)
 
 
 def Linear_IDE_5_vectorised(z: Number, p: Dict[str, float]) -> Number:
-    """Linear IDE Model 5: Q = 3H\delta\rho_{de}"""
+    """
+    Linear IDE Model 5:
+    Q = 3Hδρ_de
+    """
+    z_arr = _asarray(z)
+
     w = float(p["w"])
     delta = float(p["delta"])
     Om = float(p["Omega_m"])
     Ob = float(p.get("Omega_b", 0.048))
+    Or = float(p.get("Omega_r", 0.0))
 
     Odm0 = Om - Ob
-    Ode0 = 1.0 - Om - float(p.get("Omega_r", 0.0))
-    if Ode0 <= 0 or Odm0 <= 0: return np.full_like(_asarray(z), np.nan)
+    Ode0 = 1.0 - Om - Or
+
+    if Ode0 <= 0.0 or Odm0 <= 0.0:
+        return np.full_like(z_arr, np.nan)
 
     r0 = Odm0 / Ode0
 
-    if not ALLOW_NEGATIVE_ENERGIES:
-        if delta < 0 or delta > (-w * (1.0 + 1.0/r0)):
-            return np.full_like(_asarray(z), np.nan)
+    # -----------------------------------------------------------
+    # Doom Factor Stability Condition
+    # -----------------------------------------------------------
+    # d = δ/(1+w)
+    #
+    # Table condition:
+    #   δ(1+w) < 0.
+    if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+        if delta * (1.0 + w) >= 0.0:
+            return np.full_like(z_arr, np.nan)
 
+    # -----------------------------------------------------------
+    # Positive-Energy Conditions: Table II
+    # -----------------------------------------------------------
+    if not ALLOW_NEGATIVE_ENERGIES:
+        upper = -w / (1.0 + 1.0/r0)
+
+        # If doom-factor stability is also enforced, use the combined
+        # condition 0 < δ <= upper, which together with δ(1+w)<0
+        # selects w < -1.
+        if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+            if delta <= 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+        else:
+            if delta < 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # No Future Big Rip: Table II
+    # -----------------------------------------------------------
     if not ALLOW_BIG_RIP:
         if delta < (-w - 1.0):
-            return np.full_like(_asarray(z), np.nan)
+            return np.full_like(z_arr, np.nan)
 
     p_gen = p.copy()
     p_gen["delta_dm"] = 0.0
@@ -376,11 +536,331 @@ def Linear_IDE_5_vectorised(z: Number, p: Dict[str, float]) -> Number:
 
     return Linear_IDE_1_vectorised(z, p_gen, bypass_switchboard=True)
 
+
+def NonLinear_IDE_1_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """
+    Non-linear IDE Model 1:
+    Q = 3Hδ(ρ_dm ρ_de)/(ρ_dm + ρ_de)
+
+    Parameters in `p`:
+      • Omega_m
+      • w
+      • delta
+    """
+    z_arr = _asarray(z)
+
+    Om = float(p["Omega_m"])
+    Ob = float(p.get("Omega_b", 0.048))
+    Or = float(p.get("Omega_r", 0.0))
+    w = float(p["w"])
+    delta = float(p["delta"])
+
+    Odm0 = Om - Ob
+    Ode0 = 1.0 - Om - Or
+
+    # Base physical safeguard: present-day densities must be positive
+    if Odm0 <= 0.0 or Ode0 <= 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    r0 = Odm0 / Ode0
+
+    # -----------------------------------------------------------
+    # Doom Factor Stability Condition
+    # -----------------------------------------------------------
+    # d = δr / [(1+r)(1+w)]
+    #
+    # Table condition:
+    #   δ(1+w) < 0.
+    #
+    # Positive-energy condition:
+    #   No additional bound; this model has positive densities for all δ.
+    if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+        if delta * (1.0 + w) >= 0.0:
+            return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Physical Bounds (Table II)
+    # -----------------------------------------------------------
+    # No ALLOW_NEGATIVE_ENERGIES restriction is required here:
+    # Table II gives ρ_dm/de > 0 for all delta.
+
+    # -----------------------------------------------------------
+    # No Future Big Rip: Table II
+    # -----------------------------------------------------------
+    if not ALLOW_BIG_RIP:
+        if w < -1.0:
+            return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Mathematical Bounds (Table I) - ALWAYS ENFORCED
+    # -----------------------------------------------------------
+    if w + delta == 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    bracket = (
+        (1.0 + r0 * (1.0 + z_arr)**(-3.0 * (w + delta)))
+        / (1.0 + r0)
+    )
+
+    # Avoid non-real powers from negative/zero bases
+    if (not np.isfinite(bracket).all()) or (bracket.min() <= 0.0):
+        return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Analytical E(z) Calculation (Equation 5)
+    # -----------------------------------------------------------
+    dark_factor = (
+        Odm0 * (1.0 + z_arr)**(3.0 * (1.0 - delta))
+        + Ode0 * (1.0 + z_arr)**(3.0 * (1.0 + w))
+    )
+
+    bracket_exp = -delta / (w + delta)
+
+    E2 = (
+        dark_factor * bracket**bracket_exp
+        + Ob * (1.0 + z_arr)**3
+        + Or * (1.0 + z_arr)**4
+    )
+
+    if (not np.isfinite(E2).all()) or (E2.min() <= 0.0):
+        out = np.full_like(z_arr, np.nan)
+    else:
+        out = np.sqrt(E2)
+
+    return _scalar_or_array(out)
+
+
+def NonLinear_IDE_2_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """
+    Non-linear IDE Model 2:
+    Q = 3Hδ(ρ_dm^2)/(ρ_dm + ρ_de)
+
+    Parameters in `p`:
+      • Omega_m
+      • w
+      • delta
+    """
+    z_arr = _asarray(z)
+
+    Om = float(p["Omega_m"])
+    Ob = float(p.get("Omega_b", 0.048))
+    Or = float(p.get("Omega_r", 0.0))
+    w = float(p["w"])
+    delta = float(p["delta"])
+
+    Odm0 = Om - Ob
+    Ode0 = 1.0 - Om - Or
+
+    # Base physical safeguard: present-day densities must be positive
+    if Odm0 <= 0.0 or Ode0 <= 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    r0 = Odm0 / Ode0
+
+    # -----------------------------------------------------------
+    # Doom Factor Stability Condition
+    # -----------------------------------------------------------
+    # d = δr^2 / [(1+r)(1+w)]
+    #
+    # Table condition:
+    #   w < -1.
+    if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+        if w >= -1.0:
+            return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Positive-Energy Conditions: Table II
+    # -----------------------------------------------------------
+    # Combined doom + positive-energy condition:
+    #   0 < δ <= -w/r0,
+    #   w < -1.
+    if not ALLOW_NEGATIVE_ENERGIES:
+        upper = -w / r0
+
+        # If doom-factor stability is also enforced, use the combined
+        # condition 0 < δ <= upper. Otherwise allow the Table II boundary δ = 0.
+        if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+            if delta <= 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+        else:
+            if delta < 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # No Future Big Rip: Table II
+    # -----------------------------------------------------------
+    if not ALLOW_BIG_RIP:
+        if w < -1.0:
+            return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Mathematical Bounds (Table I) - ALWAYS ENFORCED
+    # -----------------------------------------------------------
+    if w >= 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    if delta <= w or delta > (-w / r0):
+        return np.full_like(z_arr, np.nan)
+
+    if w == 0.0 or (w - delta) == 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    A = (w + delta * r0) * (1.0 + z_arr)**(3.0 * w)
+
+    second_base = (
+        (A + r0 * (w - delta))
+        / (w * (1.0 + r0))
+    )
+
+    # Avoid non-real powers from negative/zero bases
+    if (not np.isfinite(second_base).all()) or (second_base.min() <= 0.0):
+        return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Analytical E(z) Calculation (Equation 6)
+    # -----------------------------------------------------------
+    first_factor = (
+        Odm0
+        + Ode0 * ((A - delta * r0) / w)
+    )
+
+    expansion_exp = 3.0 * (1.0 - (w * delta) / (w - delta))
+    second_exp = delta / (w - delta)
+
+    E2 = (
+        first_factor
+        * (1.0 + z_arr)**expansion_exp
+        * second_base**second_exp
+        + Ob * (1.0 + z_arr)**3
+        + Or * (1.0 + z_arr)**4
+    )
+
+    if (not np.isfinite(E2).all()) or (E2.min() <= 0.0):
+        out = np.full_like(z_arr, np.nan)
+    else:
+        out = np.sqrt(E2)
+
+    return _scalar_or_array(out)
+
+
+def NonLinear_IDE_3_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """
+    Non-linear IDE Model 3:
+    Q = 3Hδ(ρ_de^2)/(ρ_dm + ρ_de)
+
+    Parameters in `p`:
+      • Omega_m
+      • w
+      • delta
+    """
+    z_arr = _asarray(z)
+
+    Om = float(p["Omega_m"])
+    Ob = float(p.get("Omega_b", 0.048))
+    Or = float(p.get("Omega_r", 0.0))
+    w = float(p["w"])
+    delta = float(p["delta"])
+
+    Odm0 = Om - Ob
+    Ode0 = 1.0 - Om - Or
+
+    # Base physical safeguard: present-day densities must be positive
+    if Odm0 <= 0.0 or Ode0 <= 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    r0 = Odm0 / Ode0
+
+    # -----------------------------------------------------------
+    # Doom Factor Stability Condition
+    # -----------------------------------------------------------
+    # d = δ / [(1+r)(1+w)]
+    #
+    # Table condition:
+    #   δ(1+w) < 0.
+    if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+        if delta * (1.0 + w) >= 0.0:
+            return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Positive-Energy Conditions: Table II
+    # -----------------------------------------------------------
+    # Combined doom + positive-energy condition:
+    #   0 < δ <= -wr0,
+    #   w < -1.
+    if not ALLOW_NEGATIVE_ENERGIES:
+        upper = -w * r0
+
+        # If doom-factor stability is also enforced, use the combined
+        # condition 0 < δ <= upper. Otherwise allow the Table II boundary δ = 0.
+        if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+            if delta <= 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+        else:
+            if delta < 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # No Future Big Rip: Table II
+    # -----------------------------------------------------------
+    if not ALLOW_BIG_RIP:
+        if delta < w * (w + 1.0):
+            return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Mathematical Bounds (Table I) - ALWAYS ENFORCED
+    # -----------------------------------------------------------
+    if w >= 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    if delta <= w or delta > (-w * r0):
+        return np.full_like(z_arr, np.nan)
+
+    if w == 0.0 or (w - delta) == 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    A = (w * r0 + delta) * (1.0 + z_arr)**(-3.0 * w)
+
+    second_base = (
+        (A + w - delta)
+        / (w * (1.0 + r0))
+    )
+
+    # Avoid non-real powers from negative/zero bases
+    if (not np.isfinite(second_base).all()) or (second_base.min() <= 0.0):
+        return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Analytical E(z) Calculation (Equation 7)
+    # -----------------------------------------------------------
+    first_factor = (
+        Odm0 * ((A - delta) / (w * r0))
+        + Ode0
+    )
+
+    expansion_exp = 3.0 * (1.0 + (w**2) / (w - delta))
+    second_exp = delta / (w - delta)
+
+    E2 = (
+        first_factor
+        * (1.0 + z_arr)**expansion_exp
+        * second_base**second_exp
+        + Ob * (1.0 + z_arr)**3
+        + Or * (1.0 + z_arr)**4
+    )
+
+    if (not np.isfinite(E2).all()) or (E2.min() <= 0.0):
+        out = np.full_like(z_arr, np.nan)
+    else:
+        out = np.sqrt(E2)
+
+    return _scalar_or_array(out)
+
+
 # ============================================================================
-#  CMB wrappers (CLASS C_ℓ)
+#  CMB wrappers (CLASS C_â„“)
 #  ---------------------------------------------------------------------------
 #  These are used by the CMB likelihood. They take *full* cosmological
-#  parameter dicts (not just Omega_m, n, etc.) and return raw C_ℓ arrays.
+#  parameter dicts (not just Omega_m, n, etc.) and return raw C_â„“ arrays.
 # ============================================================================
 
 # Internal cache for CLASS; defined here so the CMB wrappers can share it.
@@ -393,8 +873,8 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
     Canonical CMB helper for LCDM_v.
 
     mode:
-      - "lowl" → cheap low-ℓ EE-only setup (no lensing, lmax ~ 30)
-      - anything else → full high-ℓ, lensed spectra for Plik + (optionally) lensing
+      - "lowl" â†’ cheap low-â„“ EE-only setup (no lensing, lmax ~ 30)
+      - anything else â†’ full high-â„“, lensed spectra for Plik + (optionally) lensing
 
     Returns
     -------
@@ -402,7 +882,7 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
       CLASS C_ell dict (raw_cl or lensed_cl) or None on failure.
     """
     # Make sure all background quantities are present
-    # (Ω_m, Ω_b, Ω_bh^2, Ω_dh^2 given H_0)
+    # (Î©_m, Î©_b, Î©_bh^2, Î©_dh^2 given H_0)
     p = _ensure_background_params(p)
 
     m = (mode or "").lower()
@@ -420,8 +900,8 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
     cosmo = _class_cache
     
     # IMPORTANT:
-    #   For low-ℓ SimAll EE we do NOT need lensing Cls at all.
-    #   Requesting lCl in low-ℓ mode is unnecessary and can increase fragility.
+    #   For low-â„“ SimAll EE we do NOT need lensing Cls at all.
+    #   Requesting lCl in low-â„“ mode is unnecessary and can increase fragility.
     if is_lowl:
         output_str = "tCl,pCl"
         class_params = {
@@ -431,7 +911,7 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
     else:
         output_str = "tCl,pCl,lCl"
         class_params = {
-            "l_max_scalars": 2509,  # enough for Planck high-ℓ
+            "l_max_scalars": 2509,  # enough for Planck high-â„“
             "lensing": "yes",
         }
 
@@ -461,7 +941,7 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
 
     try:
         # Hard-reset CLASS internal state between calls.
-        # This is CRITICAL when mixing low-ℓ and high-ℓ likelihoods in one run.
+        # This is CRITICAL when mixing low-â„“ and high-â„“ likelihoods in one run.
         try:
             cosmo.struct_cleanup()
         except Exception:
@@ -474,8 +954,8 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
         cosmo.set(cosmo_params)
         cosmo.compute()
 
-        # Low-ℓ: raw_cl is fine and cheaper.
-        # High-ℓ: use lensed_cl for Plik / TT-only.
+        # Low-â„“: raw_cl is fine and cheaper.
+        # High-â„“: use lensed_cl for Plik / TT-only.
         return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
 
     except classy.CosmoComputationError as e:
@@ -543,7 +1023,7 @@ def f1CDM_v_CMB(p: dict, mode: str = "hil"):
 # ============================================================================
 #  Model registry / discovery
 #  ---------------------------------------------------------------------------
-#  This is the single source of truth that maps a string name → (func, params)
+#  This is the single source of truth that maps a string name â†’ (func, params)
 #  and is used everywhere (MCMC, plotting, likelihoods).
 #
 #  To add a new model:
@@ -569,6 +1049,12 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
     "Linear_IDE_3": (Linear_IDE_3_vectorised, ["Omega_m", "w", "delta"]),
     "Linear_IDE_4": (Linear_IDE_4_vectorised, ["Omega_m", "w", "delta"]),
     "Linear_IDE_5": (Linear_IDE_5_vectorised, ["Omega_m", "w", "delta"]),
+
+    # Interacting Dark Energy Models (Non-linear)
+    "NonLinear_IDE_1": (NonLinear_IDE_1_vectorised, ["Omega_m", "w", "delta"]),
+    "NonLinear_IDE_2": (NonLinear_IDE_2_vectorised, ["Omega_m", "w", "delta"]),
+    "NonLinear_IDE_3": (NonLinear_IDE_3_vectorised, ["Omega_m", "w", "delta"]),
+
 
     # CMB-specific models for CLASS Cls (used by CMB likelihoods)
     "LCDM_v_CMB": (
@@ -615,7 +1101,7 @@ def Get_model_function(model_name: str) -> Callable[[Number, Dict[str, float]], 
 
 def Get_model_names(model_name: Union[str, List[str]]) -> Dict[str, Dict[str, List[str]]]:
     """
-    Return a mapping model → { 'parameters': [ ... ] } for one or more names.
+    Return a mapping model â†’ { 'parameters': [ ... ] } for one or more names.
 
     This is mainly used for UI / logging / consistency checks.
     """
@@ -627,6 +1113,7 @@ def Get_model_names(model_name: Union[str, List[str]]) -> Dict[str, Dict[str, Li
     return out
     
     
+
 
 
 # ============================================================================
@@ -650,19 +1137,14 @@ def restrict_f1CDM_v(x: float) -> bool:
     """
     return x < 0.5
 
-def restrict_IDE_delta(x: float) -> bool:
-    """Enforce physical thermodynamic flow from Dark Energy to Dark Matter."""
-    return x >= 0.0
 
 # Global map that Get_model_restrictions reads from.
 restrictions_map: Dict[str, Dict[str, Callable[[float], bool]]] = {
-    #"LCDM":    {"Omega_m": restrict_LCDM_Omega_m},
-    #"LCDM_v":  {"Omega_m": restrict_LCDM_Omega_m},
-    #"LCDM_nv": {"Omega_m": restrict_LCDM_Omega_m},
+    "LCDM":    {"Omega_m": restrict_LCDM_Omega_m},
+    "LCDM_v":  {"Omega_m": restrict_LCDM_Omega_m},
+    "LCDM_nv": {"Omega_m": restrict_LCDM_Omega_m},
     "f1CDM_v": {"n": restrict_f1CDM_v},
     # Example for a new model:
-    "IDE_de_v": {"delta": restrict_IDE_delta},
-    "IDE_dm_v": {"delta": restrict_IDE_delta},
     # "MyMG_v": {"my_param": restrict_MyMG_param},
 }
 
@@ -681,6 +1163,7 @@ def Get_model_restrictions(
     if isinstance(model_name, list):
         return {m: restrictions_map.get(m, {}) for m in model_name}
     return restrictions_map.get(model_name, {})
+
 
 
 # ============================================================================
@@ -709,7 +1192,7 @@ def Comoving_distance_vectorized(MODEL_func: Callable, redshifts: Number, p: Dic
 
 def matter_density_z_array(z: Number, param_dict: Dict[str, float], MODEL_func: Callable) -> Number:
     """
-    Vector Ω_m(z); signature matches SP.matter_density_z_array(z, p, model).
+    Vector Î©_m(z); signature matches SP.matter_density_z_array(z, p, model).
 
     Exposed here so that plotting and likelihood code can share one
     implementation, and users don't have to worry about it.
@@ -721,9 +1204,9 @@ def integral_term_array(
     z: Number, param_dict: Dict[str, float], MODEL_func: Callable, gamma: float
 ) -> Number:
     """
-    Vector growth integral ∫ Ω_m(z')^γ / (1+z') dz'.
+    Vector growth integral âˆ« Î©_m(z')^Î³ / (1+z') dz'.
 
-    This is used both in the fσ8 likelihood and in the plotting code
+    This is used both in the fÏƒ8 likelihood and in the plotting code
     (compute_sigma8z), so we expose a single shared wrapper here.
     """
     return _integral_term_arr(z, param_dict, MODEL_func, float(gamma))

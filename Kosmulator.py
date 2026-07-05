@@ -69,7 +69,8 @@ logging.basicConfig(level=logging.INFO)
 # ----------------------------------------------------------------------
 
 # Models implemented in User_defined_modules.py
-model_names: List[str] = ["Linear_IDE_1"]
+model_names: List[str] = ["Linear_IDE_1", "Linear_IDE_2", "Linear_IDE_3", "Linear_IDE_4",  "Linear_IDE_5", "NonLinear_IDE_1", "NonLinear_IDE_2", "NonLinear_IDE_3"]
+
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
@@ -78,6 +79,7 @@ observations: List[List[str]] = [
     #['OHD'],
     #['CC'],
     ['PantheonPS', 'DESI_DR2', 'CC'],
+    #['PantheonPS', 'DESI_DR2'],
     #['PantheonPS'],
     #['PantheonPS','CC'],
     #['f_sigma_8'],
@@ -112,13 +114,13 @@ observations: List[List[str]] = [
     #["f_sigma_8", "PantheonP"],
 ]
 
-true_model: str = "Linear_IDE_1"
+true_model: str = "LCDM_v"
 
 # Sampler settings
-nwalkers: int = 36
-nsteps: int = 100000
-burn: int = 30000
-convergence: float = 0.01
+nwalkers: int = 48     
+nsteps: int = 100000   
+burn: int = 10000     
+convergence: float = 0.01   
 
 
 prior_limits: Dict[str, Tuple[float, float]] = {
@@ -134,11 +136,12 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     # Approximating the (-∞, +∞) unbounded priors for linear models
     "delta_dm": (-2.0, 2.0),
     "delta_de": (-2.0, 2.0),
-    "delta": (-10.0, 10.0),
+    "delta": (-3.0, 3.0),
 
     # Standard Nuisance / CMB Parameters (Unchanged for safety)
     "r_d": (0.01, 1000.0),
-    "r_d": (147.499, 147.501),
+    #"r_d": (147.499, 147.501),
+    #"r_d": (147.049, 147.051),
     "gamma": (0.01, 1.0),
     "sigma_8": (0.01, 1.0),
     "n": (0.0, 0.6),
@@ -168,7 +171,7 @@ true_values: Dict[str, float] = {
     "Omega_m": 0.307,
     "H_0": 70.0,
     "M_abs": -19.35,
-    "w": -1.0,
+    "w": -1.01,
     "delta_dm": 0.0,
     "delta_de": 0.0,
     "delta": 0.0,
