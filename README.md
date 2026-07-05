@@ -115,19 +115,19 @@ For $\delta<0$, energy flows from dark matter to dark energy and dark matter bec
 
 The normalized Hubble function is
 
-$$
+```math
 \begin{aligned}
-h(z)=\Bigg\{&
-\Big[\Omega_{\rm dm,0}(1+z)^{3(1-\delta)}
-+\Omega_{\rm de,0}(1+z)^{3(1+w)}\Big]
+h(z)=\{&
+\left[\Omega_{\rm dm,0}(1+z)^{3(1-\delta)}
++\Omega_{\rm de,0}(1+z)^{3(1+w)}\right]
 \left[
 \frac{1+r_0(1+z)^{-3(w+\delta)}}{1+r_0}
 \right]^{-\frac{\delta}{w+\delta}}
 \\[1mm]
 &+\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
-\Bigg\}^{1/2}.
+\}^{1/2}.
 \end{aligned}
-$$
+```
 
 This interaction always gives positive dark-sector densities, independently of the sign or magnitude of $\delta$.
 
@@ -135,7 +135,7 @@ This interaction always gives positive dark-sector densities, independently of t
 
 The normalized Hubble function is
 
-$$
+```math
 \begin{aligned}
 h(z)=\{&
 \left[\Omega_{\rm dm,0}
@@ -152,7 +152,7 @@ h(z)=\{&
 +\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
 \}^{1/2}.
 \end{aligned}
-$$
+```
 
 For $\delta<0$, energy flows from dark matter to dark energy and dark energy becomes negative in the past. For a sufficiently small positive coupling, energy flows from dark energy to dark matter and all dark-sector densities can remain positive.
 
