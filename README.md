@@ -42,19 +42,19 @@ For a flat FLRW universe containing radiation, baryons, dark matter, and dark en
 
 $$
 \begin{aligned}
-h(z)=\Bigg\{&
+h(z)=\{&
 -\frac{1}{2\Delta}
-\Big[\Omega_{\rm de,0}(\delta_{\rm dm}-\delta_{\rm de}+w-\Delta)
-+\Omega_{\rm dm,0}(\delta_{\rm dm}-\delta_{\rm de}-w-\Delta)\Big]
+\left[\Omega_{\rm de,0}(\delta_{\rm dm}-\delta_{\rm de}+w-\Delta)
++\Omega_{\rm dm,0}(\delta_{\rm dm}-\delta_{\rm de}-w-\Delta)\right]
 (1+z)^{-\frac{3}{2}(\delta_{\rm dm}-\delta_{\rm de}-w-2+\Delta)}
 \\[1mm]
 &+\frac{1}{2\Delta}
-\Big[\Omega_{\rm de,0}(\delta_{\rm dm}-\delta_{\rm de}+w+\Delta)
-+\Omega_{\rm dm,0}(\delta_{\rm dm}-\delta_{\rm de}-w+\Delta)\Big]
+\left[\Omega_{\rm de,0}(\delta_{\rm dm}-\delta_{\rm de}+w+\Delta)
++\Omega_{\rm dm,0}(\delta_{\rm dm}-\delta_{\rm de}-w+\Delta)\right]
 (1+z)^{-\frac{3}{2}(\delta_{\rm dm}-\delta_{\rm de}-w-2-\Delta)}
 \\[1mm]
 &+\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
-\Bigg\}^{1/2},
+\}^{1/2},
 \end{aligned}
 $$
 where
