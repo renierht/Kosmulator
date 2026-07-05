@@ -57,7 +57,6 @@ h(z)=\Bigg\{&
 \Bigg\}^{1/2},
 \end{aligned}
 $$
-
 where
 
 $$
@@ -138,12 +137,12 @@ The normalized Hubble function is
 
 $$
 \begin{aligned}
-h(z)=\Bigg\{&
-\Bigg[\Omega_{\rm dm,0}
+h(z)=\{&
+\left[\Omega_{\rm dm,0}
 +\Omega_{\rm de,0}
 \left(
 \frac{[w+\delta r_0](1+z)^{3w}-\delta r_0}{w}
-\right)\Bigg]
+\right)\right]
 (1+z)^{3\left(1-\frac{w\delta}{w-\delta}\right)}
 \\[1mm]
 &\times
@@ -151,7 +150,7 @@ h(z)=\Bigg\{&
 \frac{[w+\delta r_0](1+z)^{3w}+r_0(w-\delta)}{w(1+r_0)}
 \right]^{\frac{\delta}{w-\delta}}
 +\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
-\Bigg\}^{1/2}.
+\}^{1/2}.
 \end{aligned}
 $$
 
@@ -163,12 +162,12 @@ The normalized Hubble function is
 
 $$
 \begin{aligned}
-h(z)=\Bigg\{&
-\Bigg[\Omega_{\rm dm,0}
+h(z)=\{&
+\left[\Omega_{\rm dm,0}
 \left(
 \frac{(wr_0+\delta)(1+z)^{-3w}-\delta}{wr_0}
 \right)
-+\Omega_{\rm de,0}\Bigg]
++\Omega_{\rm de,0}\right]
 (1+z)^{3\left(1+\frac{w^2}{w-\delta}\right)}
 \\[1mm]
 &\times
@@ -176,7 +175,7 @@ h(z)=\Bigg\{&
 \frac{(wr_0+\delta)(1+z)^{-3w}+w-\delta}{w(1+r_0)}
 \right]^{\frac{\delta}{w-\delta}}
 +\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
-\Bigg\}^{1/2}.
+\}^{1/2}.
 \end{aligned}
 $$
 
