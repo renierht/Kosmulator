@@ -30,7 +30,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-import clik
+try:
+    import clik
+except ImportError:
+    clik = None
+
 import sysconfig
 
 from Kosmulator_main import utils as U

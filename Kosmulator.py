@@ -90,7 +90,7 @@ observations: List[List[str]] = [
     #['Union3','CC'],
     #["DESY5",'CC'],
     #["JLA","CC","OHD"],
-    #['PantheonPS','CC','DESI_DR2'],
+    ['PantheonPS','CC','DESI_DR2'],
     #['PantheonP','DESI_DR2','BBN_DH_AlterBBN'],
     #['PantheonPS','DESI_DR2','BBN_DH_AlterBBN'],
     #["JLA","Pantheon","PantheonP","DESY5","Union3"],
@@ -102,7 +102,7 @@ observations: List[List[str]] = [
     #["DESI_DR2","CMB_lowl","BBN_PryMordial"],
     #["CMB_lowl"],
     #['CMB_hil'],
-    ['CMB_lensing', 'CMB_lowl'],
+    #['CMB_lensing', 'CMB_lowl'],
     #['CMB_hil_TT'],
     #["CC", "DESI_DR1"],
     #["JLA","DESY5","Union3"],
@@ -115,9 +115,9 @@ observations: List[List[str]] = [
 true_model: str = "LCDM_v"
 
 # Sampler settings
-nwalkers: int = 36
-nsteps: int = 100000
-burn: int = 500
+nwalkers: int = 24
+nsteps: int = 1000
+burn: int = 200
 convergence: float = 0.01
 
 # Top-hat priors
