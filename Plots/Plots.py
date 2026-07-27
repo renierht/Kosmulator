@@ -521,9 +521,13 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 model_name=model,
                 reference_chi_squared=reference_chi2,
             )
-            aic_bic_lines = PP.interpret_delta_aic_bic(stats["dAIC"], stats["dBIC"]).splitlines()
-            aic_text = aic_bic_lines[0].strip() if len(aic_bic_lines) > 0 else "No AIC interpretation available."
-            bic_text = aic_bic_lines[1].strip() if len(aic_bic_lines) > 1 else "No BIC interpretation available."
+            #Proposed version with AICc inclusion:
+            IC_lines = PP.interpret_delta_IC(stats['dAIC'], stats['dBIC'], stats['dAICc']).splitlines()
+            aic_text = IC_lines[0].strip() if len(IC_lines) > 0 else "No AIC interpretation available."
+            bic_text = IC_lines[1].strip() if len(IC_lines) > 1 else "No BIC interpretation available."
+
+            #AICc text
+            aicc_text = IC_lines[2].strip() if len(IC_lines) > 2 else "No AICc interpretation"
 
             # Resolve the raw obs list for this obs_key  (FIX: use CONFIG[model], not CONFIG[model_name])
             obs_list, obs_idx = None, None
@@ -546,7 +550,9 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 "AIC": stats["AIC"],
                 "BIC": stats["BIC"],
                 "dAIC": stats["dAIC"],
-                "dBIC": stats["dBIC"],
+                'dBIC':stats['dBIC'],
+                "AICc": stats["AICc"],
+                "dAICc": stats["dAICc"],
             }
 
             # IMPORTANT: Do NOT include S in the stats row — it will be printed as a stand-alone line
@@ -557,6 +563,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 "Reduced Chi2 Diagnostics": diagnostics.strip(),
                 "AIC Interpretation": aic_text,
                 "BIC Interpretation": bic_text,
+                "AICc Interpretation": aicc_text,
             })
 
         # Persist to disk

@@ -292,6 +292,10 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
     reference_aic: dict[str, float] = {}
     reference_bic: dict[str, float] = {}
 
+    #Adding reference for aicc
+    reference_aicc: dict[str, float] = {}
+    
+
     for model_name, obs_results in best_fit_values.items():
         results[model_name] = {}
         for obs_name, params in obs_results.items():
@@ -579,10 +583,19 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                     "Degrees of freedom (DOF) is zero or negative. "
                     "Check your model or dataset."
                 )
-
+            """
+            In order to implement AICc, I need the size of the sample space being worked with.
+            """
             reduced_chi_squared = chi_squared_total / dof
             aic = 2 * num_params - 2 * log_likelihood
             bic = num_params * np.log(num_data_points_total) - 2 * log_likelihood
+            #In the calculation of AICc, the assumption is made that num_data_points_total can be used as sample space value, n
+            if (num_data_points_total - num_params - 1) > 0:
+                aicc = 2*num_params - 2*log_likelihood + (2*num_params * (num_params + 1))/(num_data_points_total - num_params - 1)
+            else:
+                aicc = aic
+
+           
 
             results[model_name][obs_name] = {
                 "Log-Likelihood": log_likelihood,
@@ -590,6 +603,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 "Reduced_Chi_squared": reduced_chi_squared,
                 "AIC": aic,
                 "BIC": bic,
+                "AICc" : aicc,
             }
             if notes:
                 results[model_name][obs_name]["Note"] = " | ".join(notes)
@@ -597,12 +611,14 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
             if model_name == true_model:
                 reference_aic[obs_name] = aic
                 reference_bic[obs_name] = bic
+                reference_aicc[obs_name] = aicc
 
     # Calculate delta AIC and delta BIC relative to the true model.
     for model_name, obs_results in results.items():
         for obs_name, stats in obs_results.items():
             stats["dAIC"] = stats["AIC"] - reference_aic.get(obs_name, stats["AIC"])
             stats["dBIC"] = stats["BIC"] - reference_bic.get(obs_name, stats["BIC"])
+            stats["dAICc"] = stats["AICc"] - reference_aicc.get(obs_name, stats["AICc"])
 
     return results
 
@@ -682,14 +698,18 @@ def provide_model_diagnostics(
 
     return feedback
 
-
-def interpret_delta_aic_bic(delta_aic, delta_bic) -> str:
+def interpret_delta_IC(
+        delta_aic, 
+        delta_bic,
+        delta_aicc
+        ) -> str:
     """
     Turn ΔAIC / ΔBIC into human-readable model-comparison statements.
     """
     # Coerce to plain floats (works for Python floats, NumPy scalars, 0-d arrays)
     delta_aic = float(np.asarray(delta_aic).reshape(()))
     delta_bic = float(np.asarray(delta_bic).reshape(()))
+    delta_aicc = float(np.asarray(delta_aicc).reshape(()))
 
     feedback = []
 
@@ -723,6 +743,24 @@ def interpret_delta_aic_bic(delta_aic, delta_bic) -> str:
     else:
         feedback.append(
             f"Delta BIC: Strong evidence against the model (ΔBIC = {delta_bic:.2f})."
+        )
+
+    #AICc implementation:
+    if delta_aicc < 2:
+        feedback.append(
+            f"Delta AICc: Indistinguishable (ΔAIC = {delta_aicc:.2f})."
+        )
+    elif delta_aicc < 4:
+        feedback.append(
+            f"Delta AICc: Slight evidence against the model (ΔAIC = {delta_aicc:.2f})."
+        )
+    elif delta_aicc < 7:
+        feedback.append(
+            f"Delta AICc: Positive evidence against the model (ΔAIC = {delta_aicc:.2f})."
+        )
+    else:
+        feedback.append(
+            f"Delta AICc: Strong evidence against the model (ΔAIC = {delta_aicc:.2f})."
         )
 
     return "\n".join(feedback)

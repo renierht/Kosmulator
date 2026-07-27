@@ -1488,7 +1488,7 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
     header = (
         f"{'Observation':<{obs_w}} | {'Log-Likelihood':>18} | "
         f"{'Chi-Squared':>15} | {'Reduced Chi-Squared':>20} | "
-        f"{'AIC':>11} | {'BIC':>11} | {'dAIC':>11} | {'dBIC':>11}"
+        f"{'AIC':>11} | {'BIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'AICc':>11} | {'dAICc':>11}"
     )
 
     import numpy as _np
@@ -1522,12 +1522,14 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
             rchi = _as_float(s.get("Reduced_Chi_squared", _np.nan))
             aic = _as_float(s.get("AIC", _np.nan))
             bic = _as_float(s.get("BIC", _np.nan))
+            aicc = _as_float(s.get("AICc",_np.nan))
             daic = _as_float(s.get("dAIC", _np.nan))
             dbic = _as_float(s.get("dBIC", _np.nan))
+            daicc = _as_float(s.get("dAICc",_np.nan))
             row = (
                 f"{obs:<{obs_w}} | {ll:>18.4f} | {chi2:>15.4f} | "
-                f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | "
-                f"{daic:>11.3f} | {dbic:>11.3f}"
+                f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | {daic:>11.3f} |"
+                f"{dbic:>11.3f} | {aicc:>11.3f} | {daicc:11.3f}"
             )
             f.write(row + "\n")
         f.write("\n")
@@ -1539,7 +1541,7 @@ def save_interpretations_to_file(
     interpretations_list: List[Dict[str, str]],
 ) -> None:
     file_path = os.path.join(folder, "interpretations_summary.txt")
-    obs_w, diag_w, aic_w, bic_w = 30, 50, 35, 35
+    obs_w, diag_w, aic_w, bic_w, aicc_w = 30, 50, 35, 35, 35
 
     with open(file_path, "w") as f:
         f.write(f"Interpretations for Model: {model}\n\n")
@@ -1547,10 +1549,11 @@ def save_interpretations_to_file(
             f"{'Observation':<{obs_w}} | "
             f"{'Reduced Chi2 Diagnostics':<{diag_w}} | "
             f"{'AIC Interpretation':<{aic_w}} | "
-            f"{'BIC Interpretation':<{bic_w}}"
+            f"{'BIC Interpretation':<{bic_w}} |" 
+            f"{'AICc Interpretation':<{aicc_w}} |"
         )
         f.write(header + "\n")
-        total = obs_w + diag_w + aic_w + bic_w + 9
+        total = obs_w + diag_w + aic_w + bic_w + aicc_w + 9
         f.write("-" * total + "\n")
 
         for it in interpretations_list:
@@ -1558,19 +1561,22 @@ def save_interpretations_to_file(
             diag = it["Reduced Chi2 Diagnostics"]
             aic_i = it["AIC Interpretation"]
             bic_i = it["BIC Interpretation"]
+            aicc_i = it["AICc Interpretation"]
 
             diag_lines = textwrap.wrap(diag, width=diag_w)
             aic_lines = textwrap.wrap(aic_i, width=aic_w)
             bic_lines = textwrap.wrap(bic_i, width=bic_w)
+            aicc_lines = textwrap.wrap(aicc_i, width = aicc_w)
             obs_line = obs.ljust(obs_w)
-            max_lines = max(1, len(diag_lines), len(aic_lines), len(bic_lines))
+            max_lines = max(1, len(diag_lines), len(aic_lines), len(bic_lines), len(aicc_lines))
 
             for i in range(max_lines):
                 line = (
                     f"{(obs_line if i == 0 else ' ' * obs_w):<{obs_w}} | "
                     f"{(diag_lines[i] if i < len(diag_lines) else ''):<{diag_w}} | "
                     f"{(aic_lines[i] if i < len(aic_lines) else ''):<{aic_w}} | "
-                    f"{(bic_lines[i] if i < len(bic_lines) else ''):<{bic_w}}"
+                    f"{(bic_lines[i] if i < len(bic_lines) else ''):<{bic_w}} |"
+                    f"{(aicc_lines[i] if i < len(aicc_lines) else ''):<{aicc_w}} |"
                 )
                 f.write(line + "\n")
 
