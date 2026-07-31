@@ -69,7 +69,7 @@ logging.basicConfig(level=logging.INFO)
 # ----------------------------------------------------------------------
 
 # Models implemented in User_defined_modules.py
-model_names: List[str] = ["LCDM_v"]
+model_names: List[str] = ["f1CDM_v"]
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [

@@ -302,6 +302,12 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
             # Extract best-fit (median) values into a dictionary.
             param_dict = {param: values[0] for param, values in params.items()}
             num_params = len(param_dict)
+            #DEBUG STATEMENT
+            print(f"[DEBUG] model={model_name} obs={obs_name}")
+            print(f"[DEBUG]   param_dict = {param_dict}")
+            print(f"[DEBUG]   num_params = {num_params}")
+            for p, v in params.items():
+                print(f"[DEBUG]   raw values for {p}: {v}")
             notes: list[str] = []
 
             # Recover the full observation list that corresponds to this best-fit key.
@@ -323,7 +329,9 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 raise ValueError(
                     f"Observation {obs_name} not found in CONFIG for model {model_name}."
                 )
-
+            
+            # DEBUG
+            print(f"[DEBUG] obs_entry = {obs_entry}")
             chi_squared_total = 0.0
             num_data_points_total = 0
 
@@ -558,7 +566,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
 
                 else:
                     raise ValueError(f"Unsupported observation type: {obs_type}")
-
+                print(f"[DEBUG]   {obs} (type={obs_type}) contributed chi_squared = {chi_squared}")
                 chi_squared_total += float(chi_squared)
 
             if num_data_points_total <= 0:
@@ -570,6 +578,11 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 continue
 
             log_likelihood = -0.5 * chi_squared_total
+
+
+            # DEBUG STATEMENTS
+            print(f"[DEBUG]   chi_squared_total = {chi_squared_total}")
+            print(f"[DEBUG]   log_likelihood = {log_likelihood}")
 
             if obs_entry == ["PantheonP"]:
                 n_data = num_data_points_total

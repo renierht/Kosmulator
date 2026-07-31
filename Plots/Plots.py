@@ -875,6 +875,7 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
             )
 
         sample = Samples[found]
+        print(f"[DEBUG] obs={found} sample.shape={np.asarray(sample).shape}")
         names  = CONFIG["parameters"][i]
         labels = greek_Symbols(names) if use_latex else names
 
@@ -943,6 +944,7 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         CONFIG["parameters"],
         CONFIG["observations"],
     )
+    print(f"[DEBUG] structured_values = {structured_values}")
 
     # Align the table (rows match CONFIG["parameters"][i] order)
     aligned_latex_table = align_table_to_parameters(latex_table, CONFIG["parameters"])
