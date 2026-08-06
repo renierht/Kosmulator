@@ -960,7 +960,7 @@ def Calc_Generic_SNe_chi(
     # 1. Marginalize M_abs (if present)
     #    (JLA doesn't have it -> M=0 -> Data is Absolute)
     #    (DESY5/Union3 have it -> M!=0 -> Data is Apparent)
-    M = param_dict.get("M_abs", 0.0)
+    M = param_dict.get("M_abs", -19.35)
     residual = (type_data - M) - model
 
     # 2. Check for Covariance (Union3)
