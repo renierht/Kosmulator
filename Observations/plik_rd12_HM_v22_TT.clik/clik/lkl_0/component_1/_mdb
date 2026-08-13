@@ -1,0 +1,7 @@
+ndim int 2
+component_type str gcib
+nrename int 5
+ndef int 2
+lmax int 2508
+lmin int 30
+component_name str cib

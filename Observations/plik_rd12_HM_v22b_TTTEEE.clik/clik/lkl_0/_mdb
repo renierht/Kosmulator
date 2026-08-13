@@ -1,0 +1,9 @@
+nbins int 645
+n_component int 15
+lmin int 30
+m_channel_T int 3
+m_channel_P int 3
+lmax int 2508
+criterion str gauss
+lkl_type str smica
+unit int 1
