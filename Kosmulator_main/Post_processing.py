@@ -92,8 +92,23 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
     """
     results, latex_table, structured_values = {}, [], {}
 
-    for obs, obs_samples in samples.items():
+    for obs, obs_data_input in samples.items():
         results[obs], structured_values[obs], row = {}, {}, []
+
+        #Unpack the dictionary data and find the Maximum likelihood
+        if isinstance(obs_data_input, dict):
+            obs_samples = obs_data_input["samples"]
+            log_like = obs_data_input.get("loglike")
+        else:
+            obs_samples = obs_data_input
+            log_like = None
+
+        if log_like is not None:
+            mle_idx = np.nanargmax(log_like)
+            mle_vector = obs_samples[mle_idx]
+        else:
+            mle_vector = None
+
 
         # Match the observation key to its corresponding parameter list.
         # Accept the raw joined name ("PantheonP"), underscore join ("PantheonP"),
@@ -141,6 +156,7 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
         param_index = observations.index(obs_list)
         obs_param_names = parameters[param_index]
 
+        
         # Iterate over the parameters for this observation
         for param_index, param in enumerate(obs_param_names):
             # Check that the parameter index is within bounds of obs_samples
@@ -152,6 +168,9 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
                 median = p50
                 lower_error = p50 - p16
                 upper_error = p84 - p50
+
+                #Grab MLE for this parameter
+                mle_val = mle_vector[param_index] if mle_vector is not None else median
 
                 # Add to results
                 results[obs][param] = {
@@ -168,6 +187,7 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
                     round(median, 3),
                     round(median + upper_error, 3),
                     round(median - lower_error, 3),
+                    mle_val
                 ]
             else:
                 print(
@@ -300,7 +320,10 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
         results[model_name] = {}
         for obs_name, params in obs_results.items():
             # Extract best-fit (median) values into a dictionary.
-            param_dict = {param: values[0] for param, values in params.items()}
+            param_dict = {
+                param: (values[3] if len(values) > 3 else values[0])
+                for param, values in params.items()
+            }
             num_params = len(param_dict)
             #DEBUG STATEMENT
             print(f"[DEBUG] model={model_name} obs={obs_name}")
@@ -761,19 +784,19 @@ def interpret_delta_IC(
     #AICc implementation:
     if delta_aicc < 2:
         feedback.append(
-            f"Delta AICc: Indistinguishable (ΔAIC = {delta_aicc:.2f})."
+            f"Delta AICc: Indistinguishable (ΔAICc = {delta_aicc:.2f})."
         )
     elif delta_aicc < 4:
         feedback.append(
-            f"Delta AICc: Slight evidence against the model (ΔAIC = {delta_aicc:.2f})."
+            f"Delta AICc: Slight evidence against the model (ΔAICc = {delta_aicc:.2f})."
         )
     elif delta_aicc < 7:
         feedback.append(
-            f"Delta AICc: Positive evidence against the model (ΔAIC = {delta_aicc:.2f})."
+            f"Delta AICc: Positive evidence against the model (ΔAICc = {delta_aicc:.2f})."
         )
     else:
         feedback.append(
-            f"Delta AICc: Strong evidence against the model (ΔAIC = {delta_aicc:.2f})."
+            f"Delta AICc: Strong evidence against the model (ΔAICc = {delta_aicc:.2f})."
         )
 
     return "\n".join(feedback)

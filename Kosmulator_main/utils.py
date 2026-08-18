@@ -981,14 +981,26 @@ def load_or_run_chain(
         )
         with h5py.File(zeus_chain, "r") as f:
             all_samples = f["samples"][:]    # (nsteps, nwalker, ndim)
+            loglike = np.array(f["log_like"]) if "log_like" in f else (
+                np.array(f["log_prob"]) if "log_prob" in f else None
+            )
 
         burn = int(CONFIG_model.get("burn", 0) or 0)
         # Guard against silly values
         if burn >= all_samples.shape[0]:
             burn = 0
 
-        # Flatten to (n_samples, ndim) as usual
-        return all_samples[burn:, :, :].reshape(-1, all_samples.shape[-1])
+        flat = all_samples[burn:, :, :].reshape(-1, all_samples.shape[-1])
+        """
+        NOTE: loglike above is unburned/unflattened relative to `flat` in this
+        # particular reuse path (Zeus stores log_prob already burn-discarded at
+        # save time in run_mcmc, so this is likely already aligned — verify
+        # shapes match len(flat) before trusting it; fall back to None if not.
+        """
+        if loglike is not None and loglike.shape[0] != flat.shape[0]:
+            loglike = None
+        return {"samples": flat, "loglike": loglike}
+
         
     # A) Existing chain, not overwriting (emcee only)
     # For vectorised/Zeus runs we *always* delegate loading/resume to
@@ -1082,7 +1094,7 @@ def load_or_run_chain(
         )
         
     # B) Fresh run (or Zeus load/resume)
-    flat_samples = Kosmulator_MCMC.run_mcmc(
+    result = Kosmulator_MCMC.run_mcmc(
         data=data,
         saveChains=True,
         chain_path=chain_path,
@@ -1107,13 +1119,17 @@ def load_or_run_chain(
         obs_key=other_kwargs.get("obs_key"),
     )
 
+    flat_samples = result.get("samples") if isinstance(result, dict) else result
+
     if (
         flat_samples is None
         or flat_samples.size == 0
         or not np.any(np.isfinite(flat_samples))
     ):
         print(f"[WARNING] Samples for {chain_file} are empty or invalid!")
-    return flat_samples
+    if isinstance(result, dict):
+        return result
+    return {"samples": flat_samples, "loglike": None}
 
 
 # ───────────────────────────────────────────────────────────────────────────────

@@ -351,6 +351,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
     import os
     from collections import defaultdict
 
+    
     # unify roots
     normalize_save_roots(PLOT_SETTINGS)
 
@@ -744,6 +745,8 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
           If True, the printed/top table shows ALL parameters (recommended).
           If False, the printed/top table mirrors whatever appears on the corner axes.
     """
+
+    
     # 1) union of parameters across all observation groups (first-seen order)
     full_param_order, _seen = [], set()
     for plist in CONFIG["parameters"]:
@@ -874,12 +877,15 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
                 f"Available={list(Samples.keys())}"
             )
 
-        sample = Samples[found]
-        print(f"[DEBUG] obs={found} sample.shape={np.asarray(sample).shape}")
+        sample_data = Samples[found]
+
+        #Extract raw array from getdist without damaging the dictionary
+        sample_array = sample_data["samples"] if isinstance(sample_data, dict) else sample_data
+        print(f"[DEBUG] obs={found} sample.shape={np.asarray(sample_array).shape}")
         names  = CONFIG["parameters"][i]
         labels = greek_Symbols(names) if use_latex else names
 
-        ms = MCSamples(samples=sample, names=names, labels=labels)
+        ms = MCSamples(samples=sample_array, names=names, labels=labels)
         ms.plotColor = palette[i % len(palette)]
         distributions.append(ms)
 
@@ -966,6 +972,10 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         if obs_samples is None:
             derived_rd_col.append("—")
             continue
+
+        #Extract array here too so numpy can slice it
+        if isinstance(obs_samples, dict) and "samples" in obs_samples:
+            obs_samples = obs_samples["samples"]
 
         names = CONFIG["parameters"][i]
 

@@ -367,12 +367,11 @@ def batch_post(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index
 
     return out[0] if nwalkers == 1 else out
 
-
 def _zeus_logpost_vectorized(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index):
-    """Zeus log-posterior for vectorised models (always returns 1D array)."""
-    arr = np.atleast_2d(theta)
-    out = batch_post(arr, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index)
-    return np.asarray(out, dtype=float).ravel()
+    """Zeus log-posterior for vectorised models."""
+    val = batch_post(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index)
+    # CRITICAL FIX: .ravel() guarantees a 1D array, preventing 0-d iteration crashes in Zeus
+    return np.asarray(val, dtype=float).ravel()
 
 
 def _zeus_logpost_scalar(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index):
@@ -1009,6 +1008,23 @@ def run_mcmc(
                 pass
             with h5py.File(zeus_chain, "r") as f:
                 all_samples = f["samples"][:]
+        # Save Blobs from Zeus if available
+        # Explicitly save log_prob and blobs from Zeus
+        if saveChains:
+            with h5py.File(zeus_chain, "a") as h5f:
+                try:
+                    # 1. Save log_prob
+                    flat_log_prob = sampler.get_log_prob(discard=burn, flat=True)
+                    if "log_prob" in h5f:
+                        del h5f["log_prob"]
+                    h5f.create_dataset("log_prob", data=flat_log_prob)
+
+                    # 2. Flat top-hat priors everywhere → log_prob == log_like exactly
+                    if "log_like" in h5f:
+                        del h5f["log_like"]
+                    h5f.create_dataset("log_like", data=flat_log_prob)
+                except Exception as e:
+                    print(f"\n[WARNING] Could not save 'log_prob'/'log_like' from Zeus: {e}")
 
         return all_samples[burn:, :, :].reshape(-1, ndim)
 
@@ -1068,7 +1084,7 @@ def run_mcmc(
                     local_burn = max(0, burn - current)
                     obs_for_plot = [_resolved_key]
 
-                    flat_samples = utils.emcee_autocorr_stopping(
+                    res = utils.emcee_autocorr_stopping(
                         last_state,
                         sampler,
                         nsteps - current,
@@ -1087,7 +1103,7 @@ def run_mcmc(
                         print_enabled=print_enabled,
                         print_every=print_every,
                     )
-                    return flat_samples
+                    flat_samples = res[0] if isinstance(res, tuple) else res
                 else:
                     # Manual loop to allow step printing (Pool-safe)
                     for state in sampler.sample(
@@ -1115,7 +1131,25 @@ def run_mcmc(
                                         f"Max={np.nanmax(lp):.4f} | Mean={np.nanmean(lp):.4f}"
                                     )
 
-                    return sampler.get_chain(discard=burn, flat=True)
+                    flat_samples = sampler.get_chain(discard = burn, flat = True)
+                #Extract and write log_prob + loglike on resume
+                if saveChains:
+                    flat_log_prob = sampler.get_log_prob(discard = burn, flat = True)
+                    blobs = sampler.get_blobs(discard = burn, flat = True)
+                    with h5py.File(chain_path, "a") as h5f:
+                        h5f.attrs["converged"] = True
+                        if "log_prob" in h5f:
+                            del h5f["log_prob"]
+                        h5f.create_dataset("log_prob",data = flat_log_prob)
+
+                        if blobs is not None:
+                            flat_log_like = np.squeeze(
+                                np.asarray(blobs, dtype = float)
+                            )
+                            if "log_like" in h5f:
+                                del h5f["log_like"]
+                            h5f.create_dataset("log_like", data = flat_log_like)
+            return flat_samples
 
         # ------------------------------------------------------------
         # Fresh emcee run
@@ -1142,7 +1176,7 @@ def run_mcmc(
 
         if autoCorr:
             obs_for_plot = [_resolved_key]
-            flat_samples = utils.emcee_autocorr_stopping(
+            res = utils.emcee_autocorr_stopping(
                 pos0,
                 sampler,
                 nsteps,
@@ -1161,6 +1195,9 @@ def run_mcmc(
                 print_enabled=print_enabled,
                 print_every=print_every,
             )
+            flat_samples = res[0] if isinstance(res, tuple) else res
+            flat_log_prob = sampler.get_log_prob(discard = burn, flat = True)
+            blobs = sampler.get_blobs(discard = burn, flat = True)
         else:
             # Manual loop to allow step printing (Pool-safe)
             for state in sampler.sample(pos0, iterations=nsteps, progress=True):
@@ -1187,11 +1224,26 @@ def run_mcmc(
                             )
 
             flat_samples = sampler.get_chain(discard=burn, flat=True)
+            flat_log_prob = sampler.get_log_prob(discard=burn, flat=True)
+            blobs = sampler.get_blobs(discard = burn, flat = True)
 
         print(f"Emcee sampling took {utils.format_elapsed_time(time.time() - start)}\n")
+
         if saveChains:
             with h5py.File(chain_path, "a") as h5f:
                 h5f.attrs["converged"] = True
+
+                #Saving the log_probs to use for stats
+                if "log_prob" in h5f:
+                    del h5f["log_prob"]
+                h5f.create_dataset("log_prob", data = flat_log_prob)
+
+                #Save raw log_like blob
+                if blobs is not None:
+                    flat_log_like = np.squeeze(np.asarray(blobs, dtype = float))
+                    if "log_like" in h5f:
+                        del h5f["log_like"]
+                    h5f.create_dataset("log_like", data = flat_log_like)
 
         return flat_samples
 
