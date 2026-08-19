@@ -522,13 +522,11 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 model_name=model,
                 reference_chi_squared=reference_chi2,
             )
-            #Proposed version with AICc inclusion:
-            IC_lines = PP.interpret_delta_IC(stats['dAIC'], stats['dBIC'], stats['dAICc']).splitlines()
+            IC_lines = PP.interpret_delta_IC(stats['dAIC'], stats['dBIC'], stats['dAICc'], stats['dDIC']).splitlines()
             aic_text = IC_lines[0].strip() if len(IC_lines) > 0 else "No AIC interpretation available."
             bic_text = IC_lines[1].strip() if len(IC_lines) > 1 else "No BIC interpretation available."
-
-            #AICc text
-            aicc_text = IC_lines[2].strip() if len(IC_lines) > 2 else "No AICc interpretation"
+            aicc_text = IC_lines[2].strip() if len(IC_lines) > 2 else "No AICc interpretation available"
+            dic_text = IC_lines[3].strip() if len(IC_lines) > 3 else "No DIC interpretation available"
 
             # Resolve the raw obs list for this obs_key  (FIX: use CONFIG[model], not CONFIG[model_name])
             obs_list, obs_idx = None, None
@@ -554,6 +552,8 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 'dBIC':stats['dBIC'],
                 "AICc": stats["AICc"],
                 "dAICc": stats["dAICc"],
+                "DIC": stats["DIC"],
+                "dDIC": stats["dDIC"],
             }
 
             # IMPORTANT: Do NOT include S in the stats row — it will be printed as a stand-alone line
@@ -565,6 +565,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 "AIC Interpretation": aic_text,
                 "BIC Interpretation": bic_text,
                 "AICc Interpretation": aicc_text,
+                "DIC Interpretation": dic_text,
             })
 
         # Persist to disk
@@ -1187,7 +1188,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
 
             obs_list_raw = [_raw_token(t) for t in obs_list]
 
-            combined = All_best_fit_values[model_name][obs_key]
+            combined = {k: v for k, v in All_best_fit_values[model_name][obs_key].items() if k != "__D_bar__"}
             params_med, params_hi, params_lo = fetch_best_fit_values(combined)
 
             # (Optional) diagnostics

@@ -106,8 +106,12 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
         if log_like is not None:
             mle_idx = np.nanargmax(log_like)
             mle_vector = obs_samples[mle_idx]
+
+            #For DIC calculations
+            D_bar = np.nanmean(-2*np.array(log_like))
         else:
             mle_vector = None
+            D_bar = None
 
 
         # Match the observation key to its corresponding parameter list.
@@ -179,15 +183,20 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
                     "upper_error": round(upper_error, 3),
                 }
 
+
                 # Add LaTeX-formatted string for the table
                 row.append(_format_pm(median, lower_error, upper_error))
+
+            
+
+                
 
                 # Add structured values for the parameter
                 structured_values[obs][param] = [
                     round(median, 3),
                     round(median + upper_error, 3),
                     round(median - lower_error, 3),
-                    mle_val
+                    mle_val,
                 ]
             else:
                 print(
@@ -195,8 +204,13 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
                     "exceeds sample dimensions."
                 )
 
+        if D_bar is not None:
+            structured_values[obs]["__D_bar__"] = float(D_bar)
+
         # Add the row to the LaTeX table
         latex_table.append(row)
+
+        
 
     return results, latex_table, structured_values
 
@@ -311,15 +325,16 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
     results: dict[str, dict[str, dict[str, float]]] = {}
     reference_aic: dict[str, float] = {}
     reference_bic: dict[str, float] = {}
-
-    #Adding reference for aicc
     reference_aicc: dict[str, float] = {}
+    reference_dic: dict[str, float] = {}
     
 
     for model_name, obs_results in best_fit_values.items():
         results[model_name] = {}
         for obs_name, params in obs_results.items():
             # Extract best-fit (median) values into a dictionary.
+
+            D_bar = params.pop("__D_bar__", None) #Popped before the loop iterates through param
             param_dict = {
                 param: (values[3] if len(values) > 3 else values[0])
                 for param, values in params.items()
@@ -630,7 +645,22 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 aicc = 2*num_params - 2*log_likelihood + (2*num_params * (num_params + 1))/(num_data_points_total - num_params - 1)
             else:
                 aicc = aic
+            dic = float("nan")
+            p_D = float("nan")
 
+            #DIC calculations: 
+            """
+            Note: D_hat is typically the deviance over the average of parameter values,
+            but now since we are using maximum likelihood values, it can be shown that
+            taking the deviance of the MLE returns the chi_squared_total
+
+            """
+            if D_bar is not None:
+                D_hat = chi_squared_total
+                p_D = D_bar - D_hat
+                dic = D_hat + 2.0 * p_D
+
+            
            
 
             results[model_name][obs_name] = {
@@ -640,6 +670,8 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 "AIC": aic,
                 "BIC": bic,
                 "AICc" : aicc,
+                "DIC": dic,
+                "p_D": p_D,
             }
             if notes:
                 results[model_name][obs_name]["Note"] = " | ".join(notes)
@@ -648,6 +680,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 reference_aic[obs_name] = aic
                 reference_bic[obs_name] = bic
                 reference_aicc[obs_name] = aicc
+                reference_dic[obs_name] = dic
 
     # Calculate delta AIC and delta BIC relative to the true model.
     for model_name, obs_results in results.items():
@@ -655,6 +688,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
             stats["dAIC"] = stats["AIC"] - reference_aic.get(obs_name, stats["AIC"])
             stats["dBIC"] = stats["BIC"] - reference_bic.get(obs_name, stats["BIC"])
             stats["dAICc"] = stats["AICc"] - reference_aicc.get(obs_name, stats["AICc"])
+            stats["dDIC"] = stats["DIC"] -reference_dic.get(obs_name, stats["DIC"])
 
     return results
 
@@ -737,7 +771,8 @@ def provide_model_diagnostics(
 def interpret_delta_IC(
         delta_aic, 
         delta_bic,
-        delta_aicc
+        delta_aicc,
+        delta_dic,
         ) -> str:
     """
     Turn ΔAIC / ΔBIC into human-readable model-comparison statements.
@@ -746,6 +781,7 @@ def interpret_delta_IC(
     delta_aic = float(np.asarray(delta_aic).reshape(()))
     delta_bic = float(np.asarray(delta_bic).reshape(()))
     delta_aicc = float(np.asarray(delta_aicc).reshape(()))
+    delta_dic = float(np.asarray(delta_dic).reshape(()))
 
     feedback = []
 
@@ -781,7 +817,7 @@ def interpret_delta_IC(
             f"Delta BIC: Strong evidence against the model (ΔBIC = {delta_bic:.2f})."
         )
 
-    #AICc implementation:
+    #--- AICc ---
     if delta_aicc < 2:
         feedback.append(
             f"Delta AICc: Indistinguishable (ΔAICc = {delta_aicc:.2f})."
@@ -798,5 +834,24 @@ def interpret_delta_IC(
         feedback.append(
             f"Delta AICc: Strong evidence against the model (ΔAICc = {delta_aicc:.2f})."
         )
+
+    #--- DIC ---
+    if delta_dic < 2:
+        feedback.append(
+            f"Delta DIC: Indistinguishable (ΔDIC = {delta_dic:.2f})."
+        )
+    elif delta_dic < 4:
+        feedback.append(
+            f"Delta DIC: Slight evidence against the model (ΔDIC = {delta_dic:.2f})."
+        )
+    elif delta_dic < 7:
+        feedback.append(
+            f"Delta DIC Positive evidence against the model (ΔDIC = {delta_dic:.2f})."
+        )
+    else:
+        feedback.append(
+            f"Delta DIC: Strong evidence against the model (ΔDIC = {delta_dic:.2f})."
+        )
+
 
     return "\n".join(feedback)

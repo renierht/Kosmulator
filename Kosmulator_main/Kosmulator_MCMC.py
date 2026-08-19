@@ -1249,7 +1249,17 @@ def run_mcmc(
 
 
 def load_mcmc_results(output_path: str, file_name: str, CONFIG: dict):
-    """Load a saved HDFBackend chain and return the flat samples (post-burn)."""
-    backend = emcee.backends.HDFBackend(os.path.join(output_path, file_name))
+    """Load samples and saved likelihood values from an emcee chain."""
+    chain_path = os.path.join(output_path, file_name)
+    backend = emcee.backends.HDFBackend(chain_path)
     burn = CONFIG.get("burn", 0)
-    return backend.get_chain(discard=burn, flat=True)
+    samples = backend.get_chain(discard=burn, flat=True)
+
+    loglike = None
+    with h5py.File(chain_path, "r") as h5f:
+        if "log_like" in h5f:
+            candidate = np.asarray(h5f["log_like"], dtype=float).reshape(-1)
+            if candidate.size == samples.shape[0]:
+                loglike = candidate
+
+    return {"samples": samples, "loglike": loglike}
