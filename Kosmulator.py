@@ -69,10 +69,11 @@ logging.basicConfig(level=logging.INFO)
 # ----------------------------------------------------------------------
 
 # Models implemented in User_defined_modules.py
-model_names: List[str] = ["f1CDM_v"]
+model_names: List[str] = ["wowaCDM_v"]
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
+    ['DESI_DR2', 'PantheonPS'],
     #['JLA'],
     #['JLA','CC'],
     #['OHD'],
@@ -90,7 +91,7 @@ observations: List[List[str]] = [
     #['Union3','CC'],
     #["DESY5",'CC'],
     #["JLA","CC","OHD"],
-    ['PantheonPS','CC','DESI_DR2'],
+    #['PantheonPS','CC','DESI_DR2'],
     #['PantheonP','DESI_DR2','BBN_DH_AlterBBN'],
     #['PantheonPS','DESI_DR2','BBN_DH_AlterBBN'],
     #["JLA","Pantheon","PantheonP","DESY5","Union3"],
@@ -115,9 +116,9 @@ observations: List[List[str]] = [
 true_model: str = "LCDM_v"
 
 # Sampler settings
-nwalkers: int = 24
-nsteps: int = 1000
-burn: int = 200
+nwalkers: int = 32
+nsteps: int = 2500
+burn: int = 500
 convergence: float = 0.01
 
 # Top-hat priors
@@ -144,6 +145,8 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "alpha": (0.00, 1.00),
     "B": (0.00, 0.333),
     "f1": (0.01, 100.0),
+    'w0': (-3.0, 1.0),
+    'wa': (-3.0, 2.0),
 }
 
 # Reference “true” values (for diagnostics/plots)
@@ -168,6 +171,8 @@ true_values: Dict[str, float] = {
     "N_eff": K.N_EFF_DEFAULT,
     "tau_n": K.TAU_N_DEFAULT,
     "Omega_b": 0.05,
+    "w0": -1.0,
+    "wa": 0.0,
 }
 
 # ----------------------------------------------------------------------

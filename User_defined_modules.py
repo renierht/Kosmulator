@@ -99,6 +99,46 @@ def LCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
         out = np.sqrt(E2)
     return _scalar_or_array(out)
 
+"""
+The module below will replicate DESI data finding (DIC values specifically)
+"""
+
+def wowaCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    r"""
+    Flat w0wa (CPL parametrization):
+
+    E^2(z) = \Omega_m (1+z)^3 + (1 - \Omega_m) (1+z)^{3(1+w0+wa)} \exp(-3 wa z / (1+z))
+
+    Parameters in `p`:
+      • Omega_m
+      • w0
+      • wa
+    """
+    z = _asarray(z)
+    Om = float(p["Omega_m"])
+    w0 = float(p["w0"])
+    wa = float(p["wa"])
+
+    # --- Strict early matter domination cutoff from DESI DR2 paper ---
+    if (w0 + wa) >= 0.0:
+        return np.full_like(z, np.nan)
+    # ------------------------------------------------------------------
+
+    zp1 = 1.0 + z
+    a = 1.0 / zp1
+
+    #Dark energy density evolution ratio
+    rho_de_ratio = (zp1 ** (3.0 * (1.0 + w0 + wa))) * np.exp(-3.0 * wa * (1.0 - a))
+    E2 = Om * (zp1 ** 3) + (1.0 - Om) * rho_de_ratio 
+    #See DESI DR2 results for the equations
+
+    if(not np.isfinite(E2).all()) or (E2.min() <= 0):
+        out = np.full_like(z, np.nan)
+
+    else: 
+        out = np.sqrt(E2)
+    return _scalar_or_array(out)
+
 
 def LCDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
     """Slow but simple non-vectorised LCDM wrapper (kept for completeness)."""
@@ -360,6 +400,7 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
     "LCDM_nv":  (LCDM_MODEL_non_vectorised,  ["Omega_m"]),
     "f1CDM_v":  (f1CDM_MODEL_vectorised,     ["Omega_m", "n"]),
     "f1CDM_nv": (f1CDM_MODEL_non_vectorised, ["Omega_m", "n"]),
+    "wowaCDM_v": (wowaCDM_MODEL_vectorised, ["Omega_m","w0","wa"]),
 
     # CMB-specific models for CLASS Cls (used by CMB likelihoods)
     "LCDM_v_CMB": (
@@ -441,6 +482,10 @@ def restrict_f1CDM_v(x: float) -> bool:
     """
     return x < 0.5
 
+def restrict_wowa_sum(x: float, p: Dict[str, float]) -> bool:
+    #Enforce early matter domination: w0 + wa < 0
+    return (float(p.get("w0", -1)) + float(p.get("wa", 0.0))) < 0.0
+
 
 # Global map that Get_model_restrictions reads from.
 restrictions_map: Dict[str, Dict[str, Callable[[float], bool]]] = {
@@ -448,6 +493,7 @@ restrictions_map: Dict[str, Dict[str, Callable[[float], bool]]] = {
     "LCDM_v":  {"Omega_m": restrict_LCDM_Omega_m},
     "LCDM_nv": {"Omega_m": restrict_LCDM_Omega_m},
     "f1CDM_v": {"n": restrict_f1CDM_v},
+    "wowaCDM_v": {"Omega_m": restrict_LCDM_Omega_m}
     # Example for a new model:
     # "MyMG_v": {"my_param": restrict_MyMG_param},
 }
@@ -513,3 +559,4 @@ def integral_term_array(
     (compute_sigma8z), so we expose a single shared wrapper here.
     """
     return _integral_term_arr(z, param_dict, MODEL_func, float(gamma))
+
