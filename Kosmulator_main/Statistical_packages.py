@@ -960,8 +960,11 @@ def Calc_Generic_SNe_chi(
     # 1. Marginalize M_abs (if present)
     #    (JLA doesn't have it -> M=0 -> Data is Absolute)
     #    (DESY5/Union3 have it -> M!=0 -> Data is Apparent)
-    M = param_dict.get("M_abs", -19.35)
-    residual = (type_data - M) - model
+    if obs_data.get("data_is_distance_modulus", False):
+        residual = type_data - model
+    else:
+        M = param_dict.get("M_abs", -19.35)
+        residual = (type_data - M) - model
 
     # 2. Check for Covariance (Union3)
     if "inv_cov" in obs_data:
@@ -1163,6 +1166,11 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
             types[types == 4] = 3
 
     theo = np.full_like(meas, np.nan, dtype=float)
+    #Added change here in order to check NaNs of w0wa values for NaN
+    supported_types = {3, 5, 6, 7, 8}
+    unknown_types = [int(t) for t in set(types) if int(t) not in supported_types]
+    if unknown_types:
+        raise ValueError(f"DESI: unhandled type code(s): {unknown_types}. Supported: 3,5,6,7,8")
     m3 = types == 3
     m5 = types == 5
     m6 = types == 6
@@ -1175,9 +1183,8 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
     theo[m7] = rs / DV[m7]
     theo[m8] = DM[m8] / rs
 
-    if np.isnan(theo).any():
-        unknown = sorted(set(types[np.isnan(theo)]))
-        raise ValueError(f"DESI: unhandled type code(s): {unknown}. Supported: 3,5,6,7,8")
+    if not np.isfinite(theo).all():
+        return 1e300
 
     diff = theo - meas
 

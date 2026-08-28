@@ -793,6 +793,7 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     data_sne["cov"] = cov_total
                     data_sne["inv_cov"] = inv_cov_total
 
+                data_sne["data_is_distance_modulus"] = (obs == "Union3")
                 observation_data[obs] = data_sne
             # ------------------
             # Default loader
