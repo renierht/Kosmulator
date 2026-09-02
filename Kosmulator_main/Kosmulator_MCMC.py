@@ -585,7 +585,10 @@ class ZeusAutoCorrPlotter:
 
     def __call__(self, estimates, iteration):
         import numpy as np
+        import matplotlib
+        matplotlib.use('Agg')
         import matplotlib.pyplot as plt
+        
 
         if estimates is None:
             return

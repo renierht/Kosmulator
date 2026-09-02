@@ -531,6 +531,8 @@ def build_plot_settings(
     latex_enabled: bool,
     plot_table: bool,
 ) -> Dict[str, Any]:
+    import matplotlib
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt  # noqa: F401
 
     colors = DEFAULT_PLOT_COLORS
@@ -625,6 +627,8 @@ def build_plot_settings(
     # Quiet LaTeX detection (no stdout spam)
     if latex_enabled:
         if shutil.which("latex"):
+            import matplotlib
+            matplotlib.use('Agg')
             import matplotlib.pyplot as plt
 
             plt.rc("text", usetex=True)
@@ -1182,6 +1186,8 @@ def emcee_autocorr_stopping(
         Emit "[EMCEE Step N] Log-Post: Max=... | Mean=..." from the MAIN PROCESS
         so it works even when emcee uses a multiprocessing Pool.
     """
+    import matplotlib
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt  # noqa: F401
     import Plots.Plots as MP
 

@@ -73,8 +73,12 @@ model_names: List[str] = ["wowaCDM_v"]
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
-    ['DESI_DR2', 'Union3'],
-    #['DESI_DR2', 'PantheonPS'],
+    ['DESI_DR2', 'CMB_lowl', 'CMB_hil'],
+    #['DESI_DR2'],
+    #['DESI_DR2','DESY5'],
+    #['BBN_PryMordial','DESI_DR2', 'PantheonP'],
+    #['DESI_DR2', 'Union3'],
+    #['DESI_DR2', 'PantheonP'],
     #['JLA'],
     #['JLA','CC'],
     #['OHD'],
@@ -114,7 +118,7 @@ observations: List[List[str]] = [
     #["f_sigma_8", "PantheonP"],
 ]
 
-true_model: str = "LCDM_v"
+reference_model: str = "LCDM_v"
 
 # Sampler settings
 nwalkers: int = 32
@@ -151,7 +155,7 @@ prior_limits: Dict[str, Tuple[float, float]] = {
 }
 
 # Reference “true” values (for diagnostics/plots)
-true_values: Dict[str, float] = {
+reference_values: Dict[str, float] = {
     "Omega_m": 0.315,
     "H_0": 67.4,
     "gamma": K.GAMMA_FS8_SINGLETON,
@@ -180,7 +184,7 @@ true_values: Dict[str, float] = {
 # Helpers
 # ----------------------------------------------------------------------
 
-def _ensure_true_model_first(names: List[str], tm: str) -> List[str]:
+def _ensure_reference_model_first(names: List[str], tm: str) -> List[str]:
     """Return `names` with `tm` (if present) moved to the front."""
     ordered = list(names)
     if tm in ordered:
@@ -200,7 +204,7 @@ def main() -> None:
     except Exception:
         rank = 0
 
-    ordered_models = _ensure_true_model_first(model_names, true_model)
+    ordered_models = _ensure_reference_model_first(model_names, reference_model)
 
     if rank == 0:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
@@ -218,9 +222,9 @@ def main() -> None:
     run_mcmc(
         model_names=ordered_models,
         observations=observations,
-        true_model=true_model,
+        reference_model=reference_model,
         prior_limits=prior_limits,
-        true_values=true_values,
+        reference_values=reference_values,
         nwalkers=nwalkers,
         nsteps=nsteps,
         burn=burn,

@@ -342,6 +342,8 @@ def add_corner_table(
       * The table hugs the top of the corner grid with a small vertical pad.
       * Font size and cell size adapt to BOTH rows and parameters.
     """
+    import matplotlib
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -1100,10 +1102,16 @@ def extract_observation_data(
 def fetch_best_fit_values(
     combined_best_fit: Mapping[str, Sequence[float]]
 ) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, float]]:
+
+    #Filter out metadata keys (D_bar, D_var) and non-indexable values
+    valid_items = {
+        k: v for k, v in combined_best_fit.items()
+        if not str(k).startswith("__") and isinstance(v, (list, tuple, np.ndarray))
+    }
     """Return (median, upper, lower) dicts from the combined best-fit mapping."""
-    med = {k: float(v[0]) for k, v in combined_best_fit.items()}
-    up  = {k: float(v[1]) for k, v in combined_best_fit.items()}
-    lo  = {k: float(v[2]) for k, v in combined_best_fit.items()}
+    med = {k: float(v[0]) for k, v in valid_items.items()}
+    up  = {k: float(v[1]) for k, v in valid_items.items()}
+    lo  = {k: float(v[2]) for k, v in valid_items.items()}
     return med, up, lo
 
 

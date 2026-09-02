@@ -11,6 +11,8 @@ import io
 import os
 import sys
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from contextlib import contextmanager
 from getdist import plots as gd_plots, MCSamples
@@ -339,7 +341,7 @@ def _main_table_parameters(config_model: dict, param_labels: list[str]) -> list[
 
     return main_params
     
-def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
+def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
     """Run the full plotting pipeline in a clean, deterministic order.
 
     Order:
@@ -502,12 +504,12 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
     # ----- 4) Statistical analysis ------------------------------------------
     print()
-    statistical_results = PP.statistical_analysis(all_best_fit, data, CONFIG, true_model)
+    statistical_results = PP.statistical_analysis(all_best_fit, data, CONFIG, reference_model)
 
     # Build reference chi^2 map (from true model) for diagnostics
     ref_chi2 = {}
-    if true_model in statistical_results:
-        for obs_key, stats in statistical_results[true_model].items():
+    if reference_model in statistical_results:
+        for obs_key, stats in statistical_results[reference_model].items():
             ref_chi2[obs_key] = stats["Reduced_Chi_squared"]
 
     # Collect per-model stats and interpretations
@@ -516,7 +518,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
         interp_dict[model] = []
         for obs_key, stats in obs_results.items():
             # Diagnostics vs reference
-            reference_chi2 = None if model == true_model else ref_chi2.get(obs_key)
+            reference_chi2 = None if model == reference_model else ref_chi2.get(obs_key)
             diagnostics = PP.provide_model_diagnostics(
                 reduced_chi_squared=stats["Reduced_Chi_squared"],
                 model_name=model,

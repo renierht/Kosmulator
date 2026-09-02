@@ -104,16 +104,21 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
             log_like = None
 
         if log_like is not None:
+            ll_arr = np.asarray(log_like).ravel()
+            dev_samples = -2.0 * ll_arr
+
             mle_idx = np.nanargmax(log_like)
             mle_vector = obs_samples[mle_idx]
 
             #For DIC calculations
-            D_bar = np.nanmean(-2*np.array(log_like), dtype = float)
+            D_bar = float(np.nanmean(dev_samples))
+            D_var = float(np.nanvar(dev_samples, ddof = 1))
             theta_bar = np.nanmean(obs_samples, axis = 0)
 
         else:
             mle_vector = None
             D_bar = None
+            D_var = None
 
 
 
@@ -211,6 +216,7 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
 
         if D_bar is not None:
             structured_values[obs]["__D_bar__"] = float(D_bar)
+            structured_values[obs]["__D_var__"] = float(D_var)
 
         # Add the row to the LaTeX table
         latex_table.append(row)
@@ -376,10 +382,10 @@ def find_polished_mle(
     return params_dict_median, baseline_chi2
 
 
-def statistical_analysis(best_fit_values, data, CONFIG, true_model):
+def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
     """
     Perform statistical analysis for all models and observation combinations,
-    and calculate delta AIC/BIC relative to the true model.
+    and calculate delta AIC/BIC relative to the reference model.
 
     This processes each observation set individually by pairing it with
     its corresponding observation type from CONFIG.
@@ -397,6 +403,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
             # Extract best-fit (median) values into a dictionary.
 
             D_bar = params.pop("__D_bar__", None) #Popped before the loop iterates through param
+            D_var = params.pop("__D_var__", None)
 
 
             #Returns the mle_values needed for AIC and BIC
@@ -644,9 +651,17 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
 
             """
             if D_bar is not None:
-                D_hat, _  = _compute_chi2_total(param_dict_mean)
+                # Spiegelhalter / DESI MAP formulation:
+                # D_hat is the polished minimum chi-squared found by Nelder-Mead
+                D_hat = chi_squared_total
                 p_D = D_bar - D_hat
-                dic = D_hat + 2.0 * p_D
+                dic = D_hat + 2.0 * p_D   # Equivalently: 2.0 * D_bar - D_hat
+
+                print(f"[DEBUG DIC] model={model_name} obs={obs_name}")
+                print(f"[DEBUG DIC]   D_bar (mean chi2 of chain) = {D_bar:.4f}")
+                print(f"[DEBUG DIC]   D_hat (min chi2 / MAP)     = {D_hat:.4f}")
+                print(f"[DEBUG DIC]   p_D (effective param count)= {p_D:.4f}")
+                print(f"[DEBUG DIC]   Calculated DIC             = {dic:.4f}")
 
             
            
@@ -664,13 +679,13 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
             if notes:
                 results[model_name][obs_name]["Note"] = " | ".join(notes)
 
-            if model_name == true_model:
+            if model_name == reference_model:
                 reference_aic[obs_name] = aic
                 reference_bic[obs_name] = bic
                 reference_aicc[obs_name] = aicc
                 reference_dic[obs_name] = dic
 
-    # Calculate delta AIC and delta BIC relative to the true model.
+    # Calculate delta AIC and delta BIC relative to the reference model.
     for model_name, obs_results in results.items():
         for obs_name, stats in obs_results.items():
             stats["dAIC"] = stats["AIC"] - reference_aic.get(obs_name, stats["AIC"])

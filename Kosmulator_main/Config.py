@@ -752,48 +752,48 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 if obs == "DESY5":
                     sne_path = os.path.join(K.OBSERVATIONS_BASE, "DESY5.dat")
                     cov_path = os.path.join(K.OBSERVATIONS_BASE, "DESY5_covsys_000.txt")
+
+                    #DESY5 covariant matrix correction
+                    data_sne = load_named_sne_with_zcmb(sne_path)
+
+                    if cov_path and os.path.exists(cov_path):
+                        #Load raw 1D stream and reshape
+                        raw_data = np.loadtxt(cov_path)
+                        n_dim = int(raw_data[0]) 
+                        cov_loaded = raw_data[1:].reshape((n_dim, n_dim))
+                        cov_loaded = 0.5 * (cov_loaded + cov_loaded.T)
+
+                        n_data = len(data_sne['type_data'])
+                        if cov_loaded.shape != (n_data, n_data):
+                            logger.error(f"{obs} Covariance shape {cov_loaded.shape} != Data length {n_data}")
+                            raise ValueError(f"{obs} Covariance dimension mismatch!")
+
+                        #2. Add diagonal statistical variances
+                        sigma_stat = data_sne["type_data_error"]
+                        cov_total = cov_loaded + np.diag(sigma_stat**2)
+
+                        ##. invert the total corrected matrix
+                        try:
+                            inv_cov_total = np.linalg.inv(cov_total)
+                        except np.linalg.LinAlgError:
+                            inv_cov_total = np.linalg.pinv(cov_total, rcond = 1e-12)
+
+                        data_sne["cov"] = cov_total
+                        data_sne["inv_cov"] = inv_cov_total
+
                 else:  # "Union3"
                     sne_path = os.path.join(K.OBSERVATIONS_BASE, "Union3.txt")
                     cov_path = os.path.join(K.OBSERVATIONS_BASE, "Union3_mag_covmat.txt")
 
-                data_sne = load_named_sne_with_zcmb(sne_path)
+                    data_sne = load_named_sne_with_zcmb(sne_path)
 
-                if cov_path and os.path.exists(cov_path):
-                    # 1. Load the raw matrix
-                    cov_loaded, _ = load_DESI_cov(cov_path)
-                    
-                    n_data = len(data_sne["type_data"])
-                    if cov_loaded.shape != (n_data, n_data):
-                        logger.error(f"{obs} Covariance shape {cov_loaded.shape} != Data length {n_data}")
-                        raise ValueError(f"{obs} Covariance dimension mismatch! Check for commented rows.")
+                    if cov_path and os.path.exists(cov_path):
+                        cov_loaded, inv_cov_loaded = load_DESI_cov(cov_path)
+                        data_sne["cov"] = cov_loaded
+                        data_sne["inv_cov"] = inv_cov_loaded
 
-                    # 2. CRITICAL FIX: Explicitly handle DESY5
-                    # DESY5 uses a systematic-only matrix, so we MUST add the diagonal statistical errors.
-                    # Union3 uses a full matrix, so we use it as-is.
-                    
-                    if obs == "DESY5" or np.mean(np.diag(cov_loaded)) < 1e-3: 
-                        sigma_stat = data_sne["type_data_error"]
-                        
-                        # Add diagonal stats: C_total = C_sys + diag(sigma_stat^2)
-                        # This adds 280^2 to the bad SN, correctly de-weighting it.
-                        cov_total = cov_loaded + np.diag(sigma_stat**2)
-                        
-                        logger.info(f"Augmented {obs} covariance with diagonal statistical errors.")
-                    else:
-                        # Union3 path
-                        cov_total = cov_loaded
-                    
-                    # 3. Invert the corrected TOTAL matrix
-                    try:
-                        inv_cov_total = np.linalg.inv(cov_total)
-                    except np.linalg.LinAlgError:
-                        # Fallback for numerical stability
-                        inv_cov_total = np.linalg.pinv(cov_total, rcond=1e-12)
 
-                    data_sne["cov"] = cov_total
-                    data_sne["inv_cov"] = inv_cov_total
-
-                data_sne["data_is_distance_modulus"] = (obs == "Union3")
+                data_sne["data_is_distance_modulus"] = (obs == "Union3") or (obs == 'DESY5')
                 observation_data[obs] = data_sne
             # ------------------
             # Default loader
