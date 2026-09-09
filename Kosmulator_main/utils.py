@@ -728,7 +728,7 @@ def detect_vectorisation(models, get_model_fn, config, data, sample_n: int = 10)
                 z_test = np.linspace(z_min, z_max, 20000)
 
             names = config[mod]["parameters"][0]
-            tv = config[mod]["true_values"][0]
+            tv = config[mod]["reference_values"][0]
             params = dict(zip(names, tv))
 
             try:
@@ -1378,7 +1378,8 @@ def make_zeus_callbacks(
     fine_kwargs: Optional[dict] = None,
     ncheck: Optional[int] = None,
     append_writer: Optional[callable] = None,
-    consecutive_required: int = 1,
+    consecutive_required: int = 3,
+    min_tau_factor: float = 50.0,
 ):
     """
     Composite Zeus callback:
@@ -1478,7 +1479,17 @@ def make_zeus_callbacks(
                             print("[Zeus] append_writer raised; ignored.")
 
                 # ---- Early-stop rule (LOCAL burn gate) ----
-                if iteration >= int(burn) and len(self._fracs) >= consecutive_required:
+                # Require enough chain length for the current autocorrelation
+                # estimate before treating a stable tau as convergence.
+                tau_values = _np.asarray(ests, dtype=float)
+                tau_max = float(_np.nanmax(tau_values))
+                min_chain_length = int(burn) + int(
+                    _np.ceil(float(min_tau_factor) * max(tau_max, 1.0))
+                )
+                if (
+                    iteration >= min_chain_length
+                    and len(self._fracs) >= consecutive_required
+                ):
                     window = list(self._fracs)[-consecutive_required:]
                     if all(f < float(target_autocorr) for f in window):
                         if debug:
@@ -1524,7 +1535,7 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
     header = (
         f"{'Observation':<{obs_w}} | {'Log-Likelihood':>18} | "
         f"{'Chi-Squared':>15} | {'Reduced Chi-Squared':>20} | "
-        f"{'AIC':>11} | {'BIC':>11} | {'AICc':>11} | {'DIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'dAICc':>11} | {'dDIC':>11} |"
+        f"{'AIC':>11} | {'BIC':>11} | {'AICc':>11} | {'DIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'dAICc':>11} | {'dDIC':>11} | {'dChi':>11} |"
     )
 
     import numpy as _np
@@ -1564,10 +1575,11 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
             dbic = _as_float(s.get("dBIC", _np.nan))
             daicc = _as_float(s.get("dAICc",_np.nan))
             ddic = _as_float(s.get("dDIC",_np.nan))
+            dchi = _as_float(s.get("dChi", _np.nan))
             row = (
                 f"{obs:<{obs_w}} | {ll:>18.4f} | {chi2:>15.4f} | "
                 f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | {aicc:>11.3f} | {dic:>11.3f} | "
-                f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f} |"
+                f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f} | {dchi:>11.3f} |"
             )
             f.write(row + "\n")
         f.write("\n")
@@ -2183,7 +2195,7 @@ def generate_label(
 
 
 def _inject_planck_nuisance_defaults(
-    true_values: Dict[str, float],
+    reference_values: Dict[str, float],
     prior_limits: Dict[str, Tuple[float, float]],
     names: List[str],
 ) -> None:
@@ -2191,16 +2203,16 @@ def _inject_planck_nuisance_defaults(
     Ensure priors/initials exist for all requested Planck nuisance names.
     """
     for n in names:
-        if n in prior_limits and n in true_values:
+        if n in prior_limits and n in reference_values:
             continue
         default = PLANCK_NUISANCE_DEFAULTS.get(n)
         if default is not None:
             tv, (lo, hi) = default
-            true_values.setdefault(n, tv)
+            reference_values.setdefault(n, tv)
             prior_limits.setdefault(n, (lo, hi))
         else:
             # Fallback heuristic if a name isn't in our table
-            true_values.setdefault(n, 0.0)
+            reference_values.setdefault(n, 0.0)
             prior_limits.setdefault(n, (-5.0, 5.0))
 
 

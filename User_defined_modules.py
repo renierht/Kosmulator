@@ -118,6 +118,7 @@ def wowaCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
     Om = float(p["Omega_m"])
     w0 = float(p["w0"])
     wa = float(p["wa"])
+    
 
     # --- Strict early matter domination cutoff from DESI DR2 paper ---
     if (w0 + wa) >= 0.0:
@@ -138,6 +139,64 @@ def wowaCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
     else: 
         out = np.sqrt(E2)
     return _scalar_or_array(out)
+
+def wowaCDM_MODEL_vectorised_v2(z: Number, p: Dict[str, float]) -> Number:
+    r"""
+    Flat w0wa (CPL parametrization) — improved vectorization.
+ 
+    E^2(z) = Ω_m (1+z)^3 + (1 - Ω_m) (1+z)^{3(1+w0+wa)} exp(-3 wa z / (1+z))
+ 
+    Parameters in `p`:
+      • Omega_m
+      • w0
+      • wa
+ 
+    Improvements over v1:
+    - Log-space calculation near w0+wa ≈ -1 for numerical stability
+    - Element-wise NaN handling (doesn't NaN entire array if one redshift fails)
+    - Avoids catastrophic cancellation in fractional powers
+    """
+    z = _asarray(z)
+    Om = float(p["Omega_m"])
+    w0 = float(p["w0"])
+    wa = float(p["wa"])
+ 
+    # --- Hard constraint from DESI DR2 paper ---
+    # EoS must be < -1 for accelerating dark energy
+    if (w0 + wa) >= 0.0:
+        return np.full_like(z, np.nan)
+    # ------------------------------------------
+ 
+    zp1 = 1.0 + z
+    a = 1.0 / zp1
+    
+    
+    # Two methods: direct and log-space
+    # Direct: (1+z)^(3*w_sum) * exp(-3*wa*(1-a))
+    # Log:    exp(3*w_sum*log(1+z) - 3*wa*(1-a))
+    
+    # Use log-space for better stability
+    # Avoid taking fractional power of small numbers
+    log_zp1 = np.log(zp1)
+    log_rho_de = 3.0 * (1.0 + w0 + wa) * log_zp1 - 3.0 * wa * (1.0 - a)
+    
+    # Clip to prevent exp overflow
+    log_rho_de = np.clip(log_rho_de, -700, 100)
+    rho_de_ratio = np.exp(log_rho_de)
+    
+    # Hubble parameter squared
+    E2 = Om * (zp1 ** 3) + (1.0 - Om) * rho_de_ratio
+    
+    # Safety checks: clip to positive values
+    # This is gentler than returning all NaN
+    # Allows sampler to explore near boundaries
+    E2 = np.where(np.isfinite(E2) & (E2 > 0), E2, np.nan)
+    
+    # Return NaN only for genuinely bad redshifts, not entire array
+    out = np.where(np.isfinite(E2), np.sqrt(E2), np.nan)
+    
+    return _scalar_or_array(out)
+
 
 
 def LCDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
@@ -378,6 +437,100 @@ def f1CDM_v_CMB(p: dict, mode: str = "hil"):
         # print(f"DEBUG: CLASS failed with params {class_params}. Error: {e}")
         return None
 
+
+def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
+    """
+    CMB helper for wowaCDM_v (CPL w0-wa dark energy).
+
+    Uses CLASS's native fluid dark energy (Omega_fld, w0_fld, wa_fld),
+    which is a stock, unmodified feature of the CLASS build shared with LCDM_v.
+    """
+    p = _ensure_background_params(p)
+    m = (mode or "").lower()
+    is_lowl  = m.startswith("low")
+
+    Om = float(p.get("Omega_m", 0.0))
+    Ob = float(p.get("Omega_b", 0.0))
+
+    if Om <= 0 or Ob <= 0 or Ob >= Om:
+        return None
+
+    #Safe extraction of w0 and wa with LCDM fallbakcs if called across models
+    w0 = float(p.get("w0", p.get("w_0", p.get("w0_fld", -1.0))))
+    wa = float(p.get("wa", p.get("w_a", p.get("wa_fld", 0.0))))
+
+    #w(a -> 0) = wa + w0 < 1/3 for early radiation domination
+
+    if(w0 + wa) >= 0.0:
+        return None
+
+    global _class_cache
+    if _class_cache is None:
+        _class_cache = classy.Class()
+    cosmo = _class_cache
+
+    if is_lowl:
+        output_str = "tCl, pCl"
+        class_params = {
+            "l_max_scalars": 31,
+            "lensing": "no",
+        }
+    else:
+        output_str = "tCl,pCl,lCl"
+        class_params = {
+            "l_max_scalars": 2509,
+            "lensing": "yes"
+        }
+
+    base_params = {
+        "output": output_str,
+        "n_s": float(p["n_s"]),
+        "h": float(p["H_0"])/100.0,
+        "omega_b": float(p["Omega_bh^2"]),
+        "omega_cdm": float(p['Omega_dh^2']),
+        "tau_reio": float(p['tau_reio']),
+        'A_s': float(np.exp(p['ln10^10_As'])*1e-10),
+        
+        #Dark Energy: turn off Lambda, turn on CPL fluid
+        "Omega_Lambda": 0.0,
+        "w0_fld": w0,
+        "wa_fld": wa,
+        "cs2_fld": 1.0,
+    }
+
+    VERBOSE_OFF_SAFE = {
+        "input_verbose": 0,
+        "background_verbose": 0,
+        "thermodynamics_verbose": 0,
+        "perturbations_verbose": 0,
+        "transfer_verbose": 0,
+        "primordial_verbose": 0,
+        "lensing_verbose": 0,
+        "output_verbose": 0,
+    }
+
+    cosmo_params = {**base_params, **class_params, **VERBOSE_OFF_SAFE}
+
+    try:
+        try:
+            cosmo.struct_cleanup()
+        except Exception:
+            pass
+        try:
+            cosmo.empty()
+        except Exception:
+            pass
+
+        cosmo.set(cosmo_params)
+        cosmo.compute()
+
+        return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
+    except classy.CosmoComputationError as e:
+        logger.error("CLASS CosmoComputationError: %s | cosmo_params=%s", e, cosmo_params)
+        return None
+    except Exception as e:
+        logger.exception("Unexpected error in wowaCDM_v_CMB: %s | cosmo_params=%s", e, cosmo_params)
+        return None
 # ============================================================================
 #  Model registry / discovery
 #  ---------------------------------------------------------------------------
@@ -401,6 +554,7 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
     "f1CDM_v":  (f1CDM_MODEL_vectorised,     ["Omega_m", "n"]),
     "f1CDM_nv": (f1CDM_MODEL_non_vectorised, ["Omega_m", "n"]),
     "wowaCDM_v": (wowaCDM_MODEL_vectorised, ["Omega_m","w0","wa"]),
+    "wowaCDM_v2": (wowaCDM_MODEL_vectorised_v2, ["Omega_m","w0","wa"]),
 
     # CMB-specific models for CLASS Cls (used by CMB likelihoods)
     "LCDM_v_CMB": (
@@ -411,6 +565,10 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
         f1CDM_v_CMB,
         ["Omega_m", "Omega_b", "H_0", "n_s", "tau_reio", "ln10^10_As", "n"],
     ),
+    "wowaCDM_v_CMB":(
+        wowaCDM_v_CMB,
+        ["Omega_m", "Omega_b","H_0", "n_s", "tau_reio", "ln10^10_As", "w0", "wa"],
+    )
     # Example for a new MG model:
     # "MyMG_v": (MyMG_MODEL_vectorised, ["Omega_m", "my_param"]),
 }
@@ -482,9 +640,20 @@ def restrict_f1CDM_v(x: float) -> bool:
     """
     return x < 0.5
 
-def restrict_wowa_sum(x: float, p: Dict[str, float]) -> bool:
-    #Enforce early matter domination: w0 + wa < 0
-    return (float(p.get("w0", -1)) + float(p.get("wa", 0.0))) < 0.0
+def restrict_wowa_sum(p: Dict[str, float]) -> bool:
+    w0 = float(p.get("w0", -1.0))
+    wa = float(p.get("wa", 0.0))
+
+    if w0 + wa >= 0.0:
+        return False
+
+    return True
+
+
+coupled_restrictions_map: Dict[str, List[Callable[[Dict[str, float]], bool]]] = {
+    "wowaCDM_v": [restrict_wowa_sum],
+    "wowaCDM_v2": [restrict_wowa_sum],
+}
 
 
 # Global map that Get_model_restrictions reads from.
@@ -493,7 +662,8 @@ restrictions_map: Dict[str, Dict[str, Callable[[float], bool]]] = {
     "LCDM_v":  {"Omega_m": restrict_LCDM_Omega_m},
     "LCDM_nv": {"Omega_m": restrict_LCDM_Omega_m},
     "f1CDM_v": {"n": restrict_f1CDM_v},
-    "wowaCDM_v": {"Omega_m": restrict_LCDM_Omega_m}
+    "wowaCDM_v": {"Omega_m": restrict_LCDM_Omega_m},
+    "wowaCDM_v2": {"Omega_m": restrict_LCDM_Omega_m},
     # Example for a new model:
     # "MyMG_v": {"my_param": restrict_MyMG_param},
 }
@@ -513,6 +683,18 @@ def Get_model_restrictions(
     if isinstance(model_name, list):
         return {m: restrictions_map.get(m, {}) for m in model_name}
     return restrictions_map.get(model_name, {})
+
+
+def Get_model_coupled_restrictions(
+    model_name: Union[str, List[str]]
+) -> Union[
+    List[Callable[[Dict[str, float]], bool]],
+    Dict[str, List[Callable[[Dict[str, float]], bool]]],
+]:
+    """Return restrictions that depend on multiple sampled parameters."""
+    if isinstance(model_name, list):
+        return {m: coupled_restrictions_map.get(m, []) for m in model_name}
+    return coupled_restrictions_map.get(model_name, [])
 
 
 # ============================================================================

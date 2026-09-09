@@ -556,6 +556,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
                 "dAICc": stats["dAICc"],
                 "DIC": stats["DIC"],
                 "dDIC": stats["dDIC"],
+                'dChi': stats['dChi'],
             }
 
             # IMPORTANT: Do NOT include S in the stats row — it will be printed as a stand-alone line

@@ -10,7 +10,7 @@ Responsibilities:
   - Construct the CONFIG dict consumed by the MCMC layer:
       CONFIG[model_name] = {
           "observations", "observation_types",
-          "parameters", "true_values", "prior_limits",
+          "parameters", "reference_values", "prior_limits",
           "restrictions", "ndim",
           "rd_policy", "pantheonp_mode",
           "fs8_gamma_fixed_by_group",
@@ -810,9 +810,10 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
 
 def create_config(
     models: Dict[str, Any],
-    true_values: Union[Dict[str, float], Any] = None,
+    reference_values: Union[Dict[str, float], Any] = None,
     prior_limits: Dict[str, Tuple[float, float]] = None,
     restrictions: Dict[str, Dict[str, Callable[[float], bool]]] = None,
+    coupled_restrictions: Dict[str, List[Callable[[Dict[str, float]], bool]]] = None,
     observation: List[List[str]] = None,
     nwalkers: int = 20,
     nsteps: int = 200,
@@ -830,7 +831,7 @@ def create_config(
         Model registry, e.g. {"LCDM_v": {"parameters": [...], ...}, ...}.
         `parameters` here is the *core* model parameter list, not yet expanded
         per observation group.
-    true_values : dict
+    reference_values : dict
         Global "true" parameter guesses (used as initial means).
     prior_limits : dict
         Global prior boxes: {param: (low, high)}. Each parameter used in any
@@ -856,9 +857,10 @@ def create_config(
     """
     # Defaults
     observation  = observation  or [['PantheonP']]
-    true_values  = true_values  or {}
+    reference_values  = reference_values  or {}
     prior_limits = prior_limits or {}
     restrictions = restrictions or {}
+    coupled_restrictions = coupled_restrictions or {}
 
     # Normalise observation groups (order, duplicates, logging)
     observation = canonicalise_and_dedup_observations(observation, logger)
@@ -942,7 +944,7 @@ def create_config(
             if "A_planck" in defaults:
                 names.add("A_planck")
 
-        _inject_planck_nuisance_defaults(true_values, prior_limits, sorted(names))
+        _inject_planck_nuisance_defaults(reference_values, prior_limits, sorted(names))
 
     # ----------------------------------------------------------------------
     # 2. Expand each model's core parameter list with obs-required params
@@ -957,7 +959,7 @@ def create_config(
         obs_types  = [[obs_type_map[o] for o in grp] for grp in observation]
 
         # ------------------------------------------------------------------
-        # 2a. Build parameter sets, true_values, prior_limits per group
+        # 2a. Build parameter sets, reference_values, prior_limits per group
         # ------------------------------------------------------------------
         param_sets: List[List[str]] = []
         tv_sets:     List[np.ndarray] = []
@@ -987,7 +989,7 @@ def create_config(
                     )
                 lo, hi = prior_limits[p]
                 pl_map[p] = (lo, hi)
-                tv_vec.append(true_values.get(p, 0.5 * (lo + hi)))
+                tv_vec.append(reference_values.get(p, 0.5 * (lo + hi)))
 
             param_sets.append(flat_pset)
             tv_sets.append(np.asarray(tv_vec, dtype=float))
@@ -1000,9 +1002,10 @@ def create_config(
             "observations":      observation,
             "observation_types": obs_types,
             "parameters":        param_sets,
-            "true_values":       tv_sets,
+            "reference_values":  tv_sets,
             "prior_limits":      pl_sets,
             "restrictions":      restrictions.get(mod, {}),
+            "coupled_restrictions": coupled_restrictions.get(mod, []),
             "ndim":              ndim_sets,
             "nsteps":            nsteps,
             "burn":              burn,
@@ -1018,7 +1021,7 @@ def create_config(
         # ------------------------------------------------------------------
         # 3. r_d policy & fσ8 singleton gamma policy
         # ------------------------------------------------------------------
-        tv_global = true_values or {}
+        tv_global = reference_values or {}
 
         rd_fixed = float(tv_global.get("r_d_fixed", K.R_D_SINGLETON))     # <- fixed singleton value
         rd_mu    = float(tv_global.get("r_d", rd_fixed))                  # <- free/gaussian mean (defaults to fixed)
@@ -1094,7 +1097,7 @@ def create_config(
             if len(obs_grp) == 1 and obs_grp[0] == "f_sigma_8":
                 if "gamma" in grp_params:
                     grp_params.remove("gamma")
-                gamma_fix = float(true_values.get("gamma_fixed", K.GAMMA_FS8_SINGLETON))
+                gamma_fix = float(reference_values.get("gamma_fixed", K.GAMMA_FS8_SINGLETON))
                 fs8_gamma_fixed_by_group[gi] = gamma_fix
                 if logger:
                     logger.warning(
@@ -1205,12 +1208,12 @@ def create_config(
                     )
                 lo, hi = prior_limits[p]
                 pl_map[p] = (lo, hi)
-                tv_vec.append(true_values.get(p, 0.5 * (lo + hi)))
+                tv_vec.append(reference_values.get(p, 0.5 * (lo + hi)))
             tv_sets2.append(np.asarray(tv_vec, float))
             pl_sets2.append(pl_map)
             ndim_sets2.append(len(pset))
 
-        config[mod]["true_values"]   = tv_sets2
+        config[mod]["reference_values"]   = tv_sets2
         config[mod]["prior_limits"]  = pl_sets2
         config[mod]["ndim"]          = ndim_sets2
 

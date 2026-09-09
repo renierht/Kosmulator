@@ -69,16 +69,16 @@ logging.basicConfig(level=logging.INFO)
 # ----------------------------------------------------------------------
 
 # Models implemented in User_defined_modules.py
-model_names: List[str] = ["wowaCDM_v"]
+model_names: List[str] = ["wowaCDM_v2"]
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
-    ['DESI_DR2', 'CMB_lowl', 'CMB_hil'],
+    #['DESI_DR2', 'CMB_lowl', 'CMB_hil'],
     #['DESI_DR2'],
     #['DESI_DR2','DESY5'],
     #['BBN_PryMordial','DESI_DR2', 'PantheonP'],
     #['DESI_DR2', 'Union3'],
-    #['DESI_DR2', 'PantheonP'],
+    ['DESI_DR2', 'PantheonP'],
     #['JLA'],
     #['JLA','CC'],
     #['OHD'],
@@ -122,10 +122,9 @@ reference_model: str = "LCDM_v"
 
 # Sampler settings
 nwalkers: int = 32
-nsteps: int = 2500
-burn: int = 500
+nsteps: int = 12500
+burn: int = 1250
 convergence: float = 0.01
-
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),

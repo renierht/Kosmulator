@@ -105,20 +105,32 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
 
         if log_like is not None:
             ll_arr = np.asarray(log_like).ravel()
-            dev_samples = -2.0 * ll_arr
+            finite = np.isfinite(ll_arr) & np.all(np.isfinite(obs_samples), axis=1)
+            valid_ll = ll_arr[finite]
+            valid_samples = obs_samples[finite]
+            dev_samples = -2.0 * valid_ll
 
-            mle_idx = np.nanargmax(log_like)
-            mle_vector = obs_samples[mle_idx]
+            mle_idx = np.nanargmax(valid_ll)
+            mle_vector = valid_samples[mle_idx]
 
             #For DIC calculations
             D_bar = float(np.nanmean(dev_samples))
-            D_var = float(np.nanvar(dev_samples, ddof = 1))
-            theta_bar = np.nanmean(obs_samples, axis = 0)
+            D_var = float(4.0 * np.nanvar(valid_ll, ddof = 1))
+            theta_bar = np.nanmean(valid_samples, axis = 0)
+
+            # DEBUG — diagnose D_bar vs D_hat gap
+            print(f"[DEBUG DEVIANCE] obs={obs}")
+            print(f"[DEBUG DEVIANCE]   n_samples = {dev_samples.size}")
+            print(f"[DEBUG DEVIANCE]   min={np.nanmin(dev_samples):.3f}  max={np.nanmax(dev_samples):.3f}")
+            print(f"[DEBUG DEVIANCE]   mean={D_bar:.3f}  median={np.nanmedian(dev_samples):.3f}  std={np.sqrt(D_var):.3f}")
+
+            
 
         else:
             mle_vector = None
             D_bar = None
             D_var = None
+    
 
 
 
@@ -395,6 +407,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
     reference_bic: dict[str, float] = {}
     reference_aicc: dict[str, float] = {}
     reference_dic: dict[str, float] = {}
+    reference_chi: dict[str, float] = {}
     
 
     for model_name, obs_results in best_fit_values.items():
@@ -653,12 +666,14 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             if D_bar is not None:
                 # Spiegelhalter / DESI MAP formulation:
                 # D_hat is the polished minimum chi-squared found by Nelder-Mead
+                #If DIC values are not working, try the variance (Gelman) definition: p_D = D_var/2.0 and dic = D_bar + 2.0*p_D
                 D_hat = chi_squared_total
-                p_D = D_bar - D_hat
-                dic = D_hat + 2.0 * p_D   # Equivalently: 2.0 * D_bar - D_hat
+                p_D = D_bar - D_hat       #Spiegelhalter: D_bar - D_hat   Gelman: D_var/2.0
+                dic = D_hat + 2.0 * p_D  # Spiegelhalter: D_hat + 2.0*p_D
 
                 print(f"[DEBUG DIC] model={model_name} obs={obs_name}")
                 print(f"[DEBUG DIC]   D_bar (mean chi2 of chain) = {D_bar:.4f}")
+                print(f"[DEBUG DIC]   D_var (var chi2 of chain) = {D_var:.4f}")
                 print(f"[DEBUG DIC]   D_hat (min chi2 / MAP)     = {D_hat:.4f}")
                 print(f"[DEBUG DIC]   p_D (effective param count)= {p_D:.4f}")
                 print(f"[DEBUG DIC]   Calculated DIC             = {dic:.4f}")
@@ -680,18 +695,20 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 results[model_name][obs_name]["Note"] = " | ".join(notes)
 
             if model_name == reference_model:
+                reference_chi[obs_name] = chi_squared_total
                 reference_aic[obs_name] = aic
                 reference_bic[obs_name] = bic
                 reference_aicc[obs_name] = aicc
                 reference_dic[obs_name] = dic
 
-    # Calculate delta AIC and delta BIC relative to the reference model.
+    # Calculate delta values relative to the reference model.
     for model_name, obs_results in results.items():
         for obs_name, stats in obs_results.items():
             stats["dAIC"] = stats["AIC"] - reference_aic.get(obs_name, stats["AIC"])
             stats["dBIC"] = stats["BIC"] - reference_bic.get(obs_name, stats["BIC"])
             stats["dAICc"] = stats["AICc"] - reference_aicc.get(obs_name, stats["AICc"])
             stats["dDIC"] = stats["DIC"] -reference_dic.get(obs_name, stats["DIC"])
+            stats['dChi'] = stats['Chi_squared'] - reference_chi.get(obs_name, stats['Chi_squared'])
 
     return results
 

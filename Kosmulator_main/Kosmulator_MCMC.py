@@ -30,6 +30,8 @@ import Kosmulator_main.constants as K
 from Plots.Plot_functions import compute_rd as _compute_rd
 from Kosmulator_main import rd_helpers as RD
 
+logger = logging.getLogger(__name__)
+
 # Optional Zeus
 try:
     import zeus
@@ -242,6 +244,15 @@ def log_prior_all(theta_batch: np.ndarray, CONFIG: Dict[str, Any], obs_index: in
             valid = np.array([restr[p](v) for v in theta_batch[:, i]])
             lp[~valid] = -np.inf
 
+    # 3) restrictions involving multiple sampled parameters
+    coupled_restr = CONFIG.get("coupled_restrictions", [])
+    for restriction in coupled_restr:
+        valid = np.array([
+            restriction({name: theta_batch[walker, i] for i, name in enumerate(params)})
+            for walker in range(nwalkers)
+        ])
+        lp[~valid] = -np.inf
+
     # --- Coupled background consistency (always true physically) ---
     params = CONFIG["parameters"][obs_index]
 
@@ -403,7 +414,7 @@ def neg_log_prob(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_ind
 
 
 def optimise_initial_guess(
-    true_vals: np.ndarray,
+    reference_vals: np.ndarray,
     bounds: List[Tuple[float, float]],
     nlp_fn: Callable[[np.ndarray], float],
     maxiter: int,
@@ -411,34 +422,34 @@ def optimise_initial_guess(
     disp: bool,
 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
     """
-    L-BFGS-B to find a decent initial center; returns (ic, Hinv_diag or None).
+    Nelder-Mead simplex optimization to find a robust MAP center across non-smooth boundaries.
     """
     NO_OPT = os.environ.get("KOSM_NO_OPT", "0") == "1"
     if NO_OPT:
-        return np.asarray(true_vals, float), None
+        return np.asarray(reference_vals, float), None
 
+    # Nelder-Mead natively supports parameter box bounds in modern SciPy
     sol = optimize.minimize(
         nlp_fn,
-        true_vals,
+        reference_vals,
         bounds=bounds,
-        method="L-BFGS-B",
-        options={"maxiter": maxiter, "maxfun": maxfun, "disp": False},
+        method="Nelder-Mead",
+        options={
+            "maxiter": maxiter,
+            "maxfev": maxfun,
+            "disp": disp,
+            "adaptive": True,  # Scales simplex geometry for higher dimensions
+        },
     )
+
     ic = np.asarray(sol.x, float)
-    Hinv = None
-    try:
-        Hinv_like = sol.hess_inv
-        Hinv = (
-            Hinv_like.todense()
-            if hasattr(Hinv_like, "todense")
-            else np.asarray(Hinv_like, float)
-        )
-        Hinv = np.asarray(Hinv, float)
-        if Hinv.ndim == 2:
-            Hinv = np.diag(Hinv)  # take diagonal for scale proposal
-    except Exception:
-        Hinv = None
-    return ic, Hinv
+
+    # If the simplex failed to move away from the starting guess, log or inspect
+    if not sol.success:
+        logger.warning("Nelder-Mead pre-fit did not achieve full convergence: %s", sol.message)
+
+    # Nelder-Mead is derivative-free and does not produce an inverse Hessian
+    return ic, None
 
 
 def make_initial_positions(
@@ -745,7 +756,7 @@ def run_mcmc(
 
     # 1) Parameter / run config
     param_names = CONFIG["parameters"][obs_index]
-    true_vals   = CONFIG["true_values"][obs_index]
+    reference_vals   = CONFIG["reference_values"][obs_index]
     prior_map   = CONFIG["prior_limits"][obs_index]
     nsteps      = CONFIG["nsteps"]
     burn        = CONFIG["burn"]
@@ -770,11 +781,11 @@ def run_mcmc(
     if do_ic:
         bounds = [prior_map[p] for p in param_names]
         ic, sol_diag = optimise_initial_guess(
-            true_vals,
+            reference_vals,
             bounds,
             nlp,
-            maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "30")),
-            maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", "60")),
+            maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "1000")),
+            maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", "2000")),
             disp=False,
         )
         print(f"SciPy optimized IC: {ic}\n")
@@ -853,7 +864,7 @@ def run_mcmc(
                 lows  = np.array([prior_map[p][0] for p in param_names], dtype=float)
                 highs = np.array([prior_map[p][1] for p in param_names], dtype=float)
                 span  = np.maximum(highs - lows, 1e-12)
-                ic    = np.clip(np.array(true_vals, dtype=float), lows, highs)
+                ic    = np.clip(np.array(reference_vals, dtype=float), lows, highs)
                 rng   = np.random.default_rng(PLOT_SETTINGS.get("seed", None))
                 pos0  = ic + 0.05 * span * rng.normal(size=(nwalker, ndim))
                 pos0  = np.clip(pos0, lows, highs)
@@ -940,7 +951,7 @@ def run_mcmc(
             else None,
             ncheck=iters_per_cb,
             append_writer=writer,
-            consecutive_required=int(PLOT_SETTINGS.get("tau_consecutive", 1)),
+            consecutive_required=int(PLOT_SETTINGS.get("tau_consecutive", 3)),
         )
 
         # Optional: τ probe for CMB (debug only)
@@ -1161,7 +1172,7 @@ def run_mcmc(
             lows  = np.array([prior_map[p][0] for p in param_names], dtype=float)
             highs = np.array([prior_map[p][1] for p in param_names], dtype=float)
             span  = np.maximum(highs - lows, 1e-12)
-            ic    = np.clip(np.array(true_vals, dtype=float), lows, highs)
+            ic    = np.clip(np.array(reference_vals, dtype=float), lows, highs)
             rng   = np.random.default_rng(PLOT_SETTINGS.get("seed", None))
             pos0  = ic + 0.05 * span * rng.normal(size=(nwalker, ndim))
             pos0  = np.clip(pos0, lows, highs)
