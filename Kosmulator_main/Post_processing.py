@@ -407,6 +407,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
     reference_bic: dict[str, float] = {}
     reference_aicc: dict[str, float] = {}
     reference_dic: dict[str, float] = {}
+    reference_waic: dict[str, float] = {}
     reference_chi: dict[str, float] = {}
     
 
@@ -678,6 +679,10 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 print(f"[DEBUG DIC]   p_D (effective param count)= {p_D:.4f}")
                 print(f"[DEBUG DIC]   Calculated DIC             = {dic:.4f}")
 
+            #WAIC Implememtation
+            waic = float('nan')
+            waic = 0
+
             
            
 
@@ -689,6 +694,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 "BIC": bic,
                 "AICc" : aicc,
                 "DIC": dic,
+                "WAIC": waic,
                 "p_D": p_D,
             }
             if notes:
@@ -700,6 +706,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 reference_bic[obs_name] = bic
                 reference_aicc[obs_name] = aicc
                 reference_dic[obs_name] = dic
+                reference_waic[obs_name] = waic
 
     # Calculate delta values relative to the reference model.
     for model_name, obs_results in results.items():
@@ -708,6 +715,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             stats["dBIC"] = stats["BIC"] - reference_bic.get(obs_name, stats["BIC"])
             stats["dAICc"] = stats["AICc"] - reference_aicc.get(obs_name, stats["AICc"])
             stats["dDIC"] = stats["DIC"] -reference_dic.get(obs_name, stats["DIC"])
+            stats["dWAIC"] = stats["WAIC"] - reference_waic.get(obs_name, stats["WAIC"])
             stats['dChi'] = stats['Chi_squared'] - reference_chi.get(obs_name, stats['Chi_squared'])
 
     return results
@@ -793,6 +801,7 @@ def interpret_delta_IC(
         delta_bic,
         delta_aicc,
         delta_dic,
+        delta_waic,
         ) -> str:
     """
     Turn ΔAIC / ΔBIC into human-readable model-comparison statements.
@@ -802,6 +811,7 @@ def interpret_delta_IC(
     delta_bic = float(np.asarray(delta_bic).reshape(()))
     delta_aicc = float(np.asarray(delta_aicc).reshape(()))
     delta_dic = float(np.asarray(delta_dic).reshape(()))
+    delta_waic = float(np.asarray(delta_waic).reshape(()))
 
     feedback = []
 
@@ -871,6 +881,25 @@ def interpret_delta_IC(
     else:
         feedback.append(
             f"Delta DIC: Strong evidence against the model (ΔDIC = {delta_dic:.2f})."
+        )
+
+
+    #--- WAIC  ---
+    if delta_waic < 2:
+        feedback.append(
+            f"Delta WAIC: Indistinguishable (ΔWAIC = {delta_waic:.2f})."
+        )
+    elif delta_waic < 4:
+        feedback.append(
+            f"Delta WAIC: Slight evidence against the model (ΔWAIC = {delta_waic:.2f})."
+        )
+    elif delta_waic < 7:
+        feedback.append(
+            f"Delta WAIC Positive evidence against the model (ΔWAIC = {delta_waic:.2f})."
+        )
+    else:
+        feedback.append(
+            f"Delta WAIC: Strong evidence against the model (ΔWAIC = {delta_waic:.2f})."
         )
 
 

@@ -1535,7 +1535,7 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
     header = (
         f"{'Observation':<{obs_w}} | {'Log-Likelihood':>18} | "
         f"{'Chi-Squared':>15} | {'Reduced Chi-Squared':>20} | "
-        f"{'AIC':>11} | {'BIC':>11} | {'AICc':>11} | {'DIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'dAICc':>11} | {'dDIC':>11} | {'dChi':>11} |"
+        f"{'AIC':>11} | {'BIC':>11} | {'AICc':>11} | {'DIC':>11} | {'WAIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'dAICc':>11} | {'dDIC':>11} | {'dChi':>11} | {'dWAIC':>11} |"
     )
 
     import numpy as _np
@@ -1571,6 +1571,8 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
             bic = _as_float(s.get("BIC", _np.nan))
             aicc = _as_float(s.get("AICc",_np.nan))
             dic = _as_float(s.get("DIC",_np.nan))
+            waic = _as_float(s.get('WAIC',_np.nan))
+            dwaic = _as_float(s.get('dWAIC',_np.nan))
             daic = _as_float(s.get("dAIC", _np.nan))
             dbic = _as_float(s.get("dBIC", _np.nan))
             daicc = _as_float(s.get("dAICc",_np.nan))
@@ -1578,8 +1580,8 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
             dchi = _as_float(s.get("dChi", _np.nan))
             row = (
                 f"{obs:<{obs_w}} | {ll:>18.4f} | {chi2:>15.4f} | "
-                f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | {aicc:>11.3f} | {dic:>11.3f} | "
-                f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f} | {dchi:>11.3f} |"
+                f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | {aicc:>11.3f} | {dic:>11.3f} | {waic:>11.3f} | "
+                f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f} | {dchi:>11.3f} | {dwaic:>11.3f} |"
             )
             f.write(row + "\n")
         f.write("\n")
@@ -1591,7 +1593,7 @@ def save_interpretations_to_file(
     interpretations_list: List[Dict[str, str]],
 ) -> None:
     file_path = os.path.join(folder, "interpretations_summary.txt")
-    obs_w, diag_w, aic_w, bic_w, aicc_w, dic_w = 30, 50, 35, 35, 35, 35
+    obs_w, diag_w, aic_w, bic_w, aicc_w, dic_w, waic_w = 30, 50, 35, 35, 35, 35, 35
 
     with open(file_path, "w") as f:
         f.write(f"Interpretations for Model: {model}\n\n")
@@ -1602,6 +1604,7 @@ def save_interpretations_to_file(
             f"{'BIC Interpretation':<{bic_w}} |" 
             f"{'AICc Interpretation':<{aicc_w}} |"
             f"{'DIC Interpretation':<{dic_w}} |"
+            f"{'WAIC Interpretation':<{waic_w}} |"
         )
         f.write(header + "\n")
         total = obs_w + diag_w + aic_w + bic_w + aicc_w + dic_w + 9
@@ -1614,14 +1617,16 @@ def save_interpretations_to_file(
             bic_i = it["BIC Interpretation"]
             aicc_i = it["AICc Interpretation"]
             dic_i = it["DIC Interpretation"]
+            waic_i = it["WAIC Interpretation"]
 
             diag_lines = textwrap.wrap(diag, width=diag_w)
             aic_lines = textwrap.wrap(aic_i, width=aic_w)
             bic_lines = textwrap.wrap(bic_i, width=bic_w)
             aicc_lines = textwrap.wrap(aicc_i, width = aicc_w)
             dic_lines = textwrap.wrap(dic_i, width = dic_w)
+            waic_lines = textwrap.wrap(waic_i, width = waic_w)
             obs_line = obs.ljust(obs_w)
-            max_lines = max(1, len(diag_lines), len(aic_lines), len(bic_lines), len(aicc_lines), len(dic_lines))
+            max_lines = max(1, len(diag_lines), len(aic_lines), len(bic_lines), len(aicc_lines), len(dic_lines), len(waic_lines))
 
             for i in range(max_lines):
                 line = (
@@ -1631,6 +1636,7 @@ def save_interpretations_to_file(
                     f"{(bic_lines[i] if i < len(bic_lines) else ''):<{bic_w}} |"
                     f"{(aicc_lines[i] if i < len(aicc_lines) else ''):<{aicc_w}} |"
                     f"{(dic_lines[i] if i < len(dic_lines) else ''):<{dic_w}} |"
+                    f"{(waic_lines[i] if i < len(waic_lines) else ''):<{waic_w}} |"
                 )
                 f.write(line + "\n")
 

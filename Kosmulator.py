@@ -74,11 +74,11 @@ model_names: List[str] = ["wowaCDM_v2"]
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
     #['DESI_DR2', 'CMB_lowl', 'CMB_hil'],
-    #['DESI_DR2'],
+    ['DESI_DR2'],
     #['DESI_DR2','DESY5'],
     #['BBN_PryMordial','DESI_DR2', 'PantheonP'],
     #['DESI_DR2', 'Union3'],
-    ['DESI_DR2', 'PantheonP'],
+    #['DESI_DR2', 'PantheonP'],
     #['JLA'],
     #['JLA','CC'],
     #['OHD'],

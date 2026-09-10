@@ -166,29 +166,21 @@ def wowaCDM_MODEL_vectorised_v2(z: Number, p: Dict[str, float]) -> Number:
     if (w0 + wa) >= 0.0:
         return np.full_like(z, np.nan)
     # ------------------------------------------
- 
     zp1 = 1.0 + z
     a = 1.0 / zp1
-    
-    
     # Two methods: direct and log-space
     # Direct: (1+z)^(3*w_sum) * exp(-3*wa*(1-a))
     # Log:    exp(3*w_sum*log(1+z) - 3*wa*(1-a))
-    
     # Use log-space for better stability
     # Avoid taking fractional power of small numbers
     log_zp1 = np.log(zp1)
     log_rho_de = 3.0 * (1.0 + w0 + wa) * log_zp1 - 3.0 * wa * (1.0 - a)
-    
     # Clip to prevent exp overflow
     log_rho_de = np.clip(log_rho_de, -700, 100)
     rho_de_ratio = np.exp(log_rho_de)
-    
     # Hubble parameter squared
     E2 = Om * (zp1 ** 3) + (1.0 - Om) * rho_de_ratio
     
-    # Safety checks: clip to positive values
-    # This is gentler than returning all NaN
     # Allows sampler to explore near boundaries
     E2 = np.where(np.isfinite(E2) & (E2 > 0), E2, np.nan)
     
