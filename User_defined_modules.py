@@ -39,7 +39,10 @@ from typing import Union, Dict, Callable, List, Tuple
 import logging
 import numpy as np
 from scipy.optimize import fsolve
-import classy
+try:
+    import classy
+except ImportError:
+    classy = None
 
 from Kosmulator_main.constants import C_KM_S
 import logging

@@ -84,7 +84,7 @@ observations: List[List[str]] = [
     #['OHD'],
     #['CC'],
     #['PantheonP'],
-    #['PantheonPS'],
+    ['DESI_DR2','PantheonPS'],
     #['PantheonPS','CC'],
     #['f_sigma_8'],
     #['f'],
@@ -123,7 +123,7 @@ reference_model: str = "LCDM_v"
 # Sampler settings
 nwalkers: int = 32
 nsteps: int = 12500
-burn: int = 1250
+burn: int = 3750
 convergence: float = 0.01
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
