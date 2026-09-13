@@ -708,7 +708,8 @@ def print_cmb_summary_matrix(
         values = []
         for ridx in cmb_row_indices:
             row = aligned_table[ridx]
-            values.append(str(row[col_index[p]]).strip() or " ")
+            col = col_index[p]
+            values.append(str(row[col]).strip() if col < len(row) else " ")
         row_str = f"{p:<{col_w}} | " + " | ".join(f"{v:<{val_w}}" for v in values)
         if out is None:
             print(row_str)

@@ -415,14 +415,19 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
         # ---------- Detailed CMB table: ONLY parameters used in CMB obs ----------
         # Find which rows correspond to CMB datasets
         cmb_row_indices = [
-            i for i, name in enumerate(obs_names) if _is_cmb_obs_name(name)
+            i for i, name in enumerate(obs_names)
+            if _is_cmb_obs_name(name) and i < len(aligned_table)
         ]
 
         if cmb_row_indices:
             # Take ONLY parameters that have a non-empty value in at least one CMB row
             cmb_param_names: list[str] = []
             for j, pname in enumerate(param_labels):
-                if any(str(aligned_table[i][j]).strip() for i in cmb_row_indices):
+                if any(
+                    j < len(aligned_table[i])
+                    and str(aligned_table[i][j]).strip()
+                    for i in cmb_row_indices
+                ):
                     cmb_param_names.append(pname)
 
             if cmb_param_names:
@@ -602,11 +607,18 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
             print(file=out)
 
             # 2) Detailed CMB parameter table (only if there ARE CMB observations)
-            cmb_row_indices = [i for i, name in enumerate(obs_names) if "CMB" in str(name)]
+            cmb_row_indices = [
+                i for i, name in enumerate(obs_names)
+                if "CMB" in str(name) and i < len(aligned_table)
+            ]
             if cmb_row_indices:
                 cmb_param_names: list[str] = []
                 for j, pname in enumerate(param_labels):
-                    if any(str(aligned_table[i][j]).strip() for i in cmb_row_indices):
+                    if any(
+                        j < len(aligned_table[i])
+                        and str(aligned_table[i][j]).strip()
+                        for i in cmb_row_indices
+                    ):
                         cmb_param_names.append(pname)
 
                 if cmb_param_names:

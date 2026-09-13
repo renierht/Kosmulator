@@ -25,6 +25,7 @@ import logging
 
 import numpy as np
 from scipy.optimize import minimize
+from scipy.special import logsumexp #Required for WAIC
 
 import User_defined_modules as UDM
 from Kosmulator_main import utils as U
@@ -81,6 +82,31 @@ def _format_pm(value, minus, plus):
     return rf"${v_str}^{{+{hi_str}}}_{{-{lo_str}}}$"
 
 
+#Functions for WAIC calculation
+def compute_lppd(log_lik_matrix):
+    """ 
+    Couple notes on this:
+    lppd - log pointwise posterior predictive density. Measure of how well fitted statistical model predicts observed data.
+    """
+    S = log_lik_matrix.shape[0] #1000
+    c = np.max(log_lik_matrix, axis = 0) #finds max loglike for each samples parameter for all samples
+    #subtracting c prevents underflow to 0 which could crash the program.
+    lppd_i = c + np.log(np.sum(np.exp(log_lik_matrix - c), axis = 0)) - np.log(S)
+    return np.sum(lppd_i)
+
+def compute_p_waic(log_lik_matrix):
+    S = log_lik_matrix.shape[0] #1000
+    N = log_lik_matrix.shape[1] #60
+    pwi = np.var(log_lik_matrix, ddof = 1, axis = 0)
+    return np.sum(pwi)
+
+def compute_waic(log_lik_matrix):
+    lppd = compute_lppd(log_lik_matrix)
+    pw = compute_p_waic(log_lik_matrix)
+    waic = -2.0 * lppd + 2.0 * pw
+    return waic
+
+
 def calculate_asymmetric_from_samples(samples, parameters, observations):
     """
     Calculate median, upper, and lower uncertainties from MCMC samples.
@@ -99,6 +125,24 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
         if isinstance(obs_data_input, dict):
             obs_samples = obs_data_input["samples"]
             log_like = obs_data_input.get("loglike")
+
+            #Print for waic testing
+            # --- Diagnostic prints for WAIC ---
+            print(f"\n--- Diagnostic: {obs} ---")
+            print(
+                f"obs_samples type: {type(obs_samples)}, shape: {np.shape(obs_samples)}"
+            )
+            print(f"log_like type:    {type(log_like)}, shape: {np.shape(log_like)}")
+
+            if log_like is not None:
+                ll_test = np.asarray(log_like)
+                print(f"log_like ndim:    {ll_test.ndim}")
+                print(
+                    f"log_like sample values: {ll_test.ravel()[:3]}"
+                )  # show first 3 entries
+
+
+            
         else:
             obs_samples = obs_data_input
             log_like = None
@@ -113,18 +157,18 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
             mle_idx = np.nanargmax(valid_ll)
             mle_vector = valid_samples[mle_idx]
 
+            #WAIC matrix: only select random observations are used to spare
+            #Computational time
+            #WAIC needs log_like.shape [ (number of posterior draws),(number of observations)]
+            #Each element must be the loglikelihood for one observed datapoint, not the loglike across repeated columns
+
             #For DIC calculations
             D_bar = float(np.nanmean(dev_samples))
             D_var = float(4.0 * np.nanvar(valid_ll, ddof = 1))
             theta_bar = np.nanmean(valid_samples, axis = 0)
 
-            # DEBUG — diagnose D_bar vs D_hat gap
-            print(f"[DEBUG DEVIANCE] obs={obs}")
-            print(f"[DEBUG DEVIANCE]   n_samples = {dev_samples.size}")
-            print(f"[DEBUG DEVIANCE]   min={np.nanmin(dev_samples):.3f}  max={np.nanmax(dev_samples):.3f}")
-            print(f"[DEBUG DEVIANCE]   mean={D_bar:.3f}  median={np.nanmedian(dev_samples):.3f}  std={np.sqrt(D_var):.3f}")
-
-            
+            #WAIC set-up
+            #Whats required is a log_like matrix. Once we got that we can use the previous functions
 
         else:
             mle_vector = None

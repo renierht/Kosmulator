@@ -488,6 +488,7 @@ def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
         
         #Dark Energy: turn off Lambda, turn on CPL fluid
         "Omega_Lambda": 0.0,
+        'use_ppf': "yes",
         "w0_fld": w0,
         "wa_fld": wa,
         "cs2_fld": 1.0,
@@ -526,6 +527,7 @@ def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
     except Exception as e:
         logger.exception("Unexpected error in wowaCDM_v_CMB: %s | cosmo_params=%s", e, cosmo_params)
         return None
+wowaCDM_v2_CMB = wowaCDM_v_CMB
 # ============================================================================
 #  Model registry / discovery
 #  ---------------------------------------------------------------------------
@@ -561,6 +563,10 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
         ["Omega_m", "Omega_b", "H_0", "n_s", "tau_reio", "ln10^10_As", "n"],
     ),
     "wowaCDM_v_CMB":(
+        wowaCDM_v_CMB,
+        ["Omega_m", "Omega_b","H_0", "n_s", "tau_reio", "ln10^10_As", "w0", "wa"],
+    ),
+    "wowaCDM_v2_CMB":(
         wowaCDM_v_CMB,
         ["Omega_m", "Omega_b","H_0", "n_s", "tau_reio", "ln10^10_As", "w0", "wa"],
     )

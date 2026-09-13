@@ -69,12 +69,12 @@ logging.basicConfig(level=logging.INFO)
 # ----------------------------------------------------------------------
 
 # Models implemented in User_defined_modules.py
-model_names: List[str] = ["wowaCDM_v2"]
+model_names: List[str] = ["LCDM_v"]
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
     #['DESI_DR2', 'CMB_lowl', 'CMB_hil'],
-    ['DESI_DR2'],
+    #['DESI_DR2'],
     #['DESI_DR2','DESY5'],
     #['BBN_PryMordial','DESI_DR2', 'PantheonP'],
     #['DESI_DR2', 'Union3'],
@@ -84,7 +84,7 @@ observations: List[List[str]] = [
     #['OHD'],
     #['CC'],
     #['PantheonP'],
-    ['DESI_DR2','PantheonPS'],
+    #['DESI_DR2','PantheonPS'],
     #['PantheonPS','CC'],
     #['f_sigma_8'],
     #['f'],
@@ -107,7 +107,7 @@ observations: List[List[str]] = [
     #["DESI_DR2","CMB_lowl"],
     #["DESI_DR2","CMB_lowl","BBN_PryMordial"],
     #["CMB_lowl"],
-    #['CMB_hil'],
+    ['CMB_hil'],
     #['CMB_lensing', 'CMB_lowl'],
     #['CMB_hil_TT'],
     #["CC", "DESI_DR1"],
@@ -121,9 +121,9 @@ observations: List[List[str]] = [
 reference_model: str = "LCDM_v"
 
 # Sampler settings
-nwalkers: int = 32
-nsteps: int = 12500
-burn: int = 3750
+nwalkers: int = 112
+nsteps: int = 1000
+burn: int = 200
 convergence: float = 0.01
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
@@ -149,8 +149,8 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "alpha": (0.00, 1.00),
     "B": (0.00, 0.333),
     "f1": (0.01, 100.0),
-    'w0': (-3.0, 1.0),
-    'wa': (-3.0, 2.0),
+    'w0': (-2.0, -0.3),
+    'wa': (-2.0, 1.0),
 }
 
 # Reference “true” values (for diagnostics/plots)

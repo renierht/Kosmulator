@@ -398,6 +398,11 @@ def cmb_hil_loglike(pd: Dict[str, float], model_name: str, floor: float = -1e10)
         logger.error("cmb_hil_loglike: _get_cls_from_model failed: %s", e)
         return float(floor)
 
+    # CLASS returns None for numerically invalid proposals. Treat those points
+    # as rejected samples instead of allowing the sampler to crash below.
+    if cl is None or not isinstance(cl, dict):
+        return float(floor)
+
     def _block(name: str, n: int) -> Optional[np.ndarray]:
         """Return C_ℓ(name) for ℓ=0..n-1 in µK^2, contiguous float64, or None if n==0."""
         if n <= 0:
