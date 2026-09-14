@@ -529,12 +529,13 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
                 model_name=model,
                 reference_chi_squared=reference_chi2,
             )
-            IC_lines = PP.interpret_delta_IC(stats['dAIC'], stats['dBIC'], stats['dAICc'], stats['dDIC'], stats['dWAIC']).splitlines()
+            IC_lines = PP.interpret_delta_IC(stats['dAIC'], stats['dBIC'], stats['dAICc'], stats['dDIC'], stats['dWAIC'], stats['sigma']).splitlines()
             aic_text = IC_lines[0].strip() if len(IC_lines) > 0 else "No AIC interpretation available."
             bic_text = IC_lines[1].strip() if len(IC_lines) > 1 else "No BIC interpretation available."
             aicc_text = IC_lines[2].strip() if len(IC_lines) > 2 else "No AICc interpretation available"
             dic_text = IC_lines[3].strip() if len(IC_lines) > 3 else "No DIC interpretation available"
             waic_text = IC_lines[4].strip() if len(IC_lines) > 3 else "No WAIC interpretation available"
+            sigma_text = IC_lines[5].strip() if len(IC_lines) > 3 else "No Sigma interpretation available"
 
             # Resolve the raw obs list for this obs_key  (FIX: use CONFIG[model], not CONFIG[model_name])
             obs_list, obs_idx = None, None
@@ -565,6 +566,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
                 'WAIC': stats['WAIC'],
                 'dWAIC': stats['dWAIC'],
                 'dChi': stats['dChi'],
+                'sigma': stats['sigma'],
             }
 
             # IMPORTANT: Do NOT include S in the stats row — it will be printed as a stand-alone line
@@ -578,6 +580,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
                 "AICc Interpretation": aicc_text,
                 "DIC Interpretation": dic_text,
                 "WAIC Interpretation": waic_text,
+                'Significance Interpretation': sigma_text,
             })
 
         # Persist to disk

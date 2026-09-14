@@ -700,11 +700,13 @@ def run_mcmc(
           - 'mixed'   : same, but cross-engine chain reuse is allowed.
           - 'fastest' : per-observation choice (Zeus for simple LSS; EMCEE for CMB/BBN).
         """
+        print(f'ENGINE DEBUG: model name {model_name}')
         mode = getattr(K, "engine_mode", "mixed")
 
         # Hard CLI overrides always win
         if getattr(K, "force_emcee", False):
             return "emcee"
+        
         if getattr(K, "force_zeus", False) and zeus is not None:
             return "zeus"
 
@@ -784,7 +786,7 @@ def run_mcmc(
             reference_vals,
             bounds,
             nlp,
-            maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "1000")),
+            maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "2000")),
             maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", "2000")),
             disp=False,
         )

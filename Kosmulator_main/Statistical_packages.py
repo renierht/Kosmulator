@@ -28,6 +28,8 @@ import numpy as np
 import scipy.linalg as la
 from scipy.interpolate import PchipInterpolator
 
+
+
 from Kosmulator_main.constants import (
     C_KM_S,
     T_CMB_DEFAULT,
@@ -1189,7 +1191,7 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
     theo[m8] = DM[m8] / rs
 
     if not np.isfinite(theo).all():
-        return 1e300
+        return np.inf
 
     diff = theo - meas
 
@@ -1888,3 +1890,7 @@ def dArd(
     rd = _resolve_rd(p, Type or "")
     out = (DM / (1.0 + z)) / rd
     return out if out.size > 1 else float(out)
+
+
+
+

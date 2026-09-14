@@ -315,7 +315,9 @@ def main(
             elif force_zeus and (zeus is not None):
                 eng = "zeus"
             else:
-                if touches_cmb_bbn:
+                if m.startswith("wowaCDM"):
+                    eng = "emcee"
+                elif touches_cmb_bbn:
                     eng = "emcee"
                 else:
                     eng = "zeus" if (can_vec and zeus is not None) else "emcee"

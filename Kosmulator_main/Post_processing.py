@@ -26,6 +26,8 @@ import logging
 import numpy as np
 from scipy.optimize import minimize
 from scipy.special import logsumexp #Required for WAIC
+from scipy.stats import chi2, norm
+
 
 import User_defined_modules as UDM
 from Kosmulator_main import utils as U
@@ -105,6 +107,27 @@ def compute_waic(log_lik_matrix):
     pw = compute_p_waic(log_lik_matrix)
     waic = -2.0 * lppd + 2.0 * pw
     return waic
+
+# -----------------------------------------------------------------------------
+# Significance calculator function for statistical analysis
+# -----------------------------------------------------------------------------
+def significance(dchi, r):
+    """
+    p - tail probability
+    sigma - equivalent gaussian significance
+    """
+    print(f'SIG DEBUG Chi2: {dchi}')
+    print(f'SIG DEBUG r: {r}')
+    dchi = np.abs(dchi)
+    r = np.round(r, decimals = 0)
+    if np.isnan(dchi) or np.isnan(r):
+        sigma = 0
+    else:
+        p = chi2.sf(dchi, df = r)
+        sigma = norm.isf(p/2)
+    print(f'SIG DEBUG Sigma: {sigma}')
+    return np.round(sigma, decimals = 1)
+
 
 
 def calculate_asymmetric_from_samples(samples, parameters, observations):
@@ -453,6 +476,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
     reference_dic: dict[str, float] = {}
     reference_waic: dict[str, float] = {}
     reference_chi: dict[str, float] = {}
+    reference_pD : dict[str, float] = {}
     
 
     for model_name, obs_results in best_fit_values.items():
@@ -713,7 +737,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 # D_hat is the polished minimum chi-squared found by Nelder-Mead
                 #If DIC values are not working, try the variance (Gelman) definition: p_D = D_var/2.0 and dic = D_bar + 2.0*p_D
                 D_hat = chi_squared_total
-                p_D = D_bar - D_hat       #Spiegelhalter: D_bar - D_hat   Gelman: D_var/2.0
+                p_D = D_bar - D_hat       #Spiegelhalter: D_bar - D_hat   Gelman: D_var/2.0 (Effective parameters)
                 dic = D_hat + 2.0 * p_D  # Spiegelhalter: D_hat + 2.0*p_D
 
                 print(f"[DEBUG DIC] model={model_name} obs={obs_name}")
@@ -751,6 +775,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 reference_aicc[obs_name] = aicc
                 reference_dic[obs_name] = dic
                 reference_waic[obs_name] = waic
+                reference_pD[obs_name] = p_D
 
     # Calculate delta values relative to the reference model.
     for model_name, obs_results in results.items():
@@ -761,6 +786,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             stats["dDIC"] = stats["DIC"] -reference_dic.get(obs_name, stats["DIC"])
             stats["dWAIC"] = stats["WAIC"] - reference_waic.get(obs_name, stats["WAIC"])
             stats['dChi'] = stats['Chi_squared'] - reference_chi.get(obs_name, stats['Chi_squared'])
+            stats['sigma'] = significance(stats['dChi'], (stats['p_D'] - reference_pD.get(obs_name, stats['p_D'])))
 
     return results
 
@@ -846,6 +872,7 @@ def interpret_delta_IC(
         delta_aicc,
         delta_dic,
         delta_waic,
+        sigma,
         ) -> str:
     """
     Turn ΔAIC / ΔBIC into human-readable model-comparison statements.
@@ -856,6 +883,7 @@ def interpret_delta_IC(
     delta_aicc = float(np.asarray(delta_aicc).reshape(()))
     delta_dic = float(np.asarray(delta_dic).reshape(()))
     delta_waic = float(np.asarray(delta_waic).reshape(()))
+    sigma = float(np.asarray(sigma).reshape(()))
 
     feedback = []
 
@@ -939,11 +967,29 @@ def interpret_delta_IC(
         )
     elif delta_waic < 7:
         feedback.append(
-            f"Delta WAIC Positive evidence against the model (ΔWAIC = {delta_waic:.2f})."
+            f"Delta WAIC: Positive evidence against the model (ΔWAIC = {delta_waic:.2f})."
         )
     else:
         feedback.append(
             f"Delta WAIC: Strong evidence against the model (ΔWAIC = {delta_waic:.2f})."
+        )
+
+    #--- Significance ---
+    if sigma < 2:
+        feedback.append(
+            f"Significance: Indistinguishable (Sigma = {sigma:.2f})."
+        )
+    elif sigma < 4:
+        feedback.append(
+            f"Significance: Slight evidence against the model (Sigma = {sigma:.2f})."
+        )
+    elif sigma < 7:
+        feedback.append(
+            f"Significance: Positive evidence against the model (Sigma = {sigma:.2f})."
+        )
+    else:
+        feedback.append(
+            f"Significance: Strong evidence against the model (Sigma = {sigma:.2f})."
         )
 
 
