@@ -84,30 +84,6 @@ def _format_pm(value, minus, plus):
     return rf"${v_str}^{{+{hi_str}}}_{{-{lo_str}}}$"
 
 
-#Functions for WAIC calculation
-def compute_lppd(log_lik_matrix):
-    """ 
-    Couple notes on this:
-    lppd - log pointwise posterior predictive density. Measure of how well fitted statistical model predicts observed data.
-    """
-    S = log_lik_matrix.shape[0] #1000
-    c = np.max(log_lik_matrix, axis = 0) #finds max loglike for each samples parameter for all samples
-    #subtracting c prevents underflow to 0 which could crash the program.
-    lppd_i = c + np.log(np.sum(np.exp(log_lik_matrix - c), axis = 0)) - np.log(S)
-    return np.sum(lppd_i)
-
-def compute_p_waic(log_lik_matrix):
-    S = log_lik_matrix.shape[0] #1000
-    N = log_lik_matrix.shape[1] #60
-    pwi = np.var(log_lik_matrix, ddof = 1, axis = 0)
-    return np.sum(pwi)
-
-def compute_waic(log_lik_matrix):
-    lppd = compute_lppd(log_lik_matrix)
-    pw = compute_p_waic(log_lik_matrix)
-    waic = -2.0 * lppd + 2.0 * pw
-    return waic
-
 # -----------------------------------------------------------------------------
 # Significance calculator function for statistical analysis
 # -----------------------------------------------------------------------------
@@ -180,10 +156,7 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
             mle_idx = np.nanargmax(valid_ll)
             mle_vector = valid_samples[mle_idx]
 
-            #WAIC matrix: only select random observations are used to spare
-            #Computational time
-            #WAIC needs log_like.shape [ (number of posterior draws),(number of observations)]
-            #Each element must be the loglikelihood for one observed datapoint, not the loglike across repeated columns
+            #Corrections need
 
             #For DIC calculations
             D_bar = float(np.nanmean(dev_samples))
