@@ -424,6 +424,7 @@ def optimise_initial_guess(
     """
     Nelder-Mead simplex optimization to find a robust MAP center across non-smooth boundaries.
     """
+    
     NO_OPT = os.environ.get("KOSM_NO_OPT", "0") == "1"
     if NO_OPT:
         return np.asarray(reference_vals, float), None
@@ -447,6 +448,9 @@ def optimise_initial_guess(
     # If the simplex failed to move away from the starting guess, log or inspect
     if not sol.success:
         logger.warning("Nelder-Mead pre-fit did not achieve full convergence: %s", sol.message)
+
+    print(f"[OPT DEBUG] reference_vals = {reference_vals}")
+    print(f"[OPT DEBUG] result = {ic}")
 
     # Nelder-Mead is derivative-free and does not produce an inverse Hessian
     return ic, None

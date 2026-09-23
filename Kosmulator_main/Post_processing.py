@@ -156,7 +156,10 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
             mle_idx = np.nanargmax(valid_ll)
             mle_vector = valid_samples[mle_idx]
 
-            #Corrections need
+            #Corrections need for better mle results
+            top_n = min(5, len(valid_ll))
+            top_idx = np.argsort(valid_ll)[-top_n:]
+            best_candidate = valid_samples[top_idx]
 
             #For DIC calculations
             D_bar = float(np.nanmean(dev_samples))
@@ -269,6 +272,8 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
         if D_bar is not None:
             structured_values[obs]["__D_bar__"] = float(D_bar)
             structured_values[obs]["__D_var__"] = float(D_var)
+            structured_values[obs]["__best_candidates__"] = best_candidate
+            structured_values[obs]["__param_names__"] = obs_param_names
 
         # Add the row to the LaTeX table
         latex_table.append(row)
@@ -383,7 +388,8 @@ def find_polished_mle(
     compute_chi2_fn,
     params_dict_median: dict[str, float],
     prior_bounds: dict[str, tuple[float, float]] | None = None,
-    max_evals: int = 300,
+    max_evals: int = 2000,
+    candidate_starts: list[dict[str, float]] | None = None,
 ) -> tuple[dict[str, float], float]:
     """
     Find the Maximum Likelihood Estimate (MLE) by polishing
@@ -414,24 +420,56 @@ def find_polished_mle(
             pass
         return 1e12
 
-    res = minimize(
-        objective,
-        x0,
-        method="Nelder-Mead",
-        options={
-            "maxiter": max_evals,
-            "maxfev": max_evals,
-            "xatol": 1e-3,
-            "fatol": 1e-3,
-            "disp": False,
-        },
-    )
+    starts = [x0]
+    if candidate_starts:
+        for cand in candidate_starts:
+            starts.append(np.array([cand[p] for p in p_names], dtype = float))
 
-    if res.success and np.isfinite(res.fun) and (res.fun <= baseline_chi2):
-        best_p = {p: float(res.x[idx]) for idx, p in enumerate(p_names)}
-        return best_p, float(res.fun)
+    best_chi2 = baseline_chi2
+    best_p = params_dict_median
 
-    return params_dict_median, baseline_chi2
+    for start in starts:
+        res = minimize(
+            objective, 
+            start, 
+            method = "Nelder-Mead",
+            options = {
+                "maxiter": max_evals,
+                "maxfev": max_evals,
+                "xatol": 1e-3,
+                "fatol":1e-3,
+                "disp": False,
+            },
+        )
+        if res.success and np.isfinite(res.fun) and res.fun < best_chi2:
+            best_chi2 = res.fun
+            best_p = {p: float(res.x[idx]) for idx, p in enumerate(p_names)}
+        
+
+    return best_p, best_chi2
+
+def compute_lppd(log_lik_matrix):
+    """ 
+    Couple notes on this:
+    lppd - log pointwise posterior predictive density. Measure of how well fitted statistical model predicts observed data.
+    """
+    S = log_lik_matrix.shape[0] #1000
+    c = np.max(log_lik_matrix, axis = 0) #finds max loglike for each samples parameter for all samples
+    #subtracting c prevents underflow to 0 which could crash the program.
+    lppd_i = c + np.log(np.sum(np.exp(log_lik_matrix - c), axis = 0)) - np.log(S)
+    return np.sum(lppd_i)
+
+def compute_p_waic(log_lik_matrix):
+    S = log_lik_matrix.shape[0] #1000
+    N = log_lik_matrix.shape[1] #60
+    pwi = np.var(log_lik_matrix, ddof = 1, axis = 0)
+    return np.sum(pwi)
+
+def compute_waic(log_lik_matrix):
+    lppd = compute_lppd(log_lik_matrix)
+    pw = compute_p_waic(log_lik_matrix)
+    waic = -2.0 * lppd + 2.0 * pw
+    return waic
 
 
 def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
@@ -459,6 +497,15 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
 
             D_bar = params.pop("__D_bar__", None) #Popped before the loop iterates through param
             D_var = params.pop("__D_var__", None)
+            best_candidates = params.pop("__best_candidates__", None)
+            cand_param_names = params.pop("__param_names__", None)
+
+            candidate_starts_list = None
+            if best_candidates is not None and cand_param_names is not None:
+                candidate_starts_list = [
+                    {p: float(row[i]) for i, p in enumerate(cand_param_names)}
+                    for row in best_candidates
+                ]
 
 
             #Returns the mle_values needed for AIC and BIC
@@ -652,6 +699,8 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 params_dict_median=param_dict,
                 prior_bounds=prior_map,
                 max_evals=300,
+                candidate_starts= candidate_starts_list,
+
             )
 
             # Re-evaluate once at the polished minimum to fetch exact N data points
