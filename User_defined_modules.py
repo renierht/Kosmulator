@@ -193,6 +193,127 @@ def wowaCDM_MODEL_vectorised_v2(z: Number, p: Dict[str, float]) -> Number:
     return _scalar_or_array(out)
 
 
+"""
+Non-linear model (Marcel)
+"""
+ALLOW_NEGATIVE_ENERGIES = False
+ALLOW_BIG_RIP = True
+ALLOW_DOOM_FACTOR_INSTABILITIES = False
+
+def NonLinear_IDE_2_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """
+    Non-linear IDE Model 2:
+    Q = 3Hδ(ρ_dm^2)/(ρ_dm + ρ_de)
+
+    Parameters in `p`:
+      • Omega_m
+      • w
+      • delta
+    """
+    z_arr = _asarray(z)
+
+    Om = float(p["Omega_m"])
+    Ob = float(p.get("Omega_b", 0.048))
+    Or = float(p.get("Omega_r", 0.0))
+    w = float(p["w"])
+    delta = float(p["delta"])
+
+
+    Odm0 = Om - Ob
+    Ode0 = 1.0 - Om - Or
+
+    # Base physical safeguard: present-day densities must be positive
+    if Odm0 <= 0.0 or Ode0 <= 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    r0 = Odm0 / Ode0
+
+    # -----------------------------------------------------------
+    # Doom Factor Stability Condition
+    # -----------------------------------------------------------
+    # d = δr^2 / [(1+r)(1+w)]
+    #
+    # Table condition:
+    #   w < -1.
+    if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+        if w >= -1.0:
+            return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Positive-Energy Conditions: Table II
+    # -----------------------------------------------------------
+    # Combined doom + positive-energy condition:
+    #   0 < δ <= -w/r0,
+    #   w < -1.
+    if not ALLOW_NEGATIVE_ENERGIES:
+        upper = -w / r0
+
+        # If doom-factor stability is also enforced, use the combined
+        # condition 0 < δ <= upper. Otherwise allow the Table II boundary δ = 0.
+        if not ALLOW_DOOM_FACTOR_INSTABILITIES:
+            if delta <= 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+        else:
+            if delta < 0.0 or delta > upper:
+                return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # No Future Big Rip: Table II
+    # -----------------------------------------------------------
+    if not ALLOW_BIG_RIP:
+        if w < -1.0:
+            return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Mathematical Bounds (Table I) - ALWAYS ENFORCED
+    # -----------------------------------------------------------
+    if w >= 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    if delta <= w or delta > (-w / r0):
+        return np.full_like(z_arr, np.nan)
+
+    if w == 0.0 or (w - delta) == 0.0:
+        return np.full_like(z_arr, np.nan)
+
+    A = (w + delta * r0) * (1.0 + z_arr)**(3.0 * w)
+
+    second_base = (
+        (A + r0 * (w - delta))
+        / (w * (1.0 + r0))
+    )
+
+    # Avoid non-real powers from negative/zero bases
+    if (not np.isfinite(second_base).all()) or (second_base.min() <= 0.0):
+        return np.full_like(z_arr, np.nan)
+
+    # -----------------------------------------------------------
+    # Analytical E(z) Calculation (Equation 6)
+    # -----------------------------------------------------------
+    first_factor = (
+        Odm0
+        + Ode0 * ((A - delta * r0) / w)
+    )
+
+    expansion_exp = 3.0 * (1.0 - (w * delta) / (w - delta))
+    second_exp = delta / (w - delta)
+
+    E2 = (
+        first_factor
+        * (1.0 + z_arr)**expansion_exp
+        * second_base**second_exp
+        + Ob * (1.0 + z_arr)**3
+        + Or * (1.0 + z_arr)**4
+    )
+
+    if (not np.isfinite(E2).all()) or (E2.min() <= 0.0):
+        out = np.full_like(z_arr, np.nan)
+    else:
+        out = np.sqrt(E2)
+
+    return _scalar_or_array(out)
+
+
 
 def LCDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
     """Slow but simple non-vectorised LCDM wrapper (kept for completeness)."""
@@ -552,6 +673,7 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
     "f1CDM_nv": (f1CDM_MODEL_non_vectorised, ["Omega_m", "n"]),
     "wowaCDM_v": (wowaCDM_MODEL_vectorised, ["Omega_m","w0","wa"]),
     "wowaCDM_v2": (wowaCDM_MODEL_vectorised_v2, ["Omega_m","w0","wa"]),
+    "NonLinear_IDE_2": (NonLinear_IDE_2_vectorised, ["Omega_m", "w", "delta"]),
 
     # CMB-specific models for CLASS Cls (used by CMB likelihoods)
     "LCDM_v_CMB": (

@@ -76,9 +76,9 @@ observations: List[List[str]] = [
     #['DESI_DR2', 'CMB_lowl']
     #['DESI_DR2', 'CMB_lowl', 'CMB_hil'],
     #['DESI_DR2'],
-    ['DESI_DR2','DESY5'],
+    #['DESI_DR2','DESY5'],
     #['BBN_PryMordial','DESI_DR2', 'PantheonP'],
-    #['DESI_DR2', 'Union3'],
+    ['DESI_DR2', 'Union3'],
     #['DESI_DR2', 'PantheonP'],
     #['JLA'],
     #['JLA','CC'],
@@ -86,6 +86,7 @@ observations: List[List[str]] = [
     #['CC'],
     #['PantheonP'],
     #['DESI_DR2','PantheonPS'],
+    #['BBN_PryMordial', 'CC', 'DESI_DR2', 'Pantheon'],
     #['PantheonPS','CC'],
     #['f_sigma_8'],
     #['f'],
@@ -122,9 +123,9 @@ observations: List[List[str]] = [
 reference_model: str = "LCDM_v"
 
 # Sampler settings
-nwalkers: int = 32
-nsteps: int = 5000
-burn: int = 500
+nwalkers: int = 128
+nsteps: int = 150000
+burn: int = 15000
 convergence: float = 0.01
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
@@ -152,6 +153,8 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "f1": (0.01, 100.0),
     'w0': (-3.0, 1.0),
     'wa': (-3.0, 2.0),
+    'w': (-2.0, -1.0),
+    'delta':(0.0, 0.5),
 }
 
 # Reference “true” values (for diagnostics/plots)

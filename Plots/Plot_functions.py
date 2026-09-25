@@ -1548,8 +1548,9 @@ def normalize_save_roots(PLOT_SETTINGS: Dict[str, Any]) -> None:
 def base_dir(PLOT_SETTINGS: Mapping[str, Any]) -> str:
     """Return unified base dir INCLUDING exactly one `<output_suffix>`."""
     root = os.path.normpath(str(PLOT_SETTINGS.get("save_root", DEFAULT_PLOTS_BASE)))
-    suffix = str(PLOT_SETTINGS.get("output_suffix", "default_run"))
-    return root if os.path.basename(root) == suffix else os.path.join(root, suffix)
+    suffix = os.path.normpath(str(PLOT_SETTINGS.get("output_suffix", "default_run")))
+    already_appended = (root == suffix) or root.endswith(os.sep + suffix)
+    return root if already_appended else os.path.join(root, suffix)
 
 
 def save_figure(fig, model_name: str, obs_key: Optional[str], fname_suffix: str, PLOT_SETTINGS: Mapping[str, Any]) -> str:

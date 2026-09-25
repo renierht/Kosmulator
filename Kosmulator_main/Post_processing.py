@@ -274,6 +274,7 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
             structured_values[obs]["__D_var__"] = float(D_var)
             structured_values[obs]["__best_candidates__"] = best_candidate
             structured_values[obs]["__param_names__"] = obs_param_names
+            structured_values[obs]["__samples__"] = obs_samples
 
         # Add the row to the LaTeX table
         latex_table.append(row)
@@ -499,6 +500,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             D_var = params.pop("__D_var__", None)
             best_candidates = params.pop("__best_candidates__", None)
             cand_param_names = params.pop("__param_names__", None)
+            obs_samples_for_waic = params.pop("__samples__", None)
 
             candidate_starts_list = None
             if best_candidates is not None and cand_param_names is not None:
@@ -746,6 +748,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 aicc = aic
             dic = float("nan")
             p_D = float("nan")
+            waic = float('nan')
 
             #DIC calculations: 
             """
@@ -770,8 +773,36 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 print(f"[DEBUG DIC]   Calculated DIC             = {dic:.4f}")
 
             #WAIC Implememtation
-            waic = float('nan')
-            waic = 0
+            if obs_samples_for_waic is not None:
+                try:
+                    all_rows = []
+                    N_total = obs_samples_for_waic.shape[0]
+                    S = 1000
+                    shared_idx = np.random.choice(N_total, size = min(S, N_total), replace = False)
+                    for single_obs, single_type in zip(obs_entry, obs_types):
+                        if single_obs not in data:
+                            continue
+                        matrix = SP.build_log_like_matrix(
+                            flat_samples=obs_samples_for_waic,
+                            obs_data=data[single_obs],
+                            obs_type=single_type,
+                            obs_name=single_obs,
+                            Model_func=MODEL_func,
+                            CONFIG=CONFIG[model_name],
+                            obs_index=obs_index,
+                            S=1000,
+                            idx = shared_idx,
+                        )
+                        if matrix.size > 0:
+                            all_rows.append(matrix)
+
+                    if all_rows:
+                        full_matrix = np.concatenate(all_rows, axis=1)  # (S, N_total)
+                        waic = compute_waic(full_matrix)
+                        print(f"[WAIC] {model_name} {obs_name}: {waic:.4f}")
+                except Exception as e:
+                    print(f"[WAIC WARNING] {model_name} {obs_name}: {e}")
+                    waic = float('nan')
 
             
            

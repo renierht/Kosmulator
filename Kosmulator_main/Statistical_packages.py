@@ -1893,4 +1893,79 @@ def dArd(
 
 
 
+# -----------------------------------------------------------------------------
+# Pointwise-loglike calculators
+# -----------------------------------------------------------------------------
+
+def pointwise_log_like_CC(obs_data, model, param_dict):
+    H_data = obs_data['type_data']
+    H_err = obs_data['type_data_error']
+    residual = H_data - model
+
+    return -0.5 * (residual / H_err) ** 2
+
+def pointwise_log_like_DESI(obs_data, Model_func, param_dict, obs_type):
+    chi2 = Calc_DESI_chi(obs_data, Model_func, param_dict, obs_type)
+    return np.array([-0.5 * chi2]) #Shape (1,)
+
+def pointwise_log_like_SNe(obs_data, model, param_dict):
+    if "inv_cov" in obs_data:
+        # Correlated (DESY5, Union3) → N=1
+        chi2 = Calc_Generic_SNe_chi(obs_data, model, param_dict)
+        return np.array([-0.5 * chi2])
+    else:
+        # Diagonal errors (JLA) → N = number of SNe
+        residual = obs_data["type_data"] - param_dict.get("M_abs", -19.35) - model
+        err = obs_data["type_data_error"]
+        return -0.5 * (residual / err) ** 2                 # shape (N,) — only valid if no inv_cov 
+
+def pointwise_log_like_PantP(obs_data, model, param_dict):
+    chi2 = Calc_PantP_chi(
+        obs_data["m_b_corr"], obs_data["IS_CALIBRATOR"],
+        obs_data["CEPH_DIST"], obs_data.get("cov"), model, param_dict
+    )
+    return np.array([-0.5 * chi2])                    # shape (1,)
+
+def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
+                           Model_func, CONFIG, obs_index, S=1000, idx=None):
+    from Kosmulator_main import utils
+
+    N_total = flat_samples.shape[0]
+    if idx is None:
+        idx = np.random.choice(N_total, size=min(S, N_total), replace=False)
+    draws   = flat_samples[idx]
+    params  = CONFIG["parameters"][obs_index]
+
+    rows = []
+    for theta in draws:
+        param_dict = dict(zip(params, theta))
+        param_dict = utils.ensure_background_params(param_dict)
+
+        if obs_name in ("DESI_DR1", "DESI_DR2", "BAO"):
+            ll_i = pointwise_log_like_DESI(obs_data, Model_func, param_dict, obs_type)
+
+        elif obs_name in ("PantheonP", "PantheonPS"):
+            z    = obs_data["zHD"]
+            d_c  = utils.Comoving_distance_vectorized(Model_func, z, param_dict)
+            model = 25.0 + 5.0 * np.log10(d_c * (1.0 + z))
+            ll_i  = pointwise_log_like_PantP(obs_data, model, param_dict)
+
+        elif obs_type == "SNe":
+            z    = obs_data["redshift"]
+            d_c  = utils.Comoving_distance_vectorized(Model_func, z, param_dict)
+            model = 25.0 + 5.0 * np.log10(d_c * (1.0 + z))
+            ll_i  = pointwise_log_like_SNe(obs_data, model, param_dict)
+
+        elif obs_type in ("CC", "OHD"):
+            z     = obs_data["redshift"]
+            E_z   = utils.E_of_z(z, Model_func, param_dict)
+            model = param_dict["H_0"] * E_z
+            ll_i  = pointwise_log_like_CC(obs_data, model, param_dict)
+
+        else:
+            continue  # skip obs types not yet supported
+
+        rows.append(ll_i)
+
+    return np.array(rows)   # (S, N)                         # (S, N)
 
