@@ -36,6 +36,16 @@ R_D_SINGLETON: float = 147.5
 #: GR-like growth index used when fσ8 is a singleton (and as a default)
 GAMMA_FS8_SINGLETON: float = 0.55
 
+#: Optional strict r_d calibration using the matching CLASS background.
+#: Keep False until the all-model integration tests have passed.
+DERIVE_RD_WITH_MODEL_CLASS: bool = False
+
+#: Fixed CLASS calibration settings used for model-derived r_d.
+RD_CLASS_OMEGA_B: float = 0.048
+RD_CLASS_N_EFF: float = 3.044
+RD_CLASS_SUM_MNU_EV: float = 0.06
+RD_CLASS_N_NCDM: int = 3
+
 
 # ======================================================================
 # 2. Data / path defaults

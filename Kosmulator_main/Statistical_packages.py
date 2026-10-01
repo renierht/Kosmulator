@@ -1053,9 +1053,17 @@ def Calc_BAO_chi(data, Model_func, param_dict, Type) -> float:
     )
     zs_dv = np.array([0.295, 1.491], dtype=float)
 
-    dm = dmrd(zs_full, Model_func, param_dict, Type)  # D_M / r_d
-    dh = dhrd(zs_full, Model_func, param_dict, Type)  # D_H / r_d
-    dv = dvrd(zs_dv, Model_func, param_dict, Type)    # D_V / r_d
+    try:
+        dm = dmrd(zs_full, Model_func, param_dict, Type)  # D_M / r_d
+        dh = dhrd(zs_full, Model_func, param_dict, Type)  # D_H / r_d
+        dv = dvrd(zs_dv, Model_func, param_dict, Type)    # D_V / r_d
+    except Exception:
+        from Kosmulator_main import rd_helpers as _RD
+
+        if _RD._model_class_rd_enabled(param_dict):
+            # Invalid model-specific CLASS background: reject this point.
+            return 1e300
+        raise
 
     if (not np.isfinite(dm).all()) or (not np.isfinite(dh).all()) or (not np.isfinite(dv).all()):
         raise FloatingPointError("BAO theory contains non-finite values (check model/params).")
@@ -1147,6 +1155,13 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
         if rs is None:
             rs = _try_compute_rd(param_dict)
         if rs is None:
+            from Kosmulator_main import rd_helpers as _RD
+
+            if _RD._model_class_rd_enabled(param_dict):
+                # Never replace a failed model-specific CLASS r_d with
+                # the legacy fixed fiducial sound horizon.
+                return 1e300
+
             rs = float(R_D_SINGLETON)
     rs = float(rs)
     if not np.isfinite(rs) or rs <= 0.0:

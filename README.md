@@ -6,7 +6,7 @@
 
 For installation instructions, general information about Kosmulator, model selection, dataset selection, sampler configuration, and setting parameter bounds, users should refer to the [`main` branch](https://github.com/renierht/Kosmulator). This branch specifically contains modifications of Kosmulator for **Interacting Dark Energy (IDE)** background models.
 
-The purpose of this branch is to add analytical background solutions for five linear and three non-linear IDE kernels, together with parameter-domain checks that can be used to exclude imaginary or undefined dark-sector densities, negative energy densities, future big-rip singularities, and early-time perturbative instabilities according to the doom-factor analysis.
+The purpose of this branch is to add analytical background solutions for five linear and three non-linear IDE kernels, together with parameter-domain checks that can be used to exclude imaginary or undefined dark-sector densities, negative energy densities, future big-rip singularities, and early-time perturbative instabilities according to the doom-factor analysis. The branch also contains a shared CLASS background backend used to compute the baryon-drag sound horizon consistently with the selected homogeneous IDE expansion history.
 
 ---
 
@@ -246,9 +246,96 @@ The doom-factor condition is used here as a preliminary background-level stabili
 
 ---
 
+## Shared CLASS background backend and model-derived sound horizon
+
+This branch contains a single shared CLASS source tree at
+
+```text
+Class/IDE_background/
+```
+
+for the eight IDE background models. A single backend is used instead of maintaining eight duplicated CLASS trees. Kosmulator selects the required homogeneous IDE background at runtime with the following selector:
+
+| `ide_model` | Kosmulator model |
+|---:|---|
+| 0 | Standard CLASS / IDE switched off |
+| 1 | `Linear_IDE_1` |
+| 2 | `Linear_IDE_2` |
+| 3 | `Linear_IDE_3` |
+| 4 | `Linear_IDE_4` |
+| 5 | `Linear_IDE_5` |
+| 6 | `NonLinear_IDE_1` |
+| 7 | `NonLinear_IDE_2` |
+| 8 | `NonLinear_IDE_3` |
+
+For `Linear_IDE_1`, CLASS receives the two independent interaction parameters `delta_dm_ide` and `delta_de_ide`. Models 2--8 use the single interaction parameter `delta_ide`.
+
+The CLASS implementation modifies the **homogeneous dark-sector background only**. The exact analytical IDE densities are evaluated inside the shared background module, while the ordinary CLASS thermodynamics calculation is retained. This allows Kosmulator to obtain the baryon-drag sound horizon
+
+```math
+r_d = r_s(z_{\rm drag})
+```
+
+from a CLASS calculation whose expansion history matches the selected IDE model.
+
+The Python-side physical-domain switches remain the authoritative filters for optional conditions such as positive dark-sector energy densities, future big-rip avoidance, and doom-factor stability. The CLASS background contains only the mathematical/domain safeguards needed for safe evaluation of the analytical solutions.
+
+### Enabling model-derived `r_d`
+
+The optional switch
+
+```python
+DERIVE_RD_WITH_MODEL_CLASS = True
+```
+
+activates the model-derived CLASS sound-horizon route for `LCDM_v` and the eight IDE models listed above. When enabled for a BAO or DESI likelihood:
+
+1. `r_d` is removed from the sampled parameter list for supported models;
+2. Kosmulator passes the selected model name and interaction parameters to the matching CLASS background;
+3. CLASS computes `rs_drag()` using the homogeneous model background and standard thermodynamics;
+4. a mathematically invalid CLASS background is rejected as an invalid likelihood point; and
+5. the strict route does **not** replace a failed model calculation with either the Eisenstein--Hu approximation or the legacy fixed sound horizon.
+
+Models outside the validated set retain the existing legacy `r_d` policy.
+
+The fixed thermodynamic calibration settings used by this route are
+
+```text
+Omega_b = 0.048
+N_eff = 3.044
+sum(m_nu) = 0.06 eV
+N_ncdm = 3
+```
+
+with the neutrino mass distributed as three equal massive species in the CLASS call.
+
+---
+
+## Validation of the IDE CLASS implementation
+
+The shared background implementation and its integration into Kosmulator were tested at several independent levels.
+
+- **Analytical background validation:** all eight IDE selectors were compared with their exact analytical dark-matter and dark-energy densities and with the corresponding Hubble function over 40,000 points spanning approximately `0 <= z <= 1e14`. Maximum relative differences were typically of order `1e-12`.
+- **Standard CLASS regression:** with `ide_model = 0`, the shared tree reproduced the tested untouched CLASS wCDM background exactly.
+- **Zero-coupling regression:** all eight IDE selectors recovered the uncoupled wCDM background and drag-scale sound horizon. The zero-coupling `r_d` comparison agreed at approximately `1e-9` relative precision.
+- **All-model `rs_drag()` smoke test:** finite model-derived sound horizons were obtained for all eight non-zero-coupling IDE test points.
+- **Backend reuse:** all eight IDE model names were confirmed to resolve to the same `Class/IDE_background/` backend and cached source signature.
+- **Domain rejection:** deliberately invalid mathematical parameter points were rejected by CLASS rather than silently evaluated outside the model domain.
+- **Likelihood-level validation:** valid IDE points produced finite BAO and DESI likelihoods, while invalid CLASS points were mapped to the rejection penalty. Instrumentation confirmed zero calls to both the EH98 and fixed-`r_d` fallbacks in strict mode.
+- **Kosmulator runner validation:** the normal `model_likelihood()` route propagated the selected IDE model to the CLASS sound-horizon calculation and reproduced the direct BAO likelihood result.
+- **Configuration-policy validation:** supported CLASS models remove `r_d` from BAO/DESI sampled parameter sets when model-derived `r_d` is enabled, while unsupported models retain the legacy policy.
+
+The numerical results and regression tolerances used in these tests are recorded in [`VALIDATION.md`](VALIDATION.md).
+
+---
+
 ## Current limitations
 
-This branch currently implements the analytical background expansion histories and the associated background-level parameter-domain checks. The perturbation equations required for consistent CMB constraints have not yet been implemented for these IDE models. For this reason, the doom-factor analysis used here should be treated as preliminary while the perturbation sector is being added.
+This branch implements the analytical IDE background expansion histories, the associated parameter-domain checks, and a shared CLASS backend for **homogeneous-background plus standard-thermodynamics** calculations such as the drag-scale sound horizon.
+
+The IDE perturbation equations required for a self-consistent perturbation treatment have **not** been implemented in `Class/IDE_background/`. Consequently, the shared IDE backend must not be interpreted as a perturbation-complete IDE implementation and must not be used to claim IDE CMB-anisotropy predictions. Kosmulator therefore guards against using this background-only backend for IDE CMB likelihoods.
+
+The doom-factor switches remain useful as an early-time theoretical filter based on the adopted analytical criteria, but they do not constitute a numerical validation of a full IDE perturbation sector.
 
 ---
 

@@ -595,29 +595,73 @@ def run_mcmc_for_all_models(
         obs_list: List[List[str]] = CONFIG[model_name]["observations"]
         Samples: Dict[str, Any] = {}
 
-        # Prepare CLASS once per model if any CMB likelihood is involved
+        # Prepare CLASS once per model when required.
         did_class_prep = False
 
         for i, obs_set in enumerate(obs_list):
             if rank == 0:
                 print("-" * 66)
 
-            # One-time CLASS run for CMB pipelines (avoid repeated heavy prep)
-            if not did_class_prep and any(x in obs_set for x in ("CMB_hil", "CMB_hil_TT", "CMB_lensing", "CMB_lowl")):
-                no_rebuild = str(os.environ.get("KOSM_NO_CLASS_REBUILD", "")).strip().lower() in ("1", "true", "yes", "on")
+            # CMB requires a perturbation-capable CLASS implementation.
+            needs_class_for_cmb = any(
+                x in obs_set
+                for x in ("CMB_hil", "CMB_hil_TT", "CMB_lensing", "CMB_lowl")
+            )
+
+            # Optional model-derived r_d needs only the homogeneous background
+            # plus standard CLASS thermodynamics.
+            needs_class_for_rd = (
+                bool(getattr(K, "DERIVE_RD_WITH_MODEL_CLASS", False))
+                and CR.class_backend_name(model_name)
+                in {"LCDM_v", "IDE_background"}
+                and any(
+                    x in obs_set
+                    for x in ("BAO", "DESI_DR1", "DESI_DR2")
+                )
+            )
+
+            if not did_class_prep and (needs_class_for_cmb or needs_class_for_rd):
+
+                # The shared IDE_background tree intentionally implements only
+                # the homogeneous IDE background. It must not be used for CMB
+                # anisotropy or other IDE perturbation observables.
+                if (
+                    needs_class_for_cmb
+                    and CR.class_backend_name(model_name) == "IDE_background"
+                ):
+                    raise RuntimeError(
+                        "CMB likelihood requested for an IDE model, but "
+                        "IDE_background implements only the homogeneous "
+                        "background plus standard thermodynamics; IDE "
+                        "perturbations are not implemented."
+                    )
+
+                no_rebuild = str(
+                    os.environ.get("KOSM_NO_CLASS_REBUILD", "")
+                ).strip().lower() in ("1", "true", "yes", "on")
+
                 ok = CR.ensure_class_ready(
                     model_name,
                     force=False,
                     no_rebuild=no_rebuild,
                     announce=(rank == 0),
                 )
+
                 if not ok and no_rebuild:
-                    raise RuntimeError("classy missing and rebuild forbidden (KOSM_NO_CLASS_REBUILD=1).")
+                    raise RuntimeError(
+                        "classy missing and rebuild forbidden "
+                        "(KOSM_NO_CLASS_REBUILD=1)."
+                    )
+
                 if not ok:
-                    # ultra-conservative fallback (should be rare)
+                    # Conservative build fallback.
                     CR.run_model(model_name)
-                    # and load it explicitly so the right binary is active
-                    CR.ensure_class_ready(model_name, force=False, no_rebuild=False)
+                    CR.ensure_class_ready(
+                        model_name,
+                        force=False,
+                        no_rebuild=False,
+                    )
+
                 did_class_prep = True
                 UDM._class_cache = None
 

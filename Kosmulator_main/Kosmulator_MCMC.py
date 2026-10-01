@@ -66,6 +66,11 @@ def model_likelihood(
     # Derive background vars if using CMB params / 100theta_s
     param_dict = utils.ensure_background_params(param_dict)
 
+    # Hidden metadata used by the optional model-derived CLASS r_d route.
+    # Analytic background functions ignore this key.
+    if bool(getattr(K, "DERIVE_RD_WITH_MODEL_CLASS", False)):
+        param_dict["__model_name__"] = str(model_name)
+
     # If BBN is present in this observation set and r_d wasn't sampled,
     # compute r_d from (Omega_bh^2, Omega_m, H_0[, N_eff]).
     RD._maybe_calibrate_rd(param_dict, CONFIG, obs_index)

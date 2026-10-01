@@ -185,11 +185,234 @@ def _q(x, step):
     return step * round(float(x) / step)
 
 
+
+# ------------------------------------------------------------------
+# Model-aware CLASS r_d backend
+# ------------------------------------------------------------------
+
+IDE_CLASS_SELECTORS = {
+    "Linear_IDE_1": 1,
+    "Linear_IDE_2": 2,
+    "Linear_IDE_3": 3,
+    "Linear_IDE_4": 4,
+    "Linear_IDE_5": 5,
+    "NonLinear_IDE_1": 6,
+    "NonLinear_IDE_2": 7,
+    "NonLinear_IDE_3": 8,
+}
+
+MODEL_CLASS_RD_SUPPORTED = {"LCDM_v"} | set(IDE_CLASS_SELECTORS)
+
+
+def _model_class_rd_enabled(p: Mapping[str, object]) -> bool:
+    """True only when strict model-derived CLASS r_d applies to this model."""
+    from Kosmulator_main import constants as K
+
+    if not bool(getattr(K, "DERIVE_RD_WITH_MODEL_CLASS", False)):
+        return False
+
+    model_name = str(p.get("__model_name__", ""))
+    return model_name in MODEL_CLASS_RD_SUPPORTED
+
+
+@lru_cache(maxsize=8192)
+def _rd_model_class_core(
+    model_name: str,
+    h: float,
+    Omega_m: float,
+    Omega_b: float,
+    w: float,
+    delta: float,
+    delta_dm: float,
+    delta_de: float,
+    N_eff: float,
+    sum_mnu_ev: float,
+    n_ncdm: int,
+) -> float:
+    """
+    Compute rs_drag with the CLASS background matching `model_name`.
+
+    For IDE models only the homogeneous dark-sector background is modified.
+    Thermodynamics remains standard CLASS.  IDE perturbations are not
+    implemented or used here.
+    """
+    from Kosmulator_main import Class_run as CR
+
+    if model_name not in MODEL_CLASS_RD_SUPPORTED:
+        raise ValueError(
+            "Model-derived CLASS r_d is not configured for "
+            f"{model_name!r}."
+        )
+
+    backend_name = CR.class_backend_name(model_name)
+
+    # Avoid re-hashing/reloading the CLASS source tree for every MCMC point.
+    # All eight IDE models intentionally resolve to IDE_background.
+    if getattr(CR, "_current_class_model", None) != backend_name:
+        ok = CR.ensure_class_ready(
+            model_name,
+            force=False,
+            no_rebuild=False,
+            announce=False,
+        )
+        if not ok:
+            raise RuntimeError(
+                f"Could not prepare CLASS backend for {model_name}"
+            )
+
+    ClassCtor = CR.get_Class()
+
+    h = float(h)
+    Omega_m = float(Omega_m)
+    Omega_b = float(Omega_b)
+
+    if not math.isfinite(h) or h <= 0.0:
+        raise ValueError(f"Invalid h={h}")
+
+    Omega_cdm = Omega_m - Omega_b
+    if not math.isfinite(Omega_cdm) or Omega_cdm <= 0.0:
+        raise ValueError(
+            "Need Omega_m > Omega_b for CLASS r_d; "
+            f"got Omega_m={Omega_m}, Omega_b={Omega_b}"
+        )
+
+    omega_b = Omega_b * h * h
+    omega_cdm = Omega_cdm * h * h
+
+    n_ncdm = int(n_ncdm)
+    if n_ncdm <= 0:
+        raise ValueError("RD_CLASS_N_NCDM must be positive")
+
+    sum_mnu_ev = float(sum_mnu_ev)
+    if sum_mnu_ev < 0.0:
+        raise ValueError("RD_CLASS_SUM_MNU_EV cannot be negative")
+
+    m_each = sum_mnu_ev / n_ncdm
+    masses = ",".join(
+        f"{m_each:.12g}" for _ in range(n_ncdm)
+    )
+
+    pars = {
+        "h": h,
+        "omega_b": omega_b,
+        "omega_cdm": omega_cdm,
+        "N_ncdm": n_ncdm,
+        "m_ncdm": masses,
+        "Neff": float(N_eff),
+        "output": "",
+    }
+
+    if model_name in IDE_CLASS_SELECTORS:
+        pars.update({
+            "Omega_Lambda": 0.0,
+            "w0_fld": float(w),
+            "wa_fld": 0.0,
+            "ide_model": int(IDE_CLASS_SELECTORS[model_name]),
+            "delta_ide": float(delta),
+            "delta_dm_ide": float(delta_dm),
+            "delta_de_ide": float(delta_de),
+        })
+
+    c = ClassCtor()
+    try:
+        c.set(pars)
+        c.compute()
+        rd = float(c.rs_drag())
+
+        if not math.isfinite(rd) or rd <= 0.0:
+            raise ValueError(
+                f"CLASS returned invalid rs_drag={rd}"
+            )
+
+        return rd
+
+    finally:
+        try:
+            c.struct_cleanup()
+            c.empty()
+        except Exception:
+            pass
+
+
+def compute_rd_model_class(p: dict) -> float:
+    """
+    Strict model-derived CLASS sound horizon.
+
+    Requires `__model_name__`.  No EH98 or fixed-r_d fallback is performed
+    by this function.
+    """
+    from Kosmulator_main import constants as K
+
+    if "__model_name__" not in p:
+        raise KeyError(
+            "Model-derived CLASS r_d requires '__model_name__'."
+        )
+
+    model_name = str(p["__model_name__"])
+
+    if model_name not in MODEL_CLASS_RD_SUPPORTED:
+        raise ValueError(
+            "Model-derived CLASS r_d is not configured for "
+            f"{model_name!r}."
+        )
+
+    H0 = float(p["H_0"])
+    Om = float(p["Omega_m"])
+    h = H0 / 100.0
+
+    # These are deliberately fixed calibration settings.
+    Ob = float(getattr(K, "RD_CLASS_OMEGA_B", 0.048))
+    Neff = float(getattr(K, "RD_CLASS_N_EFF", 3.044))
+    sum_mnu = float(
+        getattr(K, "RD_CLASS_SUM_MNU_EV", 0.06)
+    )
+    n_ncdm = int(
+        getattr(K, "RD_CLASS_N_NCDM", 3)
+    )
+
+    if model_name == "LCDM_v":
+        w = -1.0
+        delta = 0.0
+        delta_dm = 0.0
+        delta_de = 0.0
+
+    elif model_name == "Linear_IDE_1":
+        w = float(p["w"])
+        delta = 0.0
+        delta_dm = float(p["delta_dm"])
+        delta_de = float(p["delta_de"])
+
+    else:
+        w = float(p["w"])
+        delta = float(p["delta"])
+        delta_dm = 0.0
+        delta_de = 0.0
+
+    return _rd_model_class_core(
+        model_name,
+        h,
+        Om,
+        Ob,
+        w,
+        delta,
+        delta_dm,
+        delta_de,
+        Neff,
+        sum_mnu,
+        n_ncdm,
+    )
+
+
 def compute_rd_class(p: dict):
     """
-    Compute r_d via CLASS.rs_drag(), with conservative parameter quantisation.
-    Returns None if CLASS is unavailable.
+    Compute r_d via CLASS.rs_drag().
+
+    With DERIVE_RD_WITH_MODEL_CLASS enabled, use the matching cosmological
+    CLASS background.  Otherwise retain the legacy generic CLASS route.
     """
+    if _model_class_rd_enabled(p):
+        return compute_rd_model_class(p)
+
     if not _HAVE_CLASS:
         return None
 
@@ -234,6 +457,8 @@ def _try_compute_rd(param_dict: dict):
     """
     global _RD_BACKEND_LOGGED
 
+    strict_model_class = _model_class_rd_enabled(param_dict)
+
     # 1) CLASS first
     try:
         rd = compute_rd_class(param_dict)
@@ -251,11 +476,21 @@ def _try_compute_rd(param_dict: dict):
                 _RD_BACKEND_LOGGED = True
             return float(rd)
     except Exception as e:
+        if strict_model_class:
+            logger.error(
+                "Model-specific CLASS rs_drag() failed: %s", e
+            )
+            return None
+
         if not _RD_BACKEND_LOGGED:
             logger.warning(
                 "CLASS rs_drag() failed (%s); falling back to EH98.", e
             )
             _RD_BACKEND_LOGGED = True
+
+    if strict_model_class:
+        # Never mix a failed model-specific CLASS point with EH98.
+        return None
 
     # 2) EH98 fallback
     try:
@@ -294,8 +529,26 @@ def _resolve_rd(p: dict, Type: str) -> float:
     if "r_d" in p:
         return float(p["r_d"])
 
-    # 2) If we have a background, try to compute r_d (CLASS first, then EH98)
-    have_bg = all(k in p for k in ("H_0", "Omega_m", "Omega_bh^2"))
+    # 2) Optional strict model-derived CLASS route.
+    strict_model_class = _model_class_rd_enabled(p)
+
+    if strict_model_class:
+        if not all(k in p for k in ("H_0", "Omega_m")):
+            raise ValueError(
+                "Model-derived CLASS r_d requires H_0 and Omega_m."
+            )
+
+        rd = _try_compute_rd(p)
+        if rd is None:
+            raise ValueError(
+                "Model-specific CLASS r_d calculation failed."
+            )
+        return float(rd)
+
+    # Legacy background calibration route.
+    have_bg = all(
+        k in p for k in ("H_0", "Omega_m", "Omega_bh^2")
+    )
     if have_bg:
         rd = _try_compute_rd(p)
         if rd is not None:
@@ -330,13 +583,22 @@ def _compute_r_d_from_bbn_and_background(p: dict) -> float:
 
     Try CLASS rs_drag via _try_compute_rd; fall back to EH98 compute_rd().
     """
+    strict_model_class = _model_class_rd_enabled(p)
+
     try:
         rd = _try_compute_rd(p)
         if rd is not None:
             return float(rd)
     except Exception:
-        pass
-    # Fallback: EH98
+        if strict_model_class:
+            raise
+
+    if strict_model_class:
+        raise ValueError(
+            "Model-specific CLASS r_d calculation failed."
+        )
+
+    # Legacy fallback: EH98
     return float(compute_rd(p))
 
 

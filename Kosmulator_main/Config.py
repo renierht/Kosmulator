@@ -1049,10 +1049,39 @@ def create_config(
             grp_params = list(config[mod]["parameters"][gi])
 
             # r_d handling:
-            #  - If early-time calibrators present: r_d is calibrated → do not sample it.
-            #  - If singleton BAO/DESI: fix r_d (rd_policy["fixed_value"]).
-            #  - If BAO/DESI + something: treat r_d as a free parameter.
-            if _has_early_calibrator(obs_grp):
+            #  - Optional validation mode: derive r_d from the matching CLASS
+            #    homogeneous background for every BAO/DESI group.
+            #  - Otherwise preserve the legacy early-calibrator/fixed/free policy.
+            model_class_supported = mod in {
+                "LCDM_v",
+                "Linear_IDE_1",
+                "Linear_IDE_2",
+                "Linear_IDE_3",
+                "Linear_IDE_4",
+                "Linear_IDE_5",
+                "NonLinear_IDE_1",
+                "NonLinear_IDE_2",
+                "NonLinear_IDE_3",
+            }
+
+            derive_rd_model_class = (
+                bool(getattr(K, "DERIVE_RD_WITH_MODEL_CLASS", False))
+                and model_class_supported
+            )
+
+            if derive_rd_model_class and _has_bao_desi(obs_grp):
+                if "r_d" in grp_params:
+                    grp_params.remove("r_d")
+
+                if logger:
+                    logger.warning(
+                        "BAO/DESI: deriving r_d from the matching CLASS "
+                        "homogeneous background for %s (model %s)",
+                        obs_grp,
+                        mod,
+                    )
+
+            elif _has_early_calibrator(obs_grp):
                 if "r_d" in grp_params:
                     grp_params.remove("r_d")
                 if logger:

@@ -62,6 +62,26 @@ _clik_hilTT: Optional[clik.clik] = None
 _current_class_model: Optional[str] = None
 _current_class_hash: Optional[str] = None
 
+# All eight IDE cosmologies share one homogeneous-background CLASS tree.
+IDE_CLASS_MODELS = frozenset({
+    "Linear_IDE_1",
+    "Linear_IDE_2",
+    "Linear_IDE_3",
+    "Linear_IDE_4",
+    "Linear_IDE_5",
+    "NonLinear_IDE_1",
+    "NonLinear_IDE_2",
+    "NonLinear_IDE_3",
+})
+IDE_CLASS_BACKEND = "IDE_background"
+
+
+def class_backend_name(model_name: str) -> str:
+    """Return the CLASS source/cache backend used by a cosmological model."""
+    if model_name in IDE_CLASS_MODELS:
+        return IDE_CLASS_BACKEND
+    return model_name
+
 # One-time logs for lensing
 _DID_LOG_LENSING_RAW = False
 _DID_LOG_LENSING_CMBMARG = False
@@ -118,17 +138,40 @@ def _source_tree_hash(model_dir: str) -> str:
             with open(p, "rb") as f:
                 h.update(f.read())
 
+    source_exts = (
+        ".c", ".h", ".cc", ".cpp", ".hpp",
+        ".py", ".pyx", ".pxd", ".pxi", ".txt",
+    )
+
     for root in roots:
         r = os.path.join(model_dir, root)
         if not os.path.isdir(r):
             continue
-        for dp, _, fns in os.walk(r):
+
+        for dp, dns, fns in os.walk(r):
+
+            # Never include generated/cache directories in the source signature.
+            dns[:] = [
+                d for d in dns
+                if d not in {"build", "__pycache__", ".eggs"}
+            ]
+
             for fn in sorted(fns):
-                if not fn.endswith((".c", ".h", ".cc", ".cpp", ".hpp", ".py", ".txt")):
+                if not fn.endswith(source_exts):
                     continue
+
                 fp = os.path.join(dp, fn)
-                rel = fp[len(model_dir) :].encode()
-                h.update(rel)
+                rel_path = os.path.relpath(fp, model_dir)
+
+                # Cython-generated files are build artefacts, not source inputs.
+                if rel_path in {
+                    os.path.join("python", "classy.c"),
+                    os.path.join("python", "classy.cpp"),
+                }:
+                    continue
+
+                h.update(rel_path.encode())
+
                 try:
                     with open(fp, "rb") as f:
                         h.update(f.read())
@@ -331,7 +374,8 @@ def run_model(model_name: str) -> None:
 
     Called internally from ensure_class_ready when we have to rebuild.
     """
-    model_dir = Path("./Class") / model_name
+    backend_name = class_backend_name(model_name)
+    model_dir = Path("./Class") / backend_name
     built = False
     for target in ["libclass.a", "lib"]:
         try:
@@ -469,23 +513,24 @@ def ensure_class_ready(
     """
     global _current_class_model, _current_class_hash
 
-    model_dir = os.path.join("./Class", model_name)
+    backend_name = class_backend_name(model_name)
+    model_dir = os.path.join("./Class", backend_name)
     sig = _full_signature(model_dir)
     sig_hash = _sig_hash(sig)
 
     # Fast path: already loaded in this process
-    if (not force) and (_current_class_model == model_name) and (_current_class_hash == sig_hash):
+    if (not force) and (_current_class_model == backend_name) and (_current_class_hash == sig_hash):
         return True
 
     # Try cache first (any rank can try to load)
-    cached = _find_cached_so(model_name, sig_hash)
+    cached = _find_cached_so(backend_name, sig_hash)
     if cached and not force:
         try:
-            load_classy_so(cached, model_name, sig_hash)
+            load_classy_so(cached, backend_name, sig_hash)
             from classy import Class  # type: ignore
 
             _ = Class()
-            _current_class_model, _current_class_hash = model_name, sig_hash
+            _current_class_model, _current_class_hash = backend_name, sig_hash
             msg = f"[CLASS] Using cached binary for {model_name} ({sig_hash[:8]}) @ {os.path.basename(cached)}"
             if announce:
                 print(msg, flush=True)
@@ -502,16 +547,16 @@ def ensure_class_ready(
         # Try existing model-local build (pre-cache behaviour)
     if not force:
         try:
-            local_so = find_classy_so(model_name)
-            load_classy_so(local_so, model_name, sig_hash)
+            local_so = find_classy_so(backend_name)
+            load_classy_so(local_so, backend_name, sig_hash)
             from classy import Class  # type: ignore
             _ = Class()
-            _current_class_model, _current_class_hash = model_name, sig_hash
+            _current_class_model, _current_class_hash = backend_name, sig_hash
             # Optionally promote to cache for next time
             try:
-                built_cached = _copy_built_so_to_cache(model_name, sig_hash)
+                built_cached = _copy_built_so_to_cache(backend_name, sig_hash)
                 if built_cached:
-                    _write_stamp(model_name, sig_hash, sig, built_cached)
+                    _write_stamp(backend_name, sig_hash, sig, built_cached)
             except Exception:
                 pass
             msg = f"[CLASS] Using existing local binary for {model_name} ({sig_hash[:8]})"
@@ -528,8 +573,8 @@ def ensure_class_ready(
 
     # Rebuild path: only rank 0 does the build; others wait for the artifact.
     if _mpi_rank0():
-        with _with_lock(model_name, sig_hash):
-            cached2 = _find_cached_so(model_name, sig_hash)
+        with _with_lock(backend_name, sig_hash):
+            cached2 = _find_cached_so(backend_name, sig_hash)
             if cached2 and not force:
                 path = cached2
             else:
@@ -538,22 +583,22 @@ def ensure_class_ready(
                 except Exception:
                     pass
 
-                run_model(model_name)
-                built_cached = _copy_built_so_to_cache(model_name, sig_hash)
-                path = built_cached or find_classy_so(model_name)
-                _write_stamp(model_name, sig_hash, sig, path)
+                run_model(backend_name)
+                built_cached = _copy_built_so_to_cache(backend_name, sig_hash)
+                path = built_cached or find_classy_so(backend_name)
+                _write_stamp(backend_name, sig_hash, sig, path)
     else:
-        path = _wait_for_artifact(model_name, sig_hash)
+        path = _wait_for_artifact(backend_name, sig_hash)
         if not path:
             raise RuntimeError("Worker timed out waiting for CLASS build artifact.")
 
     # Load the artifact we now have, and sanity-check
     try:
-        load_classy_so(path, model_name, sig_hash)
+        load_classy_so(path, backend_name, sig_hash)
         from classy import Class  # type: ignore
 
         _ = Class()
-        _current_class_model, _current_class_hash = model_name, sig_hash
+        _current_class_model, _current_class_hash = backend_name, sig_hash
         if path.endswith(".so"):
             msg = f"[CLASS] Ready for {model_name} ({sig_hash[:8]}) @ {os.path.basename(path)}"
             if announce:
