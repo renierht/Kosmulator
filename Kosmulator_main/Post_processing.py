@@ -26,7 +26,7 @@ import logging
 import numpy as np
 from scipy.optimize import minimize
 from scipy.special import logsumexp #Required for WAIC
-from scipy.stats import chi2, norm
+from scipy.stats import chi2, norm #used by significance
 
 
 import User_defined_modules as UDM
@@ -171,6 +171,7 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
 
         else:
             mle_vector = None
+            theta_bar  = None
             D_bar = None
             D_var = None
     
@@ -225,6 +226,11 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
 
         
         # Iterate over the parameters for this observation
+        if obs_samples.shape[0] == 0:
+            print(f"Warning: '{obs}' has no samples — skipping parameter statistics.")
+            latex_table.append([])
+            continue
+
         for param_index, param in enumerate(obs_param_names):
             # Check that the parameter index is within bounds of obs_samples
             if param_index < obs_samples.shape[1]:
@@ -461,8 +467,9 @@ def compute_lppd(log_lik_matrix):
     return np.sum(lppd_i)
 
 def compute_p_waic(log_lik_matrix):
-    S = log_lik_matrix.shape[0] #1000
-    N = log_lik_matrix.shape[1] #60
+    """
+    Effective parameter count for WAIC
+    """ 
     pwi = np.var(log_lik_matrix, ddof = 1, axis = 0)
     return np.sum(pwi)
 
