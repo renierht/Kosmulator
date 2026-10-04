@@ -18,6 +18,7 @@ from getdist import plots as gd_plots, MCSamples
 from Kosmulator_main import Statistical_packages as SP
 from Kosmulator_main.constants import CODE_STYLE, C_KM_S, R_D_SINGLETON, GAMMA_FS8_SINGLETON
 from Kosmulator_main import Post_processing as PP
+from Kosmulator_main.Plot_metadata import model_label, observation_label, corner_ranges
 from Kosmulator_main.utils import generate_label as cfg_generate_label
 from Kosmulator_main.utils import (
     save_stats_to_file,
@@ -37,7 +38,7 @@ from Plots.Plot_functions import (
     partition_by_compatibility, residual_unit,
     OBS_COLOR_ORDER, MODEL_COLOR,
     extract_observation_data, fetch_best_fit_values, save_figure,
-    model_curve_for_type, evaluator_for_points, pretty_obs_name,
+    model_curve_for_type, evaluator_for_points, pretty_obs_name, resolve_plot_rd,
 
     # model evaluators
     compute_E, compute_Dc, compute_DM, compute_DV, compute_f, compute_sigma8z, 
@@ -67,7 +68,7 @@ MODEL_FUNCS = {
     "Dc":      compute_Dc,
     "DM":      compute_DM,
     "DV":      compute_DV,
-    "rd":      compute_rd,
+    "rd":      resolve_plot_rd,
     "f":       compute_f,
     "sigma8z": compute_sigma8z,
 }
@@ -118,26 +119,7 @@ def _latex_model_name(name: str, latex_enabled: bool, settings: dict) -> str:
     return f"${name}$"
     
 def _displayize_key(key: str) -> str:
-    """
-    Turn internal keys into human-friendly *plain-text* obs labels
-    (used for console + saved stats tables).
-
-    Policy:
-      PantheonPS / PantheonP_SH0ES  -> Pantheon++SH0ES
-      PantheonP                    -> Pantheon+
-    """
-    # Normalise separators so keys like CC_PantheonPS also behave
-    s = str(key).replace("_", "+")
-    parts = s.split("+")
-    mapped = []
-    for p in parts:
-        if p in ("PantheonPS", "PantheonP_SH0ES", "Pantheon+SH0ES"):
-            mapped.append("Pantheon++SH0ES")
-        elif p == "PantheonP":
-            mapped.append("Pantheon+")
-        else:
-            mapped.append(p)
-    return "+".join(mapped)
+    return observation_label(key)
 
 @contextmanager
 def _filter_stdout(only_first_substring: str | None = None):
@@ -396,7 +378,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
     # 3a) Pretty-print main aligned table + detailed CMB parameter table
     for model_name, (aligned_table, param_labels, obs_names) in all_tables.items():
         print_rule()
-        print(f"Model: {model_name} Aligned LaTeX Table:")
+        print(f"Model: {model_label(model_name, CONFIG[model_name])} Aligned LaTeX Table:")
 
         config_model = CONFIG[model_name]
 
@@ -437,11 +419,9 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
         # The rest of this loop: build S-lines for BAO-like obs as you already do
         best_struct = all_best_fit.get(model_name, {})
-        c_km_s = C_KM_S
-        explanatory_note_printed = False
 
         for i, obs_list in enumerate(CONFIG[model_name]["observations"]):
-            # Only BAO/DESI without calibrators
+            # BAO/DESI scale summary for groups without BBN/CMB datasets
             if not (_is_bao_like(obs_list) and not (_has_bbn(obs_list) or _has_cmb(obs_list))):
                 continue
 
@@ -459,38 +439,17 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 continue
 
             med = best_struct[obs_key]
-            H0  = _medval(med, "H_0")
 
-            # r_d: prefer sampled; else policy-fixed; else EH98 from medians
-            rd = _medval(med, "r_d")
-            if rd is None:
-                rdpol = CONFIG[model_name].get("rd_policy", {})
-                mode  = str(rdpol.get("mode", "")).lower()
-                if mode.startswith("fixed") or ("fixed_value" in rdpol):
-                    try:
-                        rd = float(rdpol.get("fixed_value", R_D_SINGLETON))
-                    except Exception:
-                        rd = float(R_D_SINGLETON)
-                if rd is None:
-                    from Kosmulator_main.rd_helpers import compute_rd as _rd
-                    p = {}
-                    for k in ("H_0", "Omega_m", "Omega_bh^2", "N_eff", "T_CMB"):
-                        v = _medval(med, k)
-                        if v is not None:
-                            p[k] = v
-                    rd = _rd(p) if all(k in p for k in ("H_0","Omega_m","Omega_bh^2")) else None
-
-            if (H0 is not None) and (rd is not None) and (H0 > 0) and (rd > 0):
-                if not explanatory_note_printed:
-                    bao_S_lines_by_model[model_name].append(
-                        "Note: For BAO-like results without an early-time calibrator, we assume a fiducial rd = 147.5 Mpc. The truly "
-                        "data-driven combination is S ≡ c/(H0·r_d), which we also report below"
-                    )
-                    explanatory_note_printed = True
-
-                S_val = c_km_s / (H0 * rd)
+            # Use the same r_d resolver as the likelihood/curve pipeline.
+            from Plots.Plot_functions import bao_scale_summary
+            params, _, _ = fetch_best_fit_values(med)
+            bao_type = next(tag for tag in obs_list if tag in ("BAO", "DESI_DR1", "DESI_DR2"))
+            summary = bao_scale_summary(params, model_name, bao_type)
+            if summary is not None:
                 bao_S_lines_by_model[model_name].append(
-                    f"S (c/(H0·r_d)) for {obs_key}: {S_val:.5f}"
+                    f"S at parameter medians for {_displayize_key(obs_key)}: "
+                    f"{summary['S']:.5f} (r_d={summary['r_d']:.5f} Mpc; "
+                    f"{summary['policy']}). This is a plug-in summary, not a posterior median of S."
                 )
 
         # Immediately print the S lines to console (after the table, before stats)
@@ -501,7 +460,9 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
     # ----- 4) Statistical analysis ------------------------------------------
     print()
-    statistical_results = PP.statistical_analysis(all_best_fit, data, CONFIG, true_model)
+    statistical_results = PP.statistical_analysis(
+        all_best_fit, data, CONFIG, true_model, posterior_samples=All_Samples
+    )
 
     # Build reference chi^2 map (from true model) for diagnostics
     ref_chi2 = {}
@@ -547,6 +508,9 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 "BIC": stats["BIC"],
                 "dAIC": stats["dAIC"],
                 "dBIC": stats["dBIC"],
+                **{name: stats[name] for name in (
+                    "N", "k", "p_D", "AICc", "DIC", "dAICc", "dDIC",
+                )},
             }
 
             # IMPORTANT: Do NOT include S in the stats row — it will be printed as a stand-alone line
@@ -561,8 +525,11 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
         # Persist to disk
     suffix      = PLOT_SETTINGS.get("output_suffix", "default_run")
-    main_folder = os.path.join("Statistical_analysis_tables", suffix)
+    main_folder = PLOT_SETTINGS.get("statistical_save_root") or os.path.join("Statistical_analysis_tables", suffix)
     os.makedirs(main_folder, exist_ok=True)
+    from Kosmulator_main.Model_comparison import export_comparison
+    export_comparison(statistical_results, main_folder)
+
 
     for model in stats_dict:
         model_folder = os.path.join(main_folder, model)
@@ -573,7 +540,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
         aligned_table, param_labels, obs_names = all_tables[model]
 
         with open(pretty_path, "w", encoding="utf-8") as out:
-            print(f"Model: {model} Aligned LaTeX Table:", file=out)
+            print(f"Model: {model_label(model, CONFIG[model])} Aligned LaTeX Table:", file=out)
             print(file=out)
 
             # 1) Main aligned table: same core set as console
@@ -608,18 +575,18 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
             if s_lines:
                 print(file=out)
                 print("-" * 80, file=out)
-                print("BAO/DESI uncalibrated summary:", file=out)
+                print("BAO/DESI scale at parameter medians:", file=out)
                 for line in s_lines:
                     print(line, file=out)
 
         # 2) Then save stats & interpretations (unchanged)
-        save_stats_to_file(model, model_folder, stats_dict[model])
-        save_interpretations_to_file(model, model_folder, interp_dict[model])
+        save_stats_to_file(model_label(model, CONFIG[model]), model_folder, stats_dict[model])
+        save_interpretations_to_file(model_label(model, CONFIG[model]), model_folder, interp_dict[model])
 
     # Pretty-print to console (no duplicate headers)
     for model, rows in stats_dict.items():
         print_rule()
-        print_stats_table(model, rows)
+        print_stats_table(model_label(model, CONFIG[model]), rows)
         print_rule()
         print()
 
@@ -869,14 +836,16 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
 
         sample = Samples[found]
         names  = CONFIG["parameters"][i]
-        labels = greek_Symbols(names) if use_latex else names
+        labels = greek_Symbols(names)
         
         analysis_settings = {
             'fine_bins_2D': 1024,
             'smooth_scale_2D': 2.0,
-            'smooth_scale_1D': 2.0
+            'smooth_scale_1D': 2.0,
+            'boundary_correction_order': 1
         }
-        ms = MCSamples(samples=sample, names=names, labels=labels, settings=analysis_settings)
+        ms = MCSamples(samples=sample, names=names, labels=labels, settings=analysis_settings,
+                       ranges=corner_ranges(CONFIG, i, model_name, sample))
         ms.plotColor = palette[i % len(palette)]
         distributions.append(ms)
 
@@ -966,12 +935,41 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
             derived_rd_col.append("—")
             continue
 
-        names = CONFIG["parameters"][i]
+        from Kosmulator_main.Model_comparison import observation_index
+        group_index = observation_index(obs_key, CONFIG)
+        names = CONFIG["parameters"][group_index]
 
         # If r_d is already sampled for this group, we don't need to derive it here.
         if "r_d" in names:
             derived_rd_col.append("—")
             continue
+
+        from Kosmulator_main import constants as constants
+        if bool(getattr(constants, "DERIVE_RD_WITH_MODEL_CLASS", False)) and any(
+            tag in ("BAO", "DESI_DR1", "DESI_DR2")
+            for tag in CONFIG["observations"][group_index]
+        ):
+            from Kosmulator_main import rd_helpers as rd
+            if model_name in rd.MODEL_CLASS_RD_SUPPORTED:
+                limit = int(PLOT_SETTINGS.get("derived_rd_samples", 6000))
+                if limit <= 0:
+                    raise ValueError("derived_rd_samples must be positive")
+                rng = np.random.default_rng(PLOT_SETTINGS.get("derived_rd_seed", 20260929))
+                finite = np.flatnonzero(np.all(np.isfinite(obs_samples), axis=1))
+                if not len(finite):
+                    raise ValueError("No finite samples for derived r_d summary")
+                chosen = rng.choice(finite, min(limit, len(finite)), replace=False)
+                rds = np.array([
+                    rd.compute_rd_model_class({
+                        **dict(zip(names, map(float, obs_samples[j]))),
+                        "__model_name__": model_name,
+                    }) for j in chosen
+                ])
+                if not np.all(np.isfinite(rds)):
+                    raise ValueError("Non-finite derived r_d samples")
+                p16, p50, p84 = np.percentile(rds, [16, 50, 84])
+                derived_rd_col.append(rf"${p50:.1f}^{{+{p84-p50:.1f}}}_{{-{p50-p16:.1f}}}$")
+                continue
 
         # Need H0 and Omega_bh^2
         try:
@@ -1165,25 +1163,29 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
     use_latex = bool(PLOT_SETTINGS.get("latex_enabled", False))
 
     for model_name, obs_dict in All_best_fit_values.items():
-        model_disp = _latex_model_name(model_name, use_latex, PLOT_SETTINGS)
+        model_disp = model_label(model_name, CONFIG[model_name], mathtext=True)
+        if model_name in PLOT_SETTINGS.get("model_latex_names", {}) and use_latex:
+            model_disp = _latex_model_name(model_name, use_latex, PLOT_SETTINGS)
 
         for obs_key, _stats in obs_dict.items():
             obs_list = obs_key.split("+")
 
             # Map resolved labels → raw dataset keys for data lookups / plotting logic
             def _raw_token(t: str) -> str:
-                return t.replace("PantheonP_SH0ES", "PantheonP")
+                return t.replace("PantheonP_SH0ES", "PantheonPS")
 
             obs_list_raw = [_raw_token(t) for t in obs_list]
 
             combined = All_best_fit_values[model_name][obs_key]
             params_med, params_hi, params_lo = fetch_best_fit_values(combined)
+            for parameters in (params_med, params_hi, params_lo):
+                parameters["__model_name__"] = model_name
 
             # (Optional) diagnostics
             try:
                 if any(tag in obs_key for tag in ("BAO", "DESI", "DESI_DR1", "DESI_DR2")):
-                    rd_med = compute_rd(params_med)
-                    print(f"[diag] {model_name} {obs_key}: median r_d ≈ {rd_med:.2f} Mpc")
+                    rd_med = resolve_plot_rd(params_med, model_name, "DESI_DR2")
+                    print(f"[diag] {model_name} {obs_key}: r_d at parameter medians ≈ {rd_med:.2f} Mpc")
             except Exception:
                 pass
 
@@ -1355,17 +1357,10 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                     rdpol = CONFIG.get(model_name, {}).get("rd_policy", {})
                     fixed_rd = float(rdpol.get("fixed_value", R_D_SINGLETON))
 
-                    def _can_compute_eh98(params: dict) -> bool:
-                        return all(k in params for k in ("H_0", "Omega_m", "Omega_bh^2"))
-
                     def _rd_from_params(params: dict | None) -> float:
                         if params is None:
-                            return fixed_rd
-                        if "r_d" in params:
-                            return float(params["r_d"])
-                        if _can_compute_eh98(params):
-                            return MODEL_FUNCS["rd"](params)
-                        return fixed_rd
+                            params = params_med
+                        return resolve_plot_rd(params, model_name, "DESI_DR2")
 
                     has_cal = any(x in {
                         "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",
@@ -1377,7 +1372,10 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                         "DESY5", "Union3", "f", "f_sigma_8"
                     } for x in obs_list_raw)
 
-                    if has_cal:
+                    from Kosmulator_main import constants as constants
+                    from Kosmulator_main import rd_helpers as rd_helpers
+                    model_rd = rd_helpers._model_class_rd_enabled(params_med)
+                    if model_rd or has_cal:
                         rs_med = _rd_from_params(params_med)
                         rs_lo = _rd_from_params(params_lo) if params_lo is not None else rs_med
                         rs_hi = _rd_from_params(params_hi) if params_hi is not None else rs_med
@@ -1389,7 +1387,9 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                         rs_med = rs_lo = rs_hi = fixed_rd
 
                     # Compact in-panel rd badge
-                    if has_cal:
+                    if model_rd:
+                        _policy, rd_show = "model-derived CLASS", float(rs_med)
+                    elif has_cal:
                         _policy, rd_show = "calibrated", float(rs_med)
                     elif has_bao and has_unanch:
                         _policy, rd_show = "free", float(rs_med)
@@ -1397,15 +1397,10 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                         _policy, rd_show = "fixed", float(fixed_rd)
 
                     fs = int(PLOT_SETTINGS.get("label_font_size", 12))
-                    rd_text = (rf"$r_d$ ({_policy}): ${rd_show:.2f}\,\mathrm{{Mpc}}$"
-                               if use_latex else f"r_d ({_policy}): {rd_show:.2f} Mpc")
+                    rd_text = rf"$r_d$ at parameter medians: {rd_show:.2f} Mpc\n({_policy})".replace(r"\n", "\n")
 
-                    ax.text(
-                        0.98, 0.98, rd_text,
-                        transform=ax.transAxes, ha="right", va="top",
-                        fontsize=fs, zorder=Z_OBS_BASE + 5,
-                        bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.65, edgecolor="0.6"),
-                    )
+                    # Place r_d outside the data area; tight-bbox saving includes it.
+                    ax.set_title(rd_text, fontsize=min(fs, 10), pad=8)
 
                     DM = MODEL_FUNCS["DM"](z_dense, params_med, model_name)
                     DA = DM / (1.0 + z_dense)
@@ -1578,13 +1573,15 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                                 zorder=min(z_obs + 1, Z_BAND - 1),
                             )
                     elif obs_type not in SNE_TYPES:
-                        order = np.argsort(np.asarray(x_dat))
-                        ax.plot(
-                            np.asarray(x_dat)[order],
-                            np.asarray(y_mod_pts)[order],
-                            color=MODEL_COLOR, linestyle="-", linewidth=1.2, alpha=0.8,
-                            zorder=min(z_obs + 1, Z_BAND - 1),
-                        )
+                        overlay_point_model = bool(PLOT_SETTINGS.get("overlay_model_at_data_points", False))
+                        if overlay_point_model:
+                            order = np.argsort(np.asarray(x_dat))
+                            ax.plot(
+                                np.asarray(x_dat)[order],
+                                np.asarray(y_mod_pts)[order],
+                                color=MODEL_COLOR, linestyle="-", linewidth=1.2, alpha=0.8,
+                                zorder=min(z_obs + 1, Z_BAND - 1),
+                            )
 
                     # Residuals (using masked plotting arrays)
                     res_plot = np.asarray(y_plot) - np.asarray(y_mod_plot)

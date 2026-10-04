@@ -905,6 +905,7 @@ def load_or_run_chain(
     pool,
     vectorised: bool,
     resumeChains: bool = False,
+    load_only: bool = False,
     **other_kwargs,
 ):
     """
@@ -918,6 +919,28 @@ def load_or_run_chain(
         raise RuntimeError(
             "h5py/emcee required for chain handling but not available."
         )
+
+    if load_only:
+        if overwrite or resumeChains:
+            raise ValueError("Load-only mode cannot overwrite or resume a chain")
+        chain_path = os.path.join(output_dir, chain_file)
+        if not os.path.isfile(chain_path):
+            raise FileNotFoundError(chain_path)
+        burn = int(CONFIG_model.get("burn", 0))
+        if burn < 0:
+            raise ValueError("Burn-in must be non-negative")
+        backend = emcee.backends.HDFBackend(chain_path, read_only=True)
+        if backend.iteration <= burn:
+            raise ValueError("Existing chain has no samples after the requested burn-in")
+        flat_samples = backend.get_chain(discard=burn, thin=1, flat=True)
+        index = int(other_kwargs.get("obs_index", 0))
+        expected_ndim = len(CONFIG_model["parameters"][index])
+        if flat_samples.ndim != 2 or flat_samples.shape[1] != expected_ndim:
+            raise ValueError("Existing chain dimension does not match configured parameters")
+        if not np.all(np.isfinite(flat_samples)):
+            raise ValueError("Existing chain contains non-finite retained parameters")
+        print(f"[INFO] Read-only existing-chain load: {chain_path} ({len(flat_samples)} samples)")
+        return flat_samples
 
     # Canonical filenames for the two engines
     chain_path = os.path.join(output_dir, chain_file)           # emcee
@@ -1480,57 +1503,11 @@ def _obs_col_width(stats_list, base=38, wmin=30, wmax=68, pad=2):
 
 
 def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float]]) -> None:
-    file_path = os.path.join(folder, "stats_summary.txt")
-
-    # Dynamic width
-    obs_w = _obs_col_width(stats_list, base=38, wmin=30, wmax=68, pad=2)
-
-    header = (
-        f"{'Observation':<{obs_w}} | {'Log-Likelihood':>18} | "
-        f"{'Chi-Squared':>15} | {'Reduced Chi-Squared':>20} | "
-        f"{'AIC':>11} | {'BIC':>11} | {'dAIC':>11} | {'dBIC':>11}"
-    )
-
-    import numpy as _np
-
-    def _as_float(x):
-        """Coerce numpy scalars/arrays to a Python float for formatting."""
-        try:
-            arr = _np.asarray(x)
-            if arr.ndim == 0:
-                return float(arr)
-            if arr.size == 1:
-                return float(arr.reshape(()))
-            # fallbacks for unexpected vectors: finite mean or NaN
-            if _np.isfinite(arr).any():
-                return float(_np.nanmean(arr))
-            return float("nan")
-        except Exception:
-            try:
-                return float(x)
-            except Exception:
-                return float("nan")
-
-    with open(file_path, "w") as f:
-        f.write(f"Statistical Results for Model: {model}\n")
-        f.write(header + "\n")
-        f.write("-" * len(header) + "\n")
-        for s in stats_list:
-            obs = str(s.get("Observation", ""))
-            ll = _as_float(s.get("Log-Likelihood", _np.nan))
-            chi2 = _as_float(s.get("Chi_squared", _np.nan))
-            rchi = _as_float(s.get("Reduced_Chi_squared", _np.nan))
-            aic = _as_float(s.get("AIC", _np.nan))
-            bic = _as_float(s.get("BIC", _np.nan))
-            daic = _as_float(s.get("dAIC", _np.nan))
-            dbic = _as_float(s.get("dBIC", _np.nan))
-            row = (
-                f"{obs:<{obs_w}} | {ll:>18.4f} | {chi2:>15.4f} | "
-                f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | "
-                f"{daic:>11.3f} | {dbic:>11.3f}"
-            )
-            f.write(row + "\n")
-        f.write("\n")
+    from contextlib import redirect_stdout
+    from Plots.Plot_functions import print_stats_table
+    with open(os.path.join(folder, "stats_summary.txt"), "w", encoding="utf-8") as out:
+        with redirect_stdout(out):
+            print_stats_table(model, stats_list)
 
 
 def save_interpretations_to_file(

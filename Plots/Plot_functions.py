@@ -186,36 +186,8 @@ def texify_label(text: Optional[str], PLOT_SETTINGS: Mapping[str, Any]) -> Optio
 
 
 def pretty_obs_name(obs_key: str, latex_on: bool = True) -> str:
-    """
-    Pretty-print observation keys.
-
-    Requirements:
-      - Tables / saved stats (latex_on=False):
-          PantheonPS        -> Pantheon++SH0ES
-          PantheonP         -> Pantheon+
-      - Plots (latex_on=True):
-          PantheonPS        -> Pantheon$^{+}$+SH0ES
-          PantheonP         -> Pantheon$^{+}$
-    """
-
-    def _one_token(tok: str) -> str:
-        t = tok.strip()
-
-        # ---- Pantheon aliases ----
-        if t in ("PantheonPS", "PantheonP_SH0ES"):
-            return (r"Pantheon$^{+}$+SH0ES") if latex_on else "Pantheon++SH0ES"
-        if t == "PantheonP":
-            return (r"Pantheon$^{+}$") if latex_on else "Pantheon+"
-
-        # Fall back to your global mapping (keeps existing behavior)
-        pair = OBS_PRETTY_MAP.get(t)
-        if pair is None:
-            return t
-        return pair[0] if latex_on else pair[1]
-
-    # combined groups are joined with "+"
-    parts = str(obs_key).split("+")
-    return " + ".join(_one_token(p) for p in parts)
+    from Kosmulator_main.Plot_metadata import observation_label
+    return observation_label(obs_key, mathtext=latex_on, extra_names=OBS_PRETTY_MAP, pretty_names=OBS_PRETTY_MAP)
 
 
 # =============================================================================
@@ -478,11 +450,8 @@ def add_corner_table(
     # ------------------------------------------------------------------
     # Draw the table
     # ------------------------------------------------------------------
-    cols_tex = (
-        format_for_latex(greek_Symbols(list(parameter_labels)))
-        if PLOT_SETTINGS.get("latex_enabled", False)
-        else list(parameter_labels)
-    )
+    # Mathtext renders Greek letters and subscripts without external LaTeX.
+    cols_tex = format_for_latex(greek_Symbols(list(parameter_labels)))
 
     # Pad rows to full width
     rows = [row + [""] * (n_cols - len(row)) for row in latex_table]
@@ -726,55 +695,22 @@ def _obs_col_width(stats_list, base=38, wmin=30, wmax=68, pad=2):
     return max(wmin, min(wmax, max(base, maxlen)))
     
 def print_stats_table(model: str, stats_list):
-    red, blue, reset = "\033[31m", "\033[34m", "\033[0m"
-
-    # --- coerce numpy scalars / 0-D arrays / len-1 arrays to float
-    import numpy as _np
-    def _as_float(x):
-        try:
-            arr = _np.asarray(x)
-            if arr.ndim == 0:
-                return float(arr)
-            if arr.size == 1:
-                return float(arr.reshape(()))
-            if _np.isfinite(arr).any():
-                return float(_np.nanmean(arr))
-            return float('nan')
-        except Exception:
-            try:
-                return float(x)
-            except Exception:
-                return float('nan')
-
-    # NEW: dynamic width for the Observation column
+    """Print the same model-comparison columns used by persisted summaries."""
+    columns = ["N", "k", "p_D", "Chi_squared", "Reduced_Chi_squared",
+               "AIC", "AICc", "DIC", "BIC", "dAIC", "dAICc", "dDIC", "dBIC"]
     obs_w = _obs_col_width(stats_list, base=38, wmin=30, wmax=68, pad=2)
-
-    header = (
-        f"{'Observation':<{obs_w}} | {'Log-Likelihood':>18} | {'Chi-Squared':>15} | "
-        f"{'Reduced Chi-Squared':>20} | {'AIC':>11} | {'BIC':>11} | {'dAIC':>11} | {'dBIC':>11}"
-    )
+    header = f"{'Observation':<{obs_w}} | " + " | ".join(f"{c:>12}" for c in columns)
     print(f"Statistical Results for Model: {model}")
-    print(blue + header + reset)
-    print("-" * len(header))  # ruler matches header width
-
-    for stats in stats_list:
-        # pad BEFORE coloring to keep alignment
-        plain_obs = f"{stats['Observation']:<{obs_w}}"
-        obs  = str(stats.get('Observation', ''))
-        ll   = _as_float(stats.get('Log-Likelihood', _np.nan))
-        chi2 = _as_float(stats.get('Chi_squared', _np.nan))
-        rchi = _as_float(stats.get('Reduced_Chi_squared', _np.nan))
-        aic  = _as_float(stats.get('AIC', _np.nan))
-        bic  = _as_float(stats.get('BIC', _np.nan))
-        daic = _as_float(stats.get('dAIC', _np.nan))
-        dbic = _as_float(stats.get('dBIC', _np.nan))
-
-        obs_str = f"{obs:<{obs_w}}"
-        print(
-            f"{obs_str} | {ll:>18.4f} | {chi2:>15.4f} | "
-            f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | "
-            f"{daic:>11.3f} | {dbic:>11.3f}"
-        )
+    print(header)
+    print("-" * len(header))
+    for row in stats_list:
+        fields = []
+        for key in columns:
+            value = float(row.get(key, np.nan))
+            text = (str(int(value)) if key in ("N", "k") and np.isfinite(value)
+                    else f"{value:.3f}" if np.isfinite(value) else "--")
+            fields.append(f"{text:>12}")
+        print(f"{str(row['Observation']):<{obs_w}} | " + " | ".join(fields))
         #print(row)
 
 # =============================================================================
@@ -836,8 +772,13 @@ def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None) 
     has_cal      = any(L.startswith("bbn") or L.startswith("cmb") for L in lower)
 
     if has_bao_desi:
-        # Early-time calibrator present -> calibrated
-        if has_cal:
+        from Kosmulator_main import constants as constants
+        sampled = (model_config.get("parameters", [])[obs_index]
+                   if obs_index is not None else [])
+        # A derived sound horizon is not a fitted r_d parameter.
+        if bool(getattr(constants, "DERIVE_RD_WITH_MODEL_CLASS", False)) and "r_d" not in sampled:
+            tokens.append("rd: model-derived CLASS")
+        elif has_cal:
             tokens.append("rd: calibrated")
         # If BAO is combined with CC (or any non-calibrator second dataset) -> FREE
         elif has_cc or len(obs_list) > 1:
@@ -1043,10 +984,13 @@ def extract_observation_data(
                 if params_median is not None and "r_d" in params_median:
                     rs = float(params_median["r_d"])
                 elif params_median is not None:
-                    rs = float(compute_rd(params_median))
+                    rs = float(resolve_plot_rd(params_median, obs_type=obs_type))
                 else:
                     rs = R_D_SINGLETON
             except Exception:
+                from Kosmulator_main import constants as constants
+                if bool(getattr(constants, "DERIVE_RD_WITH_MODEL_CLASS", False)):
+                    raise
                 rs = R_D_SINGLETON
 
             idx4 = (meta == 4)
@@ -1211,6 +1155,32 @@ def compute_sigma8z(
 # Plot evaluators (turn params → observable curves)
 # =============================================================================
 
+def resolve_plot_rd(parameters, model_name=None, obs_type="BAO"):
+    """Use the likelihood's sound-horizon policy, including strict model CLASS."""
+    from Kosmulator_main import rd_helpers as rd
+    from Kosmulator_main import constants as constants
+    p = dict(parameters)
+    if model_name is not None:
+        p["__model_name__"] = model_name
+    if bool(getattr(constants, "DERIVE_RD_WITH_MODEL_CLASS", False)) and not p.get("__model_name__"):
+        raise ValueError("Model-derived r_d plotting requires a model name")
+    return rd._resolve_rd(p, obs_type)
+
+
+def bao_scale_summary(parameters, model_name, obs_type="BAO"):
+    """Sound-horizon scale at parameter medians, using the curve's resolver."""
+    from Kosmulator_main import constants
+    h0 = parameters.get("H_0")
+    if h0 is None or not np.isfinite(h0) or h0 <= 0:
+        return None
+    rd = float(resolve_plot_rd(parameters, model_name, obs_type))
+    if not np.isfinite(rd) or rd <= 0:
+        raise ValueError("Invalid sound horizon in BAO scale summary")
+    strict = bool(getattr(constants, "DERIVE_RD_WITH_MODEL_CLASS", False))
+    return {"r_d": rd, "S": constants.C_KM_S / (h0 * rd),
+            "policy": "model-derived CLASS" if strict else "likelihood r_d policy"}
+
+
 def model_curve_for_type(
     obs_type: str,
     zgrid: np.ndarray,
@@ -1224,6 +1194,7 @@ def model_curve_for_type(
 
     # Work with a copy so we can safely inject gamma if needed
     p = dict(param_dict)
+    p["__model_name__"] = model_name
     if "gamma" not in p:
         p["gamma"] = DEFAULT_GROWTH_INDEX
         gamma_fixed = True
@@ -1251,12 +1222,12 @@ def model_curve_for_type(
 
     if obs_type == "BAO":
         DV = MODEL_funcs["DV"](zgrid, p, model_name)
-        rd = MODEL_funcs["rd"](p)
+        rd = resolve_plot_rd(p, model_name, "BAO")
         return DV / rd, r"$D_V(z)/r_d$ (dimensionless)"
 
     if obs_type == "DESI":
         DM = MODEL_funcs["DM"](zgrid, p, model_name)
-        rs = MODEL_funcs["rd"](p)
+        rs = resolve_plot_rd(p, model_name, "DESI_DR1")
         return DM / rs, r"$D_M(z)/r_s$ (DESI DR1, dimensionless)"
         
     if obs_type in ("BBN_DH", "BBN_DH_AlterBBN"):
@@ -1424,12 +1395,8 @@ def evaluator_for_points(
                 DH_th = np.nan
         return np.full_like(np.atleast_1d(z), float(DH_th), dtype=float)
 
-    # BAO / DESI
-    try:
-        rs = MODEL_funcs["rd"](param_dict)
-    except Exception:
-        # Fallback for plotting in singleton BAO/DESI sets where r_d is fixed
-        rs = R_D_SINGLETON
+    # BAO / DESI: match the likelihood policy; strict CLASS errors propagate.
+    rs = resolve_plot_rd(param_dict, model_name, "BAO" if obs_type == "BAO" else "DESI_DR2")
     DM = MODEL_funcs["DM"](z, param_dict, model_name)
     DA = DM / (1.0 + z)
     Ez = MODEL_funcs["E"](z, param_dict, model_name)

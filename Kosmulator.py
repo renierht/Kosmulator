@@ -210,7 +210,7 @@ def _ensure_true_model_first(names: List[str], tm: str) -> List[str]:
 # Main
 # ----------------------------------------------------------------------
 
-def main() -> None:
+def main(*, workflow_options: dict | None = None) -> None:
     from Kosmulator_main.utils import print_init_banner  # type: ignore[import]
 
     # --- IDE SAFETY CHECK: Completely reject CMB for IDE models ---
@@ -265,6 +265,7 @@ def main() -> None:
         nsteps=nsteps,
         burn=burn,
         convergence=convergence,
+        **(workflow_options or {}),
     )
 
 

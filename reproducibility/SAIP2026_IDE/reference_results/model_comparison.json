@@ -1,0 +1,784 @@
+{
+  "LCDM": {
+    "DESI_DR2+PantheonPS": {
+      "D_bar": 1475.7214474056718,
+      "D_at_mean": 1472.719139156279,
+      "p_D": 3.002308249392854,
+      "DIC": 1478.7237556550647,
+      "Posterior_mean": [
+        0.3114934471154465,
+        71.89262813514308,
+        -19.298564837851668
+      ],
+      "Retained_samples": 444000,
+      "Finite_samples": 444000,
+      "Excluded_samples": 0,
+      "N": 1670,
+      "k": 3,
+      "Data_counts": {
+        "DESI_DR2": 13,
+        "PantheonPS": 1657
+      },
+      "Log-Likelihood": -736.3575997553589,
+      "Chi_squared": 1472.7151995107179,
+      "Reduced_Chi_squared": 0.8834524292205866,
+      "Raw_chain_chi2": 1472.7155003673274,
+      "Stored_point_check_delta_chi2": 1.5738685306132538e-06,
+      "AIC": 1478.7151995107179,
+      "AICc": 1478.7296052730228,
+      "BIC": 1494.9769362269503,
+      "MLE_parameters": {
+        "Omega_m": 0.31112615890667716,
+        "H_0": 71.86742149538541,
+        "M_abs": -19.299305358511628
+      },
+      "Parameter_names": [
+        "Omega_m",
+        "H_0",
+        "M_abs"
+      ],
+      "MLE_note": "polished likelihood (interior search)",
+      "Optimizer_runs": [
+        {
+          "stage": "interior start 1",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 181,
+          "chi2": 1472.7152117954165,
+          "parameters": {
+            "Omega_m": 0.31110906452536224,
+            "H_0": 71.86699375528787,
+            "M_abs": -19.299323090588672
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 1.2062188470274293e-08,
+            "H_0": 5.647147673926156e-07,
+            "M_abs": 1.7583047906555294e-08
+          },
+          "simplex_objective_spread": 8.041287742344139e-06,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "interior start 2",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 184,
+          "chi2": 1472.7152040843177,
+          "parameters": {
+            "Omega_m": 0.31113625501221037,
+            "H_0": 71.86622776919192,
+            "M_abs": -19.29934456538979
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 1.3992685787833636e-08,
+            "H_0": 8.688808605938902e-07,
+            "M_abs": 2.4819616584181858e-08
+          },
+          "simplex_objective_spread": 1.6387252799177077e-05,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "interior start 3",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 165,
+          "chi2": 1472.7151995107179,
+          "parameters": {
+            "Omega_m": 0.31112615890667716,
+            "H_0": 71.86742149538541,
+            "M_abs": -19.299305358511628
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 2.0077639051319096e-08,
+            "H_0": 4.932415720304562e-07,
+            "M_abs": 2.1014777473737922e-08
+          },
+          "simplex_objective_spread": 1.7622975747144665e-05,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        }
+      ],
+      "Likelihood_source": "saved likelihood blobs: <CHAIN_ROOT>/RD_CLASS_DIAG_5K/LCDM_v/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "Burn": 1000,
+      "Thin": 1,
+      "Physicality_switches": {
+        "ALLOW_NEGATIVE_ENERGIES": true,
+        "ALLOW_BIG_RIP": true,
+        "ALLOW_DOOM_FACTOR_INSTABILITIES": true
+      },
+      "Postprocessing_options": {
+        "polish": true,
+        "starts": 3,
+        "maxfev": 1500,
+        "xatol": 1e-06,
+        "fatol": 2e-05,
+        "boundary_eps": [
+          0.0001,
+          1e-06,
+          1e-08
+        ],
+        "stored_chi2_tolerance": 0.001,
+        "delta_boundary_eps": [
+          1e-06,
+          1e-08,
+          1e-10
+        ],
+        "delta_boundary_chi2_tolerance": 0.0005
+      },
+      "dChi_squared": 0.0,
+      "dAIC": 0.0,
+      "dAICc": 0.0,
+      "dDIC": 0.0,
+      "dBIC": 0.0,
+      "Reference_model": "LCDM"
+    }
+  },
+  "iwCDM": {
+    "DESI_DR2+PantheonPS": {
+      "D_bar": 1466.4140976961155,
+      "D_at_mean": 1461.4258506094639,
+      "p_D": 4.988247086651654,
+      "DIC": 1471.4023447827672,
+      "Posterior_mean": [
+        0.2958919680010606,
+        -0.9136516132758963,
+        -0.006057886892509027,
+        73.45202856680433,
+        -19.243414511816844
+      ],
+      "Retained_samples": 900000,
+      "Finite_samples": 900000,
+      "Excluded_samples": 0,
+      "N": 1670,
+      "k": 5,
+      "Data_counts": {
+        "DESI_DR2": 13,
+        "PantheonPS": 1657
+      },
+      "Log-Likelihood": -730.7083130185431,
+      "Chi_squared": 1461.4166260370862,
+      "Reduced_Chi_squared": 0.8777277033255773,
+      "Raw_chain_chi2": 1461.4315042769306,
+      "Stored_point_check_delta_chi2": 1.009202378554619e-06,
+      "AIC": 1471.4166260370862,
+      "AICc": 1471.4526837293938,
+      "BIC": 1498.5195205641403,
+      "MLE_parameters": {
+        "Omega_m": 0.2958070454720149,
+        "w": -0.9121724287034743,
+        "delta": -0.006069608332498661,
+        "H_0": 73.43574310287218,
+        "M_abs": -19.243555759419046
+      },
+      "Parameter_names": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "MLE_note": "polished likelihood (interior search)",
+      "Optimizer_runs": [
+        {
+          "stage": "interior start 1",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 468,
+          "chi2": 1461.4166260392574,
+          "parameters": {
+            "Omega_m": 0.295807173620524,
+            "w": -0.9121727912530484,
+            "delta": -0.006069583628986664,
+            "H_0": 73.43573905500713,
+            "M_abs": -19.243555900775114
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 8.732639278363763e-09,
+            "w": 6.129800700360732e-08,
+            "delta": 2.0005407018464094e-09,
+            "H_0": 9.192396532853309e-07,
+            "M_abs": 1.7441347921476336e-08
+          },
+          "simplex_objective_spread": 3.2870502764126286e-08,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "interior start 2",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 449,
+          "chi2": 1461.4166260402214,
+          "parameters": {
+            "Omega_m": 0.2958066398322438,
+            "w": -0.9121719237984677,
+            "delta": -0.006069680801579868,
+            "H_0": 73.43581814187608,
+            "M_abs": -19.24355355109248
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 1.9473009704729094e-08,
+            "w": 6.145339925822668e-08,
+            "delta": 3.7248804830511406e-09,
+            "H_0": 9.484173233431648e-07,
+            "M_abs": 2.6073493586409313e-08
+          },
+          "simplex_objective_spread": 8.899519343685824e-09,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "interior start 3",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 433,
+          "chi2": 1461.4166260370862,
+          "parameters": {
+            "Omega_m": 0.2958070454720149,
+            "w": -0.9121724287034743,
+            "delta": -0.006069608332498661,
+            "H_0": 73.43574310287218,
+            "M_abs": -19.243555759419046
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 3.9965867004720934e-08,
+            "w": 1.9684976404477084e-07,
+            "delta": 1.0150501264169498e-08,
+            "H_0": 9.31471348053492e-07,
+            "M_abs": 3.593891761966006e-08
+          },
+          "simplex_objective_spread": 8.850975063978694e-09,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        }
+      ],
+      "Likelihood_source": "saved likelihood blobs: <CHAIN_ROOT>/RD_CLASS_SEEDED_2K/NonLinear_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES_FINAL_8500.h5",
+      "Burn": 1000,
+      "Thin": 1,
+      "Physicality_switches": {
+        "ALLOW_NEGATIVE_ENERGIES": true,
+        "ALLOW_BIG_RIP": true,
+        "ALLOW_DOOM_FACTOR_INSTABILITIES": true
+      },
+      "Postprocessing_options": {
+        "polish": true,
+        "starts": 3,
+        "maxfev": 1500,
+        "xatol": 1e-06,
+        "fatol": 2e-05,
+        "boundary_eps": [
+          0.0001,
+          1e-06,
+          1e-08
+        ],
+        "stored_chi2_tolerance": 0.001,
+        "delta_boundary_eps": [
+          1e-06,
+          1e-08,
+          1e-10
+        ],
+        "delta_boundary_chi2_tolerance": 0.0005
+      },
+      "dChi_squared": -11.298573473631677,
+      "dAIC": -7.298573473631677,
+      "dAICc": -7.276921543628987,
+      "dDIC": -7.32141087229752,
+      "dBIC": 3.5425843371899646,
+      "Reference_model": "LCDM"
+    }
+  },
+  "+iwCDM": {
+    "DESI_DR2+PantheonPS": {
+      "D_bar": 1476.7357016816334,
+      "D_at_mean": 1472.6461946762533,
+      "p_D": 4.089507005380028,
+      "DIC": 1480.8252086870134,
+      "Posterior_mean": [
+        0.31226133737861933,
+        -1.03856970995353,
+        0.0005169432740667571,
+        72.74628719680875,
+        -19.279246534438244
+      ],
+      "Retained_samples": 756000,
+      "Finite_samples": 756000,
+      "Excluded_samples": 0,
+      "N": 1670,
+      "k": 5,
+      "Data_counts": {
+        "DESI_DR2": 13,
+        "PantheonPS": 1657
+      },
+      "Log-Likelihood": -735.4252411068863,
+      "Chi_squared": 1470.8504822137727,
+      "Reduced_Chi_squared": 0.8833936830112749,
+      "Raw_chain_chi2": 1470.916182635378,
+      "Stored_point_check_delta_chi2": 7.422204362228513e-07,
+      "AIC": 1480.8504822137727,
+      "AICc": 1480.8865399060803,
+      "BIC": 1507.9533767408268,
+      "MLE_parameters": {
+        "Omega_m": 0.31069484754119847,
+        "w": -1.027756889778976,
+        "delta": 1e-10,
+        "H_0": 72.79631180044464,
+        "M_abs": -19.276397744912707
+      },
+      "Parameter_names": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "MLE_note": "validated positive-delta boundary limit as delta approaches 0 from above (terminal delta=1e-10)",
+      "Optimizer_runs": [
+        {
+          "stage": "interior start 1",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 462,
+          "chi2": 1470.8510592177477,
+          "parameters": {
+            "Omega_m": 0.31069147229070887,
+            "w": -1.0278430403896506,
+            "delta": 1.6663588615835267e-07,
+            "H_0": 72.80057018686223,
+            "M_abs": -19.276281162587413
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 1.4738857800900007e-08,
+            "w": 5.170426931044858e-08,
+            "delta": 4.077057561651863e-12,
+            "H_0": 7.119173517367017e-07,
+            "M_abs": 2.031769241739312e-08
+          },
+          "simplex_objective_spread": 7.594711632918916e-06,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "interior start 2",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 710,
+          "chi2": 1470.8505736141283,
+          "parameters": {
+            "Omega_m": 0.3107064082476607,
+            "w": -1.0276919876862087,
+            "delta": 1.7830881978602444e-08,
+            "H_0": 72.79680920902851,
+            "M_abs": -19.27638406234752
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 1.1825795787068216e-08,
+            "w": 3.28162663709719e-08,
+            "delta": 5.988567579807187e-12,
+            "H_0": 5.78403771100966e-07,
+            "M_abs": 1.598322896256832e-08
+          },
+          "simplex_objective_spread": 9.032311254486558e-06,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "interior start 3",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 493,
+          "chi2": 1470.8504997492773,
+          "parameters": {
+            "Omega_m": 0.31070157790064734,
+            "w": -1.0277904382482401,
+            "delta": 2.7814312801562092e-09,
+            "H_0": 72.79926262193271,
+            "M_abs": -19.27631445840214
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 8.107350013553116e-09,
+            "w": 5.1794545763428346e-08,
+            "delta": 3.4253095569255146e-12,
+            "H_0": 9.023104041716579e-07,
+            "M_abs": 3.472160159390114e-08
+          },
+          "simplex_objective_spread": 7.252139880620234e-06,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "delta=1e-06 positive boundary",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 281,
+          "chi2": 1470.8537785760175,
+          "parameters": {
+            "Omega_m": 0.31071026041778155,
+            "w": -1.0278089957319678,
+            "delta": 1e-06,
+            "H_0": 72.7976295391999,
+            "M_abs": -19.276367686913446
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 4.457545887959213e-09,
+            "w": 6.197704571775375e-09,
+            "H_0": 8.358049825574199e-07,
+            "M_abs": 2.8533939655517315e-08
+          },
+          "simplex_objective_spread": 8.589055255470157e-06,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null,
+          "neighbourhood_chi2_range": 2.0457712253119098e-05,
+          "boundary_chi2_tolerance": 0.0005,
+          "boundary_epsilon": 1e-06
+        },
+        {
+          "stage": "delta=1e-08 positive boundary",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 271,
+          "chi2": 1470.8505195729854,
+          "parameters": {
+            "Omega_m": 0.31070597498451924,
+            "w": -1.0277760504326958,
+            "delta": 1e-08,
+            "H_0": 72.79669868112458,
+            "M_abs": -19.276381849802274
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 1.1608756844694312e-08,
+            "w": 4.078829096698655e-08,
+            "H_0": 8.09265017664984e-07,
+            "M_abs": 2.2772592700448513e-08
+          },
+          "simplex_objective_spread": 8.661147830935079e-06,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null,
+          "neighbourhood_chi2_range": 1.6787465256129508e-05,
+          "boundary_chi2_tolerance": 0.0005,
+          "boundary_epsilon": 1e-08
+        },
+        {
+          "stage": "delta=1e-10 positive boundary",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 250,
+          "chi2": 1470.8504822137727,
+          "parameters": {
+            "Omega_m": 0.31069484754119847,
+            "w": -1.027756889778976,
+            "delta": 1e-10,
+            "H_0": 72.79631180044464,
+            "M_abs": -19.276397744912707
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 3.2769580160518785e-08,
+            "w": 1.9588502375711414e-08,
+            "H_0": 9.446812327951193e-07,
+            "M_abs": 2.9425926584281115e-08
+          },
+          "simplex_objective_spread": 7.306540055651567e-06,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null,
+          "neighbourhood_chi2_range": 2.260849623780814e-05,
+          "boundary_chi2_tolerance": 0.0005,
+          "boundary_epsilon": 1e-10,
+          "boundary_sequence_validated": true
+        }
+      ],
+      "Likelihood_source": "saved likelihood blobs: <CHAIN_ROOT>/RD_CLASS_PLUS_IW_8K/NonLinear_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "Burn": 1000,
+      "Thin": 1,
+      "Physicality_switches": {
+        "ALLOW_NEGATIVE_ENERGIES": false,
+        "ALLOW_BIG_RIP": true,
+        "ALLOW_DOOM_FACTOR_INSTABILITIES": true
+      },
+      "Postprocessing_options": {
+        "polish": true,
+        "starts": 3,
+        "maxfev": 1500,
+        "xatol": 1e-06,
+        "fatol": 2e-05,
+        "boundary_eps": [
+          0.0001,
+          1e-06,
+          1e-08
+        ],
+        "stored_chi2_tolerance": 0.001,
+        "delta_boundary_eps": [
+          1e-06,
+          1e-08,
+          1e-10
+        ],
+        "delta_boundary_chi2_tolerance": 0.0005
+      },
+      "dChi_squared": -1.864717296945173,
+      "dAIC": 2.135282703054827,
+      "dAICc": 2.156934633057517,
+      "dDIC": 2.101453031948722,
+      "dBIC": 12.976440513876469,
+      "Reference_model": "LCDM"
+    }
+  },
+  "SiwCDM": {
+    "DESI_DR2+PantheonPS": {
+      "D_bar": 1471.53446702387,
+      "D_at_mean": 1467.4332593797064,
+      "p_D": 4.101207644163651,
+      "DIC": 1475.6356746680337,
+      "Posterior_mean": [
+        0.3064813565891345,
+        -1.016120947984818,
+        -0.0016527720640110482,
+        73.76405228772354,
+        -19.247913406057677
+      ],
+      "Retained_samples": 864000,
+      "Finite_samples": 864000,
+      "Excluded_samples": 0,
+      "N": 1670,
+      "k": 5,
+      "Data_counts": {
+        "DESI_DR2": 13,
+        "PantheonPS": 1657
+      },
+      "Log-Likelihood": -732.8722267484992,
+      "Chi_squared": 1465.7444534969984,
+      "Reduced_Chi_squared": 0.8803269990972964,
+      "Raw_chain_chi2": 1465.786164839346,
+      "Stored_point_check_delta_chi2": -2.7050305106968153e-07,
+      "AIC": 1475.7444534969984,
+      "AICc": 1475.780511189306,
+      "BIC": 1502.8473480240525,
+      "MLE_parameters": {
+        "Omega_m": 0.30479592163717023,
+        "w": -1.00000001,
+        "delta": -0.0022947901217461233,
+        "H_0": 73.70577106534722,
+        "M_abs": -19.247370712687456
+      },
+      "Parameter_names": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "MLE_note": "boundary-limited likelihood supremum as w approaches -1 from below",
+      "Optimizer_runs": [
+        {
+          "stage": "interior start 1",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 480,
+          "chi2": 1465.744453933864,
+          "parameters": {
+            "Omega_m": 0.3047965851408802,
+            "w": -1.0000000126152828,
+            "delta": -0.002294753834269163,
+            "H_0": 73.70614859380464,
+            "M_abs": -19.247360544142147
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 1.482155176368849e-08,
+            "w": 8.907319326567631e-12,
+            "delta": 9.536214951380573e-10,
+            "H_0": 8.489945599876592e-07,
+            "M_abs": 1.859431719708482e-08
+          },
+          "simplex_objective_spread": 2.047506768576568e-07,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "interior start 2",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 832,
+          "chi2": 1465.7444537948602,
+          "parameters": {
+            "Omega_m": 0.3047974399565869,
+            "w": -1.000000013935015,
+            "delta": -0.0022945977249204776,
+            "H_0": 73.70579970987534,
+            "M_abs": -19.247368752663597
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 4.7097171718135655e-09,
+            "w": 6.519007555993994e-12,
+            "delta": 9.22784622152395e-10,
+            "H_0": 8.383167795500412e-07,
+            "M_abs": 2.192468429029759e-08
+          },
+          "simplex_objective_spread": 2.7549788228498073e-07,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "interior start 3",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 716,
+          "chi2": 1465.7444538100003,
+          "parameters": {
+            "Omega_m": 0.3047943377056902,
+            "w": -1.0000000115824526,
+            "delta": -0.0022948788419158597,
+            "H_0": 73.7061177089609,
+            "M_abs": -19.247362182921943
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 1.1720780235258133e-08,
+            "w": 1.177857811285321e-11,
+            "delta": 3.4939593796315394e-10,
+            "H_0": 9.038983250775345e-07,
+            "M_abs": 2.867363591008143e-08
+          },
+          "simplex_objective_spread": 1.416713075741427e-07,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "w=-1-0.0001 boundary",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 345,
+          "chi2": 1465.7540948920048,
+          "parameters": {
+            "Omega_m": 0.3048058490935982,
+            "w": -1.0001,
+            "delta": -0.00229104942757988,
+            "H_0": 73.7064236455788,
+            "M_abs": -19.24736511308665
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 4.025397015716692e-09,
+            "delta": 1.0790900759755084e-09,
+            "H_0": 9.188864282805298e-07,
+            "M_abs": 2.6052521917563354e-08
+          },
+          "simplex_objective_spread": 1.4614431620429968e-07,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "w=-1-1e-06 boundary",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 348,
+          "chi2": 1465.7445489741538,
+          "parameters": {
+            "Omega_m": 0.3047968519220776,
+            "w": -1.000001,
+            "delta": -0.0022947044119941756,
+            "H_0": 73.705675253581,
+            "M_abs": -19.247373186302937
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 8.674120643981098e-09,
+            "delta": 6.869800045668228e-10,
+            "H_0": 7.816072411515051e-07,
+            "M_abs": 2.7390665735538278e-08
+          },
+          "simplex_objective_spread": 1.655804453548626e-07,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "w=-1-1e-08 boundary",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 351,
+          "chi2": 1465.7444534969984,
+          "parameters": {
+            "Omega_m": 0.30479592163717023,
+            "w": -1.00000001,
+            "delta": -0.0022947901217461233,
+            "H_0": 73.70577106534722,
+            "M_abs": -19.247370712687456
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 1.1608857819478402e-08,
+            "delta": 3.905130602568918e-10,
+            "H_0": 7.620598694302316e-07,
+            "M_abs": 3.1337137329501275e-08
+          },
+          "simplex_objective_spread": 1.619914655748289e-07,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        }
+      ],
+      "Likelihood_source": "saved likelihood blobs: <CHAIN_ROOT>/RD_CLASS_SIW_8K/NonLinear_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "Burn": 1000,
+      "Thin": 1,
+      "Physicality_switches": {
+        "ALLOW_NEGATIVE_ENERGIES": true,
+        "ALLOW_BIG_RIP": true,
+        "ALLOW_DOOM_FACTOR_INSTABILITIES": false
+      },
+      "Postprocessing_options": {
+        "polish": true,
+        "starts": 3,
+        "maxfev": 1500,
+        "xatol": 1e-06,
+        "fatol": 2e-05,
+        "boundary_eps": [
+          0.0001,
+          1e-06,
+          1e-08
+        ],
+        "stored_chi2_tolerance": 0.001,
+        "delta_boundary_eps": [
+          1e-06,
+          1e-08,
+          1e-10
+        ],
+        "delta_boundary_chi2_tolerance": 0.0005
+      },
+      "dChi_squared": -6.970746013719463,
+      "dAIC": -2.970746013719463,
+      "dAICc": -2.9490940837167727,
+      "dDIC": -3.088080987030935,
+      "dBIC": 7.870411797102179,
+      "Reference_model": "LCDM"
+    }
+  }
+}

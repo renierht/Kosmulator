@@ -1,0 +1,116 @@
+{
+  "description": "Existing-chain SAIP2026 IDE reproduction; DIC consensus pending",
+  "observations": [
+    [
+      "PantheonPS",
+      "DESI_DR2"
+    ]
+  ],
+  "reference_model": "LCDM_v",
+  "burn": 1000,
+  "thin": 1,
+  "walkers": 120,
+  "prior_limits": {
+    "Omega_m": [
+      0.1,
+      0.5
+    ],
+    "H_0": [
+      60,
+      90
+    ],
+    "M_abs": [
+      -20.5,
+      -18
+    ],
+    "w": [
+      -2,
+      -0.33
+    ],
+    "delta": [
+      -1,
+      1
+    ]
+  },
+  "class_settings": {
+    "DERIVE_RD_WITH_MODEL_CLASS": true,
+    "RD_CLASS_OMEGA_B": 0.048,
+    "RD_CLASS_N_EFF": 3.044,
+    "RD_CLASS_SUM_MNU_EV": 0.06,
+    "RD_CLASS_N_NCDM": 3
+  },
+  "derived_rd_samples": 6000,
+  "derived_rd_seed": 20260929,
+  "postprocessing": {
+    "polish": true
+  },
+  "regime_switches": {
+    "iw": [
+      true,
+      true,
+      true
+    ],
+    "plus_iw": [
+      false,
+      true,
+      true
+    ],
+    "siw": [
+      true,
+      true,
+      false
+    ]
+  },
+  "cases": {
+    "lcdm": {
+      "model": "LCDM_v",
+      "chain": "RD_CLASS_DIAG_5K/LCDM_v/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "parameters": [
+        "Omega_m",
+        "H_0",
+        "M_abs"
+      ],
+      "retained_samples": 444000,
+      "completed_steps": 4700
+    },
+    "iw": {
+      "model": "NonLinear_IDE_2",
+      "chain": "RD_CLASS_SEEDED_2K/NonLinear_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES_FINAL_8500.h5",
+      "parameters": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "retained_samples": 900000,
+      "completed_steps": 8500
+    },
+    "plus_iw": {
+      "model": "NonLinear_IDE_2",
+      "chain": "RD_CLASS_PLUS_IW_8K/NonLinear_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "parameters": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "retained_samples": 756000,
+      "completed_steps": 7300
+    },
+    "siw": {
+      "model": "NonLinear_IDE_2",
+      "chain": "RD_CLASS_SIW_8K/NonLinear_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "parameters": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "retained_samples": 864000,
+      "completed_steps": 8200
+    }
+  }
+}

@@ -157,6 +157,9 @@ def main(
     burn: int,
     convergence: float,
     pantheonp_mode: str = "PplusSH0ES",
+    existing_chain_paths: Optional[Dict[str, str]] = None,
+    postprocessing_options: Optional[Dict[str, Any]] = None,
+    plot_settings_overrides: Optional[Dict[str, Any]] = None,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -172,6 +175,16 @@ def main(
     # 1) CLI
     # ------------------------------------------------------------------
     args = parse_cli_args()
+    if existing_chain_paths is not None:
+        if set(existing_chain_paths) != set(model_names) or len(observations) != 1:
+            raise ValueError("Existing-chain mode requires one observation group and one path per model")
+        if getattr(args, "overwrite", False) or getattr(args, "resume", False):
+            raise ValueError("Existing-chain mode cannot overwrite or resume")
+        if getattr(args, "use_mpi", False) or int(getattr(args, "num_cores", 1)) != 1:
+            raise ValueError("Existing-chain reproduction currently requires serial execution")
+        for path in existing_chain_paths.values():
+            if not os.path.isfile(path):
+                raise FileNotFoundError(path)
     K.set_engine_overrides(
         force_vec=getattr(args, "force_vectorisation", False),
         disable_vec=getattr(args, "disable_vectorisation", False),
@@ -186,6 +199,9 @@ def main(
     PLOT_SETTINGS = build_plot_settings(
         observations, args.output_suffix, args.latex_enabled, args.plot_table
     )
+
+    if plot_settings_overrides:
+        PLOT_SETTINGS.update(plot_settings_overrides)
 
     PLOT_SETTINGS["corner_show_all_cmb_params"] = bool(
         getattr(args, "corner_show_all_cmb_params", False)
@@ -254,6 +270,10 @@ def main(
         shared["CONFIG"],
         shared["data"],
     )
+
+    if postprocessing_options is not None:
+        for model in model_names:
+            CONFIG[model]["postprocessing"] = dict(postprocessing_options)
 
     # ------------------------------------------------------------------
     # 6) Pantheon covariance
@@ -419,6 +439,7 @@ def main(
         vectorised=vectorised,
         suffix=getattr(args, "output_suffix", ""),
         resumeChains=bool(getattr(args, "resume", False)),
+        existing_chain_paths=existing_chain_paths,
     )
 
     # ------------------------------------------------------------------
@@ -448,6 +469,7 @@ def run_mcmc_for_all_models(
     pool=None,
     pantheon_cov: Optional[np.ndarray] = None,
     resumeChains: bool = False,
+    existing_chain_paths: Optional[Dict[str, str]] = None,
 ):
     """
     Run MCMC simulations for all models and observation sets,
@@ -591,6 +613,13 @@ def run_mcmc_for_all_models(
             )
             #print(bar, flush=True)
 
+        # Capture regime switches with the chain, before later model plotting.
+        CONFIG[model_name]["_postprocessing_switches"] = {
+            name: bool(getattr(UDM, name)) for name in (
+                "ALLOW_NEGATIVE_ENERGIES", "ALLOW_BIG_RIP",
+                "ALLOW_DOOM_FACTOR_INSTABILITIES",
+            )
+        }
         MODEL = UDM.Get_model_function(model_name)
         obs_list: List[List[str]] = CONFIG[model_name]["observations"]
         Samples: Dict[str, Any] = {}
@@ -687,11 +716,12 @@ def run_mcmc_for_all_models(
                 config_model=CONFIG[model_name],
                 obs_index=i,
             )  # e.g. "CC+PantheonP_SH0ES" or "CC+PantheonP"
-            output_dir = prepare_output(
-                model_name,
-                key.replace("+", "_"),
-                suffix,
-            )  # .../LCDM_v/CC_PantheonP_SH0ES
+            if existing_chain_paths is None:
+                output_dir = prepare_output(model_name, key.replace("+", "_"), suffix)
+                chain_file = f"{key}.h5"
+            else:
+                chain_path = os.path.abspath(existing_chain_paths[model_name])
+                output_dir, chain_file = os.path.split(chain_path)
 
             if rank == 0:
                 # Use the resolved key to decide Pantheon display (Pantheon+ or Pantheon+SH0ES)
@@ -714,7 +744,8 @@ def run_mcmc_for_all_models(
                 last_obs = (i == len(obs_list) - 1)
                 Samples[key] = load_or_run_chain(
                     output_dir=output_dir,
-                    chain_file=f"{key}.h5",
+                    chain_file=chain_file,
+                    load_only=(existing_chain_paths is not None),
                     overwrite=overwrite,
                     CONFIG_model=CONFIG[model_name],
                     data=data_work,
@@ -735,6 +766,11 @@ def run_mcmc_for_all_models(
                     num_cores=num_cores,
                     obs_key=key,
                 )
+                chain_path = os.path.join(output_dir, chain_file)
+                CONFIG[model_name].setdefault("_postprocessing_sources", {})[key] = [
+                    chain_path, chain_path.replace(".h5", "_zeus.h5"),
+                ]
+
 
             if rank == 0:
                 print("-" * 66)
