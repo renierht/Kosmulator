@@ -2,7 +2,7 @@
 """Reproduce existing paper chains through Kosmulator.main (serial, load-only).
 
 Defaults: all regimes, polished criteria and 6000 derived-r_d samples.
-DIC convention remains posterior-mean pending agreement. No fresh sampling.
+DIC uses the posterior-mean convention. No fresh sampling.
 """
 import argparse
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
@@ -104,7 +104,7 @@ def main():
     states={str(p):[p.stat().st_size,p.stat().st_mtime_ns] for group in paths.values() for p in group.values()}
     source_names=('Kosmulator.py','User_defined_modules.py','Kosmulator_main/MCMC_setup.py','Kosmulator_main/utils.py','Kosmulator_main/Model_comparison.py','Kosmulator_main/Post_processing.py','Kosmulator_main/Class_run.py','Kosmulator_main/rd_helpers.py','Plots/Plots.py','Plots/Plot_functions.py')
     hashes={n:hashlib.sha256((root/n).read_bytes()).hexdigest() for n in source_names}
-    report={'regimes':list(regimes),'derived_rd_samples':count,'polish':not args.no_polish,'engineering_output':args.no_polish or count<6000,'dic_convention':'posterior-mean; final consensus pending','source_sha256':hashes,'config':config,'python':sys.version,'platform':platform.platform(),'failures':[]}
+    report={'regimes':list(regimes),'derived_rd_samples':count,'polish':not args.no_polish,'engineering_output':args.no_polish or count<6000,'dic_convention':'posterior-mean','source_sha256':hashes,'config':config,'python':sys.version,'platform':platform.platform(),'failures':[]}
     report['packages']={}
     for name in ('numpy','scipy','matplotlib','emcee','h5py','getdist'):
         try:report['packages'][name]=importlib.metadata.version(name)
@@ -147,7 +147,7 @@ def main():
             for name in ('source_files_unchanged','chain_metadata_unchanged'):
                 if not report[name]:report['failures'].append(name+' failed')
             report['passed']=not report['failures'];(output/'workflow_report.json').write_text(json.dumps(report,indent=2)+'\n')
-    (output/'README.txt').write_text('Current mean-DIC; coauthor consensus pending.\nEngineering output: '+str(report['engineering_output'])+' (small r_d subset or no polishing).\nUses normal main/setup/loader/plotting functions; load-only mode cannot sample or resume.\nChain size/mtime checks are not cryptographic hashes.\n')
+    (output/'README.txt').write_text('DIC convention: posterior-mean.\nEngineering output: '+str(report['engineering_output'])+' (small r_d subset or no polishing).\nUses normal main/setup/loader/plotting functions; load-only mode cannot sample or resume.\nChain size/mtime checks are not cryptographic hashes.\n')
     archive=Path(str(output)+'.zip')
     with ZipFile(archive,'x',ZIP_DEFLATED) as z:
         for p in sorted(output.rglob('*')):
@@ -158,3 +158,4 @@ def main():
     print('PAPER WORKFLOW:', 'PASS' if report['passed'] else 'REQUIRES REVIEW');return 0 if report['passed'] else 1
 
 if __name__=='__main__':raise SystemExit(main())
+

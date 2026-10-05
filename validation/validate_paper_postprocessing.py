@@ -16,7 +16,7 @@ import sys
 import tempfile
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--repo", type=Path, default=Path.cwd())
+parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
 parser.add_argument("--chain-root", type=Path)
 parser.add_argument("--output", type=Path)
 args = parser.parse_args()

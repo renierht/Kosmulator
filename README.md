@@ -10,6 +10,35 @@ The purpose of this branch is to add analytical background solutions for five li
 
 ---
 
+## Repository layout and IDE additions
+
+| Location | Purpose |
+|---|---|
+| `Kosmulator.py` | Main entry point: models, datasets, priors and sampler settings. |
+| `User_defined_modules.py` | Analytical IDE models and physical-domain switches. |
+| `Class/IDE_background/` | Shared IDE CLASS background backend for derived sound horizons; IDE perturbations are not implemented. |
+| `Kosmulator_main/` | Sampling, likelihoods and postprocessing, including `rd_helpers.py`, `Model_comparison.py` and `Plot_metadata.py`. |
+| `Plots/` | Corner plots, data/model figures and parameter tables. |
+| `reproducibility/` | Project settings and instructions for generating and analysing chains. |
+| `validation/` | Scientific validation using the original analysis chains. |
+| `tests/` | Automated checks of configuration, loading, statistics, boundaries and plotting metadata. |
+
+For SAIP settings and commands, see
+[the reproduction guide](reproducibility/SAIP2026_IDE/REPRODUCE.md).
+
+Run automated tests from the repository root with:
+
+    MPLBACKEND=Agg python -m unittest discover -s tests -p 'test*.py' -v
+
+Validate the original four-chain statistical results with:
+
+    MPLBACKEND=Agg python -u validation/validate_paper_postprocessing.py --chain-root /absolute/path/to/MCMC_Chains
+
+This validator requires the original analysis chains and prepared CLASS binaries.
+For independent chains, follow the reproduction guide instead.
+
+---
+
 ## IDE background equations
 
 Phenomenological IDE models modify the separate conservation equations of dark matter and dark energy by introducing an interaction four-vector $Q^\nu$. At background level, only the energy-transfer kernel $Q$ is required, and the dark-sector conservation equations become
