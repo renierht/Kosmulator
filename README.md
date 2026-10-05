@@ -19,23 +19,12 @@ The purpose of this branch is to add analytical background solutions for five li
 | `Class/IDE_background/` | Shared IDE CLASS background backend for derived sound horizons; IDE perturbations are not implemented. |
 | `Kosmulator_main/` | Sampling, likelihoods and postprocessing, including `rd_helpers.py`, `Model_comparison.py` and `Plot_metadata.py`. |
 | `Plots/` | Corner plots, data/model figures and parameter tables. |
-| `reproducibility/` | Project settings and instructions for generating and analysing chains. |
-| `validation/` | Scientific validation using the original analysis chains. |
-| `tests/` | Automated checks of configuration, loading, statistics, boundaries and plotting metadata. |
+| [reproducibility/](reproducibility/README.md) | Project settings and instructions for generating and analysing chains. |
+| [validation/](validation/README.md) | CLASS validation report and checks of the original analysis chains. |
+| [tests/](tests/README.md) | Automated checks of configuration, loading, statistics, boundaries and plotting metadata. |
 
 For SAIP settings and commands, see
 [the reproduction guide](reproducibility/SAIP2026_IDE/REPRODUCE.md).
-
-Run automated tests from the repository root with:
-
-    MPLBACKEND=Agg python -m unittest discover -s tests -p 'test*.py' -v
-
-Validate the original four-chain statistical results with:
-
-    MPLBACKEND=Agg python -u validation/validate_paper_postprocessing.py --chain-root /absolute/path/to/MCMC_Chains
-
-This validator requires the original analysis chains and prepared CLASS binaries.
-For independent chains, follow the reproduction guide instead.
 
 ---
 
@@ -354,7 +343,7 @@ The shared background implementation and its integration into Kosmulator were te
 - **Kosmulator runner validation:** the normal `model_likelihood()` route propagated the selected IDE model to the CLASS sound-horizon calculation and reproduced the direct BAO likelihood result.
 - **Configuration-policy validation:** supported CLASS models remove `r_d` from BAO/DESI sampled parameter sets when model-derived `r_d` is enabled, while unsupported models retain the legacy policy.
 
-The numerical results and regression tolerances used in these tests are recorded in [`VALIDATION.md`](VALIDATION.md).
+The numerical results and regression tolerances used in these tests are recorded in [the CLASS validation report](validation/VALIDATION.md).
 
 ---
 

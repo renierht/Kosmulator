@@ -4,7 +4,7 @@ Use this guide to generate your own chains with the paper's model and likelihood
 
 ## 1. Set up Kosmulator
 
-Use the **Kosmulator_IDE_v2** branch and follow the [installation instructions](../../README.md). Run the commands below from the repository root in your Kosmulator environment.
+Use the **Kosmulator_IDE_v2** branch and follow the [installation instructions](../../../README.md). Run the commands below from the repository root in your Kosmulator environment.
 
 Keep the Pantheon+ and DESI DR2 observation and covariance files in `Observations/`. CLASS must be buildable in your environment, or the matching binaries for `LCDM_v` and `NonLinear_IDE_2` must already be prepared. The normal sampling workflow prepares CLASS when needed. This analysis uses background datasets only, without an IDE CMB likelihood.
 
@@ -123,4 +123,3 @@ MPLBACKEND=Agg python -u reproducibility/SAIP2026_IDE/scripts/reproduce.py \
 The output directory must not exist. Original chains are not included in GitHub; contact the authors for access. This optional launcher uses prepared CLASS binaries and prohibits rebuilding.
 
 Its output directory contains per-regime plots and tables, `combined_tables/`, and a workflow log and report. A ZIP is created beside that directory.
-
