@@ -123,3 +123,7 @@ MPLBACKEND=Agg python -u reproducibility/SAIP2026_IDE/scripts/reproduce.py \
 The output directory must not exist. Original chains are not included in GitHub; contact the authors for access. This optional launcher uses prepared CLASS binaries and prohibits rebuilding.
 
 Its output directory contains per-regime plots and tables, `combined_tables/`, and a workflow log and report. A ZIP is created beside that directory.
+
+## Original-chain convergence report
+
+See [CONVERGENCE.md](CONVERGENCE.md) for the completed chain lengths, autocorrelation diagnostics, approximate effective sample sizes and posterior-stability checks for the original analysis.
