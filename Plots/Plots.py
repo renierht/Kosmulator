@@ -537,6 +537,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
                 reduced_chi_squared=stats["Reduced_Chi_squared"],
                 model_name=model,
                 reference_chi_squared=reference_chi2,
+                dof=stats.get("dof"),
             )
             IC_lines = PP.interpret_delta_IC(stats['dAIC'], stats['dBIC'], stats['dAICc'], stats['dDIC'], stats['dWAIC'], stats['sigma']).splitlines()
             aic_text = IC_lines[0].strip() if len(IC_lines) > 0 else "No AIC interpretation available."

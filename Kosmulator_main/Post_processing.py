@@ -812,6 +812,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 "WAIC": waic,
                 "p_D": p_D,
                 "num_params": num_params,
+                "dof": dof,
             }
             if notes:
                 results[model_name][obs_name]["Note"] = " | ".join(notes)
@@ -844,76 +845,132 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
 
 
 def provide_model_diagnostics(
-    reduced_chi_squared, model_name: str = "", reference_chi_squared=None
+    reduced_chi_squared,
+    model_name: str = "",
+    reference_chi_squared=None,
+    dof=None,
 ) -> str:
     """
-    Provide a quick diagnostic description of the model's performance.
+    Plain-language reading of the reduced chi-squared, chi^2_nu = chi^2 / dof.
+
+    For a model that describes the data, chi^2_nu scatters around 1 with a
+    standard deviation of sqrt(2/dof), so the same value can be ordinary for a
+    small dataset and highly unusual for a large one.  When ``dof`` is given
+    the reading uses that scatter and the chi^2 tail probability; otherwise
+    it falls back to fixed bands.
+
+    A k-parameter model fitted to N points already has E[chi^2_min] = N - k,
+    which is why dof = N - k.  Fitting noise with a few parameters therefore
+    cannot push chi^2_nu well below 1: a low value almost always means the
+    quoted error bars are larger than the actual scatter of the data.
     """
-    # Make it robust to arrays/NaNs and avoid any external state.
     reduced_chi_squared = _scalarize(reduced_chi_squared)
     reference_chi_squared = _scalarize(reference_chi_squared)
-    feedback = ""
+    feedback = "Statistical Interpretation:\n"
 
-    # Statistical Interpretation
-    feedback += "Statistical Interpretation:\n"
-    if 0.9 <= reduced_chi_squared <= 1.1:
-        feedback += (
-            "  - The model appears to fit the data very well. The reduced chi-squared is close to 1, "
-            "indicating the residuals are consistent with the uncertainties.\n"
-        )
-    elif 0.5 <= reduced_chi_squared < 0.9:
-        feedback += (
-            "  - The reduced chi-squared is slightly below 1. This could indicate overfitting, "
-            "or that the data uncertainties may be overestimated.\n"
-        )
-    elif reduced_chi_squared < 0.5:
-        feedback += (
-            "  - The reduced chi-squared is significantly below 1. This suggests possible overfitting "
-            "or overly conservative error bars.\n"
-        )
-    elif 1.1 < reduced_chi_squared <= 3.0:
-        feedback += (
-            "  - The reduced chi-squared is above 1, but within an acceptable range. This indicates a "
-            "reasonable fit, though there might be room for improvement in the model or data uncertainties.\n"
-        )
-    else:
-        feedback += (
-            "  - The reduced chi-squared is significantly above 3. This suggests the model does not fit "
-            "the data well. Consider revising your model or checking for systematic errors in the data.\n"
-        )
+    rcs = reduced_chi_squared
+    try:
+        nu = float(dof) if dof is not None else float("nan")
+    except (TypeError, ValueError):
+        nu = float("nan")
 
-    # Benchmark Approach: Only applies to non-LCDM models
-    if reference_chi_squared is not None and model_name.lower() != "lcdm":
-        feedback += "\nBenchmark Comparison (Relative to LCDM):\n"
-        if reduced_chi_squared < reference_chi_squared:
+    low_text = (
+        "This is too low to be overfitting: a model with a few free parameters "
+        "cannot absorb that much chi-squared. The usual cause is conservative "
+        "(overestimated) error bars or correlations treated as independent, "
+        "which is common for cosmic-chronometer, OHD and growth-rate (f, fs8) "
+        "compilations. Compare models with dChi, sigma and the information "
+        "criteria rather than with the absolute chi^2_nu."
+    )
+    high_text = (
+        "The data scatter more than their error bars allow. Possible causes are "
+        "a model that misses structure in the data, underestimated or missing "
+        "systematic errors, or tension between combined datasets."
+    )
+
+    if np.isfinite(rcs) and np.isfinite(nu) and nu > 0:
+        spread = np.sqrt(2.0 / nu)
+        n_sig = (rcs - 1.0) / spread
+        chi2_val = rcs * nu
+        span = f"(expected 1 +/- {spread:.2f} for {nu:.0f} dof"
+        if abs(n_sig) <= 2.0:
             feedback += (
-                f"  - This model's reduced chi-squared ({reduced_chi_squared:.2f}) is lower than the "
-                f"benchmark LCDM value ({reference_chi_squared:.2f}).\n"
+                f"  - chi^2_nu = {rcs:.3f} is consistent with 1 {span}). "
+                "The residuals match the quoted uncertainties.\n"
             )
+        elif n_sig < -2.0:
+            p_low = chi2.cdf(chi2_val, nu)
             feedback += (
-                "    This could indicate overfitting or that uncertainties are playing a significant role.\n"
+                f"  - chi^2_nu = {rcs:.3f} lies {abs(n_sig):.1f} sigma below 1 {span}; "
+                f"P(chi^2 <= observed) = {p_low:.1e}). {low_text}\n"
             )
-        elif reduced_chi_squared > reference_chi_squared:
-            feedback +=(
-                f"  - This model's reduced chi-squared ({reduced_chi_squared:.2f}) is higher than the "
-                f"benchmark LCDM value ({reference_chi_squared:.2f}).\n"
-            )
+        elif rcs <= 3.0:
+            p_high = chi2.sf(chi2_val, nu)
             feedback += (
-                "    This may suggest underfitting or that the model does not capture the data as well as LCDM.\n"
+                f"  - chi^2_nu = {rcs:.3f} lies {n_sig:.1f} sigma above 1 {span}; "
+                f"P(chi^2 >= observed) = {p_high:.1e}). {high_text}\n"
             )
         else:
             feedback += (
-                f"  - This model's reduced chi-squared matches the benchmark LCDM value "
-                f"({reference_chi_squared:.2f}), suggesting a comparable fit.\n"
+                f"  - chi^2_nu = {rcs:.3f} is far above 1 {span}). The model does "
+                "not describe these data; check the model, the data covariance "
+                "and any calibration or nuisance parameters.\n"
+            )
+    else:
+        # dof unknown: fixed bands
+        if 0.9 <= rcs <= 1.1:
+            feedback += (
+                "  - The reduced chi-squared is close to 1: the residuals are "
+                "consistent with the quoted uncertainties.\n"
+            )
+        elif rcs < 0.9:
+            feedback += (
+                "  - The reduced chi-squared is below 1. With only a few free "
+                "parameters this is rarely overfitting; it usually means the "
+                "quoted error bars are conservative. Compare models with dChi, "
+                "sigma and the information criteria.\n"
+            )
+        elif rcs <= 3.0:
+            feedback += f"  - The reduced chi-squared is above 1. {high_text}\n"
+        else:
+            feedback += (
+                "  - The reduced chi-squared is far above 1. The model does not "
+                "describe these data; check the model, the data covariance and "
+                "any calibration or nuisance parameters.\n"
             )
 
-    # Special case for LCDM
+    # Benchmark comparison: only for non-reference models
+    if reference_chi_squared is not None and np.isfinite(reference_chi_squared) \
+            and model_name.lower() != "lcdm":
+        feedback += "\nBenchmark Comparison (Relative to LCDM):\n"
+        if rcs < reference_chi_squared:
+            feedback += (
+                f"  - chi^2_nu ({rcs:.2f}) is lower than for LCDM "
+                f"({reference_chi_squared:.2f}): the fit improves by more than "
+                "the change in the number of free parameters. Whether "
+                "the improvement is significant is given by dChi, sigma and the "
+                "information criteria.\n"
+            )
+        elif rcs > reference_chi_squared:
+            feedback += (
+                f"  - chi^2_nu ({rcs:.2f}) is higher than for LCDM "
+                f"({reference_chi_squared:.2f}): any extra parameters do not "
+                "improve the fit enough to offset the degrees of freedom "
+                "they use.\n"
+            )
+        else:
+            feedback += (
+                f"  - chi^2_nu matches the LCDM value ({reference_chi_squared:.2f}), "
+                "a comparable fit.\n"
+            )
+
     if model_name.lower() == "lcdm":
         feedback += (
-            "\nThe LCDM model is widely regarded as a robust and well-tested benchmark model. "
-            "It is recommended when comparing to other models to compare their reduced chi-squared "
-            "values to the LCDM model's to determine whether over- or under-fitting happened "
-            "irregardless of the uncertainties in the observations themselves.\n"
+            "\nLCDM is the reference model. Because chi^2_nu depends on how the "
+            "data uncertainties were estimated, its absolute value says more "
+            "about the dataset than about the model; comparisons of models on "
+            "the same data (dChi, sigma, dAIC, dBIC, dDIC) remove that "
+            "dependence.\n"
         )
 
     return feedback
