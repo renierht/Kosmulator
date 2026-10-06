@@ -1838,6 +1838,24 @@ class AppendProgressCallback:
         return False
 
 
+def find_stuck_walkers(log_prob_chain, ndim: int, p_tail: float = 1e-6) -> np.ndarray:
+    """
+    Walkers whose median log-posterior over the given (post-burn-in) steps lies
+    so far below the ensemble median that 2*(median - walker median) exceeds
+    chi2.isf(p_tail, ndim). For a healthy ensemble 2*Delta(log P) follows
+    roughly a chi^2 with ndim degrees of freedom, so this flags only walkers
+    left behind in a different region (for example behind a prior wall).
+    """
+    from scipy.stats import chi2 as _chi2
+    lp = np.asarray(log_prob_chain, dtype=float)
+    if lp.ndim != 2 or lp.shape[0] < 2:
+        return np.array([], dtype=int)
+    lp = np.where(np.isfinite(lp), lp, -1e300)
+    wmed = np.median(lp, axis=0)
+    ref = np.median(lp)
+    return np.where(2.0 * (ref - wmed) > float(_chi2.isf(p_tail, max(1, int(ndim)))))[0]
+
+
 def zeus_flat_log_like(h5f, burn: int, n_rows: Optional[int] = None) -> Optional[np.ndarray]:
     """
     Step-major flat log-likelihood for a Kosmulator zeus file, aligned with

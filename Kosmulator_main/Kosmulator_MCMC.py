@@ -442,8 +442,105 @@ def optimise_initial_guess(
     if not sol.success:
         logger.warning("Nelder-Mead pre-fit did not achieve full convergence: %s", sol.message)
 
-    # Nelder-Mead is derivative-free and does not produce an inverse Hessian
-    return ic, None
+    # Nelder-Mead gives no Hessian, so estimate the diagonal curvature by finite
+    # differences (2*ndim + 1 calls). It sets the size of the initial walker ball.
+    if os.environ.get("KOSM_NO_CURVATURE", "0") == "1":
+        return ic, None
+    try:
+        return ic, _diag_conditional_variance(nlp_fn, ic, bounds)
+    except Exception as e:  # never block a run on this
+        logger.warning("Curvature estimate for the initial ball failed (%s); using prior widths.", e)
+        return ic, None
+
+
+def _diag_conditional_variance(
+    nlp_fn: Callable[[np.ndarray], float],
+    x: np.ndarray,
+    bounds: List[Tuple[float, float]],
+    rel_step: float = 1e-3,
+) -> np.ndarray:
+    """
+    Conditional variances 1/H_ii of the posterior at x, from central second
+    differences of -log posterior with step rel_step * (prior width). The
+    stencil is moved inside the prior when x sits on a bound. Returns inf
+    where the curvature is not positive (flat or unconstrained directions).
+    """
+    x = np.asarray(x, float)
+    lows = np.array([b[0] for b in bounds], float)
+    highs = np.array([b[1] for b in bounds], float)
+    spans = np.maximum(highs - lows, 1e-300)
+    var = np.full(x.size, np.inf)
+    f_x = float(nlp_fn(x))
+    for i in range(x.size):
+        h = rel_step * spans[i]
+        if not (h > 0) or spans[i] <= 2.0 * h:
+            continue
+        c = min(max(x[i], lows[i] + h), highs[i] - h)
+        def f_at(v):
+            y = x.copy(); y[i] = v
+            return float(nlp_fn(y))
+        f_c = f_x if c == x[i] else f_at(c)
+        H = (f_at(c + h) - 2.0 * f_c + f_at(c - h)) / (h * h)
+        if np.isfinite(H) and H > 0:
+            var[i] = 1.0 / H
+    return var
+
+
+def _zeus_warmup(
+    pos0: np.ndarray,
+    logprob_fn: Callable,
+    args: tuple,
+    nwalker: int,
+    ndim: int,
+    vectorize: bool,
+    pool,
+    n_steps: int,
+    segment: int,
+    lows: np.ndarray,
+    highs: np.ndarray,
+    rng: np.random.Generator,
+) -> Tuple[np.ndarray, int]:
+    """
+    Throw-away zeus warm-up before the recorded chain. After every `segment`
+    steps, walkers with 2 (max log-post - log-post) > chi2.isf(1e-6, ndim) are
+    moved onto randomly chosen good walkers plus a small jitter (1% of the good
+    walkers' spread). Only the starting ensemble of the real run changes, so the
+    recorded chain is untouched. Returns (positions, number of resets).
+    """
+    from scipy.stats import chi2 as _chi2
+    thr = 0.5 * float(_chi2.isf(1e-6, ndim))
+    X = np.array(pos0, float)
+    n_reset, done_w = 0, 0
+    segment = max(1, int(segment))
+    while done_w < n_steps:
+        k = min(segment, n_steps - done_w)
+        s = zeus.EnsembleSampler(nwalker, ndim, logprob_fn, args=args, pool=pool,
+                                 vectorize=vectorize, verbose=False)
+        s.run_mcmc(X, k, progress=False)
+        X = np.array(s.get_chain()[-1], float)
+        lp = np.asarray(s.get_log_prob()[-1], float)
+        done_w += k
+        finite = np.isfinite(lp)
+        if not finite.any():
+            continue
+        good = finite & (lp >= np.nanmax(lp[finite]) - thr)
+        bad = ~good
+        if bad.any() and good.sum() >= 2:
+            src = rng.choice(np.where(good)[0], size=int(bad.sum()))
+            spread = np.std(X[good], axis=0)
+            X[bad] = _reflect_into(
+                X[src] + 0.01 * spread * rng.standard_normal((int(bad.sum()), ndim)), lows, highs
+            )
+            n_reset += int(bad.sum())
+    return X, n_reset
+
+
+def _reflect_into(x: np.ndarray, lows: np.ndarray, highs: np.ndarray) -> np.ndarray:
+    """Fold points back into [low, high] by reflection at the bounds (keeps the spread)."""
+    span = np.maximum(highs - lows, 1e-300)
+    y = np.mod(np.asarray(x, float) - lows, 2.0 * span)
+    y = np.where(y > span, 2.0 * span - y, y)
+    return lows + y
 
 
 def make_initial_positions(
@@ -454,37 +551,37 @@ def make_initial_positions(
     rng: np.random.Generator,
     base_frac: float,
     hessian_diag: Optional[np.ndarray] = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    sigma_frac: float = 0.5,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Propose initial walker cloud around 'ic', respecting priors and avoiding duplicates.
-    Returns (pos0, spans, lows, highs).
+    Propose the initial walker ball around 'ic', respecting priors and avoiding duplicates.
+    Returns (pos0, spans, lows, highs, std).
+
+    Per parameter the ball has width sigma_frac * sqrt(conditional variance) from
+    `hessian_diag` (variances 1/H_ii), so every walker starts in the bulk of the
+    posterior. Where the curvature is unknown or flat, the width is base_frac of
+    the prior range. Points outside the prior are reflected back in, so a starting
+    point on a bound (e.g. n = 0, or H_0 at its lower edge) still gets a spread;
+    clipping put all walkers on the bound, and an ensemble with no spread in a
+    coordinate can never move it.
     """
     lows  = np.array([prior_map[p][0] for p in param_names], float)
     highs = np.array([prior_map[p][1] for p in param_names], float)
     spans = np.maximum(highs - lows, 1e-12)
+    ndim = len(param_names)
 
     # Ensure IC inside priors
-    ic = np.clip(ic, lows, highs)
+    ic = np.clip(np.asarray(ic, float), lows, highs)
 
-    # Distance to nearest bound per-dim
-    room = np.maximum(np.minimum(ic - lows, highs - ic), 1e-12)
+    max_scale = base_frac * spans
+    std = max_scale.copy()
+    if hessian_diag is not None and np.size(hessian_diag) == ndim:
+        var = np.asarray(hessian_diag, float)
+        ok = np.isfinite(var) & (var > 0)
+        std[ok] = sigma_frac * np.sqrt(var[ok])
+    std = np.clip(std, 1e-9 * spans, max_scale)
 
-    # Base scale as fraction of prior width, limited by room
-    base_scale = np.minimum(base_frac * spans, 0.5 * room)
-
-    # Try anisotropic scale from inverse Hessian diag
-    if (
-        hessian_diag is not None
-        and hessian_diag.size == len(param_names)
-        and np.all(np.isfinite(hessian_diag))
-    ):
-        std = np.sqrt(np.maximum(hessian_diag, 1e-16))
-        std = np.minimum(std, base_scale)
-        pos0 = ic + rng.normal(size=(nwalker, len(param_names))) * std
-    else:
-        pos0 = ic + rng.normal(size=(nwalker, len(param_names))) * base_scale
-
-    pos0 = np.clip(pos0, lows, highs)
+    pos0 = _reflect_into(ic + rng.normal(size=(nwalker, ndim)) * std, lows, highs)
 
     # De-duplicate (up to a few retries)
     for _ in range(5):
@@ -493,12 +590,11 @@ def make_initial_positions(
             break
         dup_mask = np.ones(nwalker, dtype=bool)
         dup_mask[idx] = False
-        pos0[dup_mask] = ic + 0.5 * base_scale * rng.normal(
-            size=(dup_mask.sum(), len(param_names))
+        pos0[dup_mask] = _reflect_into(
+            ic + std * rng.normal(size=(dup_mask.sum(), ndim)), lows, highs
         )
-        pos0 = np.clip(pos0, lows, highs)
 
-    return pos0, spans, lows, highs
+    return pos0, spans, lows, highs, std
 
 
 def regenerate_invalid_walkers(
@@ -517,9 +613,11 @@ def regenerate_invalid_walkers(
     MODEL_func: Callable,
     model_name: str,
     obs_index: int,
+    scale: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
-    Re-generate any invalid (non-finite posterior) walkers with shrinking radius.
+    Re-generate any invalid (non-finite posterior) walkers with shrinking radius,
+    starting from the initial-ball width `scale` (0.1 of the prior range if None).
     """
     bad = np.where(~np.isfinite(post0))[0]
     if not bad.size:
@@ -527,13 +625,13 @@ def regenerate_invalid_walkers(
 
     regen_max_tries = PLOT_SETTINGS.get("init_regen_tries", 20)
     regen_shrink    = PLOT_SETTINGS.get("init_regen_shrink", 0.7)
-    jitter = 0.1 * spans  # initial proposal scale
+    jitter = (np.asarray(scale, float).copy() if scale is not None else 0.1 * spans)
 
     tries = 0
     while bad.size and tries < regen_max_tries:
         nbad = bad.size
         cand = ic + rng.normal(size=(nbad, ic.size)) * jitter
-        cand = np.clip(cand, lows, highs)
+        cand = _reflect_into(cand, lows, highs)
 
         pos0[bad] = cand
         post0 = batch_post(
@@ -808,7 +906,7 @@ def _run_mcmc_impl(
 
         jitter_frac = PLOT_SETTINGS.get("init_jitter_frac", 0.10)
         rng = np.random.default_rng(PLOT_SETTINGS.get("seed", None))
-        pos0, spans, lows, highs = make_initial_positions(
+        pos0, spans, lows, highs, init_std = make_initial_positions(
             ic,
             prior_map,
             param_names,
@@ -816,6 +914,7 @@ def _run_mcmc_impl(
             rng,
             base_frac=jitter_frac,
             hessian_diag=sol_diag,
+            sigma_frac=float(PLOT_SETTINGS.get("init_sigma_frac", 0.5)),
         )
 
         # Evaluate posterior at initial positions and regenerate if needed
@@ -838,6 +937,7 @@ def _run_mcmc_impl(
             MODEL_func,
             model_name,
             obs_index,
+            scale=init_std,
         )
 
     # ── Zeus branch ────────────────────────────────────────────────────────────
@@ -998,6 +1098,28 @@ def _run_mcmc_impl(
         logprob_fn = (
             _zeus_logpost_vectorized if zeus_vectorize else _zeus_logpost_scalar
         )
+
+        # Warm-up (fresh runs only, nothing saved): reset walkers that sit far
+        # below the ensemble before the recorded chain starts. A zeus walker that
+        # starts beyond a likelihood barrier cannot step out across it.
+        n_warm = int(PLOT_SETTINGS.get("zeus_warmup_steps", 200) or 0)
+        if done == 0 and n_warm > 0 and pos0 is not None:
+            try:
+                pos0, n_reset = _zeus_warmup(
+                    np.asarray(pos0, float), logprob_fn,
+                    (data, CONFIG, MODEL_func, model_name, obs, Type, obs_index),
+                    nwalker, ndim, zeus_vectorize, pool_for_zeus, n_warm,
+                    int(PLOT_SETTINGS.get("zeus_warmup_segment", 25)),
+                    np.array([prior_map[p][0] for p in param_names], float),
+                    np.array([prior_map[p][1] for p in param_names], float),
+                    np.random.default_rng(PLOT_SETTINGS.get("seed", None)),
+                )
+                if n_reset:
+                    log.info("[%s | %s] zeus warm-up: %d walker reset(s) in %d steps",
+                             model_name, _resolved_key, n_reset, n_warm)
+            except Exception as e:
+                log.warning("zeus warm-up skipped (%s); starting from the initial ball", e)
+
         sampler = zeus.EnsembleSampler(
             nwalker,
             ndim,
@@ -1078,9 +1200,25 @@ def _run_mcmc_impl(
                 "n/a" if tau_last is None else f"{tau_last:.1f}", ratio,
                 float(convergence),
             )
+        # Stuck-walker check on the recorded post-burn-in chain
+        stuck = []
+        try:
+            with h5py.File(zeus_chain, "r") as f:
+                if "log_prob_chain" in f:
+                    stuck = utils.find_stuck_walkers(f["log_prob_chain"][burn:all_samples.shape[0]], ndim)
+        except Exception:
+            stuck = []
+        if len(stuck):
+            log.warning(
+                "[%s | %s] %d zeus walker(s) stayed far below the ensemble after burn-in "
+                "(walkers %s). Means, DIC and WAIC are unreliable for this group; rerun "
+                "(the warm-up resets such walkers) or use --force_emcee.",
+                model_name, _resolved_key, len(stuck), list(map(int, stuck)),
+            )
         try:
             with h5py.File(zeus_chain, "a") as f:
                 f.attrs["converged"] = bool(converged)
+                f.attrs["stuck_walkers"] = np.asarray(stuck, dtype=int)
         except Exception:
             pass
 
