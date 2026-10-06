@@ -87,19 +87,29 @@ def _format_pm(value, minus, plus):
 # -----------------------------------------------------------------------------
 # Significance calculator function for statistical analysis
 # -----------------------------------------------------------------------------
-def significance(dchi, r):
+def significance(dchi, dk):
     """
-    p - tail probability
-    sigma - equivalent gaussian significance
+    Gaussian-equivalent significance of a chi^2 improvement, as in DESI DR2
+    (arXiv:2503.14738, Eq. 22): the chi^2 CDF of -dchi with dk degrees of
+    freedom, expressed as a two-sided N-sigma.
+
+    dchi : chi^2_model - chi^2_reference at the best fits (negative = better fit)
+    dk   : number of extra free parameters of the model (nested models)
+
+    Returns 0 when the model does not improve the fit, and nan when dk <= 0
+    (no extra parameters, e.g. the reference model itself).
     """
-    dchi = np.abs(dchi)
-    r = np.round(r, decimals = 0)
-    if np.isnan(dchi) or np.isnan(r):
-        sigma = 0
-    else:
-        p = chi2.sf(dchi, df = r)
-        sigma = norm.isf(p/2)
-    return np.round(sigma, decimals = 1)
+    try:
+        dchi = float(dchi)
+        dk = int(round(float(dk)))
+    except (TypeError, ValueError):
+        return float("nan")
+    if not np.isfinite(dchi) or dk <= 0:
+        return float("nan")
+    if dchi >= 0:
+        return 0.0
+    p = chi2.sf(-dchi, df=dk)
+    return float(np.round(norm.isf(p / 2), decimals=1))
 
 
 
@@ -475,6 +485,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
     reference_waic: dict[str, float] = {}
     reference_chi: dict[str, float] = {}
     reference_pD : dict[str, float] = {}
+    reference_k: dict[str, int] = {}
     
 
     for model_name, obs_results in best_fit_values.items():
@@ -787,6 +798,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 "DIC": dic,
                 "WAIC": waic,
                 "p_D": p_D,
+                "num_params": num_params,
             }
             if notes:
                 results[model_name][obs_name]["Note"] = " | ".join(notes)
@@ -799,6 +811,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 reference_dic[obs_name] = dic
                 reference_waic[obs_name] = waic
                 reference_pD[obs_name] = p_D
+                reference_k[obs_name] = num_params
 
     # Calculate delta values relative to the reference model.
     for model_name, obs_results in results.items():
@@ -809,7 +822,10 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             stats["dDIC"] = stats["DIC"] -reference_dic.get(obs_name, stats["DIC"])
             stats["dWAIC"] = stats["WAIC"] - reference_waic.get(obs_name, stats["WAIC"])
             stats['dChi'] = stats['Chi_squared'] - reference_chi.get(obs_name, stats['Chi_squared'])
-            stats['sigma'] = significance(stats['dChi'], (stats['p_D'] - reference_pD.get(obs_name, stats['p_D'])))
+            # Degrees of freedom = extra free parameters relative to the reference
+            # model (DESI DR2 Eq. 22), not the noisy difference in p_D.
+            dk = stats["num_params"] - reference_k.get(obs_name, stats["num_params"])
+            stats['sigma'] = significance(stats['dChi'], dk)
 
     return results
 
