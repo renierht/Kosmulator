@@ -311,9 +311,10 @@ def main(
         touches_cmb_bbn = _model_has_any_cmb_or_bbn(CONFIG, m)
 
         if engine_mode in ("single", "mixed"):
-            if m.startswith("wowaCDM"):
-                eng = "emcee"
-            elif force_emcee:
+            # (A rule here used to send every wowaCDM model to emcee because zeus
+            # walkers got stuck at the w0 + wa < 0 wall; fixed by the initial ball
+            # and warm-up in Kosmulator_MCMC, so w0waCDM follows the general rule.)
+            if force_emcee:
                 eng = "emcee"
             elif force_zeus and (zeus is not None):
                 eng = "zeus"
