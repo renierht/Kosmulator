@@ -35,6 +35,38 @@ except Exception:
 _RD_BACKEND_LOGGED = False
 
 # ------------------------------------------------------------------
+# r_d fallback bookkeeping (per process)
+# ------------------------------------------------------------------
+from collections import Counter as _Counter
+
+_RD_FALLBACKS = _Counter()
+_RD_WARN_AT = {1, 10, 100, 1_000, 10_000, 100_000, 1_000_000}
+
+
+class RdUnavailableError(ValueError):
+    """A calibrated r_d was required but could not be computed (CLASS and EH98 failed)."""
+
+
+def _note_fallback(kind: str, detail: str = "") -> None:
+    """Count an r_d fallback and warn at a decaying rate (1st, 10th, 100th, ...)."""
+    _RD_FALLBACKS[kind] += 1
+    n = _RD_FALLBACKS[kind]
+    if n in _RD_WARN_AT:
+        logger.warning(
+            "r_d fallback: %s (occurrence %d in this process)%s",
+            kind, n, f" - {detail}" if detail else "",
+        )
+
+
+def rd_fallback_counts() -> dict:
+    """Fallback counts recorded in this process since the last reset."""
+    return dict(_RD_FALLBACKS)
+
+
+def reset_rd_fallback_counts() -> None:
+    _RD_FALLBACKS.clear()
+
+# ------------------------------------------------------------------
 # Shared constants
 # ------------------------------------------------------------------
 try:
@@ -250,12 +282,9 @@ def _try_compute_rd(param_dict: dict):
                 )
                 _RD_BACKEND_LOGGED = True
             return float(rd)
+        _note_fallback("CLASS not available, EH98 used (~2% above CLASS)")
     except Exception as e:
-        if not _RD_BACKEND_LOGGED:
-            logger.warning(
-                "CLASS rs_drag() failed (%s); falling back to EH98.", e
-            )
-            _RD_BACKEND_LOGGED = True
+        _note_fallback("CLASS rs_drag() failed, EH98 used (~2% above CLASS)", str(e))
 
     # 2) EH98 fallback
     try:
@@ -272,7 +301,8 @@ def _try_compute_rd(param_dict: dict):
             )
             _RD_BACKEND_LOGGED = True
         return rd
-    except Exception:
+    except Exception as e:
+        _note_fallback("CLASS and EH98 both failed, no r_d", str(e))
         return None
 
 
@@ -295,11 +325,18 @@ def _resolve_rd(p: dict, Type: str) -> float:
         return float(p["r_d"])
 
     # 2) If we have a background, try to compute r_d (CLASS first, then EH98)
-    have_bg = all(k in p for k in ("H_0", "Omega_m", "Omega_bh^2"))
+    have_bg = ("H_0" in p and "Omega_bh^2" in p
+               and any(k in p for k in ("Omega_m", "Omega_dh^2", "Omega_ch^2")))
     if have_bg:
         rd = _try_compute_rd(p)
         if rd is not None:
             return float(rd)
+        # A calibrated r_d that cannot be computed must not silently become
+        # the fixed singleton value below.
+        raise RdUnavailableError(
+            "r_d should be calibrated from the background here, but CLASS and "
+            "EH98 both failed."
+        )
 
     # 3) Pure BAO/DESI-only combinations: fall back to a fixed fiducial sound horizon
     if Type in ("BAO", "DESI", "DESI_DR1", "DESI_DR2"):
@@ -365,11 +402,10 @@ def rd_for_report(p: Mapping[str, float]):
     rd = None
     try:
         rd = compute_rd_class(dict(p))
+        if rd is None:
+            _note_fallback("CLASS not available for a reported r_d, EH98 used (~2% above CLASS)")
     except Exception as e:
-        logger.warning(
-            "CLASS rs_drag() failed for a reported r_d (%s); using EH98, "
-            "which runs ~2%% above CLASS.", e
-        )
+        _note_fallback("CLASS rs_drag() failed for a reported r_d, EH98 used (~2% above CLASS)", str(e))
     if rd is not None:
         return float(rd), "CLASS"
     return float(compute_rd(p)), "EH98"

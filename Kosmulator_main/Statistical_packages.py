@@ -1147,6 +1147,10 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
         if rs is None:
             rs = _try_compute_rd(param_dict)
         if rs is None:
+            if "Omega_bh^2" in param_dict:
+                # Calibrated background but no r_d (CLASS and EH98 failed): reject
+                # the point instead of silently using the fixed singleton r_d.
+                return 1e300
             rs = float(R_D_SINGLETON)
     rs = float(rs)
     if not np.isfinite(rs) or rs <= 0.0:

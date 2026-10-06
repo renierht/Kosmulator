@@ -127,7 +127,10 @@ def model_likelihood(
 
     # BAO / DESI: enforce r_d policy
     if obs == "BAO":
-        return -0.5 * SP.Calc_BAO_chi(obs_data, MODEL_func, param_dict, obs_type)
+        try:
+            return -0.5 * SP.Calc_BAO_chi(obs_data, MODEL_func, param_dict, obs_type)
+        except RD.RdUnavailableError:
+            return -np.inf   # calibrated r_d could not be computed (counted in rd_helpers)
 
     if obs in ("DESI_DR1", "DESI_DR2"):
         return -0.5 * SP.Calc_DESI_chi(obs_data, MODEL_func, param_dict, obs_type)
@@ -645,7 +648,28 @@ class ZeusAutoCorrPlotter:
 # Public API
 # ───────────────────────────────────────────────────────────────────────────────
 
-def run_mcmc(
+def run_mcmc(*args, **kwargs):
+    """
+    Run MCMC sampling for one observation group (see _run_mcmc_impl), then
+    report any r_d fallbacks (EH98 instead of CLASS, rejected points) that
+    happened in this process during the run. Pool workers report their own
+    fallbacks through rd_helpers warnings.
+    """
+    RD.reset_rd_fallback_counts()
+    try:
+        return _run_mcmc_impl(*args, **kwargs)
+    finally:
+        counts = RD.rd_fallback_counts()
+        if counts:
+            label = kwargs.get("obs_key") or "+".join(map(str, kwargs.get("obs") or []))
+            log.warning(
+                "[%s | %s] r_d fallbacks during sampling (this process): %s",
+                kwargs.get("model_name", "?"), label,
+                "; ".join(f"{k}: {v}" for k, v in counts.items()),
+            )
+
+
+def _run_mcmc_impl(
     data,
     saveChains,
     chain_path,
