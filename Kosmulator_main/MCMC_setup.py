@@ -23,6 +23,7 @@ except Exception:  # pragma: no cover
 
 import User_defined_modules as UDM
 from Kosmulator_main import Config
+from Kosmulator_main.utils import acquire_run_lock
 from Kosmulator_main.utils import (
     parse_cli_args,
     build_plot_settings,
@@ -406,6 +407,11 @@ def main(
     # ------------------------------------------------------------------
     # 11) Run MCMC
     # ------------------------------------------------------------------
+    # One run per output folder: refuse to start if another live run is
+    # writing to MCMC_Chains/<suffix> (it would interleave chain rows).
+    if rank == 0:
+        acquire_run_lock((getattr(args, "output_suffix", "") or "").strip())
+
     samples = run_mcmc_for_all_models(
         models=models,
         observations=observations,

@@ -391,6 +391,77 @@ def get_parallel_flag(use_mpi: bool, num_cores: int) -> bool:
 # 3) Pool & MPI (robust + friendly fallbacks)
 # ───────────────────────────────────────────────────────────────────────────────
 
+_RUN_LOCK_HANDLE = None   # kept open for the lifetime of the run
+
+
+def acquire_run_lock(suffix: str = ""):
+    """
+    Take an exclusive OS-level lock on MCMC_Chains[/<suffix>]/.kosmulator.lock
+    for the lifetime of this process, so that two runs cannot write to the same
+    chain files at once (that interleaves rows in the HDF5 files). The operating
+    system releases the lock when the process ends, even after a crash, so there
+    are no stale locks. Set KOSM_IGNORE_LOCK=1 to skip the check.
+
+    Raises RuntimeError if another live run holds the lock. On file systems
+    without lock support a warning is logged and the run continues.
+    """
+    global _RUN_LOCK_HANDLE
+    log = logging.getLogger(__name__)
+    if os.environ.get("KOSM_IGNORE_LOCK", "0") == "1":
+        return None
+
+    d = os.path.join("MCMC_Chains", suffix) if suffix else "MCMC_Chains"
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, ".kosmulator.lock")
+    fh = open(path, "a+")
+
+    locked_by_other = False
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, PermissionError):
+        locked_by_other = True
+    except OSError as e:
+        if os.name == "nt" and getattr(e, "errno", None) in (13, 36):
+            locked_by_other = True
+        else:
+            log.warning(
+                "Could not lock %s (%s); continuing without protection against "
+                "concurrent runs.", path, e,
+            )
+            fh.close()
+            return None
+
+    if locked_by_other:
+        try:
+            fh.seek(0)
+            info = fh.read().strip()
+        except Exception:
+            info = ""
+        fh.close()
+        raise RuntimeError(
+            f"Another Kosmulator run is writing to '{d}'"
+            f"{' (' + info + ')' if info else ''}. Use a different --output_suffix, "
+            "wait for that run to finish, or set KOSM_IGNORE_LOCK=1."
+        )
+
+    try:
+        fh.seek(0)
+        fh.truncate()
+        fh.write(f"pid {os.getpid()} on {platform.node()} since "
+                 f"{_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        fh.flush()
+    except Exception:
+        pass
+    _RUN_LOCK_HANDLE = fh
+    return fh
+
+
 def get_pool(use_mpi: bool = False, num_cores: int | None = None, **pool_kwargs):
     """
     Create a parallel pool.
