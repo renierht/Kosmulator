@@ -2420,11 +2420,25 @@ def Comoving_distance_vectorized(MODEL_func, redshifts, param_dict):
     if zs.size == 0:
         return zs
 
+    # Non-finite redshifts: return NaN (same behaviour as a failed E(z))
+    if not np.isfinite(zs).all():
+        return np.full_like(zs, np.nan, dtype=float)
+
     idx = np.argsort(zs)
     z_sorted = zs[idx]
-    grid = np.concatenate(([0.0], z_sorted))
 
-    Ez = _Ez(MODEL_func, grid, param_dict)
+    # Integration grid: a uniform grid (dz <= 0.01) merged with the data
+    # redshifts and z = 0. Integrating on the data redshifts alone is too
+    # coarse for sparse sets (DESI: D_M off by ~0.6% at z = 2.33); this grid
+    # gives a relative error of ~2e-6. Intended for late-time redshifts;
+    # for z ~ 1100 use CLASS rather than this routine.
+    z_lo, z_hi = min(0.0, z_sorted[0]), max(0.0, z_sorted[-1])
+    if z_hi == z_lo:                       # all redshifts are zero
+        return np.zeros_like(zs)
+    n_fine = int(np.ceil((z_hi - z_lo) / 0.01)) + 1
+    grid = np.union1d(np.linspace(z_lo, z_hi, n_fine), np.append(z_sorted, 0.0))
+
+    Ez = np.asarray(_Ez(MODEL_func, grid, param_dict), dtype=float)
     if (not np.isfinite(Ez).all()) or np.any(Ez <= 0):
         out = np.full_like(z_sorted, np.nan, dtype=float)
         d_c = np.empty_like(out)
@@ -2432,7 +2446,9 @@ def Comoving_distance_vectorized(MODEL_func, redshifts, param_dict):
         return d_c
 
     invEz = 1.0 / Ez
-    integral = cumtrapz(invEz, grid, initial=0.0)[1:]  # len == len(z_sorted)
+    I_grid = cumtrapz(invEz, grid, initial=0.0)
+    I_grid -= I_grid[np.searchsorted(grid, 0.0)]          # measure from z = 0
+    integral = I_grid[np.searchsorted(grid, z_sorted)]    # duplicates map to the same node
     d_c = np.empty_like(integral)
     d_c[idx] = integral
     param = _inject_derived_background(param_dict)
