@@ -424,7 +424,10 @@ def _maybe_calibrate_rd(theta_map: dict, CONFIG: dict, obs_index: int) -> None:
             return
         obs_set = CONFIG.get("observations", [])[obs_index]
         has_bbn = any(str(o).startswith(("BBN",)) for o in obs_set)
-        if not has_bbn:
+        # Only BAO/DESI use r_d: skip the CLASS call (~50 ms) for groups such
+        # as CC + BBN or SNe + BBN, where it was computed and never used.
+        has_bao = any(str(o) in ("BAO", "DESI", "DESI_DR1", "DESI_DR2") for o in obs_set)
+        if not (has_bbn and has_bao):
             return
         needed = ("Omega_bh^2", "Omega_m", "H_0")
         if not all(k in theta_map for k in needed):
