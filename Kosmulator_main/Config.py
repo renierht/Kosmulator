@@ -96,8 +96,9 @@ def load_data(file_path: Union[str, Path]) -> Dict[str, np.ndarray]:
 def prepare_pantheonP_data(data, z_min: float = 0.01, mode: str = "PplusSH0ES"):
     """
     Prepare Pantheon+ for either:
-      • "Pplus"       : Pantheon+ without SH0ES anchor (exclude calibrators)
-      • "PplusSH0ES"  : Pantheon+ with SH0ES anchor (include calibrators)
+      • "Pplus"       : Pantheon+ without SH0ES anchor: all SNe with zHD > z_min
+                        (Cepheid hosts included as Hubble-flow SNe, distances unused)
+      • "PplusSH0ES"  : Pantheon+ with SH0ES anchor: zHD > z_min or calibrator
 
     Notes:
       - The "mode" string is treated case-insensitively and matched on "sh0es".
