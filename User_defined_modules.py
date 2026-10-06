@@ -45,6 +45,7 @@ except ImportError:
     classy = None
 
 from Kosmulator_main.constants import C_KM_S
+from Kosmulator_main import constants as _K
 import logging
 logger = logging.getLogger(__name__)
 
@@ -85,16 +86,38 @@ __all__ = [
 # ============================================================================
 
 
+def radiation_density(p: Dict[str, float]) -> float:
+    """
+    Present-day radiation density Omega_r for the late-time E(z).
+
+    Omega_r h^2 = omega_gamma (1 + 0.22711 N_ur), omega_gamma = 2.4728e-5 (T_CMB/2.7255 K)^4.
+    Uses p["Omega_r"] when given; 0 when constants.LATE_TIME_RADIATION is False.
+    N_ur defaults to constants.N_UR_LATE; h comes from p["H_0"], or
+    constants.H0_RADIATION_FALLBACK when the group does not sample H_0.
+    """
+    if "Omega_r" in p:
+        return float(p["Omega_r"])
+    if not bool(getattr(_K, "LATE_TIME_RADIATION", False)):
+        return 0.0
+    h = float(p.get("H_0", getattr(_K, "H0_RADIATION_FALLBACK", 67.4))) / 100.0
+    t_cmb = float(p.get("T_CMB", _K.T_CMB_DEFAULT))
+    n_ur = float(p.get("N_ur", getattr(_K, "N_UR_LATE", _K.N_EFF_DEFAULT)))
+    omega_gamma = 2.4728e-5 * (t_cmb / 2.7255) ** 4
+    return omega_gamma * (1.0 + 0.22711 * n_ur) / (h * h)
+
+
 def LCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
     """
-    Flat ΛCDM:  E^2(z) = Ω_m (1+z)^3 + (1 - Ω_m)
+    Flat ΛCDM:  E^2(z) = Ω_m (1+z)^3 + Ω_r (1+z)^4 + (1 - Ω_m - Ω_r)
 
     Parameters in `p`:
       • Omega_m
+    Ω_r from radiation_density(p) (0 if constants.LATE_TIME_RADIATION is False).
     """
     z = _asarray(z)
     Om = float(p["Omega_m"])
-    E2 = Om * (1 + z) ** 3 + (1 - Om)
+    Or = radiation_density(p)
+    E2 = Om * (1 + z) ** 3 + Or * (1 + z) ** 4 + (1 - Om - Or)
 
     if (not np.isfinite(E2).all()) or (E2.min() <= 0):
         out = np.full_like(z, np.nan)
@@ -110,17 +133,20 @@ def wowaCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
     r"""
     Flat w0wa (CPL parametrization):
 
-    E^2(z) = \Omega_m (1+z)^3 + (1 - \Omega_m) (1+z)^{3(1+w0+wa)} \exp(-3 wa z / (1+z))
+    E^2(z) = \Omega_m (1+z)^3 + \Omega_r (1+z)^4
+             + (1 - \Omega_m - \Omega_r) (1+z)^{3(1+w0+wa)} \exp(-3 wa z / (1+z))
 
     Parameters in `p`:
       • Omega_m
       • w0
       • wa
+    Ω_r from radiation_density(p) (0 if constants.LATE_TIME_RADIATION is False).
     """
     z = _asarray(z)
     Om = float(p["Omega_m"])
     w0 = float(p["w0"])
     wa = float(p["wa"])
+    Or = radiation_density(p)
     
 
     # --- Strict early matter domination cutoff from DESI DR2 paper ---
@@ -133,7 +159,7 @@ def wowaCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
 
     #Dark energy density evolution ratio
     rho_de_ratio = (zp1 ** (3.0 * (1.0 + w0 + wa))) * np.exp(-3.0 * wa * (1.0 - a))
-    E2 = Om * (zp1 ** 3) + (1.0 - Om) * rho_de_ratio 
+    E2 = Om * (zp1 ** 3) + Or * (zp1 ** 4) + (1.0 - Om - Or) * rho_de_ratio
     #See DESI DR2 results for the equations
 
     if(not np.isfinite(E2).all()) or (E2.min() <= 0):
@@ -166,7 +192,7 @@ def NonLinear_IDE_2_vectorised(z: Number, p: Dict[str, float]) -> Number:
 
     Om = float(p["Omega_m"])
     Ob = float(p.get("Omega_b", 0.048))
-    Or = float(p.get("Omega_r", 0.0))
+    Or = radiation_density(p)
     w = float(p["w"])
     delta = float(p["delta"])
 
@@ -282,23 +308,27 @@ def f1CDM_MODEL_vectorised(
     maxiter: int = 60,
 ) -> Number:
     r"""
-    f1CDM: E^2 = Ω_m (1+z)^3 + (1 - Ω_m) E^{2n}
+    f1CDM: E^2 = Ω_m (1+z)^3 + Ω_r (1+z)^4 + (1 - Ω_m - Ω_r) E^{2n}
 
     Parameters in `p`:
       • Omega_m
       • n          (f(T)-like exponent; constrained by `restrict_f1CDM_v`)
+    Ω_r from radiation_density(p) (0 if constants.LATE_TIME_RADIATION is False);
+    n = 0 gives LCDM_MODEL_vectorised exactly.
     """
     z = _asarray(z)
     Om = float(p["Omega_m"])
     n = float(p["n"])
+    Or = radiation_density(p)
+    Ode = 1.0 - Om - Or
 
     # Seed with ΛCDM
-    E = np.sqrt(Om * (1 + z) ** 3 + (1 - Om))
+    E = np.sqrt(Om * (1 + z) ** 3 + Or * (1 + z) ** 4 + Ode)
 
     converged = np.zeros_like(E, dtype=bool)
     for _ in range(maxiter):
-        f = E**2 - (Om * (1 + z) ** 3 + (1 - Om) * E ** (2.0 * n))
-        df = 2.0 * E - (1.0 - Om) * (2.0 * n) * np.where(
+        f = E**2 - (Om * (1 + z) ** 3 + Or * (1 + z) ** 4 + Ode * E ** (2.0 * n))
+        df = 2.0 * E - Ode * (2.0 * n) * np.where(
             E > 0, E ** (2.0 * n - 1.0), np.inf
         )
         step = f / np.where(df == 0.0, np.inf, df)
@@ -318,9 +348,9 @@ def f1CDM_MODEL_vectorised(
         )
 
         def eq(Eval, zi):
-            return Eval**2 - (Om * (1 + zi) ** 3 + (1 - Om) * Eval ** (2.0 * n))
+            return Eval**2 - (Om * (1 + zi) ** 3 + Or * (1 + zi) ** 4 + Ode * Eval ** (2.0 * n))
 
-        seeds = np.maximum(1.0, np.sqrt(Om * (1 + z[bad]) ** 3 + (1 - Om)))
+        seeds = np.maximum(1.0, np.sqrt(Om * (1 + z[bad]) ** 3 + Or * (1 + z[bad]) ** 4 + Ode))
         try:
             E[bad] = np.array(
                 [fsolve(eq, x0=float(x0), args=(zi,))[0] for x0, zi in zip(seeds, z[bad])]

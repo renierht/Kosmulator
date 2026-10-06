@@ -27,6 +27,18 @@ T_CMB_DEFAULT: float = 2.7255
 #: Standard-model effective number of relativistic species
 N_EFF_DEFAULT: float = 3.046
 
+#: Radiation in the late-time E(z) of the built-in models (LCDM, w0waCDM,
+#: f1CDM, NonLinear_IDE_2): Omega_r h^2 = omega_gamma (1 + 0.22711 N_ur), with
+#: photons at T_CMB_DEFAULT and N_ur massless neutrino species. Omega_DE is
+#: reduced by Omega_r so the model stays flat. N_UR_LATE = N_EFF_DEFAULT treats
+#: all neutrinos as massless, as the CLASS r_d call does; DESI/Planck put one
+#: 0.06 eV neutrino in Omega_m, which corresponds to N_UR_LATE = 2.0328.
+#: A sampled or fixed 'Omega_r' in the parameters overrides this.
+LATE_TIME_RADIATION: bool = True
+N_UR_LATE: float = N_EFF_DEFAULT
+#: h used for Omega_r when a group does not sample H_0 (e.g. f, f_sigma_8 alone)
+H0_RADIATION_FALLBACK: float = 67.4
+
 #: Neutron lifetime [s] used consistently in BBN (AlterBBN + grid)
 TAU_N_DEFAULT: float = 879.4
 
