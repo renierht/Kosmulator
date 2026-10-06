@@ -1028,6 +1028,7 @@ def _run_mcmc_impl(
                         sampler.iteration,
                         sampler.get_chain(flat=False),
                         sampler.get_log_prob(),
+                        force=True,
                     )
             except Exception:
                 pass
@@ -1044,26 +1045,28 @@ def _run_mcmc_impl(
                         sampler.iteration,
                         sampler.get_chain(flat=False),
                         sampler.get_log_prob(),
+                        force=True,
                     )
             except Exception:
                 pass
             with h5py.File(zeus_chain, "r") as f:
                 all_samples = f["samples"][:]
-        # Save Blobs from Zeus if available
-        # Explicitly save log_prob and blobs from Zeus
+        # Save the post-burn-in log-probabilities, flattened step-major so they
+        # line up with all_samples[burn:].reshape(-1, ndim) returned below.
+        # (zeus's own get_log_prob(flat=True) is walker-major, order='F'.)
         if saveChains:
             with h5py.File(zeus_chain, "a") as h5f:
                 try:
-                    # 1. Save log_prob
-                    flat_log_prob = sampler.get_log_prob(discard=burn, flat=True)
-                    if "log_prob" in h5f:
-                        del h5f["log_prob"]
+                    flat_log_prob = utils.zeus_flat_log_like(h5f, burn, n_rows=all_samples.shape[0])
+                    if flat_log_prob is None:
+                        raise ValueError("no log-probabilities aligned with the stored samples")
+                    for key in ("log_prob", "log_like"):
+                        if key in h5f:
+                            del h5f[key]
                     h5f.create_dataset("log_prob", data=flat_log_prob)
-
-                    # 2. Flat top-hat priors everywhere → log_prob == log_like exactly
-                    if "log_like" in h5f:
-                        del h5f["log_like"]
+                    # Flat top-hat priors everywhere → log_prob == log_like exactly
                     h5f.create_dataset("log_like", data=flat_log_prob)
+                    h5f.attrs["log_like_order"] = "step"
                 except Exception as e:
                     print(f"\n[WARNING] Could not save 'log_prob'/'log_like' from Zeus: {e}")
 

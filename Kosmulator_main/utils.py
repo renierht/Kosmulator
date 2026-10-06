@@ -1070,24 +1070,17 @@ def load_or_run_chain(
             "[INFO] EMCEE requested but found existing Zeus chain.\n"
             f"       Re-using samples from {zeus_chain}.\n"
         )
+        burn = int(CONFIG_model.get("burn", 0) or 0)
         with h5py.File(zeus_chain, "r") as f:
             all_samples = f["samples"][:]    # (nsteps, nwalker, ndim)
-            loglike = np.array(f["log_like"]) if "log_like" in f else (
-                np.array(f["log_prob"]) if "log_prob" in f else None
-            )
-
-        burn = int(CONFIG_model.get("burn", 0) or 0)
-        # Guard against silly values
-        if burn >= all_samples.shape[0]:
-            burn = 0
+            # Guard against silly values
+            if burn >= all_samples.shape[0]:
+                burn = 0
+            # Step-major, aligned with `flat` below (older walker-major files are
+            # reordered); None when the stored log_like cannot be aligned.
+            loglike = zeus_flat_log_like(f, burn)
 
         flat = all_samples[burn:, :, :].reshape(-1, all_samples.shape[-1])
-        """
-        NOTE: loglike above is unburned/unflattened relative to `flat` in this
-        # particular reuse path (Zeus stores log_prob already burn-discarded at
-        # save time in run_mcmc, so this is likely already aligned — verify
-        # shapes match len(flat) before trusting it; fall back to None if not.
-        """
         if loglike is not None and loglike.shape[0] != flat.shape[0]:
             loglike = None
         return {"samples": flat, "loglike": loglike}
@@ -1220,10 +1213,16 @@ def load_or_run_chain(
         if os.path.exists(saved_path):
             try:
                 with h5py.File(saved_path, "r") as h5f:
-                    if "log_like" in h5f:
+                    if is_zeus_run and "samples" in h5f:
+                        # zeus files: step-major, aligned with the returned samples
+                        burn_z = int(CONFIG_model.get("burn", 0) or 0)
+                        candidate = zeus_flat_log_like(h5f, burn_z)
+                    elif "log_like" in h5f:
                         candidate = np.asarray(h5f["log_like"], dtype=float).reshape(-1)
-                        if candidate.size == flat_samples.shape[0]:
-                            loglike = candidate
+                    else:
+                        candidate = None
+                    if candidate is not None and candidate.size == flat_samples.shape[0]:
+                        loglike = candidate
             except Exception as exc:
                 print(f"[WARNING] Could not load saved log_like: {exc}")
         result = {"samples": flat_samples, "loglike": loglike}
@@ -1773,17 +1772,22 @@ def _obs_col_width_from_names(names, base=30, wmin=28, wmax=72, pad=2):
 
 class AppendProgressCallback:
     """
-    Zeus callback that appends only new local samples to 'samples' dataset.
+    Zeus callback that appends only new local samples to the 'samples' dataset,
+    and the matching log-probabilities to 'log_prob_chain' (steps, walkers).
+
+    Both datasets grow together, so a resumed run keeps samples and
+    log-probabilities aligned step by step. Pass force=True for the final
+    flush, so steps after the last multiple of ncheck are not lost.
     """
     def __init__(self, filename: str, ncheck: int):
         self.filename = filename
         self.ncheck = int(ncheck)
         self._prev_local = 0
 
-    def __call__(self, iteration: int, chain: np.ndarray, log_prob: np.ndarray):
+    def __call__(self, iteration: int, chain: np.ndarray, log_prob: np.ndarray, force: bool = False):
         if h5py is None:
             return False
-        if iteration % self.ncheck != 0:
+        if (not force) and iteration % self.ncheck != 0:
             return False
 
         local_n, nwalker, ndim = chain.shape
@@ -1792,11 +1796,16 @@ class AppendProgressCallback:
             return False
 
         new_block = chain[self._prev_local:local_n]
+        lp = None if log_prob is None else np.asarray(log_prob, dtype=float)
+        new_lp = None
+        if lp is not None and lp.shape[:2] == (local_n, nwalker):
+            new_lp = lp[self._prev_local:local_n]
         with h5py.File(self.filename, "a") as f:
             if "samples" not in f:
-                ds = f.create_dataset(
+                old_n = 0
+                f.create_dataset(
                     "samples",
-                    data=chain,
+                    data=new_block,
                     maxshape=(None, nwalker, ndim),
                     chunks=(1, nwalker, ndim),
                 )
@@ -1806,9 +1815,51 @@ class AppendProgressCallback:
                 new_n = old_n + new_local
                 ds.resize((new_n, nwalker, ndim))
                 ds[old_n:new_n, :, :] = new_block
+            if new_lp is not None:
+                if "log_prob_chain" not in f:
+                    if old_n == 0:
+                        f.create_dataset(
+                            "log_prob_chain",
+                            data=new_lp,
+                            maxshape=(None, nwalker),
+                            chunks=(1, nwalker),
+                        )
+                    # A chain resumed from a file written before log_prob_chain
+                    # existed cannot be aligned, so nothing is stored for it.
+                else:
+                    dl = f["log_prob_chain"]
+                    if dl.shape[0] == old_n:
+                        dl.resize((old_n + new_local, nwalker))
+                        dl[old_n:old_n + new_local, :] = new_lp
 
         self._prev_local = local_n
         return False
+
+
+def zeus_flat_log_like(h5f, burn: int, n_rows: Optional[int] = None) -> Optional[np.ndarray]:
+    """
+    Step-major flat log-likelihood for a Kosmulator zeus file, aligned with
+    samples[burn:].reshape(-1, ndim).
+
+    Uses 'log_prob_chain' (steps, walkers) when present. Older files only hold
+    a flat 'log_like' in zeus's own walker-major order (order='F'); those are
+    reordered here. Returns None when no aligned array can be built.
+    """
+    samples = h5f["samples"]
+    n_rows = int(samples.shape[0] if n_rows is None else n_rows)
+    nwalker = int(samples.shape[1])
+    burn = max(0, min(int(burn), n_rows))
+    if "log_prob_chain" in h5f and h5f["log_prob_chain"].shape[0] >= n_rows:
+        return np.asarray(h5f["log_prob_chain"][burn:n_rows], dtype=float).reshape(-1)
+    if "log_like" in h5f:
+        ll = np.asarray(h5f["log_like"], dtype=float).reshape(-1)
+        n_post = n_rows - burn
+        if ll.size != n_post * nwalker:
+            return None
+        if h5f.attrs.get("log_like_order", "") == "step":
+            return ll
+        return ll.reshape(nwalker, n_post).T.reshape(-1)
+    return None
 
 
 # ───────────────────────────────────────────────────────────────────────────────
