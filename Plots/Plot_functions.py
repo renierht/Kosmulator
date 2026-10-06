@@ -755,7 +755,7 @@ def print_stats_table(model: str, stats_list):
 
     header = (
         f"{'Observation':<{obs_w}} | {'Log-Likelihood':>18} | {'Chi-Squared':>15} | "
-        f"{'Reduced Chi-Squared':>20} | {'AIC':>11} | {'BIC':>11} | {'AICc':>11} | {'DIC':>11} |{'WAIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'dAICc':>11} | {'dDIC':>11} | {'dChi':>11} |  {'sigma':>11} | {'dWAIC':>11} |"
+        f"{'Reduced Chi-Squared':>20} | {'AIC':>11} | {'BIC':>11} | {'AICc':>11} | {'DIC':>11} | {'WAIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'dAICc':>11} | {'dDIC':>11} | {'dChi':>11} |  {'sigma':>11} | {'dWAIC':>11} |"
     )
     print(f"Statistical Results for Model: {model}")
     print(blue + header + reset)
@@ -784,8 +784,8 @@ def print_stats_table(model: str, stats_list):
         obs_str = f"{obs:<{obs_w}}"
         print(
             f"{obs_str} | {ll:>18.4f} | {chi2:>15.4f} | "
-            f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | {aicc:>11.3f} | {dic:>11.3f} | {waic:>11.3f} |"
-            f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f}| | {dchi:>11.3f}| {dwaic:>11.3f}| {sigma:>11.3f}|" 
+            f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | {aicc:>11.3f} | {dic:>11.3f} | {waic:>11.3f} | "
+            f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f} | {dchi:>11.3f} |  {sigma:>11.3f} | {dwaic:>11.3f} |"
         )
         #print(row)
 
