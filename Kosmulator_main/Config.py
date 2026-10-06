@@ -117,12 +117,16 @@ def prepare_pantheonP_data(data, z_min: float = 0.01, mode: str = "PplusSH0ES"):
         mask = (z > z_min) | (trig > 0)
         trig_eff = trig
     else:
-        # Pure Hubble-flow subset: drop calibrators completely
-        mask = (z > z_min) & (trig == 0)
+        # Uncalibrated Pantheon+ (no SH0ES): every SN in the Hubble flow,
+        # zHD > z_min, including Cepheid-host SNe above the cut. Their Cepheid
+        # distances are not used (trig_eff = 0). This is the selection of the
+        # Pantheon+ release and of Cobaya's PantheonPlus likelihood
+        # (zmask = zcmb > 0.01, with zcmb read from the zHD column).
+        mask = (z > z_min)
         trig_eff = np.zeros_like(trig)
 
     idx = np.where(mask)[0]
-    return {
+    out = {
         "mode": ("PplusSH0ES" if use_sh0es else "Pplus"),
         "mask": mask,
         "indices": idx,
@@ -135,6 +139,11 @@ def prepare_pantheonP_data(data, z_min: float = 0.01, mode: str = "PplusSH0ES"):
             os.path.join(K.OBSERVATIONS_BASE, "PantheonP.cov"),
         ),
     }
+    # Heliocentric redshift for the (1 + zHEL) factor in D_L = (1 + zHEL) D_M(zHD),
+    # as in the Pantheon+ / Cobaya likelihood (utils.sn_luminosity_distance).
+    if data.get("zHEL") is not None:
+        out["z_hel"] = np.asarray(data["zHEL"], dtype=float)[mask]
+    return out
 
 
 from pathlib import Path
@@ -523,6 +532,7 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     "m_b_corr": df["m_b_corr"].values,
                     "IS_CALIBRATOR": df["IS_CALIBRATOR"].values,
                     "CEPH_DIST": df["CEPH_DIST"].values,
+                    "zHEL": df["zHEL"].values if "zHEL" in df.columns else None,
                     "cov_path": os.path.join(K.OBSERVATIONS_BASE, "PantheonP.cov"),
                 }
 

@@ -574,7 +574,10 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                         cov = obs_data["cov"]
 
                         comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, zHD, p_eval)
-                        distance_modulus = 25 + 5 * np.log10(comoving_distances * (1 + zHD))
+                        # D_L = (1 + zHEL) D_M(zHD) when z_hel is present (Pantheon+, DES-Y5)
+                        distance_modulus = 25 + 5 * np.log10(
+                            U.sn_luminosity_distance(comoving_distances, zHD, obs_data.get("z_hel"))
+                        )
                         chi_total += float(Calc_PantP_chi(m_b_corr, IS_CALIBRATOR, CEPH_DIST, cov, distance_modulus, p_eval))
                         n_points += len(m_b_corr)
 
