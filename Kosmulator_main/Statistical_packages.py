@@ -953,24 +953,82 @@ def Calc_chi(
     return float(np.sum((residual ** 2) / (type_data_error ** 2)))
     
 
+# -----------------------------------------------------------------------------
+# Supernova magnitude offset, marginalised analytically
+# -----------------------------------------------------------------------------
+# For a residual r = data - model and covariance C, the chi^2 with a constant
+# offset marginalised (flat prior) or minimised is
+#     chi2 = A - B^2 / E,   A = r^T C^-1 r,  B = 1^T C^-1 r,  E = 1^T C^-1 1,
+# and the best offset is B / E. This is what the Cobaya SN likelihoods do with
+# use_abs_mag: False (inverse covariance projected orthogonal to the offset).
+_SN_CHOL_ONES: Dict[int, Any] = {}
+
+
+def _sn_terms_chol(L_cov: np.ndarray, residual: np.ndarray):
+    """(A, B, E) from a lower Cholesky factor L of C (Pantheon+)."""
+    key = id(L_cov)
+    hit = _SN_CHOL_ONES.get(key)
+    if hit is None or hit[0] is not L_cov:
+        e = la.solve_triangular(L_cov, np.ones(L_cov.shape[0]), lower=True, check_finite=False)
+        hit = (L_cov, e, float(e @ e))       # keeps L alive, so the id stays unique
+        _SN_CHOL_ONES[key] = hit
+    _, e, E = hit
+    u = la.solve_triangular(L_cov, residual, lower=True, check_finite=False)
+    return float(u @ u), float(u @ e), E
+
+
+def sn_offset_terms(obs_data: dict, residual: np.ndarray):
+    """(A, B, E) for a generic SN set: inverse covariance if present, else diagonal errors."""
+    r = np.asarray(residual, dtype=float)
+    inv_cov = obs_data.get("inv_cov")
+    if inv_cov is not None:
+        W1 = obs_data.get("_sn_W1")
+        if W1 is None or np.shape(W1)[0] != r.shape[0]:
+            W1 = np.asarray(inv_cov, dtype=float).sum(axis=1)
+            obs_data["_sn_W1"] = W1
+            obs_data["_sn_E"] = float(W1.sum())
+        return float(r @ (inv_cov @ r)), float(W1 @ r), float(obs_data["_sn_E"])
+    w = 1.0 / np.asarray(obs_data["type_data_error"], dtype=float) ** 2
+    return float(np.sum(w * r * r)), float(np.sum(w * r)), float(np.sum(w))
+
+
+def sn_best_offset(obs_data: dict, residual: np.ndarray) -> float:
+    """Best-fit constant offset B/E for a SN set (used to place the data in plots)."""
+    r = np.asarray(residual, dtype=float)
+    L = obs_data.get("cov")
+    if "m_b_corr" in obs_data and L is not None and np.shape(L) == (r.size, r.size):
+        _, B, E = _sn_terms_chol(np.asarray(L), r)
+    elif obs_data.get("inv_cov") is not None or obs_data.get("type_data_error") is not None:
+        _, B, E = sn_offset_terms(obs_data, r)
+    else:
+        return float(np.nanmean(r))
+    return float(B / E)
+
+
 def Calc_Generic_SNe_chi(
     obs_data: dict,               # <-- Now takes the whole dict
     model: np.ndarray,
     param_dict: Dict[str, float],
 ) -> float:
     """
-    Generic SNe χ² evaluator.
-    Supports diagonal errors (JLA/DESY5) AND full covariance (Union3).
+    Generic SNe χ² evaluator (JLA, Pantheon, DESY5, Union3).
+    Supports diagonal errors AND a full (inverse) covariance.
+
+    With obs_data["marginalise_offset"] the magnitude offset is marginalised
+    analytically (chi2 = A - B^2/E), so neither M_abs nor H_0 enters.
     """
-    type_data = obs_data["type_data"]
-    
-    # 1. Marginalize M_abs (if present)
-    #    (JLA doesn't have it -> M=0 -> Data is Absolute)
-    #    (DESY5/Union3 have it -> M!=0 -> Data is Apparent)
+    type_data = np.asarray(obs_data["type_data"], dtype=float)
+
+    if obs_data.get("marginalise_offset", False):
+        A, B, E = sn_offset_terms(obs_data, type_data - model)
+        return float(A - B * B / E)
+
+    # Offset not marginalised: DESY5/Union3 and the JLA/Pantheon files all hold
+    # distance moduli, so M_abs only enters when it is actually sampled.
     if obs_data.get("data_is_distance_modulus", False):
         residual = type_data - model
     else:
-        M = param_dict.get("M_abs", -19.35)
+        M = param_dict.get("M_abs", 0.0)
         residual = (type_data - M) - model
 
     # 2. Check for Covariance (Union3)
@@ -991,6 +1049,7 @@ def Calc_PantP_chi(
     L_cov: np.ndarray,
     model: np.ndarray,
     param_dict: Dict[str, float],
+    marginalise: bool = False,
 ) -> float:
     """
     Pantheon+ χ² with full covariance, using a Cholesky solve.
@@ -1010,14 +1069,22 @@ def Calc_PantP_chi(
     param_dict : dict
         Parameter dictionary containing at least 'M_abs'.
 
+    marginalise : bool
+        Marginalise the magnitude offset analytically (uncalibrated Pantheon+);
+        M_abs is then not used.
+
     Returns
     -------
     float
         χ² value for the Pantheon+ subset.
     """
-    M = param_dict.get("M_abs", -19.20)
-
     moduli = np.where(trig == 1, cepheid, model)
+
+    if marginalise:
+        A, B, E = _sn_terms_chol(L_cov, mb - moduli)
+        return float(A - B * B / E)
+
+    M = param_dict.get("M_abs", -19.20)
     delta = mb - M - moduli
 
     residuals = la.solve_triangular(L_cov, delta, lower=True, check_finite=False)
@@ -1939,15 +2006,21 @@ def pointwise_log_like_SNe(obs_data, model, param_dict):
         chi2 = Calc_Generic_SNe_chi(obs_data, model, param_dict)
         return np.array([-0.5 * chi2])
     else:
-        # Diagonal errors (JLA) → N = number of SNe
-        residual = obs_data["type_data"] - param_dict.get("M_abs", -19.35) - model
+        # Diagonal errors (JLA, Pantheon) → N = number of SNe
         err = obs_data["type_data_error"]
+        if obs_data.get("marginalise_offset", False):
+            r = np.asarray(obs_data["type_data"], dtype=float) - model
+            _, B, E = sn_offset_terms(obs_data, r)
+            residual = r - B / E       # per-SN terms sum to the marginalised chi^2
+        else:
+            residual = obs_data["type_data"] - param_dict.get("M_abs", 0.0) - model
         return -0.5 * (residual / err) ** 2                 # shape (N,) — only valid if no inv_cov 
 
 def pointwise_log_like_PantP(obs_data, model, param_dict):
     chi2 = Calc_PantP_chi(
         obs_data["m_b_corr"], obs_data["IS_CALIBRATOR"],
-        obs_data["CEPH_DIST"], obs_data.get("cov"), model, param_dict
+        obs_data["CEPH_DIST"], obs_data.get("cov"), model, param_dict,
+        marginalise=bool(obs_data.get("marginalise_offset", False)),
     )
     return np.array([-0.5 * chi2])                    # shape (1,)
 

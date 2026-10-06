@@ -847,12 +847,24 @@ def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None) 
     has_cc       = any(L == "cc" for L in lower)
     has_cal      = any(L.startswith("bbn") or L.startswith("cmb") for L in lower)
 
+    # The group's sampled parameters decide when they are known: r_d sampled ->
+    # free; not sampled and no calibrator -> fixed (singleton BAO, and BAO with
+    # only uncalibrated data, see Config "BAO/DESI uncalibrated").
+    params_here = None
+    try:
+        if obs_index is not None:
+            params_here = list(model_config.get("parameters", [])[obs_index])
+    except Exception:
+        params_here = None
+
     if has_bao_desi:
         # Early-time calibrator present -> calibrated
         if has_cal:
             tokens.append("rd: calibrated")
+        elif params_here is not None and "r_d" in params_here:
+            tokens.append("rd: free")
         # If BAO is combined with CC (or any non-calibrator second dataset) -> FREE
-        elif has_cc or len(obs_list) > 1:
+        elif params_here is None and (has_cc or len(obs_list) > 1):
             tokens.append("rd: free")
         else:
             # Singleton BAO policy (typical DESI rule): FIX to configured value if present

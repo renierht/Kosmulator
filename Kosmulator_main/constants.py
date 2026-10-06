@@ -36,6 +36,15 @@ R_D_SINGLETON: float = 147.5
 #: GR-like growth index used when fσ8 is a singleton (and as a default)
 GAMMA_FS8_SINGLETON: float = 0.55
 
+#: Uncalibrated supernovae (Pantheon+ without SH0ES, DES-Y5, Union3, JLA,
+#: Pantheon): marginalise the magnitude offset (M_abs, or the H0 normalisation
+#: of the distance moduli) analytically, as in the Cobaya SN likelihoods
+#: (use_abs_mag: False). M_abs is then not sampled for PantheonP, and a BAO/DESI
+#: group whose other data fix neither H0 nor r_d uses the fixed r_d below, so
+#: H_0 measures h*r_d as DESI's hrd does. Set False for the old behaviour
+#: (M_abs sampled for PantheonP; H0 acting as the offset of distance moduli).
+SN_MARGINALISE_OFFSET: bool = True
+
 
 # ======================================================================
 # 2. Data / path defaults

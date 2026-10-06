@@ -548,6 +548,11 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     pantheon_data,
                     mode=mode,
                 )
+                # Uncalibrated Pantheon+: magnitude offset marginalised analytically
+                # (Cobaya use_abs_mag: False). With SH0ES (PantheonPS) M_abs is sampled.
+                observation_data[obs]["marginalise_offset"] = (
+                    obs == "PantheonP" and bool(getattr(K, "SN_MARGINALISE_OFFSET", True))
+                )
 
                 # Pre-build covariance + lower Cholesky and attach it
                 try:
@@ -830,12 +835,20 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
 
 
                 data_sne["data_is_distance_modulus"] = (obs == "Union3") or (obs == 'DESY5')
+                # Their distance moduli carry an arbitrary H0/M normalisation:
+                # marginalise it analytically, as the DES-Y5 and Union3 likelihoods do.
+                data_sne["marginalise_offset"] = bool(getattr(K, "SN_MARGINALISE_OFFSET", True))
                 observation_data[obs] = data_sne
             # ------------------
             # Default loader
             # ------------------
             else:
                 observation_data[obs] = load_data(file_path)
+                if obs in ("JLA", "Pantheon") and isinstance(observation_data[obs], dict):
+                    # Distance moduli with an arbitrary normalisation: offset marginalised
+                    observation_data[obs]["marginalise_offset"] = bool(
+                        getattr(K, "SN_MARGINALISE_OFFSET", True)
+                    )
 
     return observation_data
 
@@ -1082,6 +1095,25 @@ def create_config(
         def _is_bao_desi_singleton(grp: list[str]) -> bool:
             return len(grp) == 1 and grp[0] in {"BAO", "DESI_DR1", "DESI_DR2"}
 
+        # Data that fix neither H0 nor r_d: uncalibrated SNe (offset marginalised)
+        # and growth data. Combined with BAO/DESI they leave only h*r_d measured,
+        # exactly as BAO alone, so r_d is fixed and H_0 carries h*r_d (DESI DR2
+        # samples hrd for the same reason, arXiv:2503.14738 Sec. V).
+        _sn_offset_only = {"JLA", "Pantheon", "PantheonP", "DESY5", "Union3"}
+        _no_distance_scale = {"f", "f_sigma_8"}
+        _h0_anchors = {
+            "CC", "OHD", "PantheonPS",
+            "CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lensing",
+        }
+
+        def _is_bao_desi_uncalibrated(grp: list[str]) -> bool:
+            if not bool(getattr(K, "SN_MARGINALISE_OFFSET", True)):
+                return False
+            if not _has_bao_desi(grp) or len(grp) < 2:
+                return False
+            others = [x for x in grp if x not in {"BAO", "DESI_DR1", "DESI_DR2"}]
+            return all(x in (_sn_offset_only | _no_distance_scale) for x in others)
+
         param_sets_policy = []
         fs8_gamma_fixed_by_group = {}
 
@@ -1117,6 +1149,17 @@ def create_config(
                         rd_fix, obs_grp, mod,
                     )
 
+            elif _is_bao_desi_uncalibrated(obs_grp):
+                if "r_d" in grp_params:
+                    grp_params.remove("r_d")
+                if logger:
+                    rd_fix = float(config[mod]["rd_policy"].get("fixed_value", K.R_D_SINGLETON))
+                    logger.warning(
+                        "BAO/DESI uncalibrated: no H0 or r_d anchor, so H_0 measures h*r_d; fixed "
+                        "r_d=%.1f Mpc and removed 'r_d' from parameters for %s (model %s)",
+                        rd_fix, obs_grp, mod,
+                    )
+
             elif _has_bao_desi(obs_grp):
                 if "r_d" not in grp_params:
                     grp_params.append("r_d")
@@ -1128,6 +1171,19 @@ def create_config(
             else:
                 if "r_d" in grp_params:
                     grp_params.remove("r_d")
+
+            # Uncalibrated SNe without BAO or an H0 anchor: H_0 drops out of the
+            # likelihood once the offset is marginalised, so its posterior is the prior.
+            if (bool(getattr(K, "SN_MARGINALISE_OFFSET", True))
+                    and any(x in _sn_offset_only for x in obs_grp)
+                    and not _has_bao_desi(obs_grp)
+                    and not any(x in _h0_anchors for x in obs_grp)
+                    and "H_0" in grp_params and logger):
+                logger.warning(
+                    "H_0 is not constrained by %s: the supernova offset is marginalised, "
+                    "so its posterior is the prior (model %s)",
+                    obs_grp, mod,
+                )
 
             # fσ8 singleton: fix gamma to GR-like value to avoid degeneracy
             if len(obs_grp) == 1 and obs_grp[0] == "f_sigma_8":
@@ -1326,7 +1382,8 @@ def Add_required_parameters(
         'DESI_DR1': ['H_0', 'r_d'],
         'DESI_DR2': ['H_0', 'r_d'],
         'Pantheon': ['H_0'],
-        'PantheonP': ['H_0', 'M_abs'],
+        # Uncalibrated Pantheon+: M_abs is marginalised analytically by default
+        'PantheonP': ['H_0'] if getattr(K, "SN_MARGINALISE_OFFSET", True) else ['H_0', 'M_abs'],
         'PantheonPS':['H_0', 'M_abs'],
         'DESY5': ['H_0'],
         'Union3':     ['H_0'],

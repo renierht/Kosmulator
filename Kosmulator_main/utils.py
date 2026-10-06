@@ -77,6 +77,8 @@ INIT_COLLAPSE_KEYS = (
     "Added ",
     "BAO/DESI singleton",
     "BAO/DESI combo",
+    "BAO/DESI uncalibrated",
+    "H_0 is not constrained by",
     "r_d calibrated by early-time dataset(s)",
     "fσ8 singleton",
     "fσ₈ singleton",

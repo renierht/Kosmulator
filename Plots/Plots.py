@@ -1668,6 +1668,19 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
                         params_med, model_name, MODEL_FUNCS
                     )
 
+                    # Uncalibrated SNe: the magnitude offset is marginalised in the
+                    # likelihood, so place the data with its best-fit value here.
+                    if (obs_type in ("JLA", "Pantheon", "PantheonP", "DESY5", "Union3")
+                            and bool((data.get(obs_type) or {}).get("marginalise_offset", False))):
+                        try:
+                            _off = SP.sn_best_offset(
+                                data[obs_type], np.asarray(y_dat, dtype=float) - np.asarray(y_mod_pts, dtype=float)
+                            )
+                            if np.isfinite(_off):
+                                y_dat = np.asarray(y_dat, dtype=float) - _off
+                        except Exception:
+                            pass
+
                     # Best dataset highest among observations, but still below band/model
                     z_obs = Z_OBS_BASE + (len(part_sorted) - 1 - oi)
 

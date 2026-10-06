@@ -578,7 +578,8 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                         distance_modulus = 25 + 5 * np.log10(
                             U.sn_luminosity_distance(comoving_distances, zHD, obs_data.get("z_hel"))
                         )
-                        chi_total += float(Calc_PantP_chi(m_b_corr, IS_CALIBRATOR, CEPH_DIST, cov, distance_modulus, p_eval))
+                        chi_total += float(Calc_PantP_chi(m_b_corr, IS_CALIBRATOR, CEPH_DIST, cov, distance_modulus, p_eval,
+                                                          marginalise=bool(obs_data.get("marginalise_offset", False))))
                         n_points += len(m_b_corr)
 
                     elif obs == "BAO":

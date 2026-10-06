@@ -199,7 +199,8 @@ def model_likelihood(
     # --- Calculate Chi^2 ---
     if obs in ("PantheonP", "PantheonPS"):
         # Pantheon+ has its own complex covariance logic
-        chi2 = SP.Calc_PantP_chi(mb, trig, cep, cov, model, param_dict)
+        chi2 = SP.Calc_PantP_chi(mb, trig, cep, cov, model, param_dict,
+                                 marginalise=bool(obs_data.get("marginalise_offset", False)))
 
     elif obs_type == "SNe":
         # ALL other SNe (JLA, DESY5, Union3) go here.
