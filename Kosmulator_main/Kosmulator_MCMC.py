@@ -142,21 +142,8 @@ def model_likelihood(
         return -0.5 * SP.Calc_BBN_DH_chi(obs_data, MODEL_func, param_dict, "BBN_DH")
 
     if obs in ("BBN_PryMordial", "BBN_prior"):
-        obh2 = float(param_dict["Omega_bh^2"])
-        # 2D case if both mean for N_eff and covariance are provided
-        if ("cov" in obs_data) and ("mu_Neff" in obs_data):
-            x   = np.array([obh2, float(param_dict["N_eff"])], dtype=float)
-            mu  = np.array([float(obs_data["mu_obh2"]), float(obs_data["mu_Neff"])], dtype=float)
-            cov = np.array(obs_data["cov"], dtype=float)
-            try:
-                inv = np.linalg.inv(cov)
-            except np.linalg.LinAlgError:
-                inv = np.linalg.pinv(cov, rcond=1e-12)
-            d = x - mu
-            return -0.5 * float(d @ (inv @ d))
-        # 1D default (ΛCDM prior on Ω_b h^2)
-        mu, sig = float(obs_data["mu_obh2"]), float(obs_data["sigma_obh2"])
-        return -0.5 * ((obh2 - mu) / sig) ** 2
+        # Gaussian prior on Omega_b h^2 (or 2D with N_eff); shared with the statistics step
+        return -0.5 * SP.bbn_prior_chi2(obs_data, param_dict)
 
     # Non-CMB standard data containers
     if obs in ("PantheonP", "PantheonPS"):

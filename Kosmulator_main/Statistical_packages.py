@@ -1269,6 +1269,27 @@ def bbn_predict_alterbbn(p: Dict[str, float], data: Optional[dict] = None) -> fl
     return _bbn_call_cached(obh2, neff, tau)
 
 
+def bbn_prior_chi2(obs_data: Dict[str, Any], param_dict: Dict[str, float]) -> float:
+    """
+    chi^2 of the BBN Gaussian prior on Omega_b h^2 (BBN_PryMordial / BBN_prior),
+    or of the 2D (Omega_b h^2, N_eff) prior when 'cov' and 'mu_Neff' are given.
+    Used by the sampler and by the statistics step, so both see the same term.
+    """
+    obh2 = float(param_dict["Omega_bh^2"])
+    if ("cov" in obs_data) and ("mu_Neff" in obs_data):
+        x   = np.array([obh2, float(param_dict["N_eff"])], dtype=float)
+        mu  = np.array([float(obs_data["mu_obh2"]), float(obs_data["mu_Neff"])], dtype=float)
+        cov = np.array(obs_data["cov"], dtype=float)
+        try:
+            inv = np.linalg.inv(cov)
+        except np.linalg.LinAlgError:
+            inv = np.linalg.pinv(cov, rcond=1e-12)
+        d = x - mu
+        return float(d @ (inv @ d))
+    mu, sig = float(obs_data["mu_obh2"]), float(obs_data["sigma_obh2"])
+    return float(((obh2 - mu) / sig) ** 2)
+
+
 def Calc_BBN_DH_chi(
     data: dict,
     Model_func: Callable,

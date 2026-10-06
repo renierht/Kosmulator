@@ -625,7 +625,10 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                         chi_total += float(Calc_BBN_DH_chi(obs_data, MODEL_func, p_eval, obs_type))
 
                     elif obs in ("BBN_PryMordial", "BBN_prior"):
-                        continue
+                        # Counted in chi^2 (as in the sampler's log_like, so D_hat and
+                        # D_bar measure the same thing, and the MAP matches DESI's
+                        # definition), but not as a data point: it is a prior.
+                        chi_total += SP.bbn_prior_chi2(obs_data, p_eval)
 
                     elif obs_type == "CMB":
                         if obs == "CMB_lowl":
