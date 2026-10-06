@@ -1838,6 +1838,144 @@ class AppendProgressCallback:
         return False
 
 
+# ───────────────────────────────────────────────────────────────────────────────
+# Convergence report (per model and observation group)
+# ───────────────────────────────────────────────────────────────────────────────
+
+CONVERGENCE_NOTE = (
+    "tau: integrated autocorrelation time per parameter on the post-burn-in chain "
+    "(emcee estimator, window c = 5), largest over the sampled parameters. "
+    "N_post: retained steps per walker. ESS_min ~ N_post x walkers / tau_max "
+    "(walkers of one ensemble are not independent chains, so no Gelman-Rubin). "
+    "Acceptance: emcee, mean over walkers, including burn-in; zeus (slice sampling) "
+    "has no rejection step. Converged: Kosmulator's stopping rule. Stuck: walkers whose "
+    "post-burn-in median log P lies beyond the chi2(ndim) 1 - 1e-6 point below the ensemble."
+)
+
+
+def chain_convergence_summary(output_dir: str, key: str, burn: int, param_names: List[str]) -> Dict[str, Any]:
+    """
+    Convergence numbers for one chain file (zeus '<key>_zeus.h5' or emcee '<key>.h5'
+    in output_dir; the more recently written one if both exist).
+    """
+    import emcee as _emcee
+    row: Dict[str, Any] = dict(
+        observation=key, engine="n/a", steps=0, walkers=0, burn=int(burn), retained=0,
+        tau_max=float("nan"), tau_param="", n_over_tau=float("nan"), ess_min=float("nan"),
+        acceptance=float("nan"), converged=None, stuck=None,
+    )
+    paths = [(p, e) for p, e in ((os.path.join(output_dir, f"{key}_zeus.h5"), "zeus"),
+                                  (os.path.join(output_dir, f"{key}.h5"), "emcee")) if os.path.exists(p)]
+    if not paths or h5py is None:
+        return row
+    path, engine = max(paths, key=lambda pe: os.path.getmtime(pe[0]))
+    lp = None
+    with h5py.File(path, "r") as f:
+        if engine == "zeus":
+            chain = np.asarray(f["samples"][:], float)
+            if "log_prob_chain" in f:
+                lp = np.asarray(f["log_prob_chain"][: chain.shape[0]], float)
+            stuck_attr = f.attrs.get("stuck_walkers", None)
+            acc = float("nan")
+        else:
+            g = f["mcmc"]
+            it = int(g.attrs.get("iteration", g["chain"].shape[0]))
+            chain = np.asarray(g["chain"][:it], float)
+            lp = np.asarray(g["log_prob"][:it], float) if "log_prob" in g else None
+            acc = float(np.mean(np.asarray(g["accepted"], float)) / it) if ("accepted" in g and it > 0) else float("nan")
+            stuck_attr = None
+        conv = f.attrs.get("converged", None)
+    nsteps, nwalk, ndim = chain.shape
+    b = int(burn) if int(burn) < nsteps else 0
+    post = chain[b:]
+    row.update(engine=engine, steps=int(nsteps), walkers=int(nwalk), burn=b, retained=int(post.shape[0] * nwalk),
+               acceptance=acc, converged=(None if conv is None else bool(conv)))
+    if post.shape[0] > 1:
+        lg = logging.getLogger("emcee.autocorr")
+        old = lg.level
+        lg.setLevel(logging.ERROR)
+        try:
+            tau = np.asarray(_emcee.autocorr.integrated_time(post, quiet=True), float)
+        except Exception:
+            tau = np.full(ndim, np.nan)
+        finally:
+            lg.setLevel(old)
+        if np.isfinite(tau).any():
+            j = int(np.nanargmax(tau))
+            row.update(tau_max=float(tau[j]),
+                       tau_param=(param_names[j] if j < len(param_names) else f"p{j}"),
+                       n_over_tau=float(post.shape[0] / tau[j]),
+                       ess_min=float(post.shape[0] * nwalk / tau[j]))
+    if stuck_attr is not None:
+        row["stuck"] = int(np.size(stuck_attr))
+    elif lp is not None and lp.shape[0] > b + 1:
+        row["stuck"] = int(len(find_stuck_walkers(lp[b:], ndim)))
+    return row
+
+
+def _fmt_conv_row(r: Dict[str, Any]) -> List[str]:
+    def num(x, fmt):
+        return "n/a" if (x is None or not np.isfinite(x)) else format(x, fmt)
+    return [
+        str(r["observation"]), str(r["engine"]), str(r["steps"]), str(r["burn"]), str(r["retained"]),
+        (num(r["tau_max"], ".1f") + (f" ({r['tau_param']})" if r["tau_param"] else "")),
+        num(r["n_over_tau"], ".1f"), num(r["ess_min"], ".0f"),
+        ("n/a" if r["engine"] == "zeus" else num(r["acceptance"], ".3f")),
+        ("n/a" if r["converged"] is None else ("yes" if r["converged"] else "no")),
+        ("n/a" if r["stuck"] is None else str(r["stuck"])),
+    ]
+
+
+CONVERGENCE_HEADER = ["Observation", "Engine", "Steps", "Burn-in", "Retained samples", "tau_max (param)",
+                      "N_post/tau_max", "ESS_min", "Acceptance", "Converged", "Stuck walkers"]
+
+
+def format_convergence_table(model: str, rows: List[Dict[str, Any]]) -> str:
+    """Aligned plain-text convergence table for one model."""
+    body = [_fmt_conv_row(r) for r in rows]
+    widths = [max(len(h), *(len(b[i]) for b in body)) if body else len(h) for i, h in enumerate(CONVERGENCE_HEADER)]
+    line = lambda cells: " | ".join(c.ljust(w) if i == 0 else c.rjust(w) for i, (c, w) in enumerate(zip(cells, widths)))
+    out = [f"Convergence summary for model: {model}", line(CONVERGENCE_HEADER), "-" * len(line(CONVERGENCE_HEADER))]
+    out += [line(b) for b in body]
+    out += ["", textwrap.fill(CONVERGENCE_NOTE, width=110)]
+    return "\n".join(out)
+
+
+def write_convergence_reports(model: str, rows: List[Dict[str, Any]], folder: str) -> List[str]:
+    """Write convergence_summary.{txt,csv,tex} for one model; returns the paths written."""
+    os.makedirs(folder, exist_ok=True)
+    paths = []
+    p = os.path.join(folder, "convergence_summary.txt")
+    with open(p, "w", encoding="utf-8") as fh:
+        fh.write(format_convergence_table(model, rows) + "\n")
+    paths.append(p)
+    p = os.path.join(folder, "convergence_summary.csv")
+    with open(p, "w", encoding="utf-8") as fh:
+        fh.write("observation,engine,steps,burn_in,walkers,retained_samples,tau_max,tau_max_param,"
+                 "n_post_over_tau_max,ess_min,acceptance,converged,stuck_walkers\n")
+        for r in rows:
+            fh.write(",".join(str(v) for v in (
+                r["observation"], r["engine"], r["steps"], r["burn"], r["walkers"], r["retained"],
+                r["tau_max"], r["tau_param"], r["n_over_tau"], r["ess_min"], r["acceptance"],
+                r["converged"], r["stuck"])) + "\n")
+    paths.append(p)
+    p = os.path.join(folder, "convergence_summary.tex")
+    def tex(s: str) -> str:
+        return str(s).replace("_", r"\_").replace("+", r"$+$")
+    with open(p, "w", encoding="utf-8") as fh:
+        fh.write("% Convergence summary for model " + tex(model) + " (Kosmulator)\n")
+        fh.write("\\begin{tabular}{lrrrrrr}\n\\hline\n")
+        fh.write("Data & Completed steps & Retained samples & $\\tau_{\\max}$ & "
+                 "$N_{\\rm post}/\\tau_{\\max}$ & Approx.\\ ESS$_{\\min}$ & Acceptance \\\\\n\\hline\n")
+        for r in rows:
+            c = _fmt_conv_row(r)
+            fh.write(" & ".join([tex(c[0]), c[2], c[4], c[5].split(" (")[0], c[6], c[7], c[8]]) + " \\\\\n")
+        fh.write("\\hline\n\\end{tabular}\n")
+        fh.write("% " + CONVERGENCE_NOTE + "\n")
+    paths.append(p)
+    return paths
+
+
 def find_stuck_walkers(log_prob_chain, ndim: int, p_tail: float = 1e-6) -> np.ndarray:
     """
     Walkers whose median log-posterior over the given (post-burn-in) steps lies

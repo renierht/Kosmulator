@@ -701,6 +701,10 @@ def run_mcmc_for_all_models(
                     num_cores=num_cores,
                     obs_key=key,
                 )
+                # Where this group's chain lives, for the convergence report
+                PLOT_SETTINGS.setdefault("chain_index", {})[(model_name, key)] = {
+                    "dir": output_dir, "key": key, "obs_index": i,
+                }
 
             if rank == 0:
                 print("-" * 66)

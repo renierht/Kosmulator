@@ -663,7 +663,38 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
         print_rule()
         print()
 
+    # ----- 5) Convergence report (console + convergence_summary.{txt,csv,tex}) ----
+    _report_convergence(CONFIG, PLOT_SETTINGS, main_folder)
+
     return all_best_fit, all_tables, statistical_results
+
+
+def _report_convergence(CONFIG, PLOT_SETTINGS, main_folder):
+    """Per model and group: completed steps, retained samples, tau_max, N_post/tau_max,
+    approximate ESS_min, acceptance (emcee), converged flag and stuck walkers."""
+    from Kosmulator_main.utils import (
+        chain_convergence_summary, format_convergence_table, write_convergence_reports,
+    )
+    index = PLOT_SETTINGS.get("chain_index") or {}
+    by_model = {}
+    for (model, key), info in index.items():
+        try:
+            cfg = CONFIG[model]
+            params = list(cfg["parameters"][info["obs_index"]])
+            row = chain_convergence_summary(info["dir"], key, int(cfg.get("burn", 0) or 0), params)
+            row["observation"] = _displayize_key(key)
+            by_model.setdefault(model, []).append(row)
+        except Exception as e:
+            print(f"[warning] convergence summary failed for {model} {key}: {e}")
+    for model, rows in by_model.items():
+        try:
+            write_convergence_reports(model, rows, os.path.join(main_folder, model))
+        except Exception as e:
+            print(f"[warning] could not write the convergence summary for {model}: {e}")
+        print_rule()
+        print(format_convergence_table(model, rows))
+        print_rule()
+        print()
 
 
 
