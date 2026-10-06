@@ -464,8 +464,24 @@ def get_pool(use_mpi: bool = False, num_cores: int | None = None, **pool_kwargs)
           #  "emcee and non-vectorised Zeus use the worker processes."
         #)
 
-    # Forward initializer/initargs/maxtasksperchild/etc.
-    return ctx.Pool(processes=num_cores, **pool_kwargs)
+    # One BLAS/OpenMP thread per worker. Spawned workers read these variables
+    # when NumPy loads, which happens while unpickling the initializer, so
+    # setting them inside the initializer is too late. Set them in the parent
+    # just for the pool start-up, then restore the parent's values.
+    _thread_vars = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+                    "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS")
+    _saved = {k: os.environ.get(k) for k in _thread_vars}
+    try:
+        for k in _thread_vars:
+            os.environ[k] = "1"
+        # Forward initializer/initargs/maxtasksperchild/etc.
+        return ctx.Pool(processes=num_cores, **pool_kwargs)
+    finally:
+        for k, v in _saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def init_mpi():

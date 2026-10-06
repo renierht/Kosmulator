@@ -606,6 +606,13 @@ def init_clik_worker(
         "BLIS_NUM_THREADS",
     ):
         os.environ[var] = "1"
+    # The variables above only reach libraries loaded after this point; NumPy's
+    # BLAS is usually loaded already, so also cap the live thread pools.
+    try:
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(limits=1)
+    except Exception:
+        pass
 
     if hil_path:
         preload_clik_hil(hil_path)
