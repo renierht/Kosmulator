@@ -421,7 +421,11 @@ def load_DESI_cov(file_path: Union[str, Path]) -> Tuple[np.ndarray, np.ndarray]:
     try:
         np.linalg.cholesky(cov)
     except np.linalg.LinAlgError:
-        logger.warning("DESI cov not PD under Cholesky; using pseudo-inverse fallback.")
+        logger.warning(
+            "Covariance %s is not positive definite under Cholesky; its pseudo-inverse "
+            "is used where an inverse is needed (expected for a systematics-only matrix).",
+            path.name,
+        )
         inv_cov = np.linalg.pinv(cov, rcond=1e-12)
         cov     = 0.5 * (cov + cov.T)
 

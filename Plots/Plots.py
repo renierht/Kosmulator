@@ -664,10 +664,13 @@ def autocorrPlot(
 
     plt.clf()
 
-    # 1) Diagonal slope line
+    # 1) Convergence threshold: emcee stops once tau_hat < (N - burn)/check_every
+    #    (and tau_hat is stable), so draw that line, measured from the burn-in.
     iterations = resume_offset + check_every * np.arange(0, int(nsteps / check_every) + 1)
-    diag_vals  = (iterations - resume_offset) / check_every
-    plt.plot(iterations, diag_vals, linestyle="--", color="k", label="slope = 1/check")
+    _burn0 = float(global_burn) if global_burn is not None else float(resume_offset)
+    diag_vals  = np.maximum(iterations - _burn0, 0.0) / check_every
+    plt.plot(iterations, diag_vals, linestyle="--", color="k",
+             label=f"(N - burn)/{check_every}: converged below")
 
     # 2) Autocorr points up to current index
     its = resume_offset + check_every * np.arange(1, index + 1)
@@ -682,13 +685,14 @@ def autocorrPlot(
 
     latex_on = bool(PLOT_SETTINGS.get("latex_enabled", False))
 
-    # 3) Convergence target
+    # 3) The stability tolerance is a relative change |dtau|/tau, not a tau value,
+    #    so state it in the legend instead of drawing it as a horizontal line.
     if convergence is not None and np.isfinite(convergence):
         if latex_on:
-            label_target = rf"target $\tau$ = {convergence:.3f}"
+            label_target = rf"and $|\Delta\tau|/\tau$ < {convergence:g}"
         else:
-            label_target = f"target τ = {convergence:.3f}"
-        plt.axhline(convergence, linestyle=":", color="gray", label=label_target)
+            label_target = f"and |Δτ|/τ < {convergence:g}"
+        plt.plot([], [], " ", label=label_target)
 
     # 4) Global burn
     if global_burn is not None:

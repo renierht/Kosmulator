@@ -194,9 +194,9 @@ def main(
         getattr(args, "corner_table_full", False)
     )
 
-    base_plots = PLOT_SETTINGS.get(
-        "base_plots_dir", str(Path("Plots") / "Saved_plots")
-    )
+    # Same root as corner and best-fit plots (constants.DEFAULT_PLOTS_BASE);
+    # "Saved_plots" here split the output into two folders on Linux/macOS.
+    base_plots = PLOT_SETTINGS.get("base_plots_dir", K.DEFAULT_PLOTS_BASE)
     suffix = (getattr(args, "output_suffix", "") or "").strip()
     auto_base = os.path.join(base_plots, suffix) if suffix else base_plots
     PLOT_SETTINGS["autocorr_save_path"] = auto_base
