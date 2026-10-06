@@ -437,7 +437,9 @@ def find_polished_mle(
                 "disp": False,
             },
         )
-        if res.success and np.isfinite(res.fun) and res.fun < best_chi2:
+        # A run stopped by maxiter/maxfev still returns a valid, lower chi^2,
+        # so any improvement is kept (res.success is not required).
+        if np.isfinite(res.fun) and res.fun < best_chi2:
             best_chi2 = res.fun
             best_p = {p: float(res.x[idx]) for idx, p in enumerate(p_names)}
         
@@ -688,11 +690,15 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             else:
                 prior_map = None
 
+            # Evaluation cap per Nelder-Mead start: 2000 for late-time groups,
+            # where a chi^2 call is cheap; 300 when CMB is in the group, where
+            # every call runs CLASS and clik.
+            has_cmb_group = any(str(t) == "CMB" for t in obs_types)
             param_dict, chi_squared_total = find_polished_mle(
                 compute_chi2_fn=_compute_chi2_total,
                 params_dict_median=param_dict,
                 prior_bounds=prior_map,
-                max_evals=300,
+                max_evals=300 if has_cmb_group else 2000,
                 candidate_starts= candidate_starts_list,
 
             )
