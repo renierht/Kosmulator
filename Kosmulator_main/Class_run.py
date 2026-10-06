@@ -30,8 +30,24 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-import clik
 import sysconfig
+
+# Planck clik is only needed for CMB likelihoods. Import it lazily so that
+# late-time runs work without it (as the README states).
+try:
+    import clik  # type: ignore
+except Exception:  # pragma: no cover - depends on the local install
+    clik = None
+
+
+def _require_clik():
+    """Return the clik module, or raise a clear error if it is not installed."""
+    if clik is None:
+        raise ImportError(
+            "Planck 'clik' is not installed or not on the path. It is needed only "
+            "for CMB likelihoods (CMB_hil, CMB_hil_TT, CMB_lowl, CMB_lensing)."
+        )
+    return clik
 
 from Kosmulator_main import utils as U
 
@@ -700,7 +716,7 @@ def get_clik_hil():
     if _clik_path_hil is None:
         raise RuntimeError("CMB_hil path not set")
     with U.quiet_cstdio():
-        _clik_instance_hil = clik.clik(_clik_path_hil)
+        _clik_instance_hil = _require_clik().clik(_clik_path_hil)
     return _clik_instance_hil
 
 
@@ -713,7 +729,7 @@ def get_clik_lowl():
     if _clik_path_lowl is None:
         raise RuntimeError("CMB_lowl path not set")
     with U.quiet_cstdio():
-        _clik_instance_lowl = clik.clik(_clik_path_lowl)
+        _clik_instance_lowl = _require_clik().clik(_clik_path_lowl)
     return _clik_instance_lowl
 
 
@@ -734,7 +750,7 @@ def get_clik_lensing():
         )
 
     with U.quiet_cstdio():
-        _clik_instance_lensing = clik.clik_lensing(path_raw)
+        _clik_instance_lensing = _require_clik().clik_lensing(path_raw)
 
     if not _DID_LOG_LENSING_RAW:
         logger.info("Loaded lensing (RAW) clik from '%s'", path_raw)
@@ -759,7 +775,7 @@ def get_clik_lensing_cmbmarg():
         )
 
     with U.quiet_cstdio():
-        _clik_instance_lensing_cmbmarg = clik.clik_lensing(path_marg)
+        _clik_instance_lensing_cmbmarg = _require_clik().clik_lensing(path_marg)
 
     if not _DID_LOG_LENSING_CMBMARG:
         import multiprocessing as mp
@@ -782,5 +798,5 @@ def get_clik_hilTT():
     if _clik_path_hilTT is None:
         raise RuntimeError("CMB_hil_TT path not set. Call preload_clik_hilTT first.")
     with U.quiet_cstdio():
-        _clik_hilTT = clik.clik(_clik_path_hilTT)
+        _clik_hilTT = _require_clik().clik(_clik_path_hilTT)
     return _clik_hilTT

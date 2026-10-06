@@ -1,0 +1,22 @@
+# Kosmulator core dependencies (needed for every run).
+# setup.py reads this file for install_requires, so `pip install -e .`
+# installs these. Versions used in the 2026-10-06 test run (Python 3.11):
+# numpy 2.4.4, scipy 1.17.1, matplotlib 3.10.9, h5py 3.16.0, pandas 3.0.2,
+# getdist 1.7.7, emcee 3.1.6, zeus-mcmc 2.5.4, tqdm 4.70.1.
+numpy
+scipy
+matplotlib
+h5py
+pandas
+getdist
+emcee
+zeus-mcmc
+tqdm
+
+# Optional, not installed automatically:
+#   classy (CLASS)      built per model from Class/<model>; needed for CMB runs and
+#                       for the CLASS r_d in BAO/DESI + BBN/CMB groups (EH98 otherwise)
+#   clik (Planck PLC)   needed only for CMB likelihoods
+#   mpi4py, schwimmbad  MPI runs
+#   threadpoolctl       caps BLAS threads in pool workers
+#   astropy, cython     building CLASS / CMB extras

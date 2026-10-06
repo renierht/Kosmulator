@@ -39,7 +39,8 @@ from typing import Union, Dict, Callable, List, Tuple
 import logging
 import numpy as np
 from scipy.optimize import fsolve
-import classy
+# classy (CLASS) is imported inside the CMB wrappers, so late-time runs do not
+# need it and the wrappers always use the CLASS build that is currently loaded.
 
 from Kosmulator_main.constants import C_KM_S
 import logging
@@ -203,6 +204,7 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
     # (Ω_m, Ω_b, Ω_bh^2, Ω_dh^2 given H_0)
     p = _ensure_background_params(p)
 
+    import classy
     m = (mode or "").lower()
     is_lowl = m.startswith("low")
 
