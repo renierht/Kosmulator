@@ -28,6 +28,8 @@ import numpy as np
 import scipy.linalg as la
 from scipy.interpolate import PchipInterpolator
 
+
+
 from Kosmulator_main.constants import (
     C_KM_S,
     T_CMB_DEFAULT,
@@ -396,6 +398,11 @@ def cmb_hil_loglike(pd: Dict[str, float], model_name: str, floor: float = -1e10)
         cl = _get_cls_from_model(pd, model_name, mode="hil")
     except Exception as e:
         logger.error("cmb_hil_loglike: _get_cls_from_model failed: %s", e)
+        return float(floor)
+
+    # CLASS returns None for numerically invalid proposals. Treat those points
+    # as rejected samples instead of allowing the sampler to crash below.
+    if cl is None or not isinstance(cl, dict):
         return float(floor)
 
     def _block(name: str, n: int) -> Optional[np.ndarray]:
@@ -960,8 +967,11 @@ def Calc_Generic_SNe_chi(
     # 1. Marginalize M_abs (if present)
     #    (JLA doesn't have it -> M=0 -> Data is Absolute)
     #    (DESY5/Union3 have it -> M!=0 -> Data is Apparent)
-    M = param_dict.get("M_abs", 0.0)
-    residual = (type_data - M) - model
+    if obs_data.get("data_is_distance_modulus", False):
+        residual = type_data - model
+    else:
+        M = param_dict.get("M_abs", -19.35)
+        residual = (type_data - M) - model
 
     # 2. Check for Covariance (Union3)
     if "inv_cov" in obs_data:
@@ -1167,6 +1177,11 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
             types[types == 4] = 3
 
     theo = np.full_like(meas, np.nan, dtype=float)
+    #Added change here in order to check NaNs of w0wa values for NaN
+    supported_types = {3, 5, 6, 7, 8}
+    unknown_types = [int(t) for t in set(types) if int(t) not in supported_types]
+    if unknown_types:
+        raise ValueError(f"DESI: unhandled type code(s): {unknown_types}. Supported: 3,5,6,7,8")
     m3 = types == 3
     m5 = types == 5
     m6 = types == 6
@@ -1179,9 +1194,8 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
     theo[m7] = rs / DV[m7]
     theo[m8] = DM[m8] / rs
 
-    if np.isnan(theo).any():
-        unknown = sorted(set(types[np.isnan(theo)]))
-        raise ValueError(f"DESI: unhandled type code(s): {unknown}. Supported: 3,5,6,7,8")
+    if not np.isfinite(theo).all():
+        return np.inf
 
     diff = theo - meas
 
@@ -1880,3 +1894,85 @@ def dArd(
     rd = _resolve_rd(p, Type or "")
     out = (DM / (1.0 + z)) / rd
     return out if out.size > 1 else float(out)
+
+
+
+# -----------------------------------------------------------------------------
+# Pointwise-loglike calculators
+# -----------------------------------------------------------------------------
+
+def pointwise_log_like_CC(obs_data, model, param_dict):
+    H_data = obs_data['type_data']
+    H_err = obs_data['type_data_error']
+    residual = H_data - model
+
+    return -0.5 * (residual / H_err) ** 2
+
+def pointwise_log_like_DESI(obs_data, Model_func, param_dict, obs_type):
+    chi2 = Calc_DESI_chi(obs_data, Model_func, param_dict, obs_type)
+    return np.array([-0.5 * chi2]) #Shape (1,)
+
+def pointwise_log_like_SNe(obs_data, model, param_dict):
+    if "inv_cov" in obs_data:
+        # Correlated (DESY5, Union3) → N=1
+        chi2 = Calc_Generic_SNe_chi(obs_data, model, param_dict)
+        return np.array([-0.5 * chi2])
+    else:
+        # Diagonal errors (JLA) → N = number of SNe
+        residual = obs_data["type_data"] - param_dict.get("M_abs", -19.35) - model
+        err = obs_data["type_data_error"]
+        return -0.5 * (residual / err) ** 2                 # shape (N,) — only valid if no inv_cov 
+
+def pointwise_log_like_PantP(obs_data, model, param_dict):
+    chi2 = Calc_PantP_chi(
+        obs_data["m_b_corr"], obs_data["IS_CALIBRATOR"],
+        obs_data["CEPH_DIST"], obs_data.get("cov"), model, param_dict
+    )
+    return np.array([-0.5 * chi2])                    # shape (1,)
+
+def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
+                           Model_func, CONFIG, obs_index, S=1000, idx=None):
+    from Kosmulator_main import utils
+
+    N_total = flat_samples.shape[0]
+    if idx is None:
+        idx = np.random.choice(N_total, size=min(S, N_total), replace=False)
+    draws   = flat_samples[idx]
+    params  = CONFIG["parameters"][obs_index]
+
+    rows = []
+    for theta in draws:
+        param_dict = dict(zip(params, theta))
+        param_dict = utils.ensure_background_params(param_dict)
+
+        if obs_name in ("DESI_DR1", "DESI_DR2", "BAO"):
+            ll_i = pointwise_log_like_DESI(obs_data, Model_func, param_dict, obs_type)
+
+        elif obs_name in ("PantheonP", "PantheonPS"):
+            z    = obs_data["zHD"]
+            d_c  = utils.Comoving_distance_vectorized(Model_func, z, param_dict)
+            model = 25.0 + 5.0 * np.log10(d_c * (1.0 + z))
+            ll_i  = pointwise_log_like_PantP(obs_data, model, param_dict)
+
+        elif obs_type == "SNe":
+            z    = obs_data["redshift"]
+            d_c  = utils.Comoving_distance_vectorized(Model_func, z, param_dict)
+            # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5)
+            model = 25.0 + 5.0 * np.log10(
+                utils.sn_luminosity_distance(d_c, z, obs_data.get("z_hel"))
+            )
+            ll_i  = pointwise_log_like_SNe(obs_data, model, param_dict)
+
+        elif obs_type in ("CC", "OHD"):
+            z     = obs_data["redshift"]
+            E_z   = utils.E_of_z(z, Model_func, param_dict)
+            model = param_dict["H_0"] * E_z
+            ll_i  = pointwise_log_like_CC(obs_data, model, param_dict)
+
+        else:
+            continue  # skip obs types not yet supported
+
+        rows.append(ll_i)
+
+    return np.array(rows)   # (S, N)                         # (S, N)
+

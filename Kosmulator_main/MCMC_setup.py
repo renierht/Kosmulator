@@ -150,9 +150,9 @@ def _model_has_any_cmb_or_bbn(CONFIG, model_name: str) -> bool:
 def main(
     model_names: List[str],
     observations: List[List[str]],
-    true_model: str,
+    reference_model: str,
     prior_limits: Dict[str, tuple],
-    true_values: Dict[str, Any],
+    reference_values: Dict[str, Any],
     nwalkers: int,
     nsteps: int,
     burn: int,
@@ -227,9 +227,10 @@ def main(
             models = UDM.Get_model_names(model_names)
             CONFIG, data = Config.create_config(
                 models=models,
-                true_values=true_values,
+                reference_values=reference_values,
                 prior_limits=prior_limits,
                 restrictions=UDM.Get_model_restrictions(model_names),
+                coupled_restrictions=UDM.Get_model_coupled_restrictions(model_names),
                 observation=observations,
                 nwalkers=nwalkers,
                 nsteps=nsteps,
@@ -262,7 +263,7 @@ def main(
     for tag in ("PantheonP", "PantheonPS"):
         pant_cov = compute_pantheon_cov(
             data,
-            CONFIG[true_model],
+            CONFIG[reference_model],
             comm,
             rank,
             os.path.join(K.OBSERVATIONS_BASE, "PantheonP.cov"),
@@ -310,7 +311,9 @@ def main(
         touches_cmb_bbn = _model_has_any_cmb_or_bbn(CONFIG, m)
 
         if engine_mode in ("single", "mixed"):
-            if force_emcee:
+            if m.startswith("wowaCDM"):
+                eng = "emcee"
+            elif force_emcee:
                 eng = "emcee"
             elif force_zeus and (zeus is not None):
                 eng = "zeus"
@@ -318,7 +321,7 @@ def main(
                 if touches_cmb_bbn:
                     eng = "emcee"
                 else:
-                    eng = "zeus" if (can_vec and zeus is not None) else "emcee"
+                    eng = "zeus" if (can_vec and zeus is not None) else "emcee" 
 
             K.engine_for_model[m] = eng
 
@@ -431,7 +434,7 @@ def main(
     # 12) Post-processing
     # ------------------------------------------------------------------
     if rank == 0:
-        MP.generate_plots(samples, CONFIG, PLOT_SETTINGS, data, true_model)
+        MP.generate_plots(samples, CONFIG, PLOT_SETTINGS, data, reference_model)
         elapsed = format_elapsed_time(time.time() - t0)
         print_completion_banner(elapsed)
 

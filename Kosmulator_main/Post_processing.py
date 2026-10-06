@@ -25,6 +25,9 @@ import logging
 
 import numpy as np
 from scipy.optimize import minimize
+from scipy.special import logsumexp #Required for WAIC
+from scipy.stats import chi2, norm #used by significance
+
 
 import User_defined_modules as UDM
 from Kosmulator_main import utils as U
@@ -81,6 +84,25 @@ def _format_pm(value, minus, plus):
     return rf"${v_str}^{{+{hi_str}}}_{{-{lo_str}}}$"
 
 
+# -----------------------------------------------------------------------------
+# Significance calculator function for statistical analysis
+# -----------------------------------------------------------------------------
+def significance(dchi, r):
+    """
+    p - tail probability
+    sigma - equivalent gaussian significance
+    """
+    dchi = np.abs(dchi)
+    r = np.round(r, decimals = 0)
+    if np.isnan(dchi) or np.isnan(r):
+        sigma = 0
+    else:
+        p = chi2.sf(dchi, df = r)
+        sigma = norm.isf(p/2)
+    return np.round(sigma, decimals = 1)
+
+
+
 def calculate_asymmetric_from_samples(samples, parameters, observations):
     """
     Calculate median, upper, and lower uncertainties from MCMC samples.
@@ -92,8 +114,48 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
     """
     results, latex_table, structured_values = {}, [], {}
 
-    for obs, obs_samples in samples.items():
+    for obs, obs_data_input in samples.items():
         results[obs], structured_values[obs], row = {}, {}, []
+
+        #Unpack the dictionary data and find the Maximum likelihood
+        if isinstance(obs_data_input, dict):
+            obs_samples = obs_data_input["samples"]
+            log_like = obs_data_input.get("loglike")
+        else:
+            obs_samples = obs_data_input
+            log_like = None
+
+        if log_like is not None:
+            ll_arr = np.asarray(log_like).ravel()
+            finite = np.isfinite(ll_arr) & np.all(np.isfinite(obs_samples), axis=1)
+            valid_ll = ll_arr[finite]
+            valid_samples = obs_samples[finite]
+            dev_samples = -2.0 * valid_ll
+
+            mle_idx = np.nanargmax(valid_ll)
+            mle_vector = valid_samples[mle_idx]
+
+            #Corrections need for better mle results
+            top_n = min(5, len(valid_ll))
+            top_idx = np.argsort(valid_ll)[-top_n:]
+            best_candidate = valid_samples[top_idx]
+
+            #For DIC calculations
+            D_bar = float(np.nanmean(dev_samples))
+            D_var = float(4.0 * np.nanvar(valid_ll, ddof = 1))
+            theta_bar = np.nanmean(valid_samples, axis = 0)
+
+            #WAIC set-up
+            #Whats required is a log_like matrix. Once we got that we can use the previous functions
+
+        else:
+            mle_vector = None
+            theta_bar  = None
+            D_bar = None
+            D_var = None
+    
+
+
 
         # Match the observation key to its corresponding parameter list.
         # Accept the raw joined name ("PantheonP"), underscore join ("PantheonP"),
@@ -141,7 +203,13 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
         param_index = observations.index(obs_list)
         obs_param_names = parameters[param_index]
 
+        
         # Iterate over the parameters for this observation
+        if obs_samples.shape[0] == 0:
+            print(f"Warning: '{obs}' has no samples — skipping parameter statistics.")
+            latex_table.append([])
+            continue
+
         for param_index, param in enumerate(obs_param_names):
             # Check that the parameter index is within bounds of obs_samples
             if param_index < obs_samples.shape[1]:
@@ -153,6 +221,10 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
                 lower_error = p50 - p16
                 upper_error = p84 - p50
 
+                #Grab MLE for this parameter
+                mle_val = mle_vector[param_index] if mle_vector is not None else median
+                mean_val = theta_bar[param_index] if theta_bar is not None else median
+
                 # Add to results
                 results[obs][param] = {
                     "median": round(median, 3),
@@ -160,14 +232,21 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
                     "upper_error": round(upper_error, 3),
                 }
 
+
                 # Add LaTeX-formatted string for the table
                 row.append(_format_pm(median, lower_error, upper_error))
+
+            
+
+                
 
                 # Add structured values for the parameter
                 structured_values[obs][param] = [
                     round(median, 3),
                     round(median + upper_error, 3),
                     round(median - lower_error, 3),
+                    mle_val,
+                    mean_val,
                 ]
             else:
                 print(
@@ -175,8 +254,17 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
                     "exceeds sample dimensions."
                 )
 
+        if D_bar is not None:
+            structured_values[obs]["__D_bar__"] = float(D_bar)
+            structured_values[obs]["__D_var__"] = float(D_var)
+            structured_values[obs]["__best_candidates__"] = best_candidate
+            structured_values[obs]["__param_names__"] = obs_param_names
+            structured_values[obs]["__samples__"] = obs_samples
+
         # Add the row to the LaTeX table
         latex_table.append(row)
+
+        
 
     return results, latex_table, structured_values
 
@@ -280,10 +368,101 @@ def _resolve_gamma_for_obs(
     return float(default_gamma)
 
 
-def statistical_analysis(best_fit_values, data, CONFIG, true_model):
+#Function to optimise MLE values
+
+def find_polished_mle(
+    compute_chi2_fn,
+    params_dict_median: dict[str, float],
+    prior_bounds: dict[str, tuple[float, float]] | None = None,
+    max_evals: int = 2000,
+    candidate_starts: list[dict[str, float]] | None = None,
+) -> tuple[dict[str, float], float]:
+    """
+    Find the Maximum Likelihood Estimate (MLE) by polishing
+    the posterior median with Nelder-Mead simplex minimization.
+    """
+    p_names = list(params_dict_median.keys())
+    x0 = np.array([params_dict_median[p] for p in p_names], dtype=float)
+
+    # Initial baseline evaluation at median
+    baseline_chi2, _ = compute_chi2_fn(params_dict_median)
+    if not (np.isfinite(baseline_chi2) and abs(baseline_chi2) < 1e9):
+        baseline_chi2 = 1e12
+
+    def objective(x_vec: np.ndarray) -> float:
+        if prior_bounds:
+            for idx, p in enumerate(p_names):
+                if p in prior_bounds:
+                    lo, hi = prior_bounds[p]
+                    if not (lo <= x_vec[idx] <= hi):
+                        return 1e12
+
+        p_candidate = {p: float(x_vec[idx]) for idx, p in enumerate(p_names)}
+        try:
+            val, _ = compute_chi2_fn(p_candidate)
+            if np.isfinite(val) and abs(val) < 1e9:
+                return float(val)
+        except Exception:
+            pass
+        return 1e12
+
+    starts = [x0]
+    if candidate_starts:
+        for cand in candidate_starts:
+            starts.append(np.array([cand[p] for p in p_names], dtype = float))
+
+    best_chi2 = baseline_chi2
+    best_p = params_dict_median
+
+    for start in starts:
+        res = minimize(
+            objective, 
+            start, 
+            method = "Nelder-Mead",
+            options = {
+                "maxiter": max_evals,
+                "maxfev": max_evals,
+                "xatol": 1e-3,
+                "fatol":1e-3,
+                "disp": False,
+            },
+        )
+        if res.success and np.isfinite(res.fun) and res.fun < best_chi2:
+            best_chi2 = res.fun
+            best_p = {p: float(res.x[idx]) for idx, p in enumerate(p_names)}
+        
+
+    return best_p, best_chi2
+
+def compute_lppd(log_lik_matrix):
+    """ 
+    Couple notes on this:
+    lppd - log pointwise posterior predictive density. Measure of how well fitted statistical model predicts observed data.
+    """
+    S = log_lik_matrix.shape[0] #1000
+    c = np.max(log_lik_matrix, axis = 0) #finds max loglike for each samples parameter for all samples
+    #subtracting c prevents underflow to 0 which could crash the program.
+    lppd_i = c + np.log(np.sum(np.exp(log_lik_matrix - c), axis = 0)) - np.log(S)
+    return np.sum(lppd_i)
+
+def compute_p_waic(log_lik_matrix):
+    """
+    Effective parameter count for WAIC
+    """ 
+    pwi = np.var(log_lik_matrix, ddof = 1, axis = 0)
+    return np.sum(pwi)
+
+def compute_waic(log_lik_matrix):
+    lppd = compute_lppd(log_lik_matrix)
+    pw = compute_p_waic(log_lik_matrix)
+    waic = -2.0 * lppd + 2.0 * pw
+    return waic
+
+
+def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
     """
     Perform statistical analysis for all models and observation combinations,
-    and calculate delta AIC/BIC relative to the true model.
+    and calculate delta AIC/BIC relative to the reference model.
 
     This processes each observation set individually by pairing it with
     its corresponding observation type from CONFIG.
@@ -291,12 +470,43 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
     results: dict[str, dict[str, dict[str, float]]] = {}
     reference_aic: dict[str, float] = {}
     reference_bic: dict[str, float] = {}
+    reference_aicc: dict[str, float] = {}
+    reference_dic: dict[str, float] = {}
+    reference_waic: dict[str, float] = {}
+    reference_chi: dict[str, float] = {}
+    reference_pD : dict[str, float] = {}
+    
 
     for model_name, obs_results in best_fit_values.items():
         results[model_name] = {}
         for obs_name, params in obs_results.items():
             # Extract best-fit (median) values into a dictionary.
-            param_dict = {param: values[0] for param, values in params.items()}
+
+            D_bar = params.pop("__D_bar__", None) #Popped before the loop iterates through param
+            D_var = params.pop("__D_var__", None)
+            best_candidates = params.pop("__best_candidates__", None)
+            cand_param_names = params.pop("__param_names__", None)
+            obs_samples_for_waic = params.pop("__samples__", None)
+
+            candidate_starts_list = None
+            if best_candidates is not None and cand_param_names is not None:
+                candidate_starts_list = [
+                    {p: float(row[i]) for i, p in enumerate(cand_param_names)}
+                    for row in best_candidates
+                ]
+
+
+            #Returns the mle_values needed for AIC and BIC
+            param_dict = {
+                param: (values[3] if len(values) > 3 else values[0])
+                for param, values in params.items()
+            }
+
+            #Returns the mean_vals needed for DIC
+            param_dict_mean = {
+                param: (values[4] if len(values) > 4 else values[0])
+                for param, values in params.items()
+            }
             num_params = len(param_dict)
             notes: list[str] = []
 
@@ -328,234 +538,156 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
             # Get the list of observation types for this observation set.
             obs_types = CONFIG[model_name]["observation_types"][obs_index]
 
-            # Loop over each individual observation in the set
-            for i, obs in enumerate(obs_entry):
-                obs_type = obs_types[i]
-                obs_data = data.get(obs)
-                if not obs_data:
-                    raise ValueError(f"Observation data for {obs} not found.")
+            # --- NESTED EVALUATOR FUNCTION ---
+            def _compute_chi2_total(p_eval: dict) -> tuple[float, int]:
+                chi_total = 0.0
+                n_points = 0
 
-                # Handle Pantheon+ (with and without SH0ES) using the dedicated chi^2
-                if obs in ("PantheonP", "PantheonPS"):
-                    zHD = obs_data["zHD"]
-                    m_b_corr = obs_data["m_b_corr"]
-                    IS_CALIBRATOR = obs_data["IS_CALIBRATOR"]
-                    CEPH_DIST = obs_data["CEPH_DIST"]
+                for i, obs in enumerate(obs_entry):
+                    obs_type = obs_types[i]
+                    obs_data = data.get(obs)
+                    if not obs_data:
+                        raise ValueError(f"Observation data for {obs} not found.")
 
-                    # Prefer precomputed cov (lower Cholesky). If missing, compute robustly now.
-                    if "cov" not in obs_data:
-                        L = U.compute_pantheon_cov(
-                            data,  # full data dict (has indices/mask)
-                            CONFIG[model_name],  # model-specific config
-                            comm=None,           # here we don't MPI-broadcast
-                            rank=0,
-                            cov_file=obs_data["cov_path"],
+                    if obs in ("PantheonP", "PantheonPS"):
+                        zHD = obs_data["zHD"]
+                        m_b_corr = obs_data["m_b_corr"]
+                        IS_CALIBRATOR = obs_data["IS_CALIBRATOR"]
+                        CEPH_DIST = obs_data["CEPH_DIST"]
+
+                        if "cov" not in obs_data:
+                            L = U.compute_pantheon_cov(data, CONFIG[model_name], comm=None, rank=0, cov_file=obs_data["cov_path"])
+                            obs_data["cov"] = L
+                        cov = obs_data["cov"]
+
+                        comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, zHD, p_eval)
+                        distance_modulus = 25 + 5 * np.log10(comoving_distances * (1 + zHD))
+                        chi_total += float(Calc_PantP_chi(m_b_corr, IS_CALIBRATOR, CEPH_DIST, cov, distance_modulus, p_eval))
+                        n_points += len(m_b_corr)
+
+                    elif obs == "BAO":
+                        chi_total += float(Calc_BAO_chi(obs_data, MODEL_func, dict(p_eval), "BAO"))
+                        n_points += len(obs_data["covd1"])
+
+                    elif obs in ("DESI_DR1", "DESI_DR2"):
+                        calibrated = any(("BBN" in x) or ("CMB" in x) or ("THETA" in x) for x in obs_entry)
+                        type_tag = obs + ("+BBN" if calibrated else "")
+                        chi_total += float(Calc_DESI_chi(obs_data, MODEL_func, dict(p_eval), type_tag))
+                        n_points += len(obs_data["redshift"])
+
+                    elif obs_type == "SNe":
+                        redshift = obs_data["redshift"]
+                        comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, redshift, p_eval)
+                        # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5)
+                        model_val = 25 + 5 * np.log10(
+                            U.sn_luminosity_distance(comoving_distances, redshift, obs_data.get("z_hel"))
                         )
-                        obs_data["cov"] = L
-                    cov = obs_data["cov"]
+                        chi_total += float(Calc_Generic_SNe_chi(obs_data=obs_data, model=model_val, param_dict=p_eval))
+                        n_points += len(redshift)
 
-                    comoving_distances = UDM.Comoving_distance_vectorized(
-                        MODEL_func, zHD, param_dict
-                    )
-                    distance_modulus = 25 + 5 * np.log10(comoving_distances * (1 + zHD))
+                    elif obs_type in ["OHD", "CC"]:
+                        redshift = obs_data["redshift"]
+                        model_val = p_eval["H_0"] * np.array([MODEL_func(z, p_eval) for z in redshift])
+                        chi_total += float(Calc_chi(obs_type, obs_data["type_data"], obs_data["type_data_error"], model_val))
+                        n_points += len(obs_data["type_data"])
 
-                    chi_squared = Calc_PantP_chi(
-                        m_b_corr, IS_CALIBRATOR, CEPH_DIST, cov, distance_modulus, param_dict
-                    )
-                    num_data_points_total += len(m_b_corr)
-
-                elif obs == "BAO":
-                    p = dict(param_dict)
-                    chi_squared = Calc_BAO_chi(obs_data, MODEL_func, p, "BAO")
-                    num_data_points_total += len(obs_data["covd1"])
-
-                elif obs in ("DESI_DR1", "DESI_DR2"):
-                    p = dict(param_dict)
-                    calibrated = any(
-                        ("BBN" in x) or ("CMB" in x) or ("THETA" in x) for x in obs_entry
-                    )
-                    # Let DESI chi2 know if it's being run with BBN etc.
-                    type_tag = obs + ("+BBN" if calibrated else "")
-                    chi_squared = Calc_DESI_chi(obs_data, MODEL_func, p, type_tag)
-                    num_data_points_total += len(obs_data["redshift"])
-
-                elif obs_type == "SNe":
-                    redshift = obs_data["redshift"]
-                    comoving_distances = UDM.Comoving_distance_vectorized(
-                        MODEL_func, redshift, param_dict
-                    )
-                    model_val = 25 + 5 * np.log10(comoving_distances * (1 + redshift))
-                    
-                    # --- FIXED: Use the generic function to handle Union3 Covariance ---
-                    chi_squared = Calc_Generic_SNe_chi(
-                        obs_data=obs_data,
-                        model=model_val,
-                        param_dict=param_dict
-                    )
-                    num_data_points_total += len(redshift)
-
-                elif obs_type in ["OHD", "CC"]:
-                    redshift = obs_data["redshift"]
-                    type_data = obs_data["type_data"]
-                    type_data_error = obs_data["type_data_error"]
-                    model_val = param_dict["H_0"] * np.array(
-                        [MODEL_func(z, param_dict) for z in redshift]
-                    )
-                    chi_squared = Calc_chi(
-                        obs_type, type_data, type_data_error, model_val
-                    )
-                    num_data_points_total += len(type_data)
-
-                elif obs_type in ["f", "f_sigma_8"]:
-                    redshift = obs_data["redshift"]
-                    type_data = obs_data["type_data"]
-                    type_data_error = obs_data["type_data_error"]
-
-                    if obs_type == "f_sigma_8":
-                        gamma = _resolve_gamma_for_obs(
-                            model_name,
-                            obs_name,
-                            CONFIG,
-                            param_dict,
-                            default_gamma=GAMMA_FS8_SINGLETON,
-                        )
-                        gamma_was_sampled = "gamma" in param_dict
-                        if not gamma_was_sampled:
-                            notes.append(f"γ fixed to {gamma:.3f} (fσ8-only)")
-                        Omega_z = UDM.matter_density_z_array(
-                            redshift, param_dict, MODEL_func
-                        )
-                        I = UDM.integral_term_array(
-                            redshift, param_dict, MODEL_func, gamma
-                        )
-                        model_val = float(param_dict["sigma_8"]) * (Omega_z**gamma) * np.exp(
-                            -I
-                        )
-                    else:  # "f"
-                        model_val = UDM.matter_density_z_array(
-                            redshift, param_dict, MODEL_func
-                        ) ** float(param_dict["gamma"])
-
-                    chi_squared = Calc_chi(
-                        obs_type, type_data, type_data_error, model_val
-                    )
-                    num_data_points_total += len(type_data)
-
-                elif obs_type in ("BBN_DH", "BBN_DH_AlterBBN"):
-                    mode = obs_data.get("mode", "mean")
-                    if mode == "mean":
-                        num_data_points_total += 1
-                    else:
-                        num_data_points_total += len(obs_data.get("systems", []))
-                    chi_squared = Calc_BBN_DH_chi(obs_data, MODEL_func, param_dict, obs_type)
-
-                elif obs in ("BBN_PryMordial", "BBN_prior"):
-                    # Gaussian prior on Ω_b h^2 (no redshifted data points).
-                    # Used in the sampler; for the *report*, we skip adding data χ² and N.
-                    try:
-                        mu = float(data[obs]["mu_obh2"])
-                        sig = float(data[obs]["sigma_obh2"])
-                        x = float(param_dict["Omega_bh^2"])
-                        pull = (x - mu) / sig
-                        # Optionally record pull in a table if desired.
-                        _ = pull  # silence linters if unused
-                    except Exception:
-                        pass
-                    continue
-
-                elif obs_type == "CMB":
-                    # Use Statistical_packages loglike functions; convert to chi^2 = -2 ln L
-                    if obs == "CMB_lowl":
-                        # Planck SimAll EE low-ℓ
-                        chi_squared = -2.0 * SP.cmb_lowl_loglike(param_dict, model_name)
-                        # SimAll EE has 30 low-ℓ points (ℓ = 2..29)
-                        num_data_points_total += 30
-
-                    elif obs == "CMB_hil":
-                        # Planck high-ℓ TTTEEE (Plik)
-                        like = SP._get_hil_like()
-                        try:
-                            raw_lmax = like.get_lmax()
-                        except Exception:
-                            raw_lmax = [2508, 0, 0, 0]
-
-                        # raw_lmax might be dict or a sequence
-                        if isinstance(raw_lmax, dict):
-                            Ltt = int(raw_lmax.get("tt") or raw_lmax.get("TT") or 0)
-                            Lee = int(raw_lmax.get("ee") or raw_lmax.get("EE") or 0)
-                            Lte = int(raw_lmax.get("te") or raw_lmax.get("TE") or 0)
+                    elif obs_type in ["f", "f_sigma_8"]:
+                        redshift = obs_data["redshift"]
+                        if obs_type == "f_sigma_8":
+                            gamma = _resolve_gamma_for_obs(model_name, obs_name, CONFIG, p_eval, default_gamma=GAMMA_FS8_SINGLETON)
+                            if "gamma" not in p_eval and p_eval is param_dict:
+                                notes.append(f"γ fixed to {gamma:.3f} (fσ8-only)")
+                            Omega_z = UDM.matter_density_z_array(redshift, p_eval, MODEL_func)
+                            I = UDM.integral_term_array(redshift, p_eval, MODEL_func, gamma)
+                            model_val = float(p_eval["sigma_8"]) * (Omega_z**gamma) * np.exp(-I)
                         else:
-                            L_vals = list(map(int, raw_lmax)) + [0, 0, 0, 0]
-                            Ltt, Lee, _, Lte = L_vals[:4]
+                            model_val = UDM.matter_density_z_array(redshift, p_eval, MODEL_func) ** float(p_eval["gamma"])
 
-                        npts = max(Ltt - 1, 0) + max(Lee - 1, 0) + max(Lte - 1, 0)
-                        chi_squared = -2.0 * SP.cmb_hil_loglike(param_dict, model_name)
-                        num_data_points_total += npts
+                        chi_total += float(Calc_chi(obs_type, obs_data["type_data"], obs_data["type_data_error"], model_val))
+                        n_points += len(obs_data["type_data"])
 
-                    elif obs == "CMB_hil_TT":
-                        # TT-only high-ℓ (Plik TT)
-                        like = SP._get_hilTT_like()
-                        try:
-                            raw_lmax = like.get_lmax()
-                        except Exception:
-                            raw_lmax = 2508
+                    elif obs_type in ("BBN_DH", "BBN_DH_AlterBBN"):
+                        mode = obs_data.get("mode", "mean")
+                        n_points += 1 if mode == "mean" else len(obs_data.get("systems", []))
+                        chi_total += float(Calc_BBN_DH_chi(obs_data, MODEL_func, p_eval, obs_type))
 
-                        if isinstance(raw_lmax, dict):
-                            lTT = int(raw_lmax.get("tt") or raw_lmax.get("TT") or next(iter(raw_lmax.values())))
-                        elif isinstance(raw_lmax, (list, tuple, np.ndarray)):
-                            lTT = int(raw_lmax[0])
-                        else:
-                            lTT = int(raw_lmax)
+                    elif obs in ("BBN_PryMordial", "BBN_prior"):
+                        continue
 
-                        loglike = SP.cmb_hilTT_loglike(param_dict, model_name)
-                        chi_squared = -2.0 * float(loglike)
-
-                        # Roughly count TT data points (ℓ=2..lTT → lTT-1)
-                        num_data_points_total += max(lTT - 1, 0)
-
-                    elif obs == "CMB_lensing":
-                        has_primary_cmb = any(
-                            x in {"CMB_hil", "CMB_hil_TT", "CMB_lowl"} for x in obs_entry
-                        )
-                        SP.set_lensing_mode(
-                            "raw" if has_primary_cmb else "cmbmarged"
-                        )
-                        like = SP._get_lensing_like()
-
-                        # discover bins...
-                        n_bins = 8
-                        try:
-                            if hasattr(like, "get_lensing_nbins"):
-                                n_bins = int(like.get_lensing_nbins())
-                            elif hasattr(like, "get_lensing_bins"):
-                                n_bins = len(like.get_lensing_bins())
-                        except Exception:
-                            pass
-
-                        logL, p_used, note = _stats_lensing_logL_safe(
-                            param_dict, model_name
-                        )
-                        if not (isfinite(logL) and abs(logL) < 1e9):
-                            logger.error(
-                                "Lensing logL looks invalid — skipping in stats"
-                            )
-                            if note:
+                    elif obs_type == "CMB":
+                        if obs == "CMB_lowl":
+                            chi_total += float(-2.0 * SP.cmb_lowl_loglike(p_eval, model_name))
+                            n_points += 30
+                        elif obs == "CMB_hil":
+                            like = SP._get_hil_like()
+                            try:
+                                raw_lmax = like.get_lmax()
+                            except Exception:
+                                raw_lmax = [2508, 0, 0, 0]
+                            if isinstance(raw_lmax, dict):
+                                Ltt = int(raw_lmax.get("tt") or raw_lmax.get("TT") or 0)
+                                Lee = int(raw_lmax.get("ee") or raw_lmax.get("EE") or 0)
+                                Lte = int(raw_lmax.get("te") or raw_lmax.get("TE") or 0)
+                            else:
+                                L_vals = list(map(int, raw_lmax)) + [0, 0, 0, 0]
+                                Ltt, Lee, _, Lte = L_vals[:4]
+                            n_points += max(Ltt - 1, 0) + max(Lee - 1, 0) + max(Lte - 1, 0)
+                            chi_total += float(-2.0 * SP.cmb_hil_loglike(p_eval, model_name))
+                        elif obs == "CMB_hil_TT":
+                            like = SP._get_hilTT_like()
+                            try:
+                                raw_lmax = like.get_lmax()
+                            except Exception:
+                                raw_lmax = 2508
+                            lTT = int(raw_lmax.get("tt") or raw_lmax.get("TT") or next(iter(raw_lmax.values()))) if isinstance(raw_lmax, dict) else int(raw_lmax[0] if isinstance(raw_lmax, (list, tuple, np.ndarray)) else raw_lmax)
+                            n_points += max(lTT - 1, 0)
+                            chi_total += float(-2.0 * float(SP.cmb_hilTT_loglike(p_eval, model_name)))
+                        elif obs == "CMB_lensing":
+                            has_primary = any(x in {"CMB_hil", "CMB_hil_TT", "CMB_lowl"} for x in obs_entry)
+                            SP.set_lensing_mode("raw" if has_primary else "cmbmarged")
+                            like = SP._get_lensing_like()
+                            n_bins = 8
+                            try:
+                                if hasattr(like, "get_lensing_nbins"):
+                                    n_bins = int(like.get_lensing_nbins())
+                                elif hasattr(like, "get_lensing_bins"):
+                                    n_bins = len(like.get_lensing_bins())
+                            except Exception:
+                                pass
+                            logL, _, note = _stats_lensing_logL_safe(p_eval, model_name)
+                            if not (isfinite(logL) and abs(logL) < 1e9):
+                                continue
+                            if note and (note not in notes):
                                 notes.append(note)
-                            continue
-
-                        if note:
-                            notes.append(note)
-
-                        chi_squared = -2.0 * logL
-                        num_data_points_total += n_bins
-
+                            chi_total += float(-2.0 * logL)
+                            n_points += n_bins
+                        else:
+                            raise ValueError(f"Unsupported CMB observation: {obs}")
                     else:
-                        raise ValueError(f"Unsupported CMB observation: {obs}")
+                        raise ValueError(f"Unsupported observation type: {obs_type}")
 
-                else:
-                    raise ValueError(f"Unsupported observation type: {obs_type}")
+                return chi_total, n_points
+            #primary calculator for AIC,BIC and AICc
+            # --- Polish with Nelder-Mead to find the true minimum chi^2 ---
+            prior_limits_container = CONFIG.get(model_name, {}).get("prior_limits", [])
+            if isinstance(prior_limits_container, list):
+                prior_map = prior_limits_container[obs_index] if obs_index < len(prior_limits_container) else None
+            elif isinstance(prior_limits_container, dict):
+                prior_map = prior_limits_container.get(obs_index, None)
+            else:
+                prior_map = None
 
-                chi_squared_total += float(chi_squared)
+            param_dict, chi_squared_total = find_polished_mle(
+                compute_chi2_fn=_compute_chi2_total,
+                params_dict_median=param_dict,
+                prior_bounds=prior_map,
+                max_evals=300,
+                candidate_starts= candidate_starts_list,
+
+            )
+
+            # Re-evaluate once at the polished minimum to fetch exact N data points
+            _, num_data_points_total = _compute_chi2_total(param_dict)
 
             if num_data_points_total <= 0:
                 logger.error(
@@ -566,6 +698,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 continue
 
             log_likelihood = -0.5 * chi_squared_total
+
 
             if obs_entry == ["PantheonP"]:
                 n_data = num_data_points_total
@@ -579,10 +712,70 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                     "Degrees of freedom (DOF) is zero or negative. "
                     "Check your model or dataset."
                 )
-
+            """
+            In order to implement AICc, I need the size of the sample space being worked with.
+            """
             reduced_chi_squared = chi_squared_total / dof
             aic = 2 * num_params - 2 * log_likelihood
             bic = num_params * np.log(num_data_points_total) - 2 * log_likelihood
+            #In the calculation of AICc, the assumption is made that num_data_points_total can be used as sample space value, n
+            if (num_data_points_total - num_params - 1) > 0:
+                aicc = 2*num_params - 2*log_likelihood + (2*num_params * (num_params + 1))/(num_data_points_total - num_params - 1)
+            else:
+                aicc = aic
+            dic = float("nan")
+            p_D = float("nan")
+            waic = float('nan')
+
+            #DIC calculations: 
+            """
+            Note: D_hat is typically the deviance over the average of parameter values,
+            but now since we are using maximum likelihood values, it can be shown that
+            taking the deviance of the MLE returns the chi_squared_total
+
+            """
+            if D_bar is not None:
+                # Spiegelhalter / DESI MAP formulation:
+                # D_hat is the polished minimum chi-squared found by Nelder-Mead
+                #If DIC values are not working, try the variance (Gelman) definition: p_D = D_var/2.0 and dic = D_bar + 2.0*p_D
+                D_hat = chi_squared_total
+                p_D = D_bar - D_hat       #Spiegelhalter: D_bar - D_hat   Gelman: D_var/2.0 (Effective parameters)
+                dic = D_hat + 2.0 * p_D  # Spiegelhalter: D_hat + 2.0*p_D
+
+            #WAIC Implememtation
+            if obs_samples_for_waic is not None:
+                try:
+                    all_rows = []
+                    N_total = obs_samples_for_waic.shape[0]
+                    S = 1000
+                    shared_idx = np.random.choice(N_total, size = min(S, N_total), replace = False)
+                    for single_obs, single_type in zip(obs_entry, obs_types):
+                        if single_obs not in data:
+                            continue
+                        matrix = SP.build_log_like_matrix(
+                            flat_samples=obs_samples_for_waic,
+                            obs_data=data[single_obs],
+                            obs_type=single_type,
+                            obs_name=single_obs,
+                            Model_func=MODEL_func,
+                            CONFIG=CONFIG[model_name],
+                            obs_index=obs_index,
+                            S=1000,
+                            idx = shared_idx,
+                        )
+                        if matrix.size > 0:
+                            all_rows.append(matrix)
+
+                    if all_rows:
+                        full_matrix = np.concatenate(all_rows, axis=1)  # (S, N_total)
+                        waic = compute_waic(full_matrix)
+                        print(f"[WAIC] {model_name} {obs_name}: {waic:.4f}")
+                except Exception as e:
+                    print(f"[WAIC WARNING] {model_name} {obs_name}: {e}")
+                    waic = float('nan')
+
+            
+           
 
             results[model_name][obs_name] = {
                 "Log-Likelihood": log_likelihood,
@@ -590,19 +783,33 @@ def statistical_analysis(best_fit_values, data, CONFIG, true_model):
                 "Reduced_Chi_squared": reduced_chi_squared,
                 "AIC": aic,
                 "BIC": bic,
+                "AICc" : aicc,
+                "DIC": dic,
+                "WAIC": waic,
+                "p_D": p_D,
             }
             if notes:
                 results[model_name][obs_name]["Note"] = " | ".join(notes)
 
-            if model_name == true_model:
+            if model_name == reference_model:
+                reference_chi[obs_name] = chi_squared_total
                 reference_aic[obs_name] = aic
                 reference_bic[obs_name] = bic
+                reference_aicc[obs_name] = aicc
+                reference_dic[obs_name] = dic
+                reference_waic[obs_name] = waic
+                reference_pD[obs_name] = p_D
 
-    # Calculate delta AIC and delta BIC relative to the true model.
+    # Calculate delta values relative to the reference model.
     for model_name, obs_results in results.items():
         for obs_name, stats in obs_results.items():
             stats["dAIC"] = stats["AIC"] - reference_aic.get(obs_name, stats["AIC"])
             stats["dBIC"] = stats["BIC"] - reference_bic.get(obs_name, stats["BIC"])
+            stats["dAICc"] = stats["AICc"] - reference_aicc.get(obs_name, stats["AICc"])
+            stats["dDIC"] = stats["DIC"] -reference_dic.get(obs_name, stats["DIC"])
+            stats["dWAIC"] = stats["WAIC"] - reference_waic.get(obs_name, stats["WAIC"])
+            stats['dChi'] = stats['Chi_squared'] - reference_chi.get(obs_name, stats['Chi_squared'])
+            stats['sigma'] = significance(stats['dChi'], (stats['p_D'] - reference_pD.get(obs_name, stats['p_D'])))
 
     return results
 
@@ -682,47 +889,85 @@ def provide_model_diagnostics(
 
     return feedback
 
-
-def interpret_delta_aic_bic(delta_aic, delta_bic) -> str:
+def interpret_delta_IC(
+        delta_aic, 
+        delta_bic,
+        delta_aicc,
+        delta_dic,
+        delta_waic,
+        sigma,
+        ) -> str:
     """
-    Turn ΔAIC / ΔBIC into human-readable model-comparison statements.
+    Turn ΔAIC / ΔBIC / ΔAICc / ΔDIC / ΔWAIC and the significance into
+    human-readable model-comparison statements.
+
+    Sign convention: Δ = value(model) - value(reference). A positive Δ is
+    evidence AGAINST the model; a negative Δ is evidence IN FAVOUR of it. The
+    strength is set by |Δ|. Always returns six lines in the order
+    AIC, BIC, AICc, DIC, WAIC, Significance (Plots.py indexes them by position).
     """
     # Coerce to plain floats (works for Python floats, NumPy scalars, 0-d arrays)
     delta_aic = float(np.asarray(delta_aic).reshape(()))
     delta_bic = float(np.asarray(delta_bic).reshape(()))
+    delta_aicc = float(np.asarray(delta_aicc).reshape(()))
+    delta_dic = float(np.asarray(delta_dic).reshape(()))
+    delta_waic = float(np.asarray(delta_waic).reshape(()))
+    sigma = float(np.asarray(sigma).reshape(()))
 
     feedback = []
 
-    # --- AIC ---
-    if delta_aic < 2:
-        feedback.append(f"Delta AIC: Indistinguishable (ΔAIC = {delta_aic:.2f}).")
-    elif delta_aic < 4:
-        feedback.append(
-            f"Delta AIC: Slight evidence against the model (ΔAIC = {delta_aic:.2f})."
-        )
-    elif delta_aic < 7:
-        feedback.append(
-            f"Delta AIC: Positive evidence against the model (ΔAIC = {delta_aic:.2f})."
-        )
-    else:
-        feedback.append(
-            f"Delta AIC: Strong evidence against the model (ΔAIC = {delta_aic:.2f})."
-        )
+    def _ic_line(label, delta, edges, words):
+        """One statement for one criterion; strength from |delta|, direction from its sign."""
+        sym = f"Δ{label}"
+        if np.isnan(delta):
+            return f"Delta {label}: Not available ({sym} = nan)."
+        size = abs(delta)
+        if size < edges[0]:
+            return f"Delta {label}: Indistinguishable ({sym} = {delta:.2f})."
+        if size < edges[1]:
+            word = words[0]
+        elif size < edges[2]:
+            word = words[1]
+        else:
+            word = words[2]
+        direction = "against" if delta > 0 else "in favour of"
+        return f"Delta {label}: {word} evidence {direction} the model ({sym} = {delta:.2f})."
 
-    # --- BIC ---
-    if delta_bic < 2:
-        feedback.append(f"Delta BIC: Indistinguishable (ΔBIC = {delta_bic:.2f}).")
-    elif delta_bic < 6:
+    # Bin edges and labels are unchanged from the original thresholds.
+    feedback.append(_ic_line("AIC",  delta_aic,  (2, 4, 7),  ("Slight", "Positive", "Strong")))
+    feedback.append(_ic_line("BIC",  delta_bic,  (2, 6, 10), ("Weak", "Moderate", "Strong")))
+    feedback.append(_ic_line("AICc", delta_aicc, (2, 4, 7),  ("Slight", "Positive", "Strong")))
+    feedback.append(_ic_line("DIC",  delta_dic,  (2, 4, 7),  ("Slight", "Positive", "Strong")))
+    feedback.append(_ic_line("WAIC", delta_waic, (2, 4, 7),  ("Slight", "Positive", "Strong")))
+
+    #--- Significance ---
+    if sigma <= 1:
         feedback.append(
-            f"Delta BIC: Weak evidence against the model (ΔBIC = {delta_bic:.2f})."
+            f"Significance: Inconclusive (Sigma = {sigma:.2f})."
         )
-    elif delta_bic < 10:
+    elif sigma > 1 and sigma <= 2:
         feedback.append(
-            f"Delta BIC: Moderate evidence against the model (ΔBIC = {delta_bic:.2f})."
+            f"Significance: Slight consideration for the model (Sigma = {sigma:.2f})."
+        )
+    elif sigma > 2 and sigma <= 3:
+        feedback.append(
+            f"Significance: Considerable consideration for the model (Sigma = {sigma:.2f})."
+        )
+    elif sigma > 3 and sigma <= 4:
+        feedback.append(
+            f"Significance: Strong consideration for the model (Sigma = {sigma:.2f})."
+        )
+    elif sigma > 4 and sigma <= 5:
+        feedback.append(
+            f"Significance: Very strong consideration for the model (Sigma = {sigma:.2f})."
+        )
+    elif sigma > 5:
+        feedback.append(
+            f"Significance: Overwhelming consideration for the model (Sigma = {sigma:.2f})."
         )
     else:
-        feedback.append(
-            f"Delta BIC: Strong evidence against the model (ΔBIC = {delta_bic:.2f})."
-        )
+        feedback.append(f"Significance: Not available (Sigma = {sigma}).")
+
+
 
     return "\n".join(feedback)

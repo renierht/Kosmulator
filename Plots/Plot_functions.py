@@ -343,6 +343,8 @@ def add_corner_table(
       * The table hugs the top of the corner grid with a small vertical pad.
       * Font size and cell size adapt to BOTH rows and parameters.
     """
+    import matplotlib
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -707,7 +709,8 @@ def print_cmb_summary_matrix(
         values = []
         for ridx in cmb_row_indices:
             row = aligned_table[ridx]
-            values.append(str(row[col_index[p]]).strip() or " ")
+            col = col_index[p]
+            values.append(str(row[col]).strip() if col < len(row) else " ")
         row_str = f"{p:<{col_w}} | " + " | ".join(f"{v:<{val_w}}" for v in values)
         if out is None:
             print(row_str)
@@ -752,7 +755,7 @@ def print_stats_table(model: str, stats_list):
 
     header = (
         f"{'Observation':<{obs_w}} | {'Log-Likelihood':>18} | {'Chi-Squared':>15} | "
-        f"{'Reduced Chi-Squared':>20} | {'AIC':>11} | {'BIC':>11} | {'dAIC':>11} | {'dBIC':>11}"
+        f"{'Reduced Chi-Squared':>20} | {'AIC':>11} | {'BIC':>11} | {'AICc':>11} | {'DIC':>11} |{'WAIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'dAICc':>11} | {'dDIC':>11} | {'dChi':>11} |  {'sigma':>11} | {'dWAIC':>11} |"
     )
     print(f"Statistical Results for Model: {model}")
     print(blue + header + reset)
@@ -767,14 +770,22 @@ def print_stats_table(model: str, stats_list):
         rchi = _as_float(stats.get('Reduced_Chi_squared', _np.nan))
         aic  = _as_float(stats.get('AIC', _np.nan))
         bic  = _as_float(stats.get('BIC', _np.nan))
+        aicc = _as_float(stats.get('AICc',_np.nan))
+        dic = _as_float(stats.get('DIC',_np.nan))
+        waic = _as_float(stats.get('WAIC', _np.nan))
         daic = _as_float(stats.get('dAIC', _np.nan))
         dbic = _as_float(stats.get('dBIC', _np.nan))
+        daicc = _as_float(stats.get('dAICc', _np.nan))
+        ddic = _as_float(stats.get('dDIC', _np.nan))
+        dwaic = _as_float(stats.get('dWAIC',_np.nan))
+        dchi = _as_float(stats.get('dChi', _np.nan))
+        sigma = _as_float(stats.get('sigma', _np.nan))
 
         obs_str = f"{obs:<{obs_w}}"
         print(
             f"{obs_str} | {ll:>18.4f} | {chi2:>15.4f} | "
-            f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | "
-            f"{daic:>11.3f} | {dbic:>11.3f}"
+            f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | {aicc:>11.3f} | {dic:>11.3f} | {waic:>11.3f} |"
+            f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f}| | {dchi:>11.3f}| {dwaic:>11.3f}| {sigma:>11.3f}|" 
         )
         #print(row)
 
@@ -1097,10 +1108,16 @@ def extract_observation_data(
 def fetch_best_fit_values(
     combined_best_fit: Mapping[str, Sequence[float]]
 ) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, float]]:
+
+    #Filter out metadata keys (D_bar, D_var) and non-indexable values
+    valid_items = {
+        k: v for k, v in combined_best_fit.items()
+        if not str(k).startswith("__") and isinstance(v, (list, tuple, np.ndarray))
+    }
     """Return (median, upper, lower) dicts from the combined best-fit mapping."""
-    med = {k: float(v[0]) for k, v in combined_best_fit.items()}
-    up  = {k: float(v[1]) for k, v in combined_best_fit.items()}
-    lo  = {k: float(v[2]) for k, v in combined_best_fit.items()}
+    med = {k: float(v[0]) for k, v in valid_items.items()}
+    up  = {k: float(v[1]) for k, v in valid_items.items()}
+    lo  = {k: float(v[2]) for k, v in valid_items.items()}
     return med, up, lo
 
 
@@ -1532,8 +1549,9 @@ def normalize_save_roots(PLOT_SETTINGS: Dict[str, Any]) -> None:
 def base_dir(PLOT_SETTINGS: Mapping[str, Any]) -> str:
     """Return unified base dir INCLUDING exactly one `<output_suffix>`."""
     root = os.path.normpath(str(PLOT_SETTINGS.get("save_root", DEFAULT_PLOTS_BASE)))
-    suffix = str(PLOT_SETTINGS.get("output_suffix", "default_run"))
-    return root if os.path.basename(root) == suffix else os.path.join(root, suffix)
+    suffix = os.path.normpath(str(PLOT_SETTINGS.get("output_suffix", "default_run")))
+    already_appended = (root == suffix) or root.endswith(os.sep + suffix)
+    return root if already_appended else os.path.join(root, suffix)
 
 
 def save_figure(fig, model_name: str, obs_key: Optional[str], fname_suffix: str, PLOT_SETTINGS: Mapping[str, Any]) -> str:

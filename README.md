@@ -137,7 +137,7 @@ Specify the model names you want to analyse:
 # Models implemented in User_defined_modules.py
 model_names: List[str] = ["Your_model_name"] 
 
-true_model: str = "LCDM_v"  # Against which model you want to test it
+reference_model: str = "LCDM_v"  # Against which model you want to test it
 
 # Sampler settings
 nwalkers: int = 16

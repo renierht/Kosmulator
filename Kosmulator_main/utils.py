@@ -618,6 +618,8 @@ def build_plot_settings(
     latex_enabled: bool,
     plot_table: bool,
 ) -> Dict[str, Any]:
+    import matplotlib
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt  # noqa: F401
 
     colors = DEFAULT_PLOT_COLORS
@@ -712,6 +714,8 @@ def build_plot_settings(
     # Quiet LaTeX detection (no stdout spam)
     if latex_enabled:
         if shutil.which("latex"):
+            import matplotlib
+            matplotlib.use('Agg')
             import matplotlib.pyplot as plt
 
             plt.rc("text", usetex=True)
@@ -811,7 +815,7 @@ def detect_vectorisation(models, get_model_fn, config, data, sample_n: int = 10)
                 z_test = np.linspace(z_min, z_max, 20000)
 
             names = config[mod]["parameters"][0]
-            tv = config[mod]["true_values"][0]
+            tv = config[mod]["reference_values"][0]
             params = dict(zip(names, tv))
 
             try:
@@ -1068,14 +1072,26 @@ def load_or_run_chain(
         )
         with h5py.File(zeus_chain, "r") as f:
             all_samples = f["samples"][:]    # (nsteps, nwalker, ndim)
+            loglike = np.array(f["log_like"]) if "log_like" in f else (
+                np.array(f["log_prob"]) if "log_prob" in f else None
+            )
 
         burn = int(CONFIG_model.get("burn", 0) or 0)
         # Guard against silly values
         if burn >= all_samples.shape[0]:
             burn = 0
 
-        # Flatten to (n_samples, ndim) as usual
-        return all_samples[burn:, :, :].reshape(-1, all_samples.shape[-1])
+        flat = all_samples[burn:, :, :].reshape(-1, all_samples.shape[-1])
+        """
+        NOTE: loglike above is unburned/unflattened relative to `flat` in this
+        # particular reuse path (Zeus stores log_prob already burn-discarded at
+        # save time in run_mcmc, so this is likely already aligned — verify
+        # shapes match len(flat) before trusting it; fall back to None if not.
+        """
+        if loglike is not None and loglike.shape[0] != flat.shape[0]:
+            loglike = None
+        return {"samples": flat, "loglike": loglike}
+
         
     # A) Existing chain, not overwriting (emcee only)
     # For vectorised/Zeus runs we *always* delegate loading/resume to
@@ -1169,7 +1185,7 @@ def load_or_run_chain(
         )
         
     # B) Fresh run (or Zeus load/resume)
-    flat_samples = Kosmulator_MCMC.run_mcmc(
+    result = Kosmulator_MCMC.run_mcmc(
         data=data,
         saveChains=True,
         chain_path=chain_path,
@@ -1194,13 +1210,31 @@ def load_or_run_chain(
         obs_key=other_kwargs.get("obs_key"),
     )
 
+    flat_samples = result.get("samples") if isinstance(result, dict) else result
+
+    # Fresh runs return samples directly, but save log_like in the chain file.
+    # Load it back here so post-processing can compute DIC as well as AIC/BIC.
+    if not isinstance(result, dict):
+        saved_path = zeus_chain if is_zeus_run else chain_path
+        loglike = None
+        if os.path.exists(saved_path):
+            try:
+                with h5py.File(saved_path, "r") as h5f:
+                    if "log_like" in h5f:
+                        candidate = np.asarray(h5f["log_like"], dtype=float).reshape(-1)
+                        if candidate.size == flat_samples.shape[0]:
+                            loglike = candidate
+            except Exception as exc:
+                print(f"[WARNING] Could not load saved log_like: {exc}")
+        result = {"samples": flat_samples, "loglike": loglike}
+
     if (
         flat_samples is None
         or flat_samples.size == 0
         or not np.any(np.isfinite(flat_samples))
     ):
         print(f"[WARNING] Samples for {chain_file} are empty or invalid!")
-    return flat_samples
+    return result
 
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -1239,6 +1273,8 @@ def emcee_autocorr_stopping(
         Emit "[EMCEE Step N] Log-Post: Max=... | Mean=..." from the MAIN PROCESS
         so it works even when emcee uses a multiprocessing Pool.
     """
+    import matplotlib
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt  # noqa: F401
     import Plots.Plots as MP
 
@@ -1448,7 +1484,8 @@ def make_zeus_callbacks(
     fine_kwargs: Optional[dict] = None,
     ncheck: Optional[int] = None,
     append_writer: Optional[callable] = None,
-    consecutive_required: int = 1,
+    consecutive_required: int = 3,
+    min_tau_factor: float = 50.0,
 ):
     """
     Composite Zeus callback:
@@ -1553,7 +1590,17 @@ def make_zeus_callbacks(
                             print("[Zeus] append_writer raised; ignored.")
 
                 # ---- Early-stop rule (LOCAL burn gate) ----
-                if iteration >= int(burn) and len(self._fracs) >= consecutive_required:
+                # Require enough chain length for the current autocorrelation
+                # estimate before treating a stable tau as convergence.
+                tau_values = _np.asarray(ests, dtype=float)
+                tau_max = float(_np.nanmax(tau_values))
+                min_chain_length = int(burn) + int(
+                    _np.ceil(float(min_tau_factor) * max(tau_max, 1.0))
+                )
+                if (
+                    iteration >= min_chain_length
+                    and len(self._fracs) >= consecutive_required
+                ):
                     window = list(self._fracs)[-consecutive_required:]
                     if all(f < float(target_autocorr) for f in window):
                         if debug:
@@ -1600,7 +1647,7 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
     header = (
         f"{'Observation':<{obs_w}} | {'Log-Likelihood':>18} | "
         f"{'Chi-Squared':>15} | {'Reduced Chi-Squared':>20} | "
-        f"{'AIC':>11} | {'BIC':>11} | {'dAIC':>11} | {'dBIC':>11}"
+        f"{'AIC':>11} | {'BIC':>11} | {'AICc':>11} | {'DIC':>11} | {'WAIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'dAICc':>11} | {'dDIC':>11} | {'dChi':>11} | {'Sigma':>11} | {'dWAIC':>11} |"
     )
 
     import numpy as _np
@@ -1634,12 +1681,20 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
             rchi = _as_float(s.get("Reduced_Chi_squared", _np.nan))
             aic = _as_float(s.get("AIC", _np.nan))
             bic = _as_float(s.get("BIC", _np.nan))
+            aicc = _as_float(s.get("AICc",_np.nan))
+            dic = _as_float(s.get("DIC",_np.nan))
+            waic = _as_float(s.get('WAIC',_np.nan))
+            dwaic = _as_float(s.get('dWAIC',_np.nan))
             daic = _as_float(s.get("dAIC", _np.nan))
             dbic = _as_float(s.get("dBIC", _np.nan))
+            daicc = _as_float(s.get("dAICc",_np.nan))
+            ddic = _as_float(s.get("dDIC",_np.nan))
+            dchi = _as_float(s.get("dChi", _np.nan))
+            sigma = _as_float(s.get('sigma', _np.nan))
             row = (
                 f"{obs:<{obs_w}} | {ll:>18.4f} | {chi2:>15.4f} | "
-                f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | "
-                f"{daic:>11.3f} | {dbic:>11.3f}"
+                f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | {aicc:>11.3f} | {dic:>11.3f} | {waic:>11.3f} | "
+                f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f} | {dchi:>11.3f} |{sigma:>11.3f} | {dwaic:>11.3f} | "
             )
             f.write(row + "\n")
         f.write("\n")
@@ -1651,7 +1706,7 @@ def save_interpretations_to_file(
     interpretations_list: List[Dict[str, str]],
 ) -> None:
     file_path = os.path.join(folder, "interpretations_summary.txt")
-    obs_w, diag_w, aic_w, bic_w = 30, 50, 35, 35
+    obs_w, diag_w, aic_w, bic_w, aicc_w, dic_w, waic_w, sigma_w = 30, 50, 35, 35, 35, 35, 35, 35
 
     with open(file_path, "w") as f:
         f.write(f"Interpretations for Model: {model}\n\n")
@@ -1659,10 +1714,14 @@ def save_interpretations_to_file(
             f"{'Observation':<{obs_w}} | "
             f"{'Reduced Chi2 Diagnostics':<{diag_w}} | "
             f"{'AIC Interpretation':<{aic_w}} | "
-            f"{'BIC Interpretation':<{bic_w}}"
+            f"{'BIC Interpretation':<{bic_w}} |" 
+            f"{'AICc Interpretation':<{aicc_w}} |"
+            f"{'DIC Interpretation':<{dic_w}} |"
+            f"{'WAIC Interpretation':<{waic_w}} |"
+            f"{'Significance Interpretation':<{sigma_w}} |"
         )
         f.write(header + "\n")
-        total = obs_w + diag_w + aic_w + bic_w + 9
+        total = obs_w + diag_w + aic_w + bic_w + aicc_w + dic_w + 9
         f.write("-" * total + "\n")
 
         for it in interpretations_list:
@@ -1670,19 +1729,32 @@ def save_interpretations_to_file(
             diag = it["Reduced Chi2 Diagnostics"]
             aic_i = it["AIC Interpretation"]
             bic_i = it["BIC Interpretation"]
+            aicc_i = it["AICc Interpretation"]
+            dic_i = it["DIC Interpretation"]
+            waic_i = it["WAIC Interpretation"]
+            sigma_i = it["Significance Interpretation"]
+
 
             diag_lines = textwrap.wrap(diag, width=diag_w)
             aic_lines = textwrap.wrap(aic_i, width=aic_w)
             bic_lines = textwrap.wrap(bic_i, width=bic_w)
+            aicc_lines = textwrap.wrap(aicc_i, width = aicc_w)
+            dic_lines = textwrap.wrap(dic_i, width = dic_w)
+            waic_lines = textwrap.wrap(waic_i, width = waic_w)
+            sigma_lines = textwrap.wrap(sigma_i, width = sigma_w)
             obs_line = obs.ljust(obs_w)
-            max_lines = max(1, len(diag_lines), len(aic_lines), len(bic_lines))
+            max_lines = max(1, len(diag_lines), len(aic_lines), len(bic_lines), len(aicc_lines), len(dic_lines), len(waic_lines), len(sigma_lines))
 
             for i in range(max_lines):
                 line = (
                     f"{(obs_line if i == 0 else ' ' * obs_w):<{obs_w}} | "
                     f"{(diag_lines[i] if i < len(diag_lines) else ''):<{diag_w}} | "
                     f"{(aic_lines[i] if i < len(aic_lines) else ''):<{aic_w}} | "
-                    f"{(bic_lines[i] if i < len(bic_lines) else ''):<{bic_w}}"
+                    f"{(bic_lines[i] if i < len(bic_lines) else ''):<{bic_w}} |"
+                    f"{(aicc_lines[i] if i < len(aicc_lines) else ''):<{aicc_w}} |"
+                    f"{(dic_lines[i] if i < len(dic_lines) else ''):<{dic_w}} |"
+                    f"{(waic_lines[i] if i < len(waic_lines) else ''):<{waic_w}} |"
+                    f"{(sigma_lines[i] if i < len(sigma_lines) else ''):<{sigma_w}} |"
                 )
                 f.write(line + "\n")
 
@@ -2247,7 +2319,7 @@ def generate_label(
 
 
 def _inject_planck_nuisance_defaults(
-    true_values: Dict[str, float],
+    reference_values: Dict[str, float],
     prior_limits: Dict[str, Tuple[float, float]],
     names: List[str],
 ) -> None:
@@ -2255,16 +2327,16 @@ def _inject_planck_nuisance_defaults(
     Ensure priors/initials exist for all requested Planck nuisance names.
     """
     for n in names:
-        if n in prior_limits and n in true_values:
+        if n in prior_limits and n in reference_values:
             continue
         default = PLANCK_NUISANCE_DEFAULTS.get(n)
         if default is not None:
             tv, (lo, hi) = default
-            true_values.setdefault(n, tv)
+            reference_values.setdefault(n, tv)
             prior_limits.setdefault(n, (lo, hi))
         else:
             # Fallback heuristic if a name isn't in our table
-            true_values.setdefault(n, 0.0)
+            reference_values.setdefault(n, 0.0)
             prior_limits.setdefault(n, (-5.0, 5.0))
 
 
@@ -2565,6 +2637,27 @@ def Comoving_distance_vectorized(MODEL_func, redshifts, param_dict):
     d_c[idx] = integral
     param = _inject_derived_background(param_dict)
     return d_c * (C_KM_S / float(param["H_0"]))
+
+
+def sn_luminosity_distance(d_c, z, z_hel=None):
+    """
+    Luminosity distance for a supernova sample from its comoving distance.
+
+    D_L = (1 + z_fac) * D_c(z)
+
+    z      : redshift used inside the comoving-distance integral
+             (for DES-SN5YR this is the Hubble-diagram redshift, zHD).
+    z_hel  : optional heliocentric redshift. If given, it replaces z in the
+             (1 + z) prefactor, giving D_L = (1 + z_HEL) * D_c(z_HD), the
+             convention used by the DES-SN5YR/Pantheon+ likelihoods (e.g. the
+             Cobaya implementation). If None, z is used in both places, which
+             is the original single-redshift behaviour.
+
+    Datasets that do not carry a `z_hel` array (Union3, JLA, Pantheon,
+    Pantheon+) therefore give bit-for-bit the same result as before.
+    """
+    z_fac = z if z_hel is None else z_hel
+    return d_c * (1.0 + z_fac)
 
 
 def matter_density_z_array(zs, param_dict, MODEL_func):

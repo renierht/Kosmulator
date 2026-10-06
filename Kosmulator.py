@@ -69,16 +69,24 @@ logging.basicConfig(level=logging.INFO)
 # ----------------------------------------------------------------------
 
 # Models implemented in User_defined_modules.py
-model_names: List[str] = ["LCDM_v"]
+model_names: List[str] = ["wowaCDM_v"]
 
 # Each inner list is a combined likelihood
 observations: List[List[str]] = [
+    #['DESI_DR2', 'CMB_lowl']
+    #['DESI_DR2', 'CMB_lowl', 'CMB_hil'],
+    ['DESI_DR2'],
+    #['DESI_DR2','DESY5'],
+    #['BBN_PryMordial','DESI_DR2', 'PantheonP'],
+    #['DESI_DR2', 'Union3'],
+    #['DESI_DR2', 'PantheonP'],
     #['JLA'],
     #['JLA','CC'],
     #['OHD'],
     #['CC'],
     #['PantheonP'],
-    #['PantheonPS'],
+    #['DESI_DR2','PantheonPS'],
+    #['BBN_PryMordial', 'CC', 'DESI_DR2', 'Pantheon'],
     #['PantheonPS','CC'],
     #['f_sigma_8'],
     #['f'],
@@ -102,7 +110,7 @@ observations: List[List[str]] = [
     #["DESI_DR2","CMB_lowl","BBN_PryMordial"],
     #["CMB_lowl"],
     #['CMB_hil'],
-    ['CMB_lensing', 'CMB_lowl'],
+    #['CMB_lensing', 'CMB_lowl'],
     #['CMB_hil_TT'],
     #["CC", "DESI_DR1"],
     #["JLA","DESY5","Union3"],
@@ -112,14 +120,13 @@ observations: List[List[str]] = [
     #["f_sigma_8", "PantheonP"],
 ]
 
-true_model: str = "LCDM_v"
+reference_model: str = "LCDM_v"
 
 # Sampler settings
-nwalkers: int = 36
-nsteps: int = 100000
-burn: int = 500
+nwalkers: int = 32
+nsteps: int = 1500
+burn: int = 100
 convergence: float = 0.01
-
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -144,10 +151,14 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "alpha": (0.00, 1.00),
     "B": (0.00, 0.333),
     "f1": (0.01, 100.0),
+    'w0': (-3.0, 1.0),
+    'wa': (-3.0, 2.0),
+    'w': (-2.0, -1.0),
+    'delta':(0.0, 0.5),
 }
 
 # Reference “true” values (for diagnostics/plots)
-true_values: Dict[str, float] = {
+reference_values: Dict[str, float] = {
     "Omega_m": 0.315,
     "H_0": 67.4,
     "gamma": K.GAMMA_FS8_SINGLETON,
@@ -168,13 +179,15 @@ true_values: Dict[str, float] = {
     "N_eff": K.N_EFF_DEFAULT,
     "tau_n": K.TAU_N_DEFAULT,
     "Omega_b": 0.05,
+    "w0": -1.0,
+    "wa": 0.0,
 }
 
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
 
-def _ensure_true_model_first(names: List[str], tm: str) -> List[str]:
+def _ensure_reference_model_first(names: List[str], tm: str) -> List[str]:
     """Return `names` with `tm` (if present) moved to the front."""
     ordered = list(names)
     if tm in ordered:
@@ -194,7 +207,7 @@ def main() -> None:
     except Exception:
         rank = 0
 
-    ordered_models = _ensure_true_model_first(model_names, true_model)
+    ordered_models = _ensure_reference_model_first(model_names, reference_model)
 
     if rank == 0:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
@@ -212,9 +225,9 @@ def main() -> None:
     run_mcmc(
         model_names=ordered_models,
         observations=observations,
-        true_model=true_model,
+        reference_model=reference_model,
         prior_limits=prior_limits,
-        true_values=true_values,
+        reference_values=reference_values,
         nwalkers=nwalkers,
         nsteps=nsteps,
         burn=burn,

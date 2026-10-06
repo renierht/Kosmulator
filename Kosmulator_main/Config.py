@@ -10,7 +10,7 @@ Responsibilities:
   - Construct the CONFIG dict consumed by the MCMC layer:
       CONFIG[model_name] = {
           "observations", "observation_types",
-          "parameters", "true_values", "prior_limits",
+          "parameters", "reference_values", "prior_limits",
           "restrictions", "ndim",
           "rd_policy", "pantheonp_mode",
           "fs8_gamma_fixed_by_group",
@@ -152,7 +152,14 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         #name zcmb zhel dz mb dmb x1 dx1 color dcolor 3rdvar d3rdvar ...
 
     Behaviour:
-      - Uses the CMB-frame redshift column (zCMB/zcmb) as `redshift`.
+      - CSV files (DESY5): uses the Hubble-diagram redshift (zHD) as
+        `redshift`, falling back to zCMB/z if zHD is absent. Also returns the
+        heliocentric redshift (zHEL) as `z_hel` when that column exists. The
+        likelihood then uses D_L = (1 + z_HEL) * D_c(z_HD), as in the DES-SN5YR
+        (Cobaya) likelihood; see utils.sn_luminosity_distance.
+      - Whitespace files (Union3): uses the CMB-frame redshift column
+        (zcmb/z) as `redshift`; no `z_hel` is returned, so the single-redshift
+        behaviour is unchanged.
       - Uses MU/mb as `type_data` (distance-modulus–like quantity).
       - Uses MUERR_FINAL/dmb/etc. as `type_data_error` (σ_μ).
       - For Union3, parses lines manually to tolerate missing trailing columns.
@@ -182,16 +189,21 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         df.columns = cols_norm
         name_map = {c.lower(): c for c in df.columns}
 
-        # redshift
+        # redshift used inside the comoving-distance integral.
+        # zHD (Hubble-diagram redshift) comes first; candidates are matched
+        # against the lower-cased column names in name_map.
         z_name = None
-        for cand in ("zcmb", "z_cmb", "zhd", "z"):
+        for cand in ("zhd", "zcmb", "z_cmb", "z"):
             if cand in name_map:
                 z_name = name_map[cand]
                 break
         if z_name is None:
             raise ValueError(
-                f"Could not find a zCMB-like column in {file_path} (columns={df.columns.tolist()})"
+                f"Could not find a zHD/zCMB-like column in {file_path} (columns={df.columns.tolist()})"
             )
+
+        # optional heliocentric redshift, used only in the (1 + z) prefactor
+        hel_name = name_map.get("zhel")
 
         # distance modulus / magnitude
         mu_name = None
@@ -220,8 +232,15 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         else:
             sigma = np.ones_like(z, dtype=float)
 
-        # Clean rows
+        z_hel = None
+        if hel_name is not None:
+            z_hel = pd.to_numeric(df[hel_name], errors="coerce").to_numpy(dtype=float)
+
+        # Clean rows (z_hel, when present, is cleaned with the same mask so all
+        # arrays stay aligned with the covariance matrix)
         good = np.isfinite(z) & np.isfinite(mu) & np.isfinite(sigma) & (sigma > 0)
+        if z_hel is not None:
+            good &= np.isfinite(z_hel)
         z = z[good]
         mu = mu[good]
         sigma = sigma[good]
@@ -229,11 +248,14 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         if z.size == 0:
             raise ValueError(f"{file_path}: no valid rows after cleaning numeric columns.")
 
-        return {
+        out = {
             "redshift": z,
             "type_data": mu,
             "type_data_error": sigma,
         }
+        if z_hel is not None:
+            out["z_hel"] = z_hel[good]
+        return out
 
 
     # --------------------------------------------------
@@ -756,47 +778,48 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 if obs == "DESY5":
                     sne_path = os.path.join(K.OBSERVATIONS_BASE, "DESY5.dat")
                     cov_path = os.path.join(K.OBSERVATIONS_BASE, "DESY5_covsys_000.txt")
+
+                    #DESY5 covariant matrix correction
+                    data_sne = load_named_sne_with_zcmb(sne_path)
+
+                    if cov_path and os.path.exists(cov_path):
+                        #Load raw 1D stream and reshape
+                        raw_data = np.loadtxt(cov_path)
+                        n_dim = int(raw_data[0]) 
+                        cov_loaded = raw_data[1:].reshape((n_dim, n_dim))
+                        cov_loaded = 0.5 * (cov_loaded + cov_loaded.T)
+
+                        n_data = len(data_sne['type_data'])
+                        if cov_loaded.shape != (n_data, n_data):
+                            logger.error(f"{obs} Covariance shape {cov_loaded.shape} != Data length {n_data}")
+                            raise ValueError(f"{obs} Covariance dimension mismatch!")
+
+                        #2. Add diagonal statistical variances
+                        sigma_stat = data_sne["type_data_error"]
+                        cov_total = cov_loaded + np.diag(sigma_stat**2)
+
+                        ##. invert the total corrected matrix
+                        try:
+                            inv_cov_total = np.linalg.inv(cov_total)
+                        except np.linalg.LinAlgError:
+                            inv_cov_total = np.linalg.pinv(cov_total, rcond = 1e-12)
+
+                        data_sne["cov"] = cov_total
+                        data_sne["inv_cov"] = inv_cov_total
+
                 else:  # "Union3"
                     sne_path = os.path.join(K.OBSERVATIONS_BASE, "Union3.txt")
                     cov_path = os.path.join(K.OBSERVATIONS_BASE, "Union3_mag_covmat.txt")
 
-                data_sne = load_named_sne_with_zcmb(sne_path)
+                    data_sne = load_named_sne_with_zcmb(sne_path)
 
-                if cov_path and os.path.exists(cov_path):
-                    # 1. Load the raw matrix
-                    cov_loaded, _ = load_DESI_cov(cov_path)
-                    
-                    n_data = len(data_sne["type_data"])
-                    if cov_loaded.shape != (n_data, n_data):
-                        logger.error(f"{obs} Covariance shape {cov_loaded.shape} != Data length {n_data}")
-                        raise ValueError(f"{obs} Covariance dimension mismatch! Check for commented rows.")
+                    if cov_path and os.path.exists(cov_path):
+                        cov_loaded, inv_cov_loaded = load_DESI_cov(cov_path)
+                        data_sne["cov"] = cov_loaded
+                        data_sne["inv_cov"] = inv_cov_loaded
 
-                    # 2. CRITICAL FIX: Explicitly handle DESY5
-                    # DESY5 uses a systematic-only matrix, so we MUST add the diagonal statistical errors.
-                    # Union3 uses a full matrix, so we use it as-is.
-                    
-                    if obs == "DESY5" or np.mean(np.diag(cov_loaded)) < 1e-3: 
-                        sigma_stat = data_sne["type_data_error"]
-                        
-                        # Add diagonal stats: C_total = C_sys + diag(sigma_stat^2)
-                        # This adds 280^2 to the bad SN, correctly de-weighting it.
-                        cov_total = cov_loaded + np.diag(sigma_stat**2)
-                        
-                        logger.info(f"Augmented {obs} covariance with diagonal statistical errors.")
-                    else:
-                        # Union3 path
-                        cov_total = cov_loaded
-                    
-                    # 3. Invert the corrected TOTAL matrix
-                    try:
-                        inv_cov_total = np.linalg.inv(cov_total)
-                    except np.linalg.LinAlgError:
-                        # Fallback for numerical stability
-                        inv_cov_total = np.linalg.pinv(cov_total, rcond=1e-12)
 
-                    data_sne["cov"] = cov_total
-                    data_sne["inv_cov"] = inv_cov_total
-
+                data_sne["data_is_distance_modulus"] = (obs == "Union3") or (obs == 'DESY5')
                 observation_data[obs] = data_sne
             # ------------------
             # Default loader
@@ -813,9 +836,10 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
 
 def create_config(
     models: Dict[str, Any],
-    true_values: Union[Dict[str, float], Any] = None,
+    reference_values: Union[Dict[str, float], Any] = None,
     prior_limits: Dict[str, Tuple[float, float]] = None,
     restrictions: Dict[str, Dict[str, Callable[[float], bool]]] = None,
+    coupled_restrictions: Dict[str, List[Callable[[Dict[str, float]], bool]]] = None,
     observation: List[List[str]] = None,
     nwalkers: int = 20,
     nsteps: int = 200,
@@ -833,7 +857,7 @@ def create_config(
         Model registry, e.g. {"LCDM_v": {"parameters": [...], ...}, ...}.
         `parameters` here is the *core* model parameter list, not yet expanded
         per observation group.
-    true_values : dict
+    reference_values : dict
         Global "true" parameter guesses (used as initial means).
     prior_limits : dict
         Global prior boxes: {param: (low, high)}. Each parameter used in any
@@ -859,9 +883,10 @@ def create_config(
     """
     # Defaults
     observation  = observation  or [['PantheonP']]
-    true_values  = true_values  or {}
+    reference_values  = reference_values  or {}
     prior_limits = prior_limits or {}
     restrictions = restrictions or {}
+    coupled_restrictions = coupled_restrictions or {}
 
     # Normalise observation groups (order, duplicates, logging)
     observation = canonicalise_and_dedup_observations(observation, logger)
@@ -945,7 +970,7 @@ def create_config(
             if "A_planck" in defaults:
                 names.add("A_planck")
 
-        _inject_planck_nuisance_defaults(true_values, prior_limits, sorted(names))
+        _inject_planck_nuisance_defaults(reference_values, prior_limits, sorted(names))
 
     # ----------------------------------------------------------------------
     # 2. Expand each model's core parameter list with obs-required params
@@ -960,7 +985,7 @@ def create_config(
         obs_types  = [[obs_type_map[o] for o in grp] for grp in observation]
 
         # ------------------------------------------------------------------
-        # 2a. Build parameter sets, true_values, prior_limits per group
+        # 2a. Build parameter sets, reference_values, prior_limits per group
         # ------------------------------------------------------------------
         param_sets: List[List[str]] = []
         tv_sets:     List[np.ndarray] = []
@@ -990,7 +1015,7 @@ def create_config(
                     )
                 lo, hi = prior_limits[p]
                 pl_map[p] = (lo, hi)
-                tv_vec.append(true_values.get(p, 0.5 * (lo + hi)))
+                tv_vec.append(reference_values.get(p, 0.5 * (lo + hi)))
 
             param_sets.append(flat_pset)
             tv_sets.append(np.asarray(tv_vec, dtype=float))
@@ -1003,9 +1028,10 @@ def create_config(
             "observations":      observation,
             "observation_types": obs_types,
             "parameters":        param_sets,
-            "true_values":       tv_sets,
+            "reference_values":  tv_sets,
             "prior_limits":      pl_sets,
             "restrictions":      restrictions.get(mod, {}),
+            "coupled_restrictions": coupled_restrictions.get(mod, []),
             "ndim":              ndim_sets,
             "nsteps":            nsteps,
             "burn":              burn,
@@ -1021,7 +1047,7 @@ def create_config(
         # ------------------------------------------------------------------
         # 3. r_d policy & fσ8 singleton gamma policy
         # ------------------------------------------------------------------
-        tv_global = true_values or {}
+        tv_global = reference_values or {}
 
         rd_fixed = float(tv_global.get("r_d_fixed", K.R_D_SINGLETON))     # <- fixed singleton value
         rd_mu    = float(tv_global.get("r_d", rd_fixed))                  # <- free/gaussian mean (defaults to fixed)
@@ -1097,7 +1123,7 @@ def create_config(
             if len(obs_grp) == 1 and obs_grp[0] == "f_sigma_8":
                 if "gamma" in grp_params:
                     grp_params.remove("gamma")
-                gamma_fix = float(true_values.get("gamma_fixed", K.GAMMA_FS8_SINGLETON))
+                gamma_fix = float(reference_values.get("gamma_fixed", K.GAMMA_FS8_SINGLETON))
                 fs8_gamma_fixed_by_group[gi] = gamma_fix
                 if logger:
                     logger.warning(
@@ -1208,12 +1234,12 @@ def create_config(
                     )
                 lo, hi = prior_limits[p]
                 pl_map[p] = (lo, hi)
-                tv_vec.append(true_values.get(p, 0.5 * (lo + hi)))
+                tv_vec.append(reference_values.get(p, 0.5 * (lo + hi)))
             tv_sets2.append(np.asarray(tv_vec, float))
             pl_sets2.append(pl_map)
             ndim_sets2.append(len(pset))
 
-        config[mod]["true_values"]   = tv_sets2
+        config[mod]["reference_values"]   = tv_sets2
         config[mod]["prior_limits"]  = pl_sets2
         config[mod]["ndim"]          = ndim_sets2
 

@@ -30,6 +30,8 @@ import Kosmulator_main.constants as K
 from Plots.Plot_functions import compute_rd as _compute_rd
 from Kosmulator_main import rd_helpers as RD
 
+logger = logging.getLogger(__name__)
+
 # Optional Zeus
 try:
     import zeus
@@ -171,7 +173,9 @@ def model_likelihood(
     # Predictions per type
     if obs_type == "SNe":
         d_c = utils.Comoving_distance_vectorized(MODEL_func, z, param_dict)
-        y_dl = d_c * (1.0 + z)
+        # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5); otherwise
+        # identical to the original d_c * (1 + z).
+        y_dl = utils.sn_luminosity_distance(d_c, z, obs_data.get("z_hel"))
         if (not np.isfinite(y_dl).all()) or (np.min(y_dl) <= 0):
             return -np.inf
         model = 25.0 + 5.0 * np.log10(y_dl)
@@ -244,6 +248,15 @@ def log_prior_all(theta_batch: np.ndarray, CONFIG: Dict[str, Any], obs_index: in
         if p in restr:
             valid = np.array([restr[p](v) for v in theta_batch[:, i]])
             lp[~valid] = -np.inf
+
+    # 3) restrictions involving multiple sampled parameters
+    coupled_restr = CONFIG.get("coupled_restrictions", [])
+    for restriction in coupled_restr:
+        valid = np.array([
+            restriction({name: theta_batch[walker, i] for i, name in enumerate(params)})
+            for walker in range(nwalkers)
+        ])
+        lp[~valid] = -np.inf
 
     # --- Coupled background consistency (always true physically) ---
     params = CONFIG["parameters"][obs_index]
@@ -370,12 +383,11 @@ def batch_post(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index
 
     return out[0] if nwalkers == 1 else out
 
-
 def _zeus_logpost_vectorized(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index):
-    """Zeus log-posterior for vectorised models (always returns 1D array)."""
-    arr = np.atleast_2d(theta)
-    out = batch_post(arr, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index)
-    return np.asarray(out, dtype=float).ravel()
+    """Zeus log-posterior for vectorised models."""
+    val = batch_post(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index)
+    # CRITICAL FIX: .ravel() guarantees a 1D array, preventing 0-d iteration crashes in Zeus
+    return np.asarray(val, dtype=float).ravel()
 
 
 def _zeus_logpost_scalar(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index):
@@ -407,65 +419,43 @@ def neg_log_prob(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_ind
 
 
 def optimise_initial_guess(
-    true_vals: np.ndarray,
+    reference_vals: np.ndarray,
     bounds: List[Tuple[float, float]],
     nlp_fn: Callable[[np.ndarray], float],
     maxiter: int,
     maxfun: int,
     disp: bool,
-    polish: bool = True,
 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
     """
-    L-BFGS-B to find a decent initial center; returns (ic, Hinv_diag or None).
-
-    L-BFGS-B uses finite-difference gradients. When the likelihood calls CLASS
-    (quantised r_d, numerical noise) or returns -inf near a restriction, those
-    gradients are meaningless and it can stop far from the optimum, sometimes
-    still reporting success. With polish=True a derivative-free Powell search
-    starts from the L-BFGS-B point (budget KOSM_OPT_POLISH_MAXFEV, default
-    max(200, 60*ndim) evaluations) and the better of the two points is kept.
+    Nelder-Mead simplex optimization to find a robust MAP center across non-smooth boundaries.
     """
+    
     NO_OPT = os.environ.get("KOSM_NO_OPT", "0") == "1"
     if NO_OPT:
-        return np.asarray(true_vals, float), None
+        return np.asarray(reference_vals, float), None
 
-    with np.errstate(invalid="ignore"):
-        sol = optimize.minimize(
-            nlp_fn,
-            true_vals,
-            bounds=bounds,
-            method="L-BFGS-B",
-            options={"maxiter": maxiter, "maxfun": maxfun, "disp": False},
-        )
+    # Nelder-Mead natively supports parameter box bounds in modern SciPy
+    sol = optimize.minimize(
+        nlp_fn,
+        reference_vals,
+        bounds=bounds,
+        method="Nelder-Mead",
+        options={
+            "maxiter": maxiter,
+            "maxfev": maxfun,
+            "disp": disp,
+            "adaptive": True,  # Scales simplex geometry for higher dimensions
+        },
+    )
+
     ic = np.asarray(sol.x, float)
-    best_f = float(sol.fun) if np.isfinite(sol.fun) else np.inf
 
-    if polish and os.environ.get("KOSM_OPT_POLISH", "1") != "0":
-        maxfev = int(os.environ.get("KOSM_OPT_POLISH_MAXFEV", str(max(200, 60 * len(ic)))))
-        try:
-            sol2 = optimize.minimize(
-                nlp_fn, ic, bounds=bounds, method="Powell",
-                options={"maxfev": maxfev, "xtol": 1e-4, "ftol": 1e-6, "disp": False},
-            )
-            if np.isfinite(sol2.fun) and float(sol2.fun) < best_f:
-                ic = np.clip(np.asarray(sol2.x, float),
-                             [b[0] for b in bounds], [b[1] for b in bounds])
-        except Exception:
-            pass
-    Hinv = None
-    try:
-        Hinv_like = sol.hess_inv
-        Hinv = (
-            Hinv_like.todense()
-            if hasattr(Hinv_like, "todense")
-            else np.asarray(Hinv_like, float)
-        )
-        Hinv = np.asarray(Hinv, float)
-        if Hinv.ndim == 2:
-            Hinv = np.diag(Hinv)  # take diagonal for scale proposal
-    except Exception:
-        Hinv = None
-    return ic, Hinv
+    # If the simplex failed to move away from the starting guess, log or inspect
+    if not sol.success:
+        logger.warning("Nelder-Mead pre-fit did not achieve full convergence: %s", sol.message)
+
+    # Nelder-Mead is derivative-free and does not produce an inverse Hessian
+    return ic, None
 
 
 def make_initial_positions(
@@ -612,7 +602,10 @@ class ZeusAutoCorrPlotter:
 
     def __call__(self, estimates, iteration):
         import numpy as np
+        import matplotlib
+        matplotlib.use('Agg')
         import matplotlib.pyplot as plt
+        
 
         if estimates is None:
             return
@@ -739,6 +732,7 @@ def _run_mcmc_impl(
         # Hard CLI overrides always win
         if getattr(K, "force_emcee", False):
             return "emcee"
+        
         if getattr(K, "force_zeus", False) and zeus is not None:
             return "zeus"
 
@@ -790,7 +784,7 @@ def _run_mcmc_impl(
 
     # 1) Parameter / run config
     param_names = CONFIG["parameters"][obs_index]
-    true_vals   = CONFIG["true_values"][obs_index]
+    reference_vals   = CONFIG["reference_values"][obs_index]
     prior_map   = CONFIG["prior_limits"][obs_index]
     nsteps      = CONFIG["nsteps"]
     burn        = CONFIG["burn"]
@@ -815,13 +809,12 @@ def _run_mcmc_impl(
     if do_ic:
         bounds = [prior_map[p] for p in param_names]
         ic, sol_diag = optimise_initial_guess(
-            true_vals,
+            reference_vals,
             bounds,
             nlp,
-            maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "30")),
-            maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", "60")),
+            maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "2000")),
+            maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", "2000")),
             disp=False,
-            polish=not has_cmb,   # CMB likelihoods are too slow for an extra search
         )
         print(f"SciPy optimized IC: {ic}\n")
 
@@ -862,7 +855,6 @@ def _run_mcmc_impl(
     # ── Zeus branch ────────────────────────────────────────────────────────────
     engine   = _choose_engine(vectorised, model_name, has_cmb, has_bbn)
     use_zeus = (engine == "zeus" and zeus is not None)
-    #print(f"[DEBUG] Engine for { _resolved_label }: {engine} (mode={getattr(K, 'engine_mode', 'mixed')}, has_cmb={has_cmb}, has_bbn={has_bbn}, can_vec={vectorised})")
     
     if use_zeus:
         zeus_chain = chain_path.replace(".h5", "_zeus.h5")
@@ -899,7 +891,7 @@ def _run_mcmc_impl(
                 lows  = np.array([prior_map[p][0] for p in param_names], dtype=float)
                 highs = np.array([prior_map[p][1] for p in param_names], dtype=float)
                 span  = np.maximum(highs - lows, 1e-12)
-                ic    = np.clip(np.array(true_vals, dtype=float), lows, highs)
+                ic    = np.clip(np.array(reference_vals, dtype=float), lows, highs)
                 rng   = np.random.default_rng(PLOT_SETTINGS.get("seed", None))
                 pos0  = ic + 0.05 * span * rng.normal(size=(nwalker, ndim))
                 pos0  = np.clip(pos0, lows, highs)
@@ -986,7 +978,7 @@ def _run_mcmc_impl(
             else None,
             ncheck=iters_per_cb,
             append_writer=writer,
-            consecutive_required=int(PLOT_SETTINGS.get("tau_consecutive", 1)),
+            consecutive_required=int(PLOT_SETTINGS.get("tau_consecutive", 3)),
         )
 
         # Optional: τ probe for CMB (debug only)
@@ -1057,6 +1049,23 @@ def _run_mcmc_impl(
                 pass
             with h5py.File(zeus_chain, "r") as f:
                 all_samples = f["samples"][:]
+        # Save Blobs from Zeus if available
+        # Explicitly save log_prob and blobs from Zeus
+        if saveChains:
+            with h5py.File(zeus_chain, "a") as h5f:
+                try:
+                    # 1. Save log_prob
+                    flat_log_prob = sampler.get_log_prob(discard=burn, flat=True)
+                    if "log_prob" in h5f:
+                        del h5f["log_prob"]
+                    h5f.create_dataset("log_prob", data=flat_log_prob)
+
+                    # 2. Flat top-hat priors everywhere → log_prob == log_like exactly
+                    if "log_like" in h5f:
+                        del h5f["log_like"]
+                    h5f.create_dataset("log_like", data=flat_log_prob)
+                except Exception as e:
+                    print(f"\n[WARNING] Could not save 'log_prob'/'log_like' from Zeus: {e}")
 
         # Convergence report. zeus stops early only when |dtau|/tau stays below
         # the target; warn when the run ended without that, or when the chain
@@ -1142,7 +1151,7 @@ def _run_mcmc_impl(
                     local_burn = max(0, burn - current)
                     obs_for_plot = [_resolved_key]
 
-                    flat_samples = utils.emcee_autocorr_stopping(
+                    res = utils.emcee_autocorr_stopping(
                         last_state,
                         sampler,
                         nsteps - current,
@@ -1161,7 +1170,7 @@ def _run_mcmc_impl(
                         print_enabled=print_enabled,
                         print_every=print_every,
                     )
-                    return flat_samples
+                    flat_samples = res[0] if isinstance(res, tuple) else res
                 else:
                     # Manual loop to allow step printing (Pool-safe)
                     for state in sampler.sample(
@@ -1189,7 +1198,25 @@ def _run_mcmc_impl(
                                         f"Max={np.nanmax(lp):.4f} | Mean={np.nanmean(lp):.4f}"
                                     )
 
-                    return sampler.get_chain(discard=burn, flat=True)
+                    flat_samples = sampler.get_chain(discard = burn, flat = True)
+                #Extract and write log_prob + loglike on resume
+                if saveChains:
+                    flat_log_prob = sampler.get_log_prob(discard = burn, flat = True)
+                    blobs = sampler.get_blobs(discard = burn, flat = True)
+                    with h5py.File(chain_path, "a") as h5f:
+                        h5f.attrs["converged"] = True
+                        if "log_prob" in h5f:
+                            del h5f["log_prob"]
+                        h5f.create_dataset("log_prob",data = flat_log_prob)
+
+                        if blobs is not None:
+                            flat_log_like = np.squeeze(
+                                np.asarray(blobs, dtype = float)
+                            )
+                            if "log_like" in h5f:
+                                del h5f["log_like"]
+                            h5f.create_dataset("log_like", data = flat_log_like)
+            return flat_samples
 
         # ------------------------------------------------------------
         # Fresh emcee run
@@ -1198,7 +1225,7 @@ def _run_mcmc_impl(
             lows  = np.array([prior_map[p][0] for p in param_names], dtype=float)
             highs = np.array([prior_map[p][1] for p in param_names], dtype=float)
             span  = np.maximum(highs - lows, 1e-12)
-            ic    = np.clip(np.array(true_vals, dtype=float), lows, highs)
+            ic    = np.clip(np.array(reference_vals, dtype=float), lows, highs)
             rng   = np.random.default_rng(PLOT_SETTINGS.get("seed", None))
             pos0  = ic + 0.05 * span * rng.normal(size=(nwalker, ndim))
             pos0  = np.clip(pos0, lows, highs)
@@ -1216,7 +1243,7 @@ def _run_mcmc_impl(
 
         if autoCorr:
             obs_for_plot = [_resolved_key]
-            flat_samples = utils.emcee_autocorr_stopping(
+            res = utils.emcee_autocorr_stopping(
                 pos0,
                 sampler,
                 nsteps,
@@ -1235,6 +1262,9 @@ def _run_mcmc_impl(
                 print_enabled=print_enabled,
                 print_every=print_every,
             )
+            flat_samples = res[0] if isinstance(res, tuple) else res
+            flat_log_prob = sampler.get_log_prob(discard = burn, flat = True)
+            blobs = sampler.get_blobs(discard = burn, flat = True)
         else:
             # Manual loop to allow step printing (Pool-safe)
             for state in sampler.sample(pos0, iterations=nsteps, progress=True):
@@ -1261,19 +1291,44 @@ def _run_mcmc_impl(
                             )
 
             flat_samples = sampler.get_chain(discard=burn, flat=True)
+            flat_log_prob = sampler.get_log_prob(discard=burn, flat=True)
+            blobs = sampler.get_blobs(discard = burn, flat = True)
 
         print(f"Emcee sampling took {utils.format_elapsed_time(time.time() - start)}\n")
+
         if saveChains:
             # Flag the chain only if the autocorrelation rule was actually met
             # (previously every finished run was flagged converged).
             with h5py.File(chain_path, "a") as h5f:
                 h5f.attrs["converged"] = bool(getattr(sampler, "kosm_converged", False))
 
+                #Saving the log_probs to use for stats
+                if "log_prob" in h5f:
+                    del h5f["log_prob"]
+                h5f.create_dataset("log_prob", data = flat_log_prob)
+
+                #Save raw log_like blob
+                if blobs is not None:
+                    flat_log_like = np.squeeze(np.asarray(blobs, dtype = float))
+                    if "log_like" in h5f:
+                        del h5f["log_like"]
+                    h5f.create_dataset("log_like", data = flat_log_like)
+
         return flat_samples
 
 
 def load_mcmc_results(output_path: str, file_name: str, CONFIG: dict):
-    """Load a saved HDFBackend chain and return the flat samples (post-burn)."""
-    backend = emcee.backends.HDFBackend(os.path.join(output_path, file_name))
+    """Load samples and saved likelihood values from an emcee chain."""
+    chain_path = os.path.join(output_path, file_name)
+    backend = emcee.backends.HDFBackend(chain_path)
     burn = CONFIG.get("burn", 0)
-    return backend.get_chain(discard=burn, flat=True)
+    samples = backend.get_chain(discard=burn, flat=True)
+
+    loglike = None
+    with h5py.File(chain_path, "r") as h5f:
+        if "log_like" in h5f:
+            candidate = np.asarray(h5f["log_like"], dtype=float).reshape(-1)
+            if candidate.size == samples.shape[0]:
+                loglike = candidate
+
+    return {"samples": samples, "loglike": loglike}

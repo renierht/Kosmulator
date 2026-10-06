@@ -11,6 +11,8 @@ import io
 import os
 import sys
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from contextlib import contextmanager
 from getdist import plots as gd_plots, MCSamples
@@ -346,7 +348,7 @@ def _main_table_parameters(config_model: dict, param_labels: list[str]) -> list[
 
     return main_params
     
-def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
+def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
     """Run the full plotting pipeline in a clean, deterministic order.
 
     Order:
@@ -358,6 +360,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
     import os
     from collections import defaultdict
 
+    
     # unify roots
     normalize_save_roots(PLOT_SETTINGS)
 
@@ -419,14 +422,19 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
         # ---------- Detailed CMB table: ONLY parameters used in CMB obs ----------
         # Find which rows correspond to CMB datasets
         cmb_row_indices = [
-            i for i, name in enumerate(obs_names) if _is_cmb_obs_name(name)
+            i for i, name in enumerate(obs_names)
+            if _is_cmb_obs_name(name) and i < len(aligned_table)
         ]
 
         if cmb_row_indices:
             # Take ONLY parameters that have a non-empty value in at least one CMB row
             cmb_param_names: list[str] = []
             for j, pname in enumerate(param_labels):
-                if any(str(aligned_table[i][j]).strip() for i in cmb_row_indices):
+                if any(
+                    j < len(aligned_table[i])
+                    and str(aligned_table[i][j]).strip()
+                    for i in cmb_row_indices
+                ):
                     cmb_param_names.append(pname)
 
             if cmb_param_names:
@@ -510,12 +518,12 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
     # ----- 4) Statistical analysis ------------------------------------------
     print()
-    statistical_results = PP.statistical_analysis(all_best_fit, data, CONFIG, true_model)
+    statistical_results = PP.statistical_analysis(all_best_fit, data, CONFIG, reference_model)
 
     # Build reference chi^2 map (from true model) for diagnostics
     ref_chi2 = {}
-    if true_model in statistical_results:
-        for obs_key, stats in statistical_results[true_model].items():
+    if reference_model in statistical_results:
+        for obs_key, stats in statistical_results[reference_model].items():
             ref_chi2[obs_key] = stats["Reduced_Chi_squared"]
 
     # Collect per-model stats and interpretations
@@ -524,15 +532,19 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
         interp_dict[model] = []
         for obs_key, stats in obs_results.items():
             # Diagnostics vs reference
-            reference_chi2 = None if model == true_model else ref_chi2.get(obs_key)
+            reference_chi2 = None if model == reference_model else ref_chi2.get(obs_key)
             diagnostics = PP.provide_model_diagnostics(
                 reduced_chi_squared=stats["Reduced_Chi_squared"],
                 model_name=model,
                 reference_chi_squared=reference_chi2,
             )
-            aic_bic_lines = PP.interpret_delta_aic_bic(stats["dAIC"], stats["dBIC"]).splitlines()
-            aic_text = aic_bic_lines[0].strip() if len(aic_bic_lines) > 0 else "No AIC interpretation available."
-            bic_text = aic_bic_lines[1].strip() if len(aic_bic_lines) > 1 else "No BIC interpretation available."
+            IC_lines = PP.interpret_delta_IC(stats['dAIC'], stats['dBIC'], stats['dAICc'], stats['dDIC'], stats['dWAIC'], stats['sigma']).splitlines()
+            aic_text = IC_lines[0].strip() if len(IC_lines) > 0 else "No AIC interpretation available."
+            bic_text = IC_lines[1].strip() if len(IC_lines) > 1 else "No BIC interpretation available."
+            aicc_text = IC_lines[2].strip() if len(IC_lines) > 2 else "No AICc interpretation available"
+            dic_text = IC_lines[3].strip() if len(IC_lines) > 3 else "No DIC interpretation available"
+            waic_text = IC_lines[4].strip() if len(IC_lines) > 3 else "No WAIC interpretation available"
+            sigma_text = IC_lines[5].strip() if len(IC_lines) > 3 else "No Sigma interpretation available"
 
             # Resolve the raw obs list for this obs_key  (FIX: use CONFIG[model], not CONFIG[model_name])
             obs_list, obs_idx = None, None
@@ -555,7 +567,15 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 "AIC": stats["AIC"],
                 "BIC": stats["BIC"],
                 "dAIC": stats["dAIC"],
-                "dBIC": stats["dBIC"],
+                'dBIC':stats['dBIC'],
+                "AICc": stats["AICc"],
+                "dAICc": stats["dAICc"],
+                "DIC": stats["DIC"],
+                "dDIC": stats["dDIC"],
+                'WAIC': stats['WAIC'],
+                'dWAIC': stats['dWAIC'],
+                'dChi': stats['dChi'],
+                'sigma': stats['sigma'],
             }
 
             # IMPORTANT: Do NOT include S in the stats row — it will be printed as a stand-alone line
@@ -566,6 +586,10 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 "Reduced Chi2 Diagnostics": diagnostics.strip(),
                 "AIC Interpretation": aic_text,
                 "BIC Interpretation": bic_text,
+                "AICc Interpretation": aicc_text,
+                "DIC Interpretation": dic_text,
+                "WAIC Interpretation": waic_text,
+                'Significance Interpretation': sigma_text,
             })
 
         # Persist to disk
@@ -595,11 +619,18 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
             print(file=out)
 
             # 2) Detailed CMB parameter table (only if there ARE CMB observations)
-            cmb_row_indices = [i for i, name in enumerate(obs_names) if "CMB" in str(name)]
+            cmb_row_indices = [
+                i for i, name in enumerate(obs_names)
+                if "CMB" in str(name) and i < len(aligned_table)
+            ]
             if cmb_row_indices:
                 cmb_param_names: list[str] = []
                 for j, pname in enumerate(param_labels):
-                    if any(str(aligned_table[i][j]).strip() for i in cmb_row_indices):
+                    if any(
+                        j < len(aligned_table[i])
+                        and str(aligned_table[i][j]).strip()
+                        for i in cmb_row_indices
+                    ):
                         cmb_param_names.append(pname)
 
                 if cmb_param_names:
@@ -750,6 +781,8 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
           If True, the printed/top table shows ALL parameters (recommended).
           If False, the printed/top table mirrors whatever appears on the corner axes.
     """
+
+    
     # 1) union of parameters across all observation groups (first-seen order)
     full_param_order, _seen = [], set()
     for plist in CONFIG["parameters"]:
@@ -880,7 +913,10 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
                 f"Available={list(Samples.keys())}"
             )
 
-        sample = Samples[found]
+        sample_data = Samples[found]
+
+        #Extract raw array from getdist without damaging the dictionary
+        sample_array = sample_data["samples"] if isinstance(sample_data, dict) else sample_data
         names  = CONFIG["parameters"][i]
         labels = greek_Symbols(names) if use_latex else names
 
@@ -888,7 +924,7 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         # (walkers interleaved), so GetDist saw no autocorrelation, took every
         # sample as independent and chose too narrow a smoothing kernel.
         nw = int(CONFIG.get("nwalker", 0) or 0)
-        arr = np.asarray(sample)
+        arr = np.asarray(sample_array)
         if nw > 1 and arr.ndim == 2 and arr.shape[0] % nw == 0 and arr.shape[0] // nw > 1:
             chains = list(arr.reshape(-1, nw, arr.shape[1]).transpose(1, 0, 2))
         else:
@@ -984,6 +1020,10 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         if obs_samples is None:
             derived_rd_col.append("—")
             continue
+
+        #Extract array here too so numpy can slice it
+        if isinstance(obs_samples, dict) and "samples" in obs_samples:
+            obs_samples = obs_samples["samples"]
 
         names = CONFIG["parameters"][i]
 
@@ -1208,7 +1248,10 @@ def _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS):
     arr = None
     for cand in ("+".join(toks), "_".join(toks), obs_key, obs_key.replace("+", "_")):
         if cand in S:
-            arr = np.asarray(S[cand], dtype=float)
+            entry = S[cand]
+            if isinstance(entry, dict):          # {"samples": ..., "log_like": ...}
+                entry = entry.get("samples")
+            arr = None if entry is None else np.asarray(entry, dtype=float)
             break
     if arr is None or arr.ndim != 2 or arr.shape[1] != len(names) or arr.shape[0] == 0:
         return None
@@ -1261,7 +1304,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
 
             obs_list_raw = [_raw_token(t) for t in obs_list]
 
-            combined = All_best_fit_values[model_name][obs_key]
+            combined = {k: v for k, v in All_best_fit_values[model_name][obs_key].items() if k != "__D_bar__"}
             params_med, params_hi, params_lo = fetch_best_fit_values(combined)
 
             # (Optional) diagnostics
