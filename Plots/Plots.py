@@ -383,7 +383,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
     # ----- 2) Best-fit plots -------------------------------------------------
     section_banner("Creating best-fit plots for all models/observations...")
-    best_fit_plots(all_best_fit, CONFIG, data, PLOT_SETTINGS)
+    best_fit_plots(all_best_fit, CONFIG, data, PLOT_SETTINGS, All_Samples=All_Samples)
     print()
 
     # ----- 3) Tables banner + aligned LaTeX tables ---------------------------
@@ -880,7 +880,21 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         names  = CONFIG["parameters"][i]
         labels = greek_Symbols(names) if use_latex else names
 
-        ms = MCSamples(samples=sample, names=names, labels=labels)
+        # Give GetDist one chain per walker. The flat samples are step-major
+        # (walkers interleaved), so GetDist saw no autocorrelation, took every
+        # sample as independent and chose too narrow a smoothing kernel.
+        nw = int(CONFIG.get("nwalker", 0) or 0)
+        arr = np.asarray(sample)
+        if nw > 1 and arr.ndim == 2 and arr.shape[0] % nw == 0 and arr.shape[0] // nw > 1:
+            chains = list(arr.reshape(-1, nw, arr.shape[1]).transpose(1, 0, 2))
+        else:
+            chains = arr
+        # Prior edges, so densities are not smoothed past hard bounds
+        # (restrictions such as n < 0.5 are functions and are not passed).
+        plims = (CONFIG.get("prior_limits") or [{}] * (i + 1))[i] or {}
+        ranges = {p: tuple(plims[p]) for p in names if p in plims}
+
+        ms = MCSamples(samples=chains, names=names, labels=labels, ranges=ranges)
         ms.plotColor = palette[i % len(palette)]
         distributions.append(ms)
 
@@ -1168,8 +1182,67 @@ def _adjust_bestfit_margins(fig, ncols: int, PLOT_SETTINGS: dict) -> None:
     left = max(left_min, base_left - left_step * (max(1, ncols) - 1))
     fig.subplots_adjust(left=left, right=right, top=top, bottom=bottom)
     
-def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
-    """Create multi-panel best-fit plots per model and observation group."""
+def _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS):
+    """
+    Up to PLOT_SETTINGS["band_draws"] (default 200) random posterior draws for one
+    observation group, as parameter dicts. Returns None if the samples are not found.
+    """
+    if not All_Samples or model_name not in All_Samples:
+        return None
+    cfg = CONFIG[model_name]
+    S = All_Samples[model_name]
+
+    def _norm(k):
+        return str(k).replace("PantheonP_SH0ES", "PantheonPS").replace("Pantheon+SH0ES", "PantheonPS")
+
+    for i, toks in enumerate(cfg["observations"]):
+        if _norm("+".join(toks)) == _norm(obs_key):
+            break
+    else:
+        return None
+    names = cfg["parameters"][i]
+    arr = None
+    for cand in ("+".join(toks), "_".join(toks), obs_key, obs_key.replace("+", "_")):
+        if cand in S:
+            arr = np.asarray(S[cand], dtype=float)
+            break
+    if arr is None or arr.ndim != 2 or arr.shape[1] != len(names) or arr.shape[0] == 0:
+        return None
+    n = max(1, int(PLOT_SETTINGS.get("band_draws", 200)))
+    rng = np.random.default_rng(12345)
+    idx = rng.choice(arr.shape[0], size=min(n, arr.shape[0]), replace=False)
+    return [dict(zip(names, map(float, arr[j]))) for j in idx]
+
+
+def _posterior_band(draws, curve_fn):
+    """
+    Pointwise 16th and 84th percentiles of curve_fn(p) over posterior draws.
+    This is a 68% band for the plotted quantity, unlike evaluating the curve with
+    every parameter at its own 16th/84th percentile, which ignores correlations.
+    Returns None if fewer than half of the draws give a finite curve.
+    """
+    if not draws:
+        return None
+    ys = []
+    for p in draws:
+        try:
+            y = np.asarray(curve_fn(p), dtype=float)
+        except Exception:
+            continue
+        if y.size and np.all(np.isfinite(y)):
+            ys.append(y)
+    if len(ys) < max(10, len(draws) // 2):
+        return None
+    ys = np.vstack(ys)
+    return np.percentile(ys, 16, axis=0), np.percentile(ys, 84, axis=0)
+
+
+def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples=None):
+    """Create multi-panel best-fit plots per model and observation group.
+
+    Shaded bands are pointwise 68% intervals from posterior draws when
+    All_Samples is given (see _posterior_band); without samples no band is drawn.
+    """
     use_latex = bool(PLOT_SETTINGS.get("latex_enabled", False))
 
     for model_name, obs_dict in All_best_fit_values.items():
@@ -1197,6 +1270,9 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
 
             # Store band for the dedicated CMB plotter (if used elsewhere)
             PLOT_SETTINGS["cmb_params_band"] = (params_lo, params_hi)
+
+            # Posterior draws for the shaded 68% bands
+            band_draws = _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS)
 
             parts = partition_by_compatibility([t for t in obs_list_raw])
 
@@ -1434,12 +1510,25 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                             label=(f"{model_disp} (median) {label_txt}".strip()),
                         )
 
-                    # Optional 1σ band
-                    if params_lo is not None and params_hi is not None:
-                        y_low = MODEL_FUNCS["DM"](z_dense, params_lo, model_name) / rs_lo
-                        y_high = MODEL_FUNCS["DM"](z_dense, params_hi, model_name) / rs_hi
-                        ax.fill_between(z_dense, y_low, y_high, color="k", alpha=BAND_ALPHA,
-                                        linewidth=0, zorder=Z_BAND)
+                    # 68% band per plotted quantity, from posterior draws
+                    if band_draws:
+                        _codes = sorted(codes_present)
+
+                        def _bao_curves(p, _codes=_codes):
+                            rs_p = _rd_from_params(p) if (has_cal or (has_bao and has_unanch)) else fixed_rd
+                            dm_p = MODEL_FUNCS["DM"](z_dense, p, model_name)
+                            dh_p = C_KM_S / (float(p["H_0"]) * MODEL_FUNCS["E"](z_dense, p, model_name))
+                            dv_p = MODEL_FUNCS["DV"](z_dense, p, model_name)
+                            by_code = {8: dm_p / rs_p, 6: dh_p / rs_p, 5: dm_p / (1.0 + z_dense) / rs_p,
+                                       3: dv_p / rs_p, 7: rs_p / dv_p}
+                            return np.concatenate([by_code.get(c, dm_p / rs_p) for c in _codes])
+
+                        band = _posterior_band(band_draws, _bao_curves)
+                        if band is not None:
+                            nz = z_dense.size
+                            for k in range(len(_codes)):
+                                ax.fill_between(z_dense, band[0][k * nz:(k + 1) * nz], band[1][k * nz:(k + 1) * nz],
+                                                color="k", alpha=BAND_ALPHA, linewidth=0, zorder=Z_BAND)
 
                     y_label = r"BAO / DESI (dimensionless)"
 
@@ -1463,19 +1552,18 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                             label=f"{model_disp} (median)"
                         )
 
-                        if params_lo is not None and params_hi is not None:
-                            if backend == "alterbbn":
-                                y_low = float(SP.bbn_predict_alterbbn(params_lo, data[rep_type]))
-                                y_high = float(SP.bbn_predict_alterbbn(params_hi, data[rep_type]))
-                            elif backend == "alterbbn_grid":
-                                y_low = float(SP.bbn_predict_grid(params_lo, data[rep_type]))
-                                y_high = float(SP.bbn_predict_grid(params_hi, data[rep_type]))
-                            else:
-                                y_low = float(SP.bbn_predict_approx(params_lo))
-                                y_high = float(SP.bbn_predict_approx(params_hi))
+                        if band_draws:
+                            def _dh_pred(p, _b=backend, _d=data[rep_type]):
+                                if _b == "alterbbn":
+                                    return np.array([float(SP.bbn_predict_alterbbn(p, _d))])
+                                if _b == "alterbbn_grid":
+                                    return np.array([float(SP.bbn_predict_grid(p, _d))])
+                                return np.array([float(SP.bbn_predict_approx(p))])
 
-                            ax.fill_between(z_dense, y_low, y_high, color="k", alpha=BAND_ALPHA,
-                                            linewidth=0, zorder=Z_BAND)
+                            band = _posterior_band(band_draws, _dh_pred)
+                            if band is not None:
+                                ax.fill_between(z_dense, float(band[0][0]), float(band[1][0]), color="k",
+                                                alpha=BAND_ALPHA, linewidth=0, zorder=Z_BAND)
 
                     else:
                         if rep_type == "f_sigma_8":
@@ -1499,11 +1587,14 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                             z_dense, y_model, color=MODEL_COLOR, lw=2.0, zorder=Z_MODEL,
                             label=f"{model_disp} (median)"
                         )
-                        if params_lo is not None and params_hi is not None:
-                            y_low, _ = model_curve_for_type(rep_type, z_dense, params_lo, model_name, MODEL_FUNCS)
-                            y_high, _ = model_curve_for_type(rep_type, z_dense, params_hi, model_name, MODEL_FUNCS)
-                            ax.fill_between(z_dense, y_low, y_high, color="k", alpha=BAND_ALPHA,
-                                            linewidth=0, zorder=Z_BAND)
+                        if band_draws:
+                            band = _posterior_band(
+                                band_draws,
+                                lambda p, _t=rep_type: model_curve_for_type(_t, z_dense, p, model_name, MODEL_FUNCS)[0],
+                            )
+                            if band is not None:
+                                ax.fill_between(z_dense, band[0], band[1], color="k", alpha=BAND_ALPHA,
+                                                linewidth=0, zorder=Z_BAND)
 
                 ax.set_ylabel(y_label)
 
