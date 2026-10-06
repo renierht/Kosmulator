@@ -24,6 +24,7 @@ from Kosmulator_main.utils import (
     save_interpretations_to_file,
 )
 from Kosmulator_main.rd_helpers import compute_rd as compute_rd
+from Kosmulator_main.rd_helpers import rd_for_report
 from Plots.Plot_functions import (
     # console banners / rules
     phase_banner, section_banner, print_rule,
@@ -62,12 +63,18 @@ __all__ = [
 # Module-level constants
 # =============================================================================
 
+def _rd_like(p):
+    """r_d as the likelihood sees it: sampled r_d, else CLASS (EH98 only if CLASS fails).
+    Raises KeyError when r_d cannot be resolved, so callers fall back to the fixed r_d."""
+    return rd_for_report(p)[0]
+
+
 MODEL_FUNCS = {
     "E":       compute_E,
     "Dc":      compute_Dc,
     "DM":      compute_DM,
     "DV":      compute_DV,
-    "rd":      compute_rd,
+    "rd":      _rd_like,
     "f":       compute_f,
     "sigma8z": compute_sigma8z,
 }
@@ -472,13 +479,15 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                     except Exception:
                         rd = float(R_D_SINGLETON)
                 if rd is None:
-                    from Kosmulator_main.rd_helpers import compute_rd as _rd
                     p = {}
-                    for k in ("H_0", "Omega_m", "Omega_bh^2", "N_eff", "T_CMB"):
+                    for k in ("H_0", "Omega_m", "Omega_bh^2", "Omega_dh^2", "N_eff", "T_CMB"):
                         v = _medval(med, k)
                         if v is not None:
                             p[k] = v
-                    rd = _rd(p) if all(k in p for k in ("H_0","Omega_m","Omega_bh^2")) else None
+                    try:
+                        rd = rd_for_report(p)[0]   # same r_d as the likelihood (CLASS first)
+                    except KeyError:
+                        rd = None
 
             if (H0 is not None) and (rd is not None) and (H0 > 0) and (rd > 0):
                 if not explanatory_note_printed:
@@ -990,18 +999,25 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
             derived_rd_col.append("—")
             continue
 
-        # Subsample if huge (keeps plotting snappy)
+        # Same r_d as the likelihood (CLASS rs_drag, ~50 ms per call), so use a
+        # subsample: PLOT_SETTINGS["rd_table_draws"] posterior draws (default 1000).
+        # Random (seeded) draws rather than a stride: the flat chain interleaves
+        # walkers, so a fixed stride can visit only a few of them.
         N = H0.size
-        stride = max(1, N // 50000)
-        H0s  = H0[::stride]
-        obhs = obh[::stride]
-        Oms  = Om[::stride]
+        n_draws = max(1, int(PLOT_SETTINGS.get("rd_table_draws", 1000)))
+        sel = (np.sort(np.random.default_rng(12345).choice(N, size=n_draws, replace=False))
+               if N > n_draws else np.arange(N))
+        H0s  = H0[sel]
+        obhs = obh[sel]
+        Oms  = Om[sel]
 
-        rds = np.array(
-            [compute_rd({"H_0": float(h0), "Omega_m": float(om), "Omega_bh^2": float(ob)})
-             for h0, om, ob in zip(H0s, Oms, obhs)],
-            dtype=float
-        )
+        rd_src = [rd_for_report({"H_0": float(h0), "Omega_m": float(om), "Omega_bh^2": float(ob)})
+                  for h0, om, ob in zip(H0s, Oms, obhs)]
+        rds = np.array([r for r, _ in rd_src], dtype=float)
+        n_eh98 = sum(1 for _, s in rd_src if s != "CLASS")
+        if n_eh98:
+            print(f"[warning] Derived r_d for {obs_key}: CLASS unavailable for {n_eh98}/{len(rd_src)} "
+                  f"draws, EH98 used (~2% above CLASS).")
 
         p16, p50, p84 = np.percentile(rds, [16, 50, 84])
         lo, hi = p50 - p16, p84 - p50
@@ -1174,15 +1190,8 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
             # (Optional) diagnostics
             try:
                 if any(tag in obs_key for tag in ("BAO", "DESI", "DESI_DR1", "DESI_DR2")):
-                    rd_med = compute_rd(params_med)
-                    print(f"[diag] {model_name} {obs_key}: median r_d ≈ {rd_med:.2f} Mpc")
-            except Exception:
-                pass
-
-            try:
-                h0_freeRD = 69.0  # or pull from your DESI-singleton fit
-                est = h0_freeRD * (R_D_SINGLETON / rd_med)
-                print(f"[diag] rough H0~ {est:.2f} km/s/Mpc from r_d scaling")
+                    rd_med, rd_src = rd_for_report(params_med)
+                    print(f"[diag] {model_name} {obs_key}: r_d at median parameters = {rd_med:.2f} Mpc ({rd_src})")
             except Exception:
                 pass
 
@@ -1347,17 +1356,15 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                     rdpol = CONFIG.get(model_name, {}).get("rd_policy", {})
                     fixed_rd = float(rdpol.get("fixed_value", R_D_SINGLETON))
 
-                    def _can_compute_eh98(params: dict) -> bool:
-                        return all(k in params for k in ("H_0", "Omega_m", "Omega_bh^2"))
-
                     def _rd_from_params(params: dict | None) -> float:
+                        # Sampled r_d, else CLASS from the background (also for CMB
+                        # groups, which carry Omega_dh^2 instead of Omega_m), else fixed.
                         if params is None:
                             return fixed_rd
-                        if "r_d" in params:
-                            return float(params["r_d"])
-                        if _can_compute_eh98(params):
-                            return MODEL_FUNCS["rd"](params)
-                        return fixed_rd
+                        try:
+                            return float(MODEL_FUNCS["rd"](params))
+                        except KeyError:
+                            return fixed_rd
 
                     has_cal = any(x in {
                         "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",

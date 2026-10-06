@@ -340,6 +340,41 @@ def _compute_r_d_from_bbn_and_background(p: dict) -> float:
     return float(compute_rd(p))
 
 
+def rd_for_report(p: Mapping[str, float]):
+    """
+    r_d [Mpc] for tables, plots and diagnostics, resolved the same way as the
+    likelihood: a sampled r_d first, then CLASS rs_drag(), and EH98 only if
+    CLASS is unavailable or fails (EH98 runs ~2% above CLASS).
+
+    Returns (r_d, source) with source in {"sampled", "CLASS", "EH98"}.
+    Raises KeyError if r_d is not sampled and the background is incomplete
+    (needs H_0, Omega_bh^2 and Omega_m or Omega_dh^2 / Omega_ch^2), so callers
+    can fall back to a policy-fixed r_d.
+    """
+    if "r_d" in p:
+        return float(p["r_d"]), "sampled"
+
+    has_bg = ("H_0" in p and "Omega_bh^2" in p
+              and any(k in p for k in ("Omega_m", "Omega_dh^2", "Omega_ch^2")))
+    if not has_bg:
+        raise KeyError(
+            "r_d is not sampled and the background is incomplete "
+            "(need H_0, Omega_bh^2 and Omega_m or Omega_dh^2)."
+        )
+
+    rd = None
+    try:
+        rd = compute_rd_class(dict(p))
+    except Exception as e:
+        logger.warning(
+            "CLASS rs_drag() failed for a reported r_d (%s); using EH98, "
+            "which runs ~2%% above CLASS.", e
+        )
+    if rd is not None:
+        return float(rd), "CLASS"
+    return float(compute_rd(p)), "EH98"
+
+
 def _maybe_calibrate_rd(theta_map: dict, CONFIG: dict, obs_index: int) -> None:
     """
     If this observation set includes BBN and r_d is absent, compute it from

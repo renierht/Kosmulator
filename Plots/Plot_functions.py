@@ -41,6 +41,7 @@ from Kosmulator_main.constants import (
     OBS_PRETTY_MAP, TABLE_ANCHORS_OBS, TABLE_ANCHORS_PARM, C_KM_S,T_CMB_DEFAULT, N_EFF_DEFAULT, TAU_N_DEFAULT, DEFAULT_CMB_FILES
 )
 from Kosmulator_main.rd_helpers import compute_rd as compute_rd
+from Kosmulator_main.rd_helpers import rd_for_report
 #from Kosmulator_main.Kosmulator_MCMC import _inject_derived_background
 __all__ = [
     # console
@@ -1043,7 +1044,7 @@ def extract_observation_data(
                 if params_median is not None and "r_d" in params_median:
                     rs = float(params_median["r_d"])
                 elif params_median is not None:
-                    rs = float(compute_rd(params_median))
+                    rs = float(rd_for_report(params_median)[0])   # CLASS first, as in the likelihood
                 else:
                     rs = R_D_SINGLETON
             except Exception:
