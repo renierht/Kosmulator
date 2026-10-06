@@ -2511,6 +2511,27 @@ def Comoving_distance_vectorized(MODEL_func, redshifts, param_dict):
     return d_c * (C_KM_S / float(param["H_0"]))
 
 
+def sn_luminosity_distance(d_c, z, z_hel=None):
+    """
+    Luminosity distance for a supernova sample from its comoving distance.
+
+    D_L = (1 + z_fac) * D_c(z)
+
+    z      : redshift used inside the comoving-distance integral
+             (for DES-SN5YR this is the Hubble-diagram redshift, zHD).
+    z_hel  : optional heliocentric redshift. If given, it replaces z in the
+             (1 + z) prefactor, giving D_L = (1 + z_HEL) * D_c(z_HD), the
+             convention used by the DES-SN5YR/Pantheon+ likelihoods (e.g. the
+             Cobaya implementation). If None, z is used in both places, which
+             is the original single-redshift behaviour.
+
+    Datasets that do not carry a `z_hel` array (Union3, JLA, Pantheon,
+    Pantheon+) therefore give bit-for-bit the same result as before.
+    """
+    z_fac = z if z_hel is None else z_hel
+    return d_c * (1.0 + z_fac)
+
+
 def matter_density_z_array(zs, param_dict, MODEL_func):
     """
     Ω_m(z) = Ω_m0 (1+z)^3 / E(z)^2

@@ -152,7 +152,14 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         #name zcmb zhel dz mb dmb x1 dx1 color dcolor 3rdvar d3rdvar ...
 
     Behaviour:
-      - Uses the CMB-frame redshift column (zCMB/zcmb) as `redshift`.
+      - CSV files (DESY5): uses the Hubble-diagram redshift (zHD) as
+        `redshift`, falling back to zCMB/z if zHD is absent. Also returns the
+        heliocentric redshift (zHEL) as `z_hel` when that column exists. The
+        likelihood then uses D_L = (1 + z_HEL) * D_c(z_HD), as in the DES-SN5YR
+        (Cobaya) likelihood; see utils.sn_luminosity_distance.
+      - Whitespace files (Union3): uses the CMB-frame redshift column
+        (zcmb/z) as `redshift`; no `z_hel` is returned, so the single-redshift
+        behaviour is unchanged.
       - Uses MU/mb as `type_data` (distance-modulus–like quantity).
       - Uses MUERR_FINAL/dmb/etc. as `type_data_error` (σ_μ).
       - For Union3, parses lines manually to tolerate missing trailing columns.
@@ -182,16 +189,21 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         df.columns = cols_norm
         name_map = {c.lower(): c for c in df.columns}
 
-        # redshift
+        # redshift used inside the comoving-distance integral.
+        # zHD (Hubble-diagram redshift) comes first; candidates are matched
+        # against the lower-cased column names in name_map.
         z_name = None
-        for cand in ("zcmb", "z_cmb", "zhd", "z"):
+        for cand in ("zhd", "zcmb", "z_cmb", "z"):
             if cand in name_map:
                 z_name = name_map[cand]
                 break
         if z_name is None:
             raise ValueError(
-                f"Could not find a zCMB-like column in {file_path} (columns={df.columns.tolist()})"
+                f"Could not find a zHD/zCMB-like column in {file_path} (columns={df.columns.tolist()})"
             )
+
+        # optional heliocentric redshift, used only in the (1 + z) prefactor
+        hel_name = name_map.get("zhel")
 
         # distance modulus / magnitude
         mu_name = None
@@ -220,8 +232,15 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         else:
             sigma = np.ones_like(z, dtype=float)
 
-        # Clean rows
+        z_hel = None
+        if hel_name is not None:
+            z_hel = pd.to_numeric(df[hel_name], errors="coerce").to_numpy(dtype=float)
+
+        # Clean rows (z_hel, when present, is cleaned with the same mask so all
+        # arrays stay aligned with the covariance matrix)
         good = np.isfinite(z) & np.isfinite(mu) & np.isfinite(sigma) & (sigma > 0)
+        if z_hel is not None:
+            good &= np.isfinite(z_hel)
         z = z[good]
         mu = mu[good]
         sigma = sigma[good]
@@ -229,11 +248,14 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         if z.size == 0:
             raise ValueError(f"{file_path}: no valid rows after cleaning numeric columns.")
 
-        return {
+        out = {
             "redshift": z,
             "type_data": mu,
             "type_data_error": sigma,
         }
+        if z_hel is not None:
+            out["z_hel"] = z_hel[good]
+        return out
 
 
     # --------------------------------------------------

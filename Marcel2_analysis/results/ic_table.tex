@@ -1,0 +1,28 @@
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lcrrrrrrrr}
+\toprule
+Model & $k$ & $\chi^2_{\min}$ & $\Delta\chi^2$ & $p_D$ & DIC & $\Delta$DIC & $\Delta$AIC & $\Delta$BIC & $\sigma$ \\
+\midrule
+\multicolumn{10}{l}{\textit{CLASS included (reference: Unrestricted)}} \\
+Doom-Factor Stable (SiwCDM) & 5 & 1465.8 & 4.33 & 5.71 & 1477.3 & 5.88 & 4.33 & 4.33 & 2.1 \\
+Positive Energy (+iwCDM) & 5 & 1471.0 & 9.49 & 5.75 & 1482.5 & 11.14 & 9.49 & 9.49 & 3.1 \\
+Unrestricted (iwCDM) & 5 & 1461.5 & ref. & 4.93 & 1471.4 & ref. & ref. & ref. & ref. \\
+\midrule
+\multicolumn{10}{l}{\textit{Free $r_d$, Free (reference: $\Lambda$CDM)}} \\
+LCDM\_v & 4 & 1465.5 & ref. & 3.97 & 1473.5 & ref. & ref. & ref. & ref. \\
+NonLinear\_IDE\_2 & 6 & 1460.7 & -4.79 & 5.92 & 1472.6 & -0.89 & -0.79 & 10.10 & 1.7 \\
+\midrule
+\multicolumn{10}{l}{\textit{Free $r_d$, Positive (reference: $\Lambda$CDM)}} \\
+LCDM\_v & 4 & 1465.5 & ref. & 4.00 & 1473.5 & ref. & ref. & ref. & ref. \\
+NonLinear\_IDE\_2 & 6 & 1461.7 & -3.85 & 6.49 & 1474.7 & 1.13 & 0.14 & 11.04 & 1.5 \\
+\midrule
+\multicolumn{10}{l}{\textit{Free $r_d$, Positive stable (reference: $\Lambda$CDM)}} \\
+LCDM\_v & 4 & 1465.5 & ref. & 4.01 & 1473.6 & ref. & ref. & ref. & ref. \\
+NonLinear\_IDE\_2 & 6 & 1463.2 & -2.33 & 6.57 & 1476.4 & 2.81 & 1.67 & 12.57 & 0.7 \\
+\bottomrule
+\end{tabular}
+\caption{Information criteria and $\Delta\chi^2$ significance for the Marcel\_2 chains (DESI DR2 + Pantheon+\,\&\,SH0ES), assuming $N=1714$ data points. $\chi^2_{\min}=-2\ln\mathcal{L}_{\max}$, $p_D=\bar D-\hat D$, and $\sigma$ is the equivalent Gaussian significance of $\Delta\chi^2$ for $r=\Delta p_D$ (rounded) degrees of freedom. Differences are relative to the stated reference model.}
+\label{tab:marcel2_ic}
+\end{table}

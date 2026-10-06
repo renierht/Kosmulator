@@ -1953,7 +1953,10 @@ def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
         elif obs_type == "SNe":
             z    = obs_data["redshift"]
             d_c  = utils.Comoving_distance_vectorized(Model_func, z, param_dict)
-            model = 25.0 + 5.0 * np.log10(d_c * (1.0 + z))
+            # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5)
+            model = 25.0 + 5.0 * np.log10(
+                utils.sn_luminosity_distance(d_c, z, obs_data.get("z_hel"))
+            )
             ll_i  = pointwise_log_like_SNe(obs_data, model, param_dict)
 
         elif obs_type in ("CC", "OHD"):

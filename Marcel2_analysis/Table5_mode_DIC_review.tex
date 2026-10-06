@@ -1,0 +1,18 @@
+% Provisional values for co-author review; integrated production validation pending.
+% Requires \usepackage{booktabs}.
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrrrrrr}
+\toprule
+Regime & $k$ & $p_{D,\mathrm{mode}}$ & $\Delta\chi^2_{\min}$ & $\Delta\mathrm{AIC}$ & $\Delta\mathrm{AICc}$ & $\Delta\mathrm{DIC}_{\mathrm{mode}}$ & $\Delta\mathrm{BIC}$ \\
+\midrule
+$\Lambda$CDM & 3 & 3.006 & 0.000 & 0.000 & 0.000 & 0.000 & 0.000 \\
+$iw$CDM & 5 & 4.997 & -11.299 & -7.299 & -7.277 & -7.316 & 3.543 \\
+$+iw$CDM & 5 & 5.885 & -1.865 & 2.135 & 2.157 & 3.893 & 12.976 \\
+$Siw$CDM & 5 & 5.790 & -6.971 & -2.971 & -2.949 & -1.403 & 7.870 \\
+\bottomrule
+\end{tabular}
+\caption{Model-comparison statistics relative to flat $\Lambda$CDM for Pantheon+SH0ES and DESI DR2 BAO, with $N=1670$. The sound horizon $r_d$ is derived from the corresponding background model and is not an independent fitted parameter. We use $\mathrm{AIC}=\chi^2_{\min}+2k$, $\mathrm{AICc}=\mathrm{AIC}+2k(k+1)/(N-k-1)$, and $\mathrm{BIC}=\chi^2_{\min}+k\ln N$. For the mode-based DIC convention, $D(\theta)=-2\ln\mathcal{L}(\theta)$, $p_{D,\mathrm{mode}}=\bar D-D(\hat\theta)$, and $\mathrm{DIC}_{\mathrm{mode}}=2\bar D-D(\hat\theta)$, with $D(\hat\theta)=\chi^2_{\min}$. Flat priors identify the allowed posterior mode with the likelihood maximum. The deviance average uses all finite post-burn samples, with 1000 steps discarded and no thinning. The $+iw$CDM boundary value is numerically approximated as $\delta\to0^+$ (final $\delta=10^{-10}$); the $Siw$CDM value approaches $w\to-1^-$ (final $w=-1-10^{-8}$). Negative criterion differences favour the IDE regime.}
+\label{tab:model_comparison_mode_dic}
+\end{table}

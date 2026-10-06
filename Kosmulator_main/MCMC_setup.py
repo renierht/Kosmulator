@@ -310,17 +310,17 @@ def main(
         touches_cmb_bbn = _model_has_any_cmb_or_bbn(CONFIG, m)
 
         if engine_mode in ("single", "mixed"):
-            if force_emcee:
+            if m.startswith("wowaCDM"):
+                eng = "emcee"
+            elif force_emcee:
                 eng = "emcee"
             elif force_zeus and (zeus is not None):
                 eng = "zeus"
             else:
-                if m.startswith("wowaCDM"):
-                    eng = "emcee"
-                elif touches_cmb_bbn:
+                if touches_cmb_bbn:
                     eng = "emcee"
                 else:
-                    eng = "zeus" if (can_vec and zeus is not None) else "emcee"
+                    eng = "zeus" if (can_vec and zeus is not None) else "emcee" 
 
             K.engine_for_model[m] = eng
 

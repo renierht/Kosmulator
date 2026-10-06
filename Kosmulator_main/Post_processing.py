@@ -92,8 +92,6 @@ def significance(dchi, r):
     p - tail probability
     sigma - equivalent gaussian significance
     """
-    print(f'SIG DEBUG Chi2: {dchi}')
-    print(f'SIG DEBUG r: {r}')
     dchi = np.abs(dchi)
     r = np.round(r, decimals = 0)
     if np.isnan(dchi) or np.isnan(r):
@@ -101,7 +99,6 @@ def significance(dchi, r):
     else:
         p = chi2.sf(dchi, df = r)
         sigma = norm.isf(p/2)
-    print(f'SIG DEBUG Sigma: {sigma}')
     return np.round(sigma, decimals = 1)
 
 
@@ -124,24 +121,6 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
         if isinstance(obs_data_input, dict):
             obs_samples = obs_data_input["samples"]
             log_like = obs_data_input.get("loglike")
-
-            #Print for waic testing
-            # --- Diagnostic prints for WAIC ---
-            print(f"\n--- Diagnostic: {obs} ---")
-            print(
-                f"obs_samples type: {type(obs_samples)}, shape: {np.shape(obs_samples)}"
-            )
-            print(f"log_like type:    {type(log_like)}, shape: {np.shape(log_like)}")
-
-            if log_like is not None:
-                ll_test = np.asarray(log_like)
-                print(f"log_like ndim:    {ll_test.ndim}")
-                print(
-                    f"log_like sample values: {ll_test.ravel()[:3]}"
-                )  # show first 3 entries
-
-
-            
         else:
             obs_samples = obs_data_input
             log_like = None
@@ -529,12 +508,6 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 for param, values in params.items()
             }
             num_params = len(param_dict)
-            #DEBUG STATEMENT
-            print(f"[DEBUG] model={model_name} obs={obs_name}")
-            print(f"[DEBUG]   param_dict = {param_dict}")
-            print(f"[DEBUG]   num_params = {num_params}")
-            for p, v in params.items():
-                print(f"[DEBUG]   raw values for {p}: {v}")
             notes: list[str] = []
 
             # Recover the full observation list that corresponds to this best-fit key.
@@ -556,9 +529,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 raise ValueError(
                     f"Observation {obs_name} not found in CONFIG for model {model_name}."
                 )
-            
-            # DEBUG
-            print(f"[DEBUG] obs_entry = {obs_entry}")
+
             chi_squared_total = 0.0
             num_data_points_total = 0
 
@@ -607,7 +578,10 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                     elif obs_type == "SNe":
                         redshift = obs_data["redshift"]
                         comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, redshift, p_eval)
-                        model_val = 25 + 5 * np.log10(comoving_distances * (1 + redshift))
+                        # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5)
+                        model_val = 25 + 5 * np.log10(
+                            U.sn_luminosity_distance(comoving_distances, redshift, obs_data.get("z_hel"))
+                        )
                         chi_total += float(Calc_Generic_SNe_chi(obs_data=obs_data, model=model_val, param_dict=p_eval))
                         n_points += len(redshift)
 
@@ -726,10 +700,6 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             log_likelihood = -0.5 * chi_squared_total
 
 
-            # DEBUG STATEMENTS
-            print(f"[DEBUG]   chi_squared_total = {chi_squared_total}")
-            print(f"[DEBUG]   log_likelihood = {log_likelihood}")
-
             if obs_entry == ["PantheonP"]:
                 n_data = num_data_points_total
                 n_param = len(CONFIG[model_name]["parameters"][obs_index])  # should be 3
@@ -771,13 +741,6 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 D_hat = chi_squared_total
                 p_D = D_bar - D_hat       #Spiegelhalter: D_bar - D_hat   Gelman: D_var/2.0 (Effective parameters)
                 dic = D_hat + 2.0 * p_D  # Spiegelhalter: D_hat + 2.0*p_D
-
-                print(f"[DEBUG DIC] model={model_name} obs={obs_name}")
-                print(f"[DEBUG DIC]   D_bar (mean chi2 of chain) = {D_bar:.4f}")
-                print(f"[DEBUG DIC]   D_var (var chi2 of chain) = {D_var:.4f}")
-                print(f"[DEBUG DIC]   D_hat (min chi2 / MAP)     = {D_hat:.4f}")
-                print(f"[DEBUG DIC]   p_D (effective param count)= {p_D:.4f}")
-                print(f"[DEBUG DIC]   Calculated DIC             = {dic:.4f}")
 
             #WAIC Implememtation
             if obs_samples_for_waic is not None:
@@ -935,7 +898,13 @@ def interpret_delta_IC(
         sigma,
         ) -> str:
     """
-    Turn ΔAIC / ΔBIC into human-readable model-comparison statements.
+    Turn ΔAIC / ΔBIC / ΔAICc / ΔDIC / ΔWAIC and the significance into
+    human-readable model-comparison statements.
+
+    Sign convention: Δ = value(model) - value(reference). A positive Δ is
+    evidence AGAINST the model; a negative Δ is evidence IN FAVOUR of it. The
+    strength is set by |Δ|. Always returns six lines in the order
+    AIC, BIC, AICc, DIC, WAIC, Significance (Plots.py indexes them by position).
     """
     # Coerce to plain floats (works for Python floats, NumPy scalars, 0-d arrays)
     delta_aic = float(np.asarray(delta_aic).reshape(()))
@@ -947,110 +916,58 @@ def interpret_delta_IC(
 
     feedback = []
 
-    # --- AIC ---
-    if delta_aic < 2:
-        feedback.append(f"Delta AIC: Indistinguishable (ΔAIC = {delta_aic:.2f}).")
-    elif delta_aic < 4:
-        feedback.append(
-            f"Delta AIC: Slight evidence against the model (ΔAIC = {delta_aic:.2f})."
-        )
-    elif delta_aic < 7:
-        feedback.append(
-            f"Delta AIC: Positive evidence against the model (ΔAIC = {delta_aic:.2f})."
-        )
-    else:
-        feedback.append(
-            f"Delta AIC: Strong evidence against the model (ΔAIC = {delta_aic:.2f})."
-        )
+    def _ic_line(label, delta, edges, words):
+        """One statement for one criterion; strength from |delta|, direction from its sign."""
+        sym = f"Δ{label}"
+        if np.isnan(delta):
+            return f"Delta {label}: Not available ({sym} = nan)."
+        size = abs(delta)
+        if size < edges[0]:
+            return f"Delta {label}: Indistinguishable ({sym} = {delta:.2f})."
+        if size < edges[1]:
+            word = words[0]
+        elif size < edges[2]:
+            word = words[1]
+        else:
+            word = words[2]
+        direction = "against" if delta > 0 else "in favour of"
+        return f"Delta {label}: {word} evidence {direction} the model ({sym} = {delta:.2f})."
 
-    # --- BIC ---
-    if delta_bic < 2:
-        feedback.append(f"Delta BIC: Indistinguishable (ΔBIC = {delta_bic:.2f}).")
-    elif delta_bic < 6:
-        feedback.append(
-            f"Delta BIC: Weak evidence against the model (ΔBIC = {delta_bic:.2f})."
-        )
-    elif delta_bic < 10:
-        feedback.append(
-            f"Delta BIC: Moderate evidence against the model (ΔBIC = {delta_bic:.2f})."
-        )
-    else:
-        feedback.append(
-            f"Delta BIC: Strong evidence against the model (ΔBIC = {delta_bic:.2f})."
-        )
-
-    #--- AICc ---
-    if delta_aicc < 2:
-        feedback.append(
-            f"Delta AICc: Indistinguishable (ΔAICc = {delta_aicc:.2f})."
-        )
-    elif delta_aicc < 4:
-        feedback.append(
-            f"Delta AICc: Slight evidence against the model (ΔAICc = {delta_aicc:.2f})."
-        )
-    elif delta_aicc < 7:
-        feedback.append(
-            f"Delta AICc: Positive evidence against the model (ΔAICc = {delta_aicc:.2f})."
-        )
-    else:
-        feedback.append(
-            f"Delta AICc: Strong evidence against the model (ΔAICc = {delta_aicc:.2f})."
-        )
-
-    #--- DIC ---
-    if delta_dic < 2:
-        feedback.append(
-            f"Delta DIC: Indistinguishable (ΔDIC = {delta_dic:.2f})."
-        )
-    elif delta_dic < 4:
-        feedback.append(
-            f"Delta DIC: Slight evidence against the model (ΔDIC = {delta_dic:.2f})."
-        )
-    elif delta_dic < 7:
-        feedback.append(
-            f"Delta DIC Positive evidence against the model (ΔDIC = {delta_dic:.2f})."
-        )
-    else:
-        feedback.append(
-            f"Delta DIC: Strong evidence against the model (ΔDIC = {delta_dic:.2f})."
-        )
-
-
-    #--- WAIC  ---
-    if delta_waic < 2:
-        feedback.append(
-            f"Delta WAIC: Indistinguishable (ΔWAIC = {delta_waic:.2f})."
-        )
-    elif delta_waic < 4:
-        feedback.append(
-            f"Delta WAIC: Slight evidence against the model (ΔWAIC = {delta_waic:.2f})."
-        )
-    elif delta_waic < 7:
-        feedback.append(
-            f"Delta WAIC: Positive evidence against the model (ΔWAIC = {delta_waic:.2f})."
-        )
-    else:
-        feedback.append(
-            f"Delta WAIC: Strong evidence against the model (ΔWAIC = {delta_waic:.2f})."
-        )
+    # Bin edges and labels are unchanged from the original thresholds.
+    feedback.append(_ic_line("AIC",  delta_aic,  (2, 4, 7),  ("Slight", "Positive", "Strong")))
+    feedback.append(_ic_line("BIC",  delta_bic,  (2, 6, 10), ("Weak", "Moderate", "Strong")))
+    feedback.append(_ic_line("AICc", delta_aicc, (2, 4, 7),  ("Slight", "Positive", "Strong")))
+    feedback.append(_ic_line("DIC",  delta_dic,  (2, 4, 7),  ("Slight", "Positive", "Strong")))
+    feedback.append(_ic_line("WAIC", delta_waic, (2, 4, 7),  ("Slight", "Positive", "Strong")))
 
     #--- Significance ---
-    if sigma < 2:
+    if sigma <= 1:
         feedback.append(
-            f"Significance: Indistinguishable (Sigma = {sigma:.2f})."
+            f"Significance: Inconclusive (Sigma = {sigma:.2f})."
         )
-    elif sigma < 4:
+    elif sigma > 1 and sigma <= 2:
         feedback.append(
-            f"Significance: Slight evidence against the model (Sigma = {sigma:.2f})."
+            f"Significance: Slight consideration for the model (Sigma = {sigma:.2f})."
         )
-    elif sigma < 7:
+    elif sigma > 2 and sigma <= 3:
         feedback.append(
-            f"Significance: Positive evidence against the model (Sigma = {sigma:.2f})."
+            f"Significance: Considerable consideration for the model (Sigma = {sigma:.2f})."
+        )
+    elif sigma > 3 and sigma <= 4:
+        feedback.append(
+            f"Significance: Strong consideration for the model (Sigma = {sigma:.2f})."
+        )
+    elif sigma > 4 and sigma <= 5:
+        feedback.append(
+            f"Significance: Very strong consideration for the model (Sigma = {sigma:.2f})."
+        )
+    elif sigma > 5:
+        feedback.append(
+            f"Significance: Overwhelming consideration for the model (Sigma = {sigma:.2f})."
         )
     else:
-        feedback.append(
-            f"Significance: Strong evidence against the model (Sigma = {sigma:.2f})."
-        )
+        feedback.append(f"Significance: Not available (Sigma = {sigma}).")
+
 
 
     return "\n".join(feedback)

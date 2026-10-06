@@ -170,7 +170,9 @@ def model_likelihood(
     # Predictions per type
     if obs_type == "SNe":
         d_c = utils.Comoving_distance_vectorized(MODEL_func, z, param_dict)
-        y_dl = d_c * (1.0 + z)
+        # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5); otherwise
+        # identical to the original d_c * (1 + z).
+        y_dl = utils.sn_luminosity_distance(d_c, z, obs_data.get("z_hel"))
         if (not np.isfinite(y_dl).all()) or (np.min(y_dl) <= 0):
             return -np.inf
         model = 25.0 + 5.0 * np.log10(y_dl)
@@ -449,9 +451,6 @@ def optimise_initial_guess(
     if not sol.success:
         logger.warning("Nelder-Mead pre-fit did not achieve full convergence: %s", sol.message)
 
-    print(f"[OPT DEBUG] reference_vals = {reference_vals}")
-    print(f"[OPT DEBUG] result = {ic}")
-
     # Nelder-Mead is derivative-free and does not produce an inverse Hessian
     return ic, None
 
@@ -704,7 +703,6 @@ def run_mcmc(
           - 'mixed'   : same, but cross-engine chain reuse is allowed.
           - 'fastest' : per-observation choice (Zeus for simple LSS; EMCEE for CMB/BBN).
         """
-        print(f'ENGINE DEBUG: model name {model_name}')
         mode = getattr(K, "engine_mode", "mixed")
 
         # Hard CLI overrides always win
@@ -833,7 +831,6 @@ def run_mcmc(
     # ── Zeus branch ────────────────────────────────────────────────────────────
     engine   = _choose_engine(vectorised, model_name, has_cmb, has_bbn)
     use_zeus = (engine == "zeus" and zeus is not None)
-    #print(f"[DEBUG] Engine for { _resolved_label }: {engine} (mode={getattr(K, 'engine_mode', 'mixed')}, has_cmb={has_cmb}, has_bbn={has_bbn}, can_vec={vectorised})")
     
     if use_zeus:
         zeus_chain = chain_path.replace(".h5", "_zeus.h5")

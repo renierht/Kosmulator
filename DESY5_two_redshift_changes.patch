@@ -1,0 +1,148 @@
+--- a/Kosmulator_main/Config.py
++++ b/Kosmulator_main/Config.py
+@@ -152,7 +152,14 @@
+         #name zcmb zhel dz mb dmb x1 dx1 color dcolor 3rdvar d3rdvar ...
+ 
+     Behaviour:
+-      - Uses the CMB-frame redshift column (zCMB/zcmb) as `redshift`.
++      - CSV files (DESY5): uses the Hubble-diagram redshift (zHD) as
++        `redshift`, falling back to zCMB/z if zHD is absent. Also returns the
++        heliocentric redshift (zHEL) as `z_hel` when that column exists. The
++        likelihood then uses D_L = (1 + z_HEL) * D_c(z_HD), as in the DES-SN5YR
++        (Cobaya) likelihood; see utils.sn_luminosity_distance.
++      - Whitespace files (Union3): uses the CMB-frame redshift column
++        (zcmb/z) as `redshift`; no `z_hel` is returned, so the single-redshift
++        behaviour is unchanged.
+       - Uses MU/mb as `type_data` (distance-modulus–like quantity).
+       - Uses MUERR_FINAL/dmb/etc. as `type_data_error` (σ_μ).
+       - For Union3, parses lines manually to tolerate missing trailing columns.
+@@ -182,17 +189,22 @@
+         df.columns = cols_norm
+         name_map = {c.lower(): c for c in df.columns}
+ 
+-        # redshift
++        # redshift used inside the comoving-distance integral.
++        # zHD (Hubble-diagram redshift) comes first; candidates are matched
++        # against the lower-cased column names in name_map.
+         z_name = None
+-        for cand in ("zhel","zhd", "zcmb", "z_cmb", "z"):
++        for cand in ("zhd", "zcmb", "z_cmb", "z"):
+             if cand in name_map:
+                 z_name = name_map[cand]
+                 break
+         if z_name is None:
+             raise ValueError(
+-                f"Could not find a zCMB-like column in {file_path} (columns={df.columns.tolist()})"
++                f"Could not find a zHD/zCMB-like column in {file_path} (columns={df.columns.tolist()})"
+             )
+ 
++        # optional heliocentric redshift, used only in the (1 + z) prefactor
++        hel_name = name_map.get("zhel")
++
+         # distance modulus / magnitude
+         mu_name = None
+         for cand in ("mu", "mb"):
+@@ -220,8 +232,15 @@
+         else:
+             sigma = np.ones_like(z, dtype=float)
+ 
+-        # Clean rows
++        z_hel = None
++        if hel_name is not None:
++            z_hel = pd.to_numeric(df[hel_name], errors="coerce").to_numpy(dtype=float)
++
++        # Clean rows (z_hel, when present, is cleaned with the same mask so all
++        # arrays stay aligned with the covariance matrix)
+         good = np.isfinite(z) & np.isfinite(mu) & np.isfinite(sigma) & (sigma > 0)
++        if z_hel is not None:
++            good &= np.isfinite(z_hel)
+         z = z[good]
+         mu = mu[good]
+         sigma = sigma[good]
+@@ -229,11 +248,14 @@
+         if z.size == 0:
+             raise ValueError(f"{file_path}: no valid rows after cleaning numeric columns.")
+ 
+-        return {
++        out = {
+             "redshift": z,
+             "type_data": mu,
+             "type_data_error": sigma,
+         }
++        if z_hel is not None:
++            out["z_hel"] = z_hel[good]
++        return out
+ 
+ 
+     # --------------------------------------------------
+--- a/Kosmulator_main/utils.py
++++ b/Kosmulator_main/utils.py
+@@ -2511,6 +2511,27 @@
+     return d_c * (C_KM_S / float(param["H_0"]))
+ 
+ 
++def sn_luminosity_distance(d_c, z, z_hel=None):
++    """
++    Luminosity distance for a supernova sample from its comoving distance.
++
++    D_L = (1 + z_fac) * D_c(z)
++
++    z      : redshift used inside the comoving-distance integral
++             (for DES-SN5YR this is the Hubble-diagram redshift, zHD).
++    z_hel  : optional heliocentric redshift. If given, it replaces z in the
++             (1 + z) prefactor, giving D_L = (1 + z_HEL) * D_c(z_HD), the
++             convention used by the DES-SN5YR/Pantheon+ likelihoods (e.g. the
++             Cobaya implementation). If None, z is used in both places, which
++             is the original single-redshift behaviour.
++
++    Datasets that do not carry a `z_hel` array (Union3, JLA, Pantheon,
++    Pantheon+) therefore give bit-for-bit the same result as before.
++    """
++    z_fac = z if z_hel is None else z_hel
++    return d_c * (1.0 + z_fac)
++
++
+ def matter_density_z_array(zs, param_dict, MODEL_func):
+     """
+     Ω_m(z) = Ω_m0 (1+z)^3 / E(z)^2
+--- a/Kosmulator_main/Kosmulator_MCMC.py
++++ b/Kosmulator_main/Kosmulator_MCMC.py
+@@ -170,7 +170,9 @@
+     # Predictions per type
+     if obs_type == "SNe":
+         d_c = utils.Comoving_distance_vectorized(MODEL_func, z, param_dict)
+-        y_dl = d_c * (1.0 + z)
++        # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5); otherwise
++        # identical to the original d_c * (1 + z).
++        y_dl = utils.sn_luminosity_distance(d_c, z, obs_data.get("z_hel"))
+         if (not np.isfinite(y_dl).all()) or (np.min(y_dl) <= 0):
+             return -np.inf
+         model = 25.0 + 5.0 * np.log10(y_dl)
+--- a/Kosmulator_main/Post_processing.py
++++ b/Kosmulator_main/Post_processing.py
+@@ -578,7 +578,10 @@
+                     elif obs_type == "SNe":
+                         redshift = obs_data["redshift"]
+                         comoving_distances = UDM.Comoving_distance_vectorized(MODEL_func, redshift, p_eval)
+-                        model_val = 25 + 5 * np.log10(comoving_distances * (1 + redshift))
++                        # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5)
++                        model_val = 25 + 5 * np.log10(
++                            U.sn_luminosity_distance(comoving_distances, redshift, obs_data.get("z_hel"))
++                        )
+                         chi_total += float(Calc_Generic_SNe_chi(obs_data=obs_data, model=model_val, param_dict=p_eval))
+                         n_points += len(redshift)
+ 
+--- a/Kosmulator_main/Statistical_packages.py
++++ b/Kosmulator_main/Statistical_packages.py
+@@ -1953,7 +1953,10 @@
+         elif obs_type == "SNe":
+             z    = obs_data["redshift"]
+             d_c  = utils.Comoving_distance_vectorized(Model_func, z, param_dict)
+-            model = 25.0 + 5.0 * np.log10(d_c * (1.0 + z))
++            # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5)
++            model = 25.0 + 5.0 * np.log10(
++                utils.sn_luminosity_distance(d_c, z, obs_data.get("z_hel"))
++            )
+             ll_i  = pointwise_log_like_SNe(obs_data, model, param_dict)
+ 
+         elif obs_type in ("CC", "OHD"):

@@ -143,54 +143,6 @@ def wowaCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
         out = np.sqrt(E2)
     return _scalar_or_array(out)
 
-def wowaCDM_MODEL_vectorised_v2(z: Number, p: Dict[str, float]) -> Number:
-    r"""
-    Flat w0wa (CPL parametrization) — improved vectorization.
- 
-    E^2(z) = Ω_m (1+z)^3 + (1 - Ω_m) (1+z)^{3(1+w0+wa)} exp(-3 wa z / (1+z))
- 
-    Parameters in `p`:
-      • Omega_m
-      • w0
-      • wa
- 
-    Improvements over v1:
-    - Log-space calculation near w0+wa ≈ -1 for numerical stability
-    - Element-wise NaN handling (doesn't NaN entire array if one redshift fails)
-    - Avoids catastrophic cancellation in fractional powers
-    """
-    z = _asarray(z)
-    Om = float(p["Omega_m"])
-    w0 = float(p["w0"])
-    wa = float(p["wa"])
- 
-    # --- Hard constraint from DESI DR2 paper ---
-    # EoS must be < -1 for accelerating dark energy
-    if (w0 + wa) >= 0.0:
-        return np.full_like(z, np.nan)
-    # ------------------------------------------
-    zp1 = 1.0 + z
-    a = 1.0 / zp1
-    # Two methods: direct and log-space
-    # Direct: (1+z)^(3*w_sum) * exp(-3*wa*(1-a))
-    # Log:    exp(3*w_sum*log(1+z) - 3*wa*(1-a))
-    # Use log-space for better stability
-    # Avoid taking fractional power of small numbers
-    log_zp1 = np.log(zp1)
-    log_rho_de = 3.0 * (1.0 + w0 + wa) * log_zp1 - 3.0 * wa * (1.0 - a)
-    # Clip to prevent exp overflow
-    log_rho_de = np.clip(log_rho_de, -700, 100)
-    rho_de_ratio = np.exp(log_rho_de)
-    # Hubble parameter squared
-    E2 = Om * (zp1 ** 3) + (1.0 - Om) * rho_de_ratio
-    
-    # Allows sampler to explore near boundaries
-    E2 = np.where(np.isfinite(E2) & (E2 > 0), E2, np.nan)
-    
-    # Return NaN only for genuinely bad redshifts, not entire array
-    out = np.where(np.isfinite(E2), np.sqrt(E2), np.nan)
-    
-    return _scalar_or_array(out)
 
 
 """
@@ -549,8 +501,6 @@ def f1CDM_v_CMB(p: dict, mode: str = "hil"):
         
         return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
     except Exception as e:
-        # If it still fails, we want to know why in the terminal
-        # print(f"DEBUG: CLASS failed with params {class_params}. Error: {e}")
         return None
 
 
@@ -648,7 +598,7 @@ def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
     except Exception as e:
         logger.exception("Unexpected error in wowaCDM_v_CMB: %s | cosmo_params=%s", e, cosmo_params)
         return None
-wowaCDM_v2_CMB = wowaCDM_v_CMB
+
 # ============================================================================
 #  Model registry / discovery
 #  ---------------------------------------------------------------------------
@@ -672,7 +622,6 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
     "f1CDM_v":  (f1CDM_MODEL_vectorised,     ["Omega_m", "n"]),
     "f1CDM_nv": (f1CDM_MODEL_non_vectorised, ["Omega_m", "n"]),
     "wowaCDM_v": (wowaCDM_MODEL_vectorised, ["Omega_m","w0","wa"]),
-    "wowaCDM_v2": (wowaCDM_MODEL_vectorised_v2, ["Omega_m","w0","wa"]),
     "NonLinear_IDE_2": (NonLinear_IDE_2_vectorised, ["Omega_m", "w", "delta"]),
 
     # CMB-specific models for CLASS Cls (used by CMB likelihoods)
@@ -688,10 +637,6 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
         wowaCDM_v_CMB,
         ["Omega_m", "Omega_b","H_0", "n_s", "tau_reio", "ln10^10_As", "w0", "wa"],
     ),
-    "wowaCDM_v2_CMB":(
-        wowaCDM_v_CMB,
-        ["Omega_m", "Omega_b","H_0", "n_s", "tau_reio", "ln10^10_As", "w0", "wa"],
-    )
     # Example for a new MG model:
     # "MyMG_v": (MyMG_MODEL_vectorised, ["Omega_m", "my_param"]),
 }
@@ -775,7 +720,6 @@ def restrict_wowa_sum(p: Dict[str, float]) -> bool:
 
 coupled_restrictions_map: Dict[str, List[Callable[[Dict[str, float]], bool]]] = {
     "wowaCDM_v": [restrict_wowa_sum],
-    "wowaCDM_v2": [restrict_wowa_sum],
 }
 
 
@@ -786,7 +730,6 @@ restrictions_map: Dict[str, Dict[str, Callable[[float], bool]]] = {
     "LCDM_nv": {"Omega_m": restrict_LCDM_Omega_m},
     "f1CDM_v": {"n": restrict_f1CDM_v},
     "wowaCDM_v": {"Omega_m": restrict_LCDM_Omega_m},
-    "wowaCDM_v2": {"Omega_m": restrict_LCDM_Omega_m},
     # Example for a new model:
     # "MyMG_v": {"my_param": restrict_MyMG_param},
 }
