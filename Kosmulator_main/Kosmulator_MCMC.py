@@ -1034,6 +1034,32 @@ def _run_mcmc_impl(
             with h5py.File(zeus_chain, "r") as f:
                 all_samples = f["samples"][:]
 
+        # Convergence report. zeus stops early only when |dtau|/tau stays below
+        # the target; warn when the run ended without that, or when the chain
+        # is short compared with tau (N/tau < 50 after burn-in).
+        cb = callbacks[0] if callbacks else None
+        stopped = bool(getattr(cb, "stopped_early", False))
+        tau_last = getattr(cb, "last_tau", None)
+        n_post = max(0, all_samples.shape[0] - burn)
+        ratio = (n_post / tau_last) if (tau_last is not None and tau_last > 0) else float("nan")
+        converged = stopped and (not np.isfinite(ratio) or ratio >= 50.0)
+        if not converged:
+            log.warning(
+                "[%s | %s] zeus %s: tau = %s, N/tau = %.1f after burn-in "
+                "(rule: |dtau|/tau < %.3g, and N/tau >= 50). Treat these results "
+                "as preliminary; increase nsteps.",
+                model_name, _resolved_key,
+                "stopped on |dtau|/tau but the chain is short" if stopped
+                else "reached nsteps without meeting the convergence rule",
+                "n/a" if tau_last is None else f"{tau_last:.1f}", ratio,
+                float(convergence),
+            )
+        try:
+            with h5py.File(zeus_chain, "a") as f:
+                f.attrs["converged"] = bool(converged)
+        except Exception:
+            pass
+
         return all_samples[burn:, :, :].reshape(-1, ndim)
 
     # ── emcee branch ────────────────────────────────────────────────────────────
@@ -1214,8 +1240,10 @@ def _run_mcmc_impl(
 
         print(f"Emcee sampling took {utils.format_elapsed_time(time.time() - start)}\n")
         if saveChains:
+            # Flag the chain only if the autocorrelation rule was actually met
+            # (previously every finished run was flagged converged).
             with h5py.File(chain_path, "a") as h5f:
-                h5f.attrs["converged"] = True
+                h5f.attrs["converged"] = bool(getattr(sampler, "kosm_converged", False))
 
         return flat_samples
 

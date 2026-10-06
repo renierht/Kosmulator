@@ -1195,6 +1195,7 @@ def emcee_autocorr_stopping(
     os.makedirs(folder, exist_ok=True)
     plot_path = os.path.join(folder, f"{obs_label}.png")
     tau_target = convergence
+    sampler.kosm_converged = False   # read by the caller to flag the saved chain
 
     # Drive step-by-step to control the check cadence
     for sample in sampler.sample(pos, iterations=nsteps, progress=True):
@@ -1284,6 +1285,7 @@ def emcee_autocorr_stopping(
                 stable = False
 
             if converged and stable:
+                sampler.kosm_converged = True
                 MP.autocorrPlot(
                     autocorr,
                     index,
@@ -1321,6 +1323,23 @@ def emcee_autocorr_stopping(
             nsteps=nsteps,
             convergence=convergence,
         )
+        # Not converged: say so, with the numbers behind the rule.
+        try:
+            tau_end = np.asarray(sampler.get_autocorr_time(tol=0, quiet=True), dtype=float)
+            n_eff_iter = max(0, resume_offset + sampler.iteration - global_burn)
+            logging.getLogger(__name__).warning(
+                "[%s | %s] emcee reached nsteps=%d without meeting the convergence rule "
+                "(N > %d tau and |dtau|/tau < %.3g): max tau = %.1f, N/tau = %.1f after burn-in. "
+                "Treat these results as preliminary; increase nsteps.",
+                model_name, generate_label(obs), resume_offset + sampler.iteration,
+                check_every, tau_target, float(np.max(tau_end)),
+                n_eff_iter / max(float(np.max(tau_end)), 1e-12),
+            )
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "[%s | %s] emcee reached nsteps without meeting the convergence rule "
+                "(tau could not be estimated).", model_name, generate_label(obs),
+            )
 
     backend = sampler.backend
     return backend.get_chain(discard=global_burn, flat=True)
@@ -1374,6 +1393,9 @@ def make_zeus_callbacks(
             self._fracs = deque(maxlen=8)   # recent fractional |Δτ|/τ
             self._taus = deque(maxlen=8)    # optional τ history (debug)
             self._switched = False
+            self.stopped_early = False      # True if the convergence rule ended the run
+            self.last_tau = None
+            self.last_frac = None
 
         def __call__(self, iteration, chain, log_prob):
             # Update τ̂ estimates every ncheck via the parent
@@ -1416,12 +1438,14 @@ def make_zeus_callbacks(
 
             # Current τ̂ (scalar summary from zeus’ estimates)
             tau = float(_np.asarray(ests, dtype=float)[-1])
+            self.last_tau = tau
             stopped = False
 
             # Compute fractional change and record
             if self._prev_tau is not None:
                 delta = abs(tau - self._prev_tau)
                 frac = delta / max(tau, 1e-12)
+                self.last_frac = frac
                 self._fracs.append(frac)
                 self._taus.append(tau)
 
@@ -1452,6 +1476,7 @@ def make_zeus_callbacks(
                                 f"(for {consecutive_required} consecutive checks)"
                             )
                         stopped = True
+                        self.stopped_early = True
 
             self._prev_tau = tau
             return stopped
