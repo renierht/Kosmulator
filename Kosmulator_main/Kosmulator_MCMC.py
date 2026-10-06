@@ -413,22 +413,45 @@ def optimise_initial_guess(
     maxiter: int,
     maxfun: int,
     disp: bool,
+    polish: bool = True,
 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
     """
     L-BFGS-B to find a decent initial center; returns (ic, Hinv_diag or None).
+
+    L-BFGS-B uses finite-difference gradients. When the likelihood calls CLASS
+    (quantised r_d, numerical noise) or returns -inf near a restriction, those
+    gradients are meaningless and it can stop far from the optimum, sometimes
+    still reporting success. With polish=True a derivative-free Powell search
+    starts from the L-BFGS-B point (budget KOSM_OPT_POLISH_MAXFEV, default
+    max(200, 60*ndim) evaluations) and the better of the two points is kept.
     """
     NO_OPT = os.environ.get("KOSM_NO_OPT", "0") == "1"
     if NO_OPT:
         return np.asarray(true_vals, float), None
 
-    sol = optimize.minimize(
-        nlp_fn,
-        true_vals,
-        bounds=bounds,
-        method="L-BFGS-B",
-        options={"maxiter": maxiter, "maxfun": maxfun, "disp": False},
-    )
+    with np.errstate(invalid="ignore"):
+        sol = optimize.minimize(
+            nlp_fn,
+            true_vals,
+            bounds=bounds,
+            method="L-BFGS-B",
+            options={"maxiter": maxiter, "maxfun": maxfun, "disp": False},
+        )
     ic = np.asarray(sol.x, float)
+    best_f = float(sol.fun) if np.isfinite(sol.fun) else np.inf
+
+    if polish and os.environ.get("KOSM_OPT_POLISH", "1") != "0":
+        maxfev = int(os.environ.get("KOSM_OPT_POLISH_MAXFEV", str(max(200, 60 * len(ic)))))
+        try:
+            sol2 = optimize.minimize(
+                nlp_fn, ic, bounds=bounds, method="Powell",
+                options={"maxfev": maxfev, "xtol": 1e-4, "ftol": 1e-6, "disp": False},
+            )
+            if np.isfinite(sol2.fun) and float(sol2.fun) < best_f:
+                ic = np.clip(np.asarray(sol2.x, float),
+                             [b[0] for b in bounds], [b[1] for b in bounds])
+        except Exception:
+            pass
     Hinv = None
     try:
         Hinv_like = sol.hess_inv
@@ -798,6 +821,7 @@ def _run_mcmc_impl(
             maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "30")),
             maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", "60")),
             disp=False,
+            polish=not has_cmb,   # CMB likelihoods are too slow for an extra search
         )
         print(f"SciPy optimized IC: {ic}\n")
 
