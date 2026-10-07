@@ -46,6 +46,60 @@ if not log.handlers:
 # Prior / Likelihood glue (vectorised where possible)
 # ───────────────────────────────────────────────────────────────────────────────
 
+def _theta_params(theta: np.ndarray, CONFIG: dict, obs_index: int) -> dict:
+    """Parameter dict for one walker: sampled values, derived background values and,
+    for BBN groups without a sampled r_d, the calibrated r_d."""
+    params = CONFIG["parameters"][obs_index]
+    param_dict = {p: theta[i] for i, p in enumerate(params)}
+    # Derive background vars if using CMB params / 100theta_s
+    param_dict = utils.ensure_background_params(param_dict)
+    # If BBN is present in this observation set and r_d wasn't sampled,
+    # compute r_d from (Omega_bh^2, Omega_m, H_0[, N_eff]).
+    RD._maybe_calibrate_rd(param_dict, CONFIG, obs_index)
+    return param_dict
+
+
+def _sn_batched(obs_data: dict, obs_type: str) -> bool:
+    """SN sets whose chi^2 is evaluated for all walkers at once (all but the official JLA,
+    whose covariance depends on alpha and beta)."""
+    t = obs_type[0] if isinstance(obs_type, list) else obs_type
+    return t == "SNe" and not obs_data.get("jla_full")
+
+
+def _sn_residual(param_dict: dict, obs_data: dict, MODEL_func: Callable, obs: str):
+    """SN residual vector for one walker (None if the distances are unphysical);
+    its chi^2 is SP.sn_chi2_rows(obs_data, obs, residuals)."""
+    z = obs_data["zHD"] if obs in ("PantheonP", "PantheonPS") else obs_data["redshift"]
+    d_c = utils.Comoving_distance_vectorized(MODEL_func, z, param_dict)
+    # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5); otherwise
+    # identical to the original d_c * (1 + z).
+    y_dl = utils.sn_luminosity_distance(d_c, z, obs_data.get("z_hel"))
+    if (not np.isfinite(y_dl).all()) or (np.min(y_dl) <= 0):
+        return None
+    model = 25.0 + 5.0 * np.log10(y_dl)
+    if obs in ("PantheonP", "PantheonPS"):
+        return SP.pantheon_residual(obs_data["m_b_corr"], obs_data["IS_CALIBRATOR"], obs_data["CEPH_DIST"],
+                                    model, param_dict, bool(obs_data.get("marginalise_offset", False)))
+    return SP.generic_sn_residual(obs_data, model, param_dict)
+
+
+def _sn_loglike_batch(theta_batch: np.ndarray, obs_data: dict, CONFIG: dict, MODEL_func: Callable,
+                      obs: str, obs_index: int) -> np.ndarray:
+    """log-likelihood of one SN set for every walker: residuals walker by walker, then
+    the chi^2 of all of them in one matrix product (SP.sn_chi2_rows)."""
+    n = theta_batch.shape[0]
+    out = np.full(n, -np.inf)
+    rows, idx = [], []
+    for j in range(n):
+        r = _sn_residual(_theta_params(theta_batch[j], CONFIG, obs_index), obs_data, MODEL_func, obs)
+        if r is not None:
+            rows.append(r)
+            idx.append(j)
+    if rows:
+        out[np.asarray(idx)] = -0.5 * SP.sn_chi2_rows(obs_data, obs, np.vstack(rows))
+    return out
+
+
 def model_likelihood(
     theta: np.ndarray,
     obs_data: dict,
@@ -62,15 +116,7 @@ def model_likelihood(
     if isinstance(obs_type, list):
         obs_type = obs_type[0]
 
-    params = CONFIG["parameters"][obs_index]
-    param_dict = {p: theta[i] for i, p in enumerate(params)}
-
-    # Derive background vars if using CMB params / 100theta_s
-    param_dict = utils.ensure_background_params(param_dict)
-
-    # If BBN is present in this observation set and r_d wasn't sampled,
-    # compute r_d from (Omega_bh^2, Omega_m, H_0[, N_eff]).
-    RD._maybe_calibrate_rd(param_dict, CONFIG, obs_index)
+    param_dict = _theta_params(theta, CONFIG, obs_index)
 
     # Dedicated CMB branches
     if obs == "CMB_hil":
@@ -145,17 +191,17 @@ def model_likelihood(
         # Gaussian prior on Omega_b h^2 (or 2D with N_eff); shared with the statistics step
         return -0.5 * SP.bbn_prior_chi2(obs_data, param_dict)
 
-    # Non-CMB standard data containers
-    if obs in ("PantheonP", "PantheonPS"):
-        z    = obs_data["zHD"]
-        mb   = obs_data["m_b_corr"]
-        trig = obs_data["IS_CALIBRATOR"]
-        cep  = obs_data["CEPH_DIST"]
-        cov  = obs_data.get("cov")
-    else:
-        z         = obs_data["redshift"]
-        type_data = obs_data["type_data"]
-        type_err  = obs_data["type_data_error"]
+    # SN sets except the official JLA: the same code as the batched path (one row)
+    if _sn_batched(obs_data, obs_type):
+        r = _sn_residual(param_dict, obs_data, MODEL_func, obs)
+        if r is None:
+            return -np.inf
+        return -0.5 * float(SP.sn_chi2_rows(obs_data, obs, r)[0])
+
+    # Non-CMB standard data containers (Pantheon+ is always handled above)
+    z         = obs_data["redshift"]
+    type_data = obs_data["type_data"]
+    type_err  = obs_data["type_data_error"]
 
     # Predictions per type
     if obs_type == "SNe":
@@ -197,13 +243,8 @@ def model_likelihood(
         return -np.inf
 
     # --- Calculate Chi^2 ---
-    if obs in ("PantheonP", "PantheonPS"):
-        # Pantheon+ has its own complex covariance logic
-        chi2 = SP.Calc_PantP_chi(mb, trig, cep, cov, model, param_dict,
-                                 marginalise=bool(obs_data.get("marginalise_offset", False)))
-
-    elif obs_type == "SNe":
-        # ALL other SNe (JLA, DESY5, Union3) go here.
+    if obs_type == "SNe":
+        # Only the official JLA reaches this point (alpha/beta-dependent covariance)
         chi2 = SP.Calc_Generic_SNe_chi(
             obs_data=obs_data,      # <--- CHANGED from current_data to obs_data
             model=model,            # <--- Ensure this matches your local var (usually 'model' or 'model_val')
@@ -297,6 +338,10 @@ def log_likelihood_all(
     ll = np.zeros(nwalkers, dtype=float)
 
     for obs_name, obs_type in zip(obs, Type):
+        if _sn_batched(data[obs_name], obs_type):
+            # SN chi^2 of all walkers in one matrix product (the large covariances)
+            ll += _sn_loglike_batch(theta_batch, data[obs_name], CONFIG, MODEL_func, obs_name, obs_index)
+            continue
         for j in range(nwalkers):
             val = model_likelihood(
                 theta_batch[j],
@@ -327,6 +372,32 @@ def emcee_prob(theta, data, Type, CONFIG, MODEL_func, model_name, obs, obs_index
     ll0 = float(np.asarray(ll, dtype=float).ravel()[0])
 
     return lp0 + ll0, ll0
+
+
+def emcee_prob_vectorized(theta, data, Type, CONFIG, MODEL_func, model_name, obs, obs_index):
+    """
+    emcee_prob for a whole set of walkers at once (emcee's vectorize=True): theta is
+    (n, ndim); returns one (log_post, log_like) pair per walker, the same values as
+    emcee_prob, so the stored log_prob and log_like blobs keep their layout.
+    """
+    theta = np.atleast_2d(np.asarray(theta, dtype=float))
+    lp = np.atleast_1d(np.asarray(log_prior_all(theta, CONFIG, obs_index), dtype=float))
+    ll = np.full(theta.shape[0], np.nan)
+    ok = np.isfinite(lp)
+    if ok.any():
+        try:
+            v = np.asarray(log_likelihood_all(theta[ok], data, CONFIG, MODEL_func, model_name,
+                                              obs, Type, obs_index), dtype=float).ravel()
+            if v.shape[0] != int(ok.sum()):
+                raise ValueError("vectorised likelihood returned the wrong shape")
+            ll[ok] = v
+        except Exception:
+            for k in np.where(ok)[0]:
+                ll[k] = emcee_prob(theta[k], data, Type, CONFIG, MODEL_func, model_name, obs, obs_index)[1]
+    post = np.where(ok, lp + ll, -np.inf)
+    post[~np.isfinite(post)] = -np.inf
+    return [(float(a), float(b)) for a, b in zip(post, ll)]
+
 
 def batch_post(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index):
     """Vectorised log-posterior used by Zeus (and emcee diagnostics)."""
@@ -654,6 +725,42 @@ def regenerate_invalid_walkers(
 # Public API
 # ───────────────────────────────────────────────────────────────────────────────
 
+_BLAS_LIMITER = None
+
+
+def _limit_main_blas(uses_pool: bool, engine: str = "", vectorised: bool = True, label: str = "") -> None:
+    """
+    Groups that sample in this process without a worker pool (vectorised zeus and
+    emcee, or --num_cores 1) use constants.MAIN_BLAS_THREADS_NO_POOL BLAS/OpenMP
+    threads; run_mcmc restores the previous setting when the group ends. Logs one
+    line saying where the likelihood is evaluated.
+    """
+    global _BLAS_LIMITER
+    n = getattr(K, "MAIN_BLAS_THREADS_NO_POOL", None)
+    if uses_pool:
+        log.info("[%s] %s: likelihood evaluated by the worker pool", label, engine)
+        return
+    log.info("[%s] %s: runs in this process (%s), BLAS threads: %s", label, engine,
+             "vectorised" if vectorised else "one walker per call", n if n else "library default")
+    if not n or _BLAS_LIMITER is not None:
+        return
+    try:
+        from threadpoolctl import threadpool_limits
+        _BLAS_LIMITER = threadpool_limits(limits=int(n))
+    except Exception:
+        _BLAS_LIMITER = None
+
+
+def _restore_main_blas() -> None:
+    global _BLAS_LIMITER
+    if _BLAS_LIMITER is not None:
+        try:
+            _BLAS_LIMITER.restore_original_limits()
+        except Exception:
+            pass
+        _BLAS_LIMITER = None
+
+
 def run_mcmc(*args, **kwargs):
     """
     Run MCMC sampling for one observation group (see _run_mcmc_impl), then
@@ -665,6 +772,7 @@ def run_mcmc(*args, **kwargs):
     try:
         return _run_mcmc_impl(*args, **kwargs)
     finally:
+        _restore_main_blas()
         counts = RD.rd_fallback_counts()
         if counts:
             label = kwargs.get("obs_key") or "+".join(map(str, kwargs.get("obs") or []))
@@ -912,9 +1020,10 @@ def _run_mcmc_impl(
         # - zeus_vectorize=False  → use Pool (parallel across cores)
         # - zeus_vectorize=True   → no Pool (vectorised, single-core)
         pool_for_zeus = None if zeus_vectorize else pool
+        _limit_main_blas(pool_for_zeus is not None, "zeus", zeus_vectorize, f"{model_name} | {_resolved_key}")
         
         buffer_after_burn = int(
-            PLOT_SETTINGS.get("autocorr_buffer_after_burn", max(1000, burn // 5))
+            PLOT_SETTINGS.get("autocorr_buffer_after_burn", 0)
         )
         iters_per_cb = int(PLOT_SETTINGS.get("autocorr_check_every", 100))
 
@@ -946,7 +1055,7 @@ def _run_mcmc_impl(
             rules=utils.convergence_rules(PLOT_SETTINGS, convergence),
             check_every=iters_per_cb,
             earliest_stop=burn + buffer_after_burn,
-            consecutive=int(PLOT_SETTINGS.get("tau_consecutive", 1)),
+            consecutive=int(PLOT_SETTINGS.get("tau_consecutive", 2)),
             param_names=list(param_names),
         )
         plot_path = os.path.join(
@@ -1133,6 +1242,19 @@ def _run_mcmc_impl(
     else:
         backend = None
 
+        # Vectorisable groups without CMB, BBN or a pool-preferred dataset run in this
+        # process with emcee's vectorize=True (one likelihood call per half-ensemble,
+        # as for zeus). The worker pool is kept for CMB/BBN groups (CLASS per walker)
+        # and non-vectorisable models, where one likelihood call is expensive.
+        emcee_vectorize = (
+            bool(vectorised or getattr(K, "force_vectorisation", False))
+            and not (has_cmb or has_bbn)
+            and not any(o in getattr(K, "POOL_PREFERRED_DATASETS", set()) for o in (obs or []))
+        )
+        emcee_pool = None if emcee_vectorize else pool
+        emcee_fn = emcee_prob_vectorized if emcee_vectorize else emcee_prob
+        _limit_main_blas(emcee_pool is not None, "emcee", emcee_vectorize, f"{model_name} | {_resolved_key}")
+
         # ------------------------------------------------------------
         # Backend setup
         # ------------------------------------------------------------
@@ -1175,10 +1297,11 @@ def _run_mcmc_impl(
                 sampler = emcee.EnsembleSampler(
                     nwalker,
                     ndim,
-                    emcee_prob,
+                    emcee_fn,
                     args=(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index),
-                    pool=pool,
+                    pool=emcee_pool,
                     backend=backend,
+                    vectorize=emcee_vectorize,
                 )
 
                 if autoCorr:
@@ -1199,7 +1322,7 @@ def _run_mcmc_impl(
                         local_burn=local_burn,
                         global_burn=burn,
                         buffer_after_burn=PLOT_SETTINGS.get(
-                            "autocorr_buffer_after_burn", 1000
+                            "autocorr_buffer_after_burn", 0
                         ),
                         print_enabled=print_enabled,
                         print_every=print_every,
@@ -1271,10 +1394,11 @@ def _run_mcmc_impl(
         sampler = emcee.EnsembleSampler(
             nwalker,
             ndim,
-            emcee_prob,
+            emcee_fn,
             args=(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index),
-            pool=pool,
+            pool=emcee_pool,
             backend=backend,
+            vectorize=emcee_vectorize,
         )
 
         if autoCorr:
@@ -1293,7 +1417,7 @@ def _run_mcmc_impl(
                 local_burn=burn,
                 global_burn=burn,
                 buffer_after_burn=PLOT_SETTINGS.get(
-                    "autocorr_buffer_after_burn", 1000
+                    "autocorr_buffer_after_burn", 0
                 ),
                 print_enabled=print_enabled,
                 print_every=print_every,

@@ -177,7 +177,7 @@ python Kosmulator.py --help
 
 | Argument | Type | Default | Description |
 |---|---|---|---|
-| `--num_cores` | int | `8` | Number of CPU cores to use for multiprocessing. |
+| `--num_cores` | int | `8` | Number of worker processes for groups that need a pool (CMB/BBN groups, models that cannot be vectorised, official JLA). Other groups run vectorised in the main process with `constants.MAIN_BLAS_THREADS_NO_POOL` BLAS threads (default 1; the fastest value depends on the machine, so compare the steps/s of a short run with 1, 2 and 4). |
 | `--use_mpi` | flag | `False` | Force use of an MPI pool (if MPI is available). |
 
 #### Sampler / Engine Control
@@ -201,14 +201,18 @@ chain cut in two halves, Gelman et al. 2013). The run stops once
 N_post ≥ 50 τ_max, ESS ≥ 2000, split-R̂ < 1.01 and τ_max changed by less than
 `convergence` (Kosmulator.py, default 0.05) since the previous check
 (thresholds in `constants.CONV_*`). Otherwise it runs to `nsteps`, flags the chain
-as not converged and says which condition failed. `auto_corr/<group>.png` shows
-the same quantities, and `convergence_summary.txt` lists them per group.
+as not converged and says which condition failed. The first check comes one
+interval after burn-in, and by default the rule must hold at two checks in a row;
+there is no fixed minimum run length unless `--autocorr-buffer` sets one.
+`auto_corr/<group>.png` shows the same quantities (grey points in the shaded burn-in
+region: the same numbers on the second half of the chain so far, shown only), and
+`convergence_summary.txt` lists them per group.
 
 | Argument | Type | Default | Description |
 |---|---|---|---|
-| `--tau-consecutive` (alias: `--consecutive-required`) | int | `1` | Number of consecutive checks at which all conditions must hold before the run stops. |
+| `--tau-consecutive` (alias: `--consecutive-required`) | int | `2` | Number of consecutive checks at which all conditions must hold before the run stops. |
 | `--autocorr-check-every` | int | `100` | Check the convergence rule (and redraw its plot) every `N` steps. |
-| `--autocorr-buffer` | int | `None` | Earliest stop: the rule may end a run only after burn + this many steps. If not set, Kosmulator uses `max(1000, burn/5)`. |
+| `--autocorr-buffer` | int | `None` | Optional minimum run length: the rule may end a run only after burn + this many steps. Default 0 (the rule's own tests decide). |
 
 #### Plotting / Presentation
 

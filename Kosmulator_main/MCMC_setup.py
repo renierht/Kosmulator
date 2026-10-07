@@ -208,7 +208,7 @@ def main(
     )
     _user_buf = getattr(args, "autocorr_buffer", None)
     PLOT_SETTINGS["autocorr_buffer_after_burn"] = int(
-        _user_buf if _user_buf is not None else max(1000, burn // 5)
+        _user_buf if _user_buf is not None else 0
     )
     PLOT_SETTINGS["tau_consecutive"] = max(1, int(args.consecutive_required))
     # Tolerance on the relative change of tau_max (Kosmulator.py `convergence`),
@@ -333,7 +333,9 @@ def main(
 
             K.engine_for_model[m] = eng
 
-            if eng == "emcee" or (eng == "zeus" and not can_vec):
+            # emcee needs workers only for CMB/BBN groups or non-vectorisable models;
+            # other emcee groups run vectorised in this process (Kosmulator_MCMC).
+            if (eng == "emcee" and (touches_cmb_bbn or not can_vec)) or (eng == "zeus" and not can_vec):
                 any_needs_pool = True
 
         elif engine_mode == "fastest":
@@ -361,7 +363,7 @@ def main(
                 os._exit(0)
         else:
             print(
-                "MPI requested but all models use vectorized Zeus → "
+                "MPI requested but every group runs vectorised in this process (zeus or emcee) → "
                 "proceeding on rank 0; extra ranks exited."
             )
 
@@ -410,7 +412,7 @@ def main(
         else:
             log.info(
                 "Parallel plan: selected engines do not require a worker Pool "
-                "(vectorised Zeus only)."
+                "(vectorised zeus and emcee run in this process)."
             )
 
         log.info("────────────────────────────────────────────────────────")
@@ -571,25 +573,15 @@ def run_mcmc_for_all_models(
         # idle worker processes. Under MPI the old behaviour is kept, because
         # the other ranks wait in the pool.
         model_needs_pool = (
-            engine == "emcee"
+            (engine == "emcee" and _model_has_any_cmb_or_bbn(CONFIG, model_name))
             or not can_vec
             or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set())
                    for grp in CONFIG[model_name].get("observations", []) for o in grp)
         )
         need_pool = parallel_flag and (use_mpi or model_needs_pool)
 
-        # Vectorised zeus without a pool runs in this process; there the BLAS/OpenMP
-        # threads of NumPy only add overhead for the SN covariances (DESI DR2 + DES-Y5:
-        # 5.6 steps/s with 1 thread against 3.3 with the default threads).
-        # constants.MAIN_BLAS_THREADS_NO_POOL = None keeps the library default.
-        _blas_limit = None
-        _n_blas = getattr(K, "MAIN_BLAS_THREADS_NO_POOL", 1)
-        if (not model_needs_pool) and _n_blas:
-            try:
-                from threadpoolctl import threadpool_limits
-                _blas_limit = threadpool_limits(limits=int(_n_blas))
-            except Exception:
-                _blas_limit = None
+        # BLAS/OpenMP threads for groups that sample in this process without a pool
+        # are set per group in Kosmulator_MCMC (constants.MAIN_BLAS_THREADS_NO_POOL).
 
         pool_for_model = None
         if need_pool:
@@ -745,11 +737,6 @@ def run_mcmc_for_all_models(
             data_work = cleanup_pantheon_cov(data_work)
 
         All_Samples[model_name] = Samples
-        if _blas_limit is not None:
-            try:
-                _blas_limit.restore_original_limits()
-            except Exception:
-                pass
 
     # Tidy up any workers we created
     for p in getattr(locals().get("pool_cache", {}), "values", lambda: [])():

@@ -750,12 +750,16 @@ def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_
     against the step, with the two limits it must stay below: the length limit
     (N - burn)/CONV_TAU_FACTOR and the ESS limit (N - burn) x walkers / CONV_ESS_MIN.
     Bottom (log scale): the relative change of tau_max since the previous check
-    and split-Rhat - 1, each with its tolerance. Vertical lines: burn-in, the
-    earliest step at which the run may stop, and the step where it stopped.
+    and split-Rhat - 1, each with its tolerance. Grey open markers in the shaded
+    burn-in region: the same numbers on the second half of the chain so far
+    (shown only, never used to stop). Vertical lines: burn-in, the earliest step
+    at which the run may stop (if set) and the step where it stopped. Legends sit
+    to the right of the panels so they never cover the data.
     """
-    h = monitor.hist
+    h, pre = monitor.hist, getattr(monitor, "pre", None) or {"it": []}
     it = np.asarray(h["it"], dtype=float)
-    if it.size == 0:
+    it_pre = np.asarray(pre.get("it", []), dtype=float)
+    if it.size == 0 and it_pre.size == 0:
         return
     r = monitor.rules
     burn = float(monitor.burn)
@@ -764,24 +768,39 @@ def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_
     rel = np.asarray(h["rel"], dtype=float)
     rhat = np.asarray(h["rhat_max"], dtype=float)
     ok = np.asarray(h["ok"], dtype=bool)
+    tau_pre = np.asarray(pre.get("tau_max", []), dtype=float)
+    rel_pre = np.asarray(pre.get("rel", []), dtype=float)
+    rhat_pre = np.asarray(pre.get("rhat_max", []), dtype=float)
+    grey = dict(color="0.55", mfc="white", ms=4, lw=0.8)
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.6, 6.4), sharex=True,
-                                   gridspec_kw={"height_ratios": (1.7, 1.0), "hspace": 0.08})
-    x_hi = max(float(it[-1]), float(monitor.earliest_stop)) * 1.03
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.2, 6.4), sharex=True,
+                                   gridspec_kw={"height_ratios": (1.5, 1.0), "hspace": 0.08})
+    last = max([float(x[-1]) for x in (it, it_pre) if x.size] + [burn])
+    x_hi = max(last, float(monitor.earliest_stop)) * 1.03
+    for ax in (ax1, ax2):
+        ax.axvspan(0, burn, color="0.94", lw=0, zorder=0)
+
+    if it_pre.size:
+        ax1.plot(it_pre, tau_pre, "o-", label="burn-in phase (second half of\nthe chain so far; not used to stop)",
+                 **grey)
+    if it.size:
+        ax1.plot(it, tau, "o-", color="C0", ms=4, lw=1.4, label=r"$\tau_{\max}$ (largest over the parameters)")
     xx = np.linspace(burn, x_hi, 300)
-    ax1.plot(it, tau, "o-", color="C0", ms=4, lw=1.4, label=r"$\tau_{\max}$ (largest over the parameters)")
     ax1.plot(xx, (xx - burn) / r["tau_factor"], "k--", lw=1.2,
              label=rf"length limit $(N-N_{{\rm burn}})/{r['tau_factor']:g}$")
     if W:
         ax1.plot(xx, (xx - burn) * W / r["ess_min"], ":", color="C3", lw=1.6,
                  label=rf"ESS limit $(N-N_{{\rm burn}})\times{W}/{r['ess_min']:g}$")
-    fin = tau[np.isfinite(tau)]
-    top = 1.6 * float(fin.max()) if fin.size else 1.0
-    ax1.set_ylim(0, max(top, 1.0))
+    fin = np.concatenate([tau[np.isfinite(tau)], tau_pre[np.isfinite(tau_pre)]])
+    ax1.set_ylim(0, max(1.15 * float(fin.max()) if fin.size else 1.0, 1.0))
     ax1.set_ylabel(r"$\tau_{\max}$ (steps)")
-    ax1.text(0.99, 0.03, r"needs $\tau_{\max}$ below both limits", transform=ax1.transAxes,
-             ha="right", va="bottom", fontsize=8, color="0.35")
 
+    good_pre = np.isfinite(rel_pre) & (rel_pre > 0)
+    if good_pre.any():
+        ax2.semilogy(it_pre[good_pre], rel_pre[good_pre], "o-", **grey)
+    goodr_pre = np.isfinite(rhat_pre) & (rhat_pre > 1.0)
+    if goodr_pre.any():
+        ax2.semilogy(it_pre[goodr_pre], rhat_pre[goodr_pre] - 1.0, "s-", **grey)
     good = np.isfinite(rel) & (rel > 0)
     ax2.semilogy(it[good], rel[good], "o-", color="C0", ms=4, lw=1.0,
                  label=r"$|\Delta\tau_{\max}|/\tau_{\max}$ since the previous check")
@@ -799,7 +818,7 @@ def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_
     ax2.set_ylabel("Relative change")
 
     for ax in (ax1, ax2):
-        ax.axvline(burn, color="r", ls="--", lw=1.0, alpha=0.6, label="burn-in" if ax is ax1 else None)
+        ax.axvline(burn, color="r", ls="--", lw=1.0, alpha=0.6, label="end of burn-in" if ax is ax1 else None)
         if monitor.earliest_stop > burn:
             ax.axvline(monitor.earliest_stop, color="0.4", ls=":", lw=1.0,
                        label="earliest stop" if ax is ax1 else None)
@@ -807,8 +826,9 @@ def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_
             ax.axvline(monitor.stopped_at, color="C2", ls="-", lw=1.5,
                        label="stopped (converged)" if ax is ax1 else None)
         ax.set_xlim(0, x_hi)
-    ax1.legend(loc="upper left", fontsize=8, framealpha=0.85)
-    ax2.legend(loc="upper right", fontsize=7, framealpha=0.85, ncol=1)
+    leg = dict(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0, framealpha=0.9)
+    ax1.legend(fontsize=8, title=r"needs $\tau_{\max}$ below both limits", title_fontsize=8, **leg)
+    ax2.legend(fontsize=8, title="needs both below their limits", title_fontsize=8, **leg)
     status = "converged" if monitor.stopped_at is not None else (
         "all conditions met" if ok.size and ok[-1] else "not converged yet")
     title = f"Convergence: {model_name}, {group} ({status})"

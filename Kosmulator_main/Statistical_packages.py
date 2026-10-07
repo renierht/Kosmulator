@@ -963,33 +963,107 @@ def Calc_chi(
 # use_abs_mag: False (inverse covariance projected orthogonal to the offset).
 _SN_CHOL_ONES: Dict[int, Any] = {}
 
+# All SN chi^2 terms are computed for a batch of residual vectors R (one row per
+# walker) at once: r^T C^-1 r for every row is one matrix product (or one
+# triangular solve with every residual as a column), instead of one matrix-vector
+# product per walker. The scalar functions below call the same code with one row,
+# so the sampler, the statistics and the plots use one implementation.
 
-def _sn_terms_chol(L_cov: np.ndarray, residual: np.ndarray):
-    """(A, B, E) from a lower Cholesky factor L of C (Pantheon+)."""
+
+def _sn_chol_ones(L_cov: np.ndarray):
+    """(e, E) with e = L^-1 1 and E = 1^T C^-1 1, cached per Cholesky factor."""
     key = id(L_cov)
     hit = _SN_CHOL_ONES.get(key)
     if hit is None or hit[0] is not L_cov:
         e = la.solve_triangular(L_cov, np.ones(L_cov.shape[0]), lower=True, check_finite=False)
         hit = (L_cov, e, float(e @ e))       # keeps L alive, so the id stays unique
         _SN_CHOL_ONES[key] = hit
-    _, e, E = hit
-    u = la.solve_triangular(L_cov, residual, lower=True, check_finite=False)
-    return float(u @ u), float(u @ e), E
+    return hit[1], hit[2]
+
+
+def sn_terms_chol_rows(L_cov: np.ndarray, R: np.ndarray):
+    """(A, B, E) for every row of R from a lower Cholesky factor L of C (Pantheon+)."""
+    R = np.atleast_2d(np.asarray(R, dtype=float))
+    e, E = _sn_chol_ones(L_cov)
+    U = la.solve_triangular(L_cov, R.T, lower=True, check_finite=False)   # (N, n_rows)
+    return np.einsum("ij,ij->j", U, U), e @ U, E
+
+
+def _sn_terms_chol(L_cov: np.ndarray, residual: np.ndarray):
+    """(A, B, E) from a lower Cholesky factor L of C (Pantheon+), one residual."""
+    A, B, E = sn_terms_chol_rows(L_cov, residual)
+    return float(A[0]), float(B[0]), float(E)
+
+
+def _sn_W1(obs_data: dict, n: int):
+    """C^-1 1 and E = 1^T C^-1 1 for an SN set with an inverse covariance (cached)."""
+    W1 = obs_data.get("_sn_W1")
+    if W1 is None or np.shape(W1)[0] != n:
+        W1 = np.asarray(obs_data["inv_cov"], dtype=float).sum(axis=1)
+        obs_data["_sn_W1"] = W1
+        obs_data["_sn_E"] = float(W1.sum())
+    return W1, float(obs_data["_sn_E"])
+
+
+def sn_offset_terms_rows(obs_data: dict, R: np.ndarray):
+    """(A, B, E) for every row of R: inverse covariance if present, else diagonal errors."""
+    R = np.atleast_2d(np.asarray(R, dtype=float))
+    inv_cov = obs_data.get("inv_cov")
+    if inv_cov is not None:
+        W1, E = _sn_W1(obs_data, R.shape[1])
+        return np.einsum("ij,ij->i", R @ np.asarray(inv_cov, dtype=float), R), R @ W1, E
+    w = 1.0 / np.asarray(obs_data["type_data_error"], dtype=float) ** 2
+    return (R * R) @ w, R @ w, float(np.sum(w))
 
 
 def sn_offset_terms(obs_data: dict, residual: np.ndarray):
     """(A, B, E) for a generic SN set: inverse covariance if present, else diagonal errors."""
-    r = np.asarray(residual, dtype=float)
-    inv_cov = obs_data.get("inv_cov")
-    if inv_cov is not None:
-        W1 = obs_data.get("_sn_W1")
-        if W1 is None or np.shape(W1)[0] != r.shape[0]:
-            W1 = np.asarray(inv_cov, dtype=float).sum(axis=1)
-            obs_data["_sn_W1"] = W1
-            obs_data["_sn_E"] = float(W1.sum())
-        return float(r @ (inv_cov @ r)), float(W1 @ r), float(obs_data["_sn_E"])
-    w = 1.0 / np.asarray(obs_data["type_data_error"], dtype=float) ** 2
-    return float(np.sum(w * r * r)), float(np.sum(w * r)), float(np.sum(w))
+    A, B, E = sn_offset_terms_rows(obs_data, residual)
+    return float(A[0]), float(B[0]), float(E)
+
+
+def generic_sn_residual(obs_data: dict, model: np.ndarray, param_dict: Dict[str, float]) -> np.ndarray:
+    """Residual of a generic SN set (DES-Y5, Union3, Pantheon, JLA_legacy) whose chi^2
+    generic_sn_chi2_rows evaluates; M_abs enters only when the offset is not marginalised
+    and the data are magnitudes rather than distance moduli."""
+    type_data = np.asarray(obs_data["type_data"], dtype=float)
+    if obs_data.get("marginalise_offset", False) or obs_data.get("data_is_distance_modulus", False):
+        return type_data - model
+    return (type_data - param_dict.get("M_abs", 0.0)) - model
+
+
+def generic_sn_chi2_rows(obs_data: dict, R: np.ndarray) -> np.ndarray:
+    """chi^2 of a generic SN set for every row of R (residuals from generic_sn_residual)."""
+    R = np.atleast_2d(np.asarray(R, dtype=float))
+    if obs_data.get("marginalise_offset", False):
+        A, B, E = sn_offset_terms_rows(obs_data, R)
+        return A - B * B / E
+    if "inv_cov" in obs_data:
+        return np.einsum("ij,ij->i", R @ np.asarray(obs_data["inv_cov"], dtype=float), R)
+    return (R * R) @ (1.0 / np.asarray(obs_data["type_data_error"], dtype=float) ** 2)
+
+
+def pantheon_residual(mb, trig, cepheid, model, param_dict: Dict[str, float],
+                      marginalise: bool = False) -> np.ndarray:
+    """Pantheon+ residual: Cepheid distances for calibrators, the model otherwise;
+    M_abs is subtracted unless the offset is marginalised."""
+    moduli = np.where(np.asarray(trig) == 1, cepheid, model)
+    if marginalise:
+        return np.asarray(mb, dtype=float) - moduli
+    return np.asarray(mb, dtype=float) - param_dict.get("M_abs", -19.20) - moduli
+
+
+def pantheon_chi2_rows(L_cov: np.ndarray, R: np.ndarray, marginalise: bool = False) -> np.ndarray:
+    """Pantheon+ chi^2 for every row of R (residuals from pantheon_residual)."""
+    A, B, E = sn_terms_chol_rows(L_cov, R)
+    return A - B * B / E if marginalise else A
+
+
+def sn_chi2_rows(obs_data: dict, obs_name: str, R: np.ndarray) -> np.ndarray:
+    """chi^2 of one SN dataset (not the official JLA) for every row of residuals R."""
+    if obs_name in ("PantheonP", "PantheonPS"):
+        return pantheon_chi2_rows(obs_data.get("cov"), R, bool(obs_data.get("marginalise_offset", False)))
+    return generic_sn_chi2_rows(obs_data, R)
 
 
 # -----------------------------------------------------------------------------
@@ -1110,30 +1184,11 @@ def Calc_Generic_SNe_chi(
     if obs_data.get("jla_full"):
         # Official JLA: alpha/beta-dependent covariance, two analytic offsets
         return Calc_JLA_chi(obs_data, model, param_dict)
-
-    type_data = np.asarray(obs_data["type_data"], dtype=float)
-
-    if obs_data.get("marginalise_offset", False):
-        A, B, E = sn_offset_terms(obs_data, type_data - model)
-        return float(A - B * B / E)
-
-    # Offset not marginalised: DESY5/Union3 and the JLA/Pantheon files all hold
-    # distance moduli, so M_abs only enters when it is actually sampled.
-    if obs_data.get("data_is_distance_modulus", False):
-        residual = type_data - model
-    else:
-        M = param_dict.get("M_abs", 0.0)
-        residual = (type_data - M) - model
-
-    # 2. Check for Covariance (Union3)
-    if "inv_cov" in obs_data:
-        inv_cov = obs_data["inv_cov"]
-        # Matrix Chi2: R.T @ C^-1 @ R
-        return float(residual @ inv_cov @ residual)
-
-    # 3. Fallback to Diagonal Errors (JLA/DESY5)
-    type_data_error = obs_data["type_data_error"]
-    return float(np.sum((residual ** 2) / (type_data_error ** 2)))
+    # Offset marginalised: chi2 = A - B^2/E. Otherwise DESY5/Union3 and the
+    # JLA/Pantheon files hold distance moduli, so M_abs only enters when sampled;
+    # full inverse covariance if present (DES-Y5, Union3), else diagonal errors.
+    r = generic_sn_residual(obs_data, model, param_dict)
+    return float(generic_sn_chi2_rows(obs_data, r)[0])
 
 
 def Calc_PantP_chi(
@@ -1172,17 +1227,8 @@ def Calc_PantP_chi(
     float
         χ² value for the Pantheon+ subset.
     """
-    moduli = np.where(trig == 1, cepheid, model)
-
-    if marginalise:
-        A, B, E = _sn_terms_chol(L_cov, mb - moduli)
-        return float(A - B * B / E)
-
-    M = param_dict.get("M_abs", -19.20)
-    delta = mb - M - moduli
-
-    residuals = la.solve_triangular(L_cov, delta, lower=True, check_finite=False)
-    return float(np.dot(residuals, residuals))
+    r = pantheon_residual(mb, trig, cepheid, model, param_dict, marginalise)
+    return float(pantheon_chi2_rows(L_cov, r, marginalise)[0])
 
 
 # -----------------------------------------------------------------------------

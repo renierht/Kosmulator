@@ -170,17 +170,17 @@ def parse_cli_args():
     )
     parser.add_argument(
         "--tau-consecutive", "--consecutive-required",
-        dest="consecutive_required", type=int, default=1,
+        dest="consecutive_required", type=int, default=2,
         help=(
             "Convergence rule (zeus and emcee): number of consecutive checks at which "
-            "all its conditions must hold before the run stops. Default 1."
+            "all its conditions must hold before the run stops. Default 2."
         ),
     )
     parser.add_argument(
         "--autocorr-buffer", type=int, default=None,
         help=(
-            "Earliest stop: the convergence rule may end a run only after burn + this "
-            "many steps. Default: max(1000, burn/5)."
+            "Optional minimum run length: the convergence rule may end a run only after "
+            "burn + this many steps. Default 0 (the rule's own tests decide)."
         ),
     )
     parser.add_argument(
@@ -340,7 +340,7 @@ def print_model_banner(
             parts.append("pool")
     elif eng == "emcee":
         parts.append("EMCEE")
-        parts.append("pool")
+        parts.append("vectorised" if (can_vec and not touches_cmb_bbn) else "pool")
     else:
         parts.append(eng)
 
@@ -703,7 +703,7 @@ def build_plot_settings(
         "cmb_lensing_Lmax": CMB_LENSING_LMAX,
         # Autocorr
         "autocorr_check_every": 100,
-        "autocorr_buffer_after_burn": 1000,
+        "autocorr_buffer_after_burn": 0,
         # Misc plot options
         "legend_loc": "upper left",
         "legend_bbox_anchor": (0.02, 0.98),
@@ -1253,8 +1253,8 @@ def load_or_run_chain(
 #
 # tau_max is the largest integrated autocorrelation time over the sampled
 # parameters, estimated with zeus's default method (autocorr_time_mk). The run
-# may stop at the first check at or after burn + autocorr_buffer_after_burn where
-# all four hold for `tau_consecutive` checks in a row. The saved chain's
+# may stop at the first check at or after burn + autocorr_buffer_after_burn
+# (default 0) where all four hold for `tau_consecutive` (default 2) checks in a row. The saved chain's
 # "converged" attribute records whether the rule was met.
 
 def _acf_1d(x: np.ndarray) -> Optional[np.ndarray]:
@@ -1380,15 +1380,35 @@ class ConvergenceMonitor:
         self.param_names = list(param_names) if param_names else None
         self.hist: Dict[str, List[Any]] = {k: [] for k in
                                            ("it", "tau_max", "tau_param", "n_post", "ess", "rel", "rhat_max", "ok")}
+        # Burn-in phase, for the plot only (never used to stop): the same numbers on the
+        # second half of the chain so far, as zeus's own callbacks do (discard = 0.5).
+        self.pre: Dict[str, List[Any]] = {k: [] for k in ("it", "tau_max", "rel", "rhat_max")}
         self.walkers = None
         self.streak = 0
         self.stopped_at: Optional[int] = None
         self.last: Optional[Dict[str, Any]] = None
 
+    def _evaluate_burnin(self, it: int, chain) -> None:
+        """Burn-in diagnostics for the plot: chain[it//2 : it], once that holds >= check_every steps."""
+        if it < 2 * self.check_every:
+            return
+        try:
+            part = np.asarray(chain[it // 2:it], dtype=float)
+            prev = self.pre["tau_max"][-1] if self.pre["tau_max"] else None
+            st = convergence_status(part, self.rules, prev, self.param_names)
+        except Exception:
+            return
+        for k, v in (("it", it), ("tau_max", st["tau_max"]), ("rel", st["rel_change"]),
+                     ("rhat_max", st["rhat_max"])):
+            self.pre[k].append(v)
+
     def _evaluate(self, it: int, chain) -> Optional[Dict[str, Any]]:
         it = int(it)
         n_post = it - self.burn
-        if n_post < max(2 * self.check_every, 20):
+        if n_post <= 0:
+            self._evaluate_burnin(it, chain)
+            return None
+        if n_post < max(self.check_every, 20):
             return None
         post = np.asarray(chain[self.burn:it], dtype=float)
         prev = self.hist["tau_max"][-1] if self.hist["tau_max"] else None
@@ -1496,7 +1516,7 @@ def emcee_autocorr_stopping(
         global_burn = local_burn or 0
     check_every = int(PLOT_SETTINGS.get("autocorr_check_every", 100))
     buffer_after_burn = int(buffer_after_burn if buffer_after_burn is not None
-                            else PLOT_SETTINGS.get("autocorr_buffer_after_burn", 1000))
+                            else PLOT_SETTINGS.get("autocorr_buffer_after_burn", 0))
     try:
         print_every = max(0, int(print_every or 0))
     except Exception:
@@ -1512,7 +1532,7 @@ def emcee_autocorr_stopping(
         rules=convergence_rules(PLOT_SETTINGS, convergence),
         check_every=check_every,
         earliest_stop=int(global_burn) + buffer_after_burn,
-        consecutive=int(PLOT_SETTINGS.get("tau_consecutive", 1)),
+        consecutive=int(PLOT_SETTINGS.get("tau_consecutive", 2)),
         param_names=param_names,
     )
     sampler.kosm_converged = False

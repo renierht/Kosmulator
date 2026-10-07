@@ -73,10 +73,13 @@ JLA_HOST_MASS_SPLIT: float = 10.0
 #: evaluating them in one vectorised call on a single core.
 POOL_PREFERRED_DATASETS: Set[str] = {"JLA"}
 
-#: BLAS/OpenMP threads in the main process while a model samples without a
-#: worker pool (vectorised zeus). 1 is fastest for the SN covariances
-#: (measured 1.7x faster than the default threads for DESI DR2 + DES-Y5);
-#: None keeps NumPy's default.
+#: BLAS/OpenMP threads in the main process while a group samples without a
+#: worker pool (vectorised zeus and emcee, or any run with --num_cores 1).
+#: None keeps NumPy's default (all cores). The best value depends on the
+#: machine: compare the steps/s of a short run with 1, 2 and 4 threads.
+#: In a 2-core cloud test 2 threads were 1.3x faster than 1 for DESI DR2 +
+#: DES-Y5 and equal for Pantheon+; 1 is kept until measured on the target
+#: machine, so a run never takes every core by default.
 MAIN_BLAS_THREADS_NO_POOL = 1
 
 # ----------------------------------------------------------------------
