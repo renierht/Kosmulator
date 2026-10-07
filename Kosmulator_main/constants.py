@@ -57,6 +57,22 @@ GAMMA_FS8_SINGLETON: float = 0.55
 #: (M_abs sampled for PantheonP; H0 acting as the offset of distance moduli).
 SN_MARGINALISE_OFFSET: bool = True
 
+#: Official JLA likelihood (Betoule et al. 2014, arXiv:1401.4064), tag "JLA".
+#: Light-curve nuisance parameters sampled with JLA: (low, high, start). Priors
+#: and starting values follow Cobaya's sn.jla. The absolute magnitudes M_B and
+#: M_B + Delta_M (host-mass step) are fitted analytically and not sampled.
+JLA_NUISANCE_DEFAULTS: Dict[str, Tuple[float, float, float]] = {
+    "alpha_JLA": (0.01, 2.0, 0.14),
+    "beta_JLA": (0.9, 4.6, 3.1),
+}
+#: Host-galaxy split for the magnitude step, in log10(M_stellar / M_sun)
+JLA_HOST_MASS_SPLIT: float = 10.0
+#: Late-time datasets whose likelihood is expensive (JLA rebuilds and factorises
+#: a 740 x 740 covariance for every alpha, beta: about 10 - 20 ms). For groups
+#: containing them zeus spreads the walkers over the worker pool instead of
+#: evaluating them in one vectorised call on a single core.
+POOL_PREFERRED_DATASETS: Set[str] = {"JLA"}
+
 
 # ======================================================================
 # 2. Data / path defaults
@@ -64,6 +80,9 @@ SN_MARGINALISE_OFFSET: bool = True
 
 #: Base directory where all observational data live
 OBSERVATIONS_BASE: str = "./Observations"
+
+#: Folder (inside OBSERVATIONS_BASE) with the official JLA files
+JLA_DIR_RELATIVE: str = "JLA"
 
 #: Relative path (inside OBSERVATIONS_BASE) to the default BBN grid
 BBN_GRID_RELATIVE: str = "BBN/bbn_grid.npz"
@@ -115,6 +134,7 @@ GREEK_SYMBOLS: Dict[str, str] = {
 OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
     # SNe datasets
     "JLA":       ("JLA",               "JLA"),
+    "JLA_legacy": ("JLA (legacy)",     "JLA (legacy)"),
     "DESY5":       ("DESY5",               "DESY5"),
     "Union3":       ("Union3",               "Union3"),
     "Pantheon":       (r"Pantheon",       "Pantheon"),
@@ -137,8 +157,8 @@ OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
     
     #BAO
     "BAO":       ("BAO",               "BAO"),
-    "DESI_DR1":      (r"DESI_{DR1}",         "DESI DR1"),
-    "DESI_DR2":      (r"DESI_{DR2}",         "DESI DR2"),
+    "DESI_DR1":      (r"DESI DR1",           "DESI DR1"),
+    "DESI_DR2":      (r"DESI DR2",           "DESI DR2"),
     
     #Big Bang Nucleosythesis
     "BBN_PryMordial":      (r"BBN (primordial)",             "BBN (primordial)"),
@@ -151,7 +171,7 @@ OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
 #: Which observation types can share an axis column in best-fit panels
 COMBINE_GROUPS: List[Set[str]] = [
     {"OHD", "CC"},
-    {"PantheonP", "PantheonP_SH0ES", "Pantheon", "JLA", "DESY5", "Union3"},
+    {"PantheonP", "PantheonP_SH0ES", "Pantheon", "JLA", "JLA_legacy", "DESY5", "Union3"},
     {"BAO", "DESI_DR1", "DESI_DR2"},
 ]
 

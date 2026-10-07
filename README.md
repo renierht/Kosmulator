@@ -24,6 +24,8 @@ The package is designed to be **modular**, **flexible**, and **user-friendly**, 
 - **Wide Range of Observational Data**  
   Built-in support for:
   - Type Ia Supernovae (JLA, Pantheon, Pantheon+, Union3, DES-Y5)
+    - `JLA` is the official 740-SN likelihood (Betoule et al. 2014): `alpha_JLA` and `beta_JLA` are sampled, the absolute magnitudes (with the host-mass step) are fitted analytically, and the covariance is rebuilt for each alpha, beta. See `Observations/JLA/README.md`.
+    - `JLA_legacy` is the old 359-SN file used as "JLA" before October 2026, kept only to reproduce earlier runs.
   - Baryon Acoustic Oscillations (BAO)
   - DESI (DR1 and DR2)
   - Cosmic Chronometers / OHD
@@ -202,7 +204,7 @@ python Kosmulator.py --help
 | Argument | Type | Default | Description |
 |---|---|---|---|
 | `--latex_enabled` | flag | `False` | Enable LaTeX rendering in plots. |
-| `--plot_table` | flag | `False` | Generate parameter-table plots. |
+| `--plot_table` | flag | `False` | Draw the posterior summary table on the corner plot (placed in the empty upper-right triangle when it fits, otherwise above the grid; its rows carry the colour key, replacing the legend). Layout options: `table_position`, `table_font_scale`, `table_display_pt`, `table_style`, `table_keep_legend` in PLOT_SETTINGS. |
 | `--corner-show-all-cmb-params` | flag | `False` | Corner plot: show all CMB parameters (including nuisance). Default behaviour shows only key cosmological parameters. |
 | `--corner-table-full` | flag | `False` | Corner plot top table: keep the full parameter list (including CMB nuisances). |
 
@@ -310,6 +312,13 @@ Kosmulator/
 
 ### Type Ia Supernovae
 #### JLA
+1. Betoule, M., et al. (2014).  
+   *Improved cosmological constraints from a joint analysis of the SDSS-II and SNLS supernova samples*.  
+   A&A, 568, A22.  
+   https://doi.org/10.1051/0004-6361/201423413 (arXiv:1401.4064)  
+   Data files: CosmoMC/Cobaya distribution, https://github.com/CobayaSampler/sn_data
+
+#### JLA_legacy (old 359-SN file; origin not documented, references as previously listed)
 1. Hicken, M., Challis, P., Jha, S., et al. (2009).  
    *CfA3: 185 Type Ia Supernova Light Curves from the CfA*.  
    ApJ, 700, 331.  

@@ -998,6 +998,12 @@ def _run_mcmc_impl(
                 if (not has_cmb) and (not has_bbn):
                     zeus_vectorize = True
 
+            # 2) Expensive late-time likelihoods (official JLA): use the pool
+            if zeus_vectorize and (pool is not None) and any(
+                o in getattr(K, "POOL_PREFERRED_DATASETS", set()) for o in obs
+            ):
+                zeus_vectorize = False
+
         # Pool usage:
         # - zeus_vectorize=False  → use Pool (parallel across cores)
         # - zeus_vectorize=True   → no Pool (vectorised, single-core)

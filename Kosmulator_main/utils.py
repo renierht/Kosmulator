@@ -112,6 +112,7 @@ _OBS_ORDER = [
     "f",
     "f_sigma_8",
     "JLA",
+    "JLA_legacy",
     "OHD",
     "Pantheon",
     "PantheonP",
@@ -2600,6 +2601,22 @@ def issue_observation_warnings(CONFIG, models, *, token_mode: bool = True) -> No
             # ------------------------------------------------------------------
             # SNe solo warnings
             # ------------------------------------------------------------------
+            if (rraw == "jla_legacy") or ("jla_legacy" in rlow):
+                if token_mode:
+                    _warn_once(f"JLA_solo::{resolved}", "JLA run solo")
+                else:
+                    _warn_once(
+                        f"JLA_solo::{resolved}",
+                        (
+                            "JLA_legacy (SNe) run solo: this is the old 359-SN "
+                            "file of undocumented origin, kept to reproduce "
+                            "earlier runs. Use 'JLA' for the official 740-SN "
+                            "likelihood. Its magnitude offset is marginalised, "
+                            "so H0 is not constrained."
+                        ),
+                    )
+                continue
+
             if (rraw == "jla") or ("jla" in rlow):
                 if token_mode:
                     _warn_once(f"JLA_solo::{resolved}", "JLA run solo")
@@ -2607,11 +2624,11 @@ def issue_observation_warnings(CONFIG, models, *, token_mode: bool = True) -> No
                     _warn_once(
                         f"JLA_solo::{resolved}",
                         (
-                            "JLA (SNe) run solo: these SNe have M_abs values "
-                            "calibrated to Cepheids and are treated as fixed "
-                            "per object. Running solo is acceptable, but "
-                            "pairing with other observations (e.g., CC) is "
-                            "recommended."
+                            "JLA (SNe) run solo: official 740-SN likelihood "
+                            "with alpha_JLA and beta_JLA sampled and the "
+                            "absolute magnitudes (with the host-mass step) "
+                            "fitted analytically, so H0 is not constrained. "
+                            "Combine with CC, BAO or CMB data for H0."
                         ),
                     )
                 continue

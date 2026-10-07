@@ -309,6 +309,10 @@ def main(
     for m in model_names:
         can_vec = bool(vectorised.get(m, False))
         touches_cmb_bbn = _model_has_any_cmb_or_bbn(CONFIG, m)
+        # Expensive late-time likelihoods (official JLA) run zeus through the pool
+        if any(o in getattr(K, "POOL_PREFERRED_DATASETS", set())
+               for grp in CONFIG[m].get("observations", []) for o in grp):
+            any_needs_pool = True
 
         if engine_mode in ("single", "mixed"):
             # (A rule here used to send every wowaCDM model to emcee because zeus

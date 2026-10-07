@@ -340,6 +340,86 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
 # DESI BAO VI loaders
 # ---------------------------------------------------------------------------
 
+def load_jla_full(folder: Union[str, Path]) -> Dict[str, Any]:
+    """
+    Official JLA sample (Betoule et al. 2014, arXiv:1401.4064): 740 SNe Ia.
+
+    Reads the CosmoMC/Cobaya distribution of the JLA inputs (see
+    Observations/JLA/README.md): jla_lcparams.txt and the six blocks of
+    C_eta (jla_{v0,va,vb,v0a,v0b,vab}_covmatrix.dat).
+
+    The returned dict carries everything Statistical_packages.Calc_JLA_chi
+    needs to build C(alpha, beta) and the standardised magnitudes. For code
+    that only understands (redshift, type_data, type_data_error), it also
+    holds magnitudes standardised at the default alpha, beta and the matching
+    diagonal errors; the likelihood itself never uses those two arrays.
+    """
+    folder = Path(folder)
+    lc_path = folder / "jla_lcparams.txt"
+    if not lc_path.exists():
+        raise FileNotFoundError(f"JLA light-curve file not found: {lc_path}")
+
+    cols, names, rows = None, [], []
+    with open(lc_path) as fh:
+        for line in fh:
+            if line.startswith("#"):
+                cols = line[1:].split()
+                continue
+            if not line.strip():
+                continue
+            parts = line.split()
+            names.append(parts[0])
+            rows.append([float(x) for x in parts[1:]])
+    if cols is None or cols[0] != "name":
+        raise ValueError(f"{lc_path}: expected a '#name ...' header line")
+    arr = np.asarray(rows, dtype=float)
+    col = {c: arr[:, i] for i, c in enumerate(cols[1:])}
+    n = len(names)
+
+    blocks = []
+    for tag in ("v0", "va", "vb", "v0a", "v0b", "vab"):
+        path = folder / f"jla_{tag}_covmatrix.dat"
+        raw = np.loadtxt(path)
+        if int(round(raw[0])) != n or raw.size != n * n + 1:
+            raise ValueError(f"{path}: expected {n} x {n} entries after the size line")
+        m = raw[1:].reshape(n, n)
+        blocks.append(0.5 * (m + m.T))
+
+    host = col["3rdvar"]
+    split = float(getattr(K, "JLA_HOST_MASS_SPLIT", 10.0))
+    templates = np.column_stack([(host <= split), (host > split)]).astype(float)
+
+    data: Dict[str, Any] = {
+        "names": np.asarray(names),
+        "redshift": col["zcmb"],
+        "z_hel": col["zhel"],
+        "mb": col["mb"],
+        "x1": col["x1"],
+        "colour": col["color"],
+        "host_logmass": host,
+        "dmb2": col["dmb"] ** 2,
+        "dx12": col["dx1"] ** 2,
+        "dc2": col["dcolor"] ** 2,
+        "cov_ms": col["cov_m_s"],
+        "cov_mc": col["cov_m_c"],
+        "cov_sc": col["cov_s_c"],
+        "survey": col["set"].astype(int),
+        "V_blocks": np.stack(blocks),       # (6, N, N): v0, va, vb, v0a, v0b, vab
+        "templates": templates,             # (N, 2): M_B and M_B + Delta_M
+        "jla_full": True,
+        "data_is_distance_modulus": True,
+        "marginalise_offset": True,
+    }
+
+    # Fallback arrays for generic consumers (standardised at the default alpha, beta)
+    a0 = K.JLA_NUISANCE_DEFAULTS["alpha_JLA"][2]
+    b0 = K.JLA_NUISANCE_DEFAULTS["beta_JLA"][2]
+    from Kosmulator_main import Statistical_packages as _SP
+    data["type_data"] = _SP.jla_standardised_mag(data, a0, b0)
+    data["type_data_error"] = np.sqrt(np.diag(_SP.jla_covariance(data, a0, b0)))
+    return data
+
+
 def load_DESI_data(file_path: Union[str, Path]) -> Dict[str, np.ndarray]:
     """
     Parse DESI BAO VI files.
@@ -841,11 +921,24 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 data_sne["marginalise_offset"] = bool(getattr(K, "SN_MARGINALISE_OFFSET", True))
                 observation_data[obs] = data_sne
             # ------------------
+            # Official JLA (740 SNe, alpha/beta-dependent covariance)
+            # ------------------
+            elif obs == "JLA":
+                observation_data[obs] = load_jla_full(
+                    os.path.join(K.OBSERVATIONS_BASE, K.JLA_DIR_RELATIVE)
+                )
+            # ------------------
             # Default loader
             # ------------------
             else:
                 observation_data[obs] = load_data(file_path)
-                if obs in ("JLA", "Pantheon") and isinstance(observation_data[obs], dict):
+                if obs == "JLA_legacy":
+                    logger.warning(
+                        "JLA_legacy is the old 359-SN file (JLA redshifts, distance moduli "
+                        "of undocumented origin), kept to reproduce earlier runs; use 'JLA' "
+                        "for the official 740-SN likelihood."
+                    )
+                if obs in ("JLA_legacy", "Pantheon") and isinstance(observation_data[obs], dict):
                     # Distance moduli with an arbitrary normalisation: offset marginalised
                     observation_data[obs]["marginalise_offset"] = bool(
                         getattr(K, "SN_MARGINALISE_OFFSET", True)
@@ -922,6 +1015,7 @@ def create_config(
     obs_type_map = {
         # --- SNe-like (distance modulus) ---
         'JLA':       'SNe',
+        'JLA_legacy': 'SNe',
         'Pantheon':  'SNe',
         'PantheonP': 'SNe',
         'PantheonPS': 'SNe',
@@ -995,6 +1089,13 @@ def create_config(
                 names.add("A_planck")
 
         _inject_planck_nuisance_defaults(reference_values, prior_limits, sorted(names))
+
+    # Official JLA: default priors and starting values for alpha_JLA, beta_JLA
+    # (as Cobaya's sn.jla) unless the user set them in Kosmulator.py.
+    if "JLA" in flat_obs:
+        for _p, (_lo, _hi, _start) in K.JLA_NUISANCE_DEFAULTS.items():
+            prior_limits.setdefault(_p, (_lo, _hi))
+            reference_values.setdefault(_p, _start)
 
     # ----------------------------------------------------------------------
     # 2. Expand each model's core parameter list with obs-required params
@@ -1100,7 +1201,7 @@ def create_config(
         # and growth data. Combined with BAO/DESI they leave only h*r_d measured,
         # exactly as BAO alone, so r_d is fixed and H_0 carries h*r_d (DESI DR2
         # samples hrd for the same reason, arXiv:2503.14738 Sec. V).
-        _sn_offset_only = {"JLA", "Pantheon", "PantheonP", "DESY5", "Union3"}
+        _sn_offset_only = {"JLA", "JLA_legacy", "Pantheon", "PantheonP", "DESY5", "Union3"}
         _no_distance_scale = {"f", "f_sigma_8"}
         _h0_anchors = {
             "CC", "OHD", "PantheonPS",
@@ -1390,7 +1491,10 @@ def Add_required_parameters(
         'Union3':     ['H_0'],
         'f_sigma_8': ['Omega_m','sigma_8', 'gamma'],
         'f': ['Omega_m','gamma'],
-        'JLA': ['H_0'],
+        # Official JLA: light-curve nuisance parameters are sampled; the two
+        # absolute magnitudes are fitted analytically (Calc_JLA_chi).
+        'JLA': ['H_0', 'alpha_JLA', 'beta_JLA'],
+        'JLA_legacy': ['H_0'],
         'OHD': ['H_0'],
         'CC': ['H_0'],
         'BBN_DH': ['Omega_bh^2'],

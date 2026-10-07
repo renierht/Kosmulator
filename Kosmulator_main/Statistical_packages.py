@@ -992,9 +992,99 @@ def sn_offset_terms(obs_data: dict, residual: np.ndarray):
     return float(np.sum(w * r * r)), float(np.sum(w * r)), float(np.sum(w))
 
 
-def sn_best_offset(obs_data: dict, residual: np.ndarray) -> float:
-    """Best-fit constant offset B/E for a SN set (used to place the data in plots)."""
+# -----------------------------------------------------------------------------
+# Official JLA likelihood (Betoule et al. 2014, arXiv:1401.4064)
+# -----------------------------------------------------------------------------
+# mu = m_B - (M_B - alpha X_1 + beta C), with M_B -> M_B + Delta_M for massive
+# hosts. The covariance depends on alpha and beta (Cobaya sn.jla / CosmoMC):
+#   C = V0 + a^2 Va + b^2 Vb + 2a V0a - 2b V0b - 2ab Vab
+#       + diag(dmb^2 + a^2 dx1^2 + b^2 dc^2 + 2a c_ms - 2b c_mc - 2ab c_sc).
+# The two absolute magnitudes enter linearly through the (N, 2) template T, so
+# they are fitted analytically:
+#   chi2 = r^T C^-1 r - b^T F^-1 b,  b = T^T C^-1 r,  F = T^T C^-1 T,
+# with r = m_B + a X_1 - b C - mu_model. Marginalising them with flat priors
+# instead adds ln det(F / 2 pi), which depends only on alpha and beta (it moves
+# them by < 0.05 sigma and leaves the cosmology unchanged). It is left out so
+# that the sampler, chi2_min, AIC/BIC and DIC all use the same deviance; the
+# official JLA code also reports chi2 with M_B and Delta_M at their best fit.
+_JLA_CACHE: Dict[str, Any] = {}
+
+
+def jla_standardised_mag(obs_data: dict, alpha: float, beta: float) -> np.ndarray:
+    """m_B + alpha X_1 - beta C (= mu + M_B), per SN."""
+    return (np.asarray(obs_data["mb"], dtype=float)
+            + alpha * np.asarray(obs_data["x1"], dtype=float)
+            - beta * np.asarray(obs_data["colour"], dtype=float))
+
+
+def jla_covariance(obs_data: dict, alpha: float, beta: float) -> np.ndarray:
+    """Full JLA covariance of the standardised magnitudes for given alpha, beta."""
+    a, b = float(alpha), float(beta)
+    w = np.array([1.0, a * a, b * b, 2.0 * a, -2.0 * b, -2.0 * a * b])
+    C = np.tensordot(w, obs_data["V_blocks"], axes=1)
+    C[np.diag_indices_from(C)] += (
+        obs_data["dmb2"] + a * a * obs_data["dx12"] + b * b * obs_data["dc2"]
+        + 2.0 * a * obs_data["cov_ms"] - 2.0 * b * obs_data["cov_mc"]
+        - 2.0 * a * b * obs_data["cov_sc"]
+    )
+    return C
+
+
+def _jla_factor(obs_data: dict, alpha: float, beta: float):
+    """Cholesky factor of C(alpha, beta) and C^-1 T, cached for the last (alpha, beta)."""
+    key = (id(obs_data), float(alpha), float(beta))
+    if _JLA_CACHE.get("key") == key:
+        return _JLA_CACHE["cf"], _JLA_CACHE["CiT"], _JLA_CACHE["F"]
+    C = jla_covariance(obs_data, alpha, beta)
+    cf = la.cho_factor(C, lower=True, check_finite=False)
+    T = obs_data["templates"]
+    CiT = la.cho_solve(cf, T, check_finite=False)
+    F = T.T @ CiT
+    _JLA_CACHE.update(key=key, cf=cf, CiT=CiT, F=F)
+    return cf, CiT, F
+
+
+def _jla_terms(obs_data: dict, model: np.ndarray, param_dict: Dict[str, float]):
+    """(chi2, best-fit offsets, residual before offsets) for the official JLA."""
+    alpha = float(param_dict["alpha_JLA"])
+    beta = float(param_dict["beta_JLA"])
+    r = jla_standardised_mag(obs_data, alpha, beta) - np.asarray(model, dtype=float)
+    cf, CiT, F = _jla_factor(obs_data, alpha, beta)
+    Cir = la.cho_solve(cf, r, check_finite=False)
+    bvec = obs_data["templates"].T @ Cir
+    offsets = np.linalg.solve(F, bvec)
+    chi2 = float(r @ Cir - bvec @ offsets)
+    return chi2, offsets, r
+
+
+def Calc_JLA_chi(obs_data: dict, model: np.ndarray, param_dict: Dict[str, float]) -> float:
+    """
+    chi^2 of the official JLA sample for distance moduli ``model``
+    (25 + 5 log10(D_L / Mpc), D_L = (1 + z_hel) D_M(z_cmb)), with M_B and
+    Delta_M fitted analytically. Needs alpha_JLA and beta_JLA in param_dict.
+    """
+    try:
+        chi2, _, _ = _jla_terms(obs_data, model, param_dict)
+    except la.LinAlgError:
+        return np.inf
+    return chi2
+
+
+def sn_best_offset(obs_data: dict, residual: np.ndarray, param_dict: Optional[Dict[str, float]] = None):
+    """
+    Best-fit magnitude offset for a SN set (used to place the data in plots):
+    B/E for one constant offset; for the official JLA a per-SN array with the
+    two host-mass offsets, which needs alpha_JLA and beta_JLA in param_dict
+    (``residual`` must then use magnitudes standardised with the same values).
+    """
     r = np.asarray(residual, dtype=float)
+    if obs_data.get("jla_full"):
+        pd_ = dict(param_dict or {})
+        pd_.setdefault("alpha_JLA", 0.14)
+        pd_.setdefault("beta_JLA", 3.1)
+        cf, CiT, F = _jla_factor(obs_data, pd_["alpha_JLA"], pd_["beta_JLA"])
+        offsets = np.linalg.solve(F, obs_data["templates"].T @ la.cho_solve(cf, r, check_finite=False))
+        return obs_data["templates"] @ offsets
     L = obs_data.get("cov")
     if "m_b_corr" in obs_data and L is not None and np.shape(L) == (r.size, r.size):
         _, B, E = _sn_terms_chol(np.asarray(L), r)
@@ -1017,6 +1107,10 @@ def Calc_Generic_SNe_chi(
     With obs_data["marginalise_offset"] the magnitude offset is marginalised
     analytically (chi2 = A - B^2/E), so neither M_abs nor H_0 enters.
     """
+    if obs_data.get("jla_full"):
+        # Official JLA: alpha/beta-dependent covariance, two analytic offsets
+        return Calc_JLA_chi(obs_data, model, param_dict)
+
     type_data = np.asarray(obs_data["type_data"], dtype=float)
 
     if obs_data.get("marginalise_offset", False):
@@ -2001,12 +2095,12 @@ def pointwise_log_like_DESI(obs_data, Model_func, param_dict, obs_type):
     return np.array([-0.5 * chi2]) #Shape (1,)
 
 def pointwise_log_like_SNe(obs_data, model, param_dict):
-    if "inv_cov" in obs_data:
-        # Correlated (DESY5, Union3) → N=1
+    if "inv_cov" in obs_data or obs_data.get("jla_full"):
+        # Correlated (DESY5, Union3, official JLA) → N=1
         chi2 = Calc_Generic_SNe_chi(obs_data, model, param_dict)
         return np.array([-0.5 * chi2])
     else:
-        # Diagonal errors (JLA, Pantheon) → N = number of SNe
+        # Diagonal errors (JLA_legacy, Pantheon) → N = number of SNe
         err = obs_data["type_data_error"]
         if obs_data.get("marginalise_offset", False):
             r = np.asarray(obs_data["type_data"], dtype=float) - model
