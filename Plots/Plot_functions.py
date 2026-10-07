@@ -341,8 +341,9 @@ def add_corner_table(
     The layout is computed in physical units (inches) from the measured size
     of every label and value, so cells always fit their contents:
 
-      * The font follows the corner plot's axis-label size and is reduced only
-        when the table would be wider than the corner grid.
+      * The font follows the corner plot's axis-label size, but never drops
+        below a floor that keeps it readable when the whole figure is viewed
+        about 10 in wide (large corner plots are 4 in per parameter).
       * ``table_position`` "auto" (default) puts the table in the empty
         upper-right triangle of the corner plot when it fits there, and
         otherwise in a band above the grid. For the band the figure is made
@@ -357,6 +358,10 @@ def add_corner_table(
     PLOT_SETTINGS keys (all optional):
       table_position      "auto" | "top" | "triangle"
       table_font_scale    font size relative to the axis labels (1.0)
+      table_display_pt, table_display_width_in
+                          readability floor: the table font is at least
+                          table_display_pt (9) when the figure is viewed
+                          table_display_width_in (10) wide
       table_min_font_frac smallest font relative to that size before the
                           table is split into blocks (0.7)
       table_max_font_frac largest font relative to that size, used when the
@@ -531,11 +536,19 @@ def add_corner_table(
             return geos, W, H
         return None
 
-    f_target = float(PLOT_SETTINGS.get("table_font_scale", 1.0)) * float(
+    f_label = float(PLOT_SETTINGS.get("table_font_scale", 1.0)) * float(
         getattr(g.settings, "axes_labelsize", None) or PLOT_SETTINGS.get("label_font_size", 12))
-    f_min = max(6.0, float(PLOT_SETTINGS.get("table_min_font_frac", 0.7)) * f_target)
-    # Large corner plots leave room for a larger table, which stays readable
-    # when the figure is viewed scaled down.
+    # Readability floor. The corner plot is 4 in wide per parameter and is
+    # normally viewed scaled to a screen or slide, so a font fixed in points
+    # becomes unreadable on large plots. Keep the table at least
+    # table_display_pt when the whole figure is shown table_display_width_in
+    # wide; the table never shrinks below this (it wraps names, splits into
+    # column blocks or moves to the band instead).
+    f_read = (float(PLOT_SETTINGS.get("table_display_pt", 9.0)) * W_fig
+              / float(PLOT_SETTINGS.get("table_display_width_in", 10.0)))
+    f_target = max(f_label, f_read)
+    f_min = max(6.0, f_read, float(PLOT_SETTINGS.get("table_min_font_frac", 0.7)) * f_label)
+    # Large corner plots leave room for a larger table.
     f_max = float(PLOT_SETTINGS.get("table_max_font_frac", 1.4)) * f_target
 
     # ------------------------------------------------------------------
@@ -543,7 +556,7 @@ def add_corner_table(
     # ------------------------------------------------------------------
     choice = None
     if position in ("auto", "triangle") and not keep_legend:
-        tri_min = f_target * (0.8 if position == "auto" else 0.5)
+        tri_min = max(f_min, f_target * (0.8 if position == "auto" else 0.5))
         wrapped_tri = [_wrap(l, 0.45 * avail_w / (f_target / F_REF)) for l in row_labels]
         for labs in (row_labels, wrapped_tri):
             f = f_max
@@ -578,9 +591,12 @@ def add_corner_table(
                 _, W, _ = _layout(f_target, blocks, labs)
                 # A band adds height to the figure, so it is enlarged less than a
                 # table in the empty triangle, and wrapped labels not at all.
-                f_cap = min(f_max, 1.2 * f_target) if labs is row_labels else f_target
+                # Split tables are not enlarged either: they are already tall.
+                f_cap = min(f_max, 1.2 * f_target) if (labs is row_labels and k == 1) else f_target
                 f = min(f_cap, f_target * band_w / W)
-                if f >= f_min:
+                # Splitting doubles the table height, so a single block may go
+                # up to 10 % below the floor rather than split for a few percent.
+                if f >= (0.9 * f_min if k == 1 else f_min):
                     chosen = (f, blocks, labs)
                     break
                 if best is None or f > best[0]:
