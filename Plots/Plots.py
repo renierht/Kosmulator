@@ -32,7 +32,7 @@ from Plots.Plot_functions import (
     phase_banner, section_banner, print_rule,
 
     # table + label helpers
-    greek_Symbols, format_for_latex, add_corner_table, pretty_obs_name,
+    greek_Symbols, format_for_latex, add_corner_table, place_corner_legend, pretty_obs_name,
     align_table_to_parameters, print_aligned_latex_table,
     print_parameter_list_table, print_cmb_summary_matrix,
 
@@ -98,6 +98,7 @@ QUALITY_ORDER = {
     "Pantheon":  2,
     "Union3":    3,
     "JLA":       4,
+    "JLA_legacy": 5,
     # H(z)
     "CC": 0, "OHD": 1,
     # Growth rate
@@ -109,35 +110,51 @@ QUALITY_ORDER = {
 # =============================================================================
 
 def _latex_model_name(name: str, latex_enabled: bool, settings: dict) -> str:
-    """Return a LaTeX-safe model label (consistent everywhere)."""
-    if not latex_enabled:
-        return name
-    # user override wins
-    custom = (settings or {}).get("model_latex_names", {})
-    if name in custom:
-        s = custom[name]
-        return s if s.startswith("$") else f"${s}$"
-    # already LaTeX-like
-    if "$" in name:
-        return name
-    # simple rule: first '_' starts a subscript with the remainder
-    if "_" in name:
-        head, tail = name.split("_", 1)
-        return rf"${head}_{{{tail}}}$"
-    return f"${name}$"
-    
+    """
+    Display label for a model (consistent everywhere): LCDM_v -> $\\Lambda$CDM,
+    wowaCDM_v -> $w_0w_a$CDM, f1CDM_v -> $f_1$CDM, other names as escaped text.
+    PLOT_SETTINGS["model_latex_names"] overrides per model.
+    """
+    from Plots.latex_labels import model_label
+    return model_label(name, latex_enabled, (settings or {}).get("model_latex_names", {}))
+
+
 def _displayize_key(key: str) -> str:
     """
     Turn internal keys into human-friendly *plain-text* obs labels
     (used for console + saved stats tables).
 
+    Groups are joined with "+". Dataset tags keep their own underscores
+    (DESI_DR2, f_sigma_8, JLA_legacy); only an old-style key whose "_"-separated
+    pieces are all known tags (CC_PantheonPS) is split on "_".
+
     Policy:
       PantheonPS / PantheonP_SH0ES  -> Pantheon++SH0ES
       PantheonP                    -> Pantheon+
     """
-    # Normalise separators so keys like CC_PantheonPS also behave
-    s = str(key).replace("_", "+")
-    parts = s.split("+")
+    from Kosmulator_main.constants import OBS_PRETTY_MAP as _OPM
+    known = set(_OPM) | {"PantheonPS", "PantheonP_SH0ES", "BBN_prior"}
+
+    def _split_part(p: str) -> list:
+        if p in known or "_" not in p:
+            return [p]
+        pieces = p.split("_")
+        # greedy re-join of pieces into known tags (DESI_DR2 inside CC_DESI_DR2)
+        out, i = [], 0
+        while i < len(pieces):
+            for j in range(len(pieces), i, -1):
+                cand = "_".join(pieces[i:j])
+                if cand in known:
+                    out.append(cand)
+                    i = j
+                    break
+            else:
+                return [p]          # not made of known tags: keep as is
+        return out
+
+    parts = []
+    for p in str(key).split("+"):
+        parts.extend(_split_part(p) if p else [])
     mapped = []
     for p in parts:
         if p in ("PantheonPS", "PantheonP_SH0ES", "Pantheon+SH0ES"):
@@ -1214,6 +1231,11 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
             fig.tight_layout()
         except Exception:
             pass
+        # Measured legend placement (triangle or band), same rules as the table
+        try:
+            place_corner_legend(g, PLOT_SETTINGS)
+        except Exception as exc:
+            print(f"[warning] corner legend layout skipped: {exc}")
 
     # Save figure
     root   = base_dir(PLOT_SETTINGS)
@@ -1530,7 +1552,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
                     } for x in obs_list_raw)
                     has_bao = any(x in {"BAO", "DESI_DR1", "DESI_DR2"} for x in obs_list_raw)
                     has_unanch = any(x in {
-                        "JLA", "Pantheon", "PantheonP", "PantheonPS", 
+                        "JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS",
                         "DESY5", "Union3", "f", "f_sigma_8"
                     } for x in obs_list_raw)
 
@@ -1705,13 +1727,16 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
 
                     # Uncalibrated SNe: the magnitude offset is marginalised in the
                     # likelihood, so place the data with its best-fit value here.
-                    if (obs_type in ("JLA", "Pantheon", "PantheonP", "DESY5", "Union3")
+                    if (obs_type in ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "DESY5", "Union3")
                             and bool((data.get(obs_type) or {}).get("marginalise_offset", False))):
                         try:
+                            # JLA: per-SN offsets (two host-mass classes), using the
+                            # same alpha, beta as the standardised magnitudes
                             _off = SP.sn_best_offset(
-                                data[obs_type], np.asarray(y_dat, dtype=float) - np.asarray(y_mod_pts, dtype=float)
+                                data[obs_type], np.asarray(y_dat, dtype=float) - np.asarray(y_mod_pts, dtype=float),
+                                param_dict=params_med,
                             )
-                            if np.isfinite(_off):
+                            if np.all(np.isfinite(_off)):
                                 y_dat = np.asarray(y_dat, dtype=float) - _off
                         except Exception:
                             pass
@@ -1751,7 +1776,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
                     )
 
                     overlay_flag = bool(PLOT_SETTINGS.get("overlay_model_for_bao_desi", False))
-                    SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
+                    SNE_TYPES = ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
 
                     if obs_type in ("BAO", "DESI_DR1", "DESI_DR2"):
                         if overlay_flag:
@@ -1789,7 +1814,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
                 # Legend: model first, then datasets (deduped)
                 handles, labels_here = _model_first_legend(ax, model_disp)
 
-                SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
+                SNE_TYPES = ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
                 if all(o in SNE_TYPES for o in part_sorted):
                     legend_loc = "lower right"
                     legend_anchor = (0.98, 0.02)

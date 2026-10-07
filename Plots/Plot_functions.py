@@ -49,7 +49,7 @@ __all__ = [
     # labels
     "greek_Symbols", "format_for_latex", "texify_label", "pretty_obs_name",
     # tables
-    "align_table_to_parameters", "add_corner_table",
+    "align_table_to_parameters", "add_corner_table", "place_corner_legend",
     "print_aligned_latex_table", "print_parameter_list_table", "print_cmb_summary_matrix", "print_stats_table",
     # data helpers
     "extract_observation_data", "fetch_best_fit_values",
@@ -93,51 +93,28 @@ def print_rule() -> None:
 # =============================================================================
 # Label helpers
 # =============================================================================
-PARAM_LATEX_OVERRIDES = {
-    # Core cosmological / CMB parameters with non-trivial syntax
-    "Omega_bh^2":  r"\Omega_b h^2",
-    "Omega_dh^2":  r"\Omega_d h^2",
-    "ln10^10_As":  r"\ln 10^{10} A_s",
-    "tau_reio":    r"\tau_\mathrm{reio}",
-    "A_planck":    r"A_\mathrm{Planck}",
-    # You can extend this dict with any other special cases you care about.
-    # e.g.
-    # "A_cib_217":   r"A_\mathrm{CIB}^{217}",
-    # "A_sz":        r"A_\mathrm{SZ}",
-}
+#: Exact LaTeX labels for parameter names (without $). These win over the
+#: automatic rules in Plots/latex_labels.py, which already cover Greek names,
+#: digit subscripts, h^2 densities and Planck/JLA nuisance names. Example:
+#:   PARAM_LATEX_OVERRIDES["A_cib_217"] = r"A^{\rm CIB}_{217}"
+PARAM_LATEX_OVERRIDES: Dict[str, str] = {}
+
 
 def greek_Symbols(parameters: Sequence[str] | Sequence[Sequence[str]] | None = None):
     """
-    Map parameter names to TeX, handling subscripts.
+    Map parameter names to LaTeX (math mode, without $).
 
-    Rules:
-      * Simple names like ``Omega_m`` or ``H_0`` become ``\\Omega_{m}``, ``H_{0}``.
-      * Known special cases (Planck nuisance etc.) are taken from
-        ``PARAM_LATEX_OVERRIDES``.
-      * Names with more than one ``_`` (e.g. ``ps_A_100_100``) are treated as
-        plain text and wrapped in ``\\mathrm{...}`` so we don't guess a
-        subscript structure and lose information.
+    Delegates to ``latex_labels.param_latex``: Greek names anywhere in a name,
+    trailing digits as subscripts (w0 -> w_0), upright descriptive subscripts
+    (Omega_m -> \\Omega_{\\rm m}), h^2 densities, Planck-style nuisance names
+    (ps_A_100_100 -> A^{ps}_{100,100}) and escaped text otherwise. Every label
+    is test-compiled, so an odd name falls back to upright text instead of
+    stopping the plot. ``PARAM_LATEX_OVERRIDES`` wins over the rules.
     """
+    from Plots.latex_labels import param_latex
+
     def fmt_one(name: str) -> str:
-        # 1) Exact override first
-        if name in PARAM_LATEX_OVERRIDES:
-            return PARAM_LATEX_OVERRIDES[name]
-
-        # 2) No underscore → try full-name Greek replacement, otherwise leave
-        if "_" not in name:
-            return GREEK_SYMBOLS.get(name, name)
-
-        # 3) Very complex names (multiple underscores) → keep as roman text
-        #    e.g. ps_A_100_100, A_sbpx_100_100_TT, ...
-        if name.count("_") > 1:
-            safe = name.replace("_", r"\_")
-            return rf"\mathrm{{{safe}}}"
-
-        # 4) Simple base_sub pattern (Omega_m, H_0, etc.)
-        base, sub = name.split("_", 1)
-        base_label = GREEK_SYMBOLS.get(base, base)
-        sub_label  = GREEK_SYMBOLS.get(sub, sub)
-        return rf"{base_label}_{{{sub_label}}}"
+        return param_latex(name, PARAM_LATEX_OVERRIDES)
 
     if not parameters:
         return []
@@ -211,6 +188,10 @@ def pretty_obs_name(obs_key: str, latex_on: bool = True) -> str:
         # Fall back to your global mapping (keeps existing behavior)
         pair = OBS_PRETTY_MAP.get(t)
         if pair is None:
+            # Unknown dataset tag: make it safe for LaTeX (underscores etc.)
+            if latex_on:
+                from Plots.latex_labels import text_label
+                return text_label(t)
             return t
         return pair[0] if latex_on else pair[1]
 
@@ -697,6 +678,143 @@ def add_corner_table(
 
 
 
+def place_corner_legend(g, PLOT_SETTINGS):
+    """
+    Lay out GetDist's corner-plot legend when no summary table is drawn.
+
+    Same rules as ``add_corner_table``: sizes come from the measured legend,
+    the font follows the axis labels with the same readability floor
+    (``table_display_pt`` at ``table_display_width_in``), and the legend goes
+    into the empty upper-right triangle when it fits there; otherwise it sits
+    in a band above the grid and the figure grows by exactly its height.
+    The number of legend columns is chosen to fit. Set
+    ``PLOT_SETTINGS["corner_legend_layout"] = "getdist"`` for GetDist's own
+    placement. Returns the new legend, or None.
+    """
+    import matplotlib.pyplot as plt
+
+    if str(PLOT_SETTINGS.get("corner_legend_layout", "auto")).lower() == "getdist":
+        return None
+    fig = getattr(g, "fig", None) or plt.gcf()
+    legends = list(getattr(fig, "legends", []))
+    if not legends:
+        return None
+    old = legends[0]
+    handles = list(getattr(old, "legend_handles", None) or getattr(old, "legendHandles", []))
+    labels = [t.get_text() for t in old.get_texts()]
+    if not handles or len(handles) != len(labels):
+        return None
+    for lg in legends:
+        lg.remove()
+
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    dpi = fig.dpi
+    W_fig, H_fig = fig.get_size_inches()
+    panels = [ax for ax in fig.axes if ax.get_visible() and ax.axison]
+    if not panels:
+        return None
+    pos = [ax.get_position() for ax in panels]
+    g_left = min(p.x0 for p in pos) * W_fig
+    g_right = max(p.x1 for p in pos) * W_fig
+    g_top = max(p.y1 for p in pos) * H_fig
+    obstacles = []
+    for ax in panels:
+        bb = ax.get_tightbbox(renderer)
+        if bb is not None:
+            obstacles.append((bb.x0 / dpi, bb.y0 / dpi, bb.x1 / dpi, bb.y1 / dpi))
+    content_top = max([g_top] + [o[3] for o in obstacles])
+    avail_w = max(1e-3, g_right - g_left)
+
+    f_label = float(PLOT_SETTINGS.get("table_font_scale", 1.0)) * float(
+        getattr(g.settings, "axes_labelsize", None) or PLOT_SETTINGS.get("label_font_size", 12))
+    f_read = (float(PLOT_SETTINGS.get("table_display_pt", 9.0)) * W_fig
+              / float(PLOT_SETTINGS.get("table_display_width_in", 10.0)))
+    f_target = max(f_label, f_read)
+    f_min = max(6.0, f_read, float(PLOT_SETTINGS.get("table_min_font_frac", 0.7)) * f_label)
+    f_max = float(PLOT_SETTINGS.get("table_max_font_frac", 1.4)) * f_target
+    F_REF = 10.0
+    n = len(labels)
+
+    def _make(ncol, f, loc, anchor):
+        return fig.legend(handles, labels, loc=loc, bbox_to_anchor=anchor,
+                          bbox_transform=fig.transFigure, ncol=ncol, fontsize=f,
+                          frameon=True, borderaxespad=0.0)
+
+    _size_cache = {}
+
+    def _size(ncol, f, exact=False):
+        """Legend (w, h) in inches; measured at F_REF and scaled unless exact."""
+        fk = round(f, 2) if exact else F_REF
+        key = (ncol, fk)
+        if key not in _size_cache:
+            lg = _make(ncol, fk, "upper right", (1.0, 1.0))
+            bb = lg.get_window_extent(renderer)
+            lg.remove()
+            _size_cache[key] = (bb.width / dpi, bb.height / dpi)
+        w, h = _size_cache[key]
+        return (w, h) if exact else (w * f / F_REF, h * f / F_REF)
+
+    def _fits(x0, y0, x1, y1, margin):
+        return all(x0 >= o[2] + margin or x1 <= o[0] - margin or y0 >= o[3] + margin or y1 <= o[1] - margin
+                   for o in obstacles)
+
+    choice = None
+    # 1) upper-right triangle: largest font that fits with some column count
+    f = f_max
+    while f >= max(f_min, 0.8 * f_target) - 1e-9 and choice is None:
+        for ncol in range(1, n + 1):
+            w, h = _size(ncol, f)
+            m = 0.5 * f / 72.0
+            if _fits(g_right - w, g_top - h, g_right, g_top, m):
+                w, h = _size(ncol, f, exact=True)
+                if _fits(g_right - w, g_top - h, g_right, g_top, m):
+                    choice = ("triangle", ncol, f)
+                break
+        f *= 0.95
+
+    if choice is not None:
+        _, ncol, f = choice
+        return _make(ncol, f, "upper right", (g_right / W_fig, g_top / H_fig))
+
+    # 2) band above the grid: most columns that fit the width at the target font
+    band_w = max(avail_w, float(PLOT_SETTINGS.get("table_min_width_in", 6.0)))
+    f_cap = min(f_max, 1.2 * f_target)
+    best = None
+    for ncol in range(n, 0, -1):
+        w, h = _size(ncol, f_target)
+        f = min(f_cap, f_target * band_w / w)
+        if f >= f_min:
+            best = (ncol, f)
+            break
+        if best is None or f > best[1]:
+            best = (ncol, f)
+    ncol, f = best
+    f = max(6.0, f)
+    for _ in range(4):                                         # confirm at the real size
+        w, h = _size(ncol, f, exact=True)
+        if w <= band_w * 1.0001 or f <= 6.0:
+            break
+        f = max(6.0, 0.995 * f * band_w / w)
+
+    gap = 0.8 * f / 72.0
+    top_margin = 0.25 * f / 72.0
+    side = 0.1
+    y0 = content_top + gap
+    new_W = max(W_fig, w + 2 * side)
+    new_H = max(H_fig, y0 + h + top_margin)
+    shift = 0.5 * (new_W - W_fig)
+    if new_W > W_fig or new_H > H_fig:
+        for ax in fig.axes:
+            p = ax.get_position()
+            ax.set_position([(p.x0 * W_fig + shift) / new_W, p.y0 * H_fig / new_H,
+                             p.width * W_fig / new_W, p.height * H_fig / new_H])
+        fig.set_size_inches(new_W, new_H, forward=False)
+    centre = 0.5 * (g_left + g_right) + shift
+    xc = min(max(centre, side + 0.5 * w), new_W - side - 0.5 * w)
+    return _make(ncol, f, "lower center", (xc / new_W, y0 / new_H))
+
+
 def _obs_col_width_from_names(names, base=30, wmin=28, wmax=72, pad=2):
     """Pick a width for the Observation column that fits the longest name."""
     try:
@@ -944,7 +1062,7 @@ def partition_by_compatibility(obs_list: Sequence[str]) -> List[List[str]]:
 def residual_unit(obs_type: str) -> str:
     if obs_type in ("OHD", "CC"):
         return r"km s$^{-1}$ Mpc$^{-1}$"
-    if obs_type in ("PantheonP", "Pantheon", "JLA", "DESY5", "Union3"):
+    if obs_type in ("PantheonP", "Pantheon", "JLA", "JLA_legacy", "DESY5", "Union3"):
         return "mag"
     if obs_type in ("BBN_DH", "BBN_DH_AlterBBN"):
         return "D/H (absolute)"
@@ -1061,6 +1179,18 @@ def extract_observation_data(
             M0 = float(params_median["M_abs"])
         y = np.asarray(obs_data["m_b_corr"]) - M0
         yerr = np.asarray(obs_data.get("type_data_error", np.zeros_like(y)))
+        return z, y, yerr, None
+
+    # --- Official JLA: magnitudes standardised with the plotted alpha, beta ---
+    if isinstance(obs_data, Mapping) and obs_data.get("jla_full"):
+        from Kosmulator_main import Statistical_packages as _SP
+        from Kosmulator_main.constants import JLA_NUISANCE_DEFAULTS as _JND
+        pm = dict(params_median or {})
+        a = float(pm.get("alpha_JLA", _JND["alpha_JLA"][2]))
+        b = float(pm.get("beta_JLA", _JND["beta_JLA"][2]))
+        z = np.asarray(obs_data["redshift"], dtype=float)
+        y = _SP.jla_standardised_mag(obs_data, a, b)
+        yerr = np.sqrt(np.diag(_SP.jla_covariance(obs_data, a, b)))
         return z, y, yerr, None
 
     # --- CMB HANDLING ---
@@ -1388,7 +1518,7 @@ def model_curve_for_type(
         Ez = MODEL_funcs["E"](zgrid, p, model_name)
         return p["H_0"] * Ez, r"$H(z)$ (km s$^{-1}$ Mpc$^{-1}$)"
 
-    if obs_type in ("PantheonP", "PantheonPS", "Pantheon", "JLA", "DESY5", "Union3"):
+    if obs_type in ("PantheonP", "PantheonPS", "Pantheon", "JLA", "JLA_legacy", "DESY5", "Union3"):
         Dc = MODEL_funcs["Dc"](zgrid, p, model_name)
         mu = 25.0 + 5.0 * np.log10(np.clip((1.0 + zgrid) * Dc, 1e-12, None))
         return mu, r"Distance modulus $\mu$ (mag)"
@@ -1499,7 +1629,7 @@ def evaluator_for_points(
         Ez = MODEL_funcs["E"](z, param_dict, model_name)
         return param_dict["H_0"] * Ez
 
-    if obs_type in ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3"):
+    if obs_type in ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3"):
         z = np.asarray(z, dtype=float)
         d_c = MODEL_funcs["Dc"](z, param_dict, model_name)     # comoving distance [Mpc]
         d_l = d_c * (1.0 + z)                                  # luminosity distance [Mpc]
