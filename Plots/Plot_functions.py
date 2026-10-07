@@ -331,245 +331,353 @@ def add_corner_table(
     labels,
     PLOT_SETTINGS,
     parameter_labels,
-    flat_parameters,
-    num_params,
+    flat_parameters=None,
+    num_params=None,
+    line_args=None,
 ):
     """
-    Draw the best–fit summary table as a band above the corner plot.
+    Draw the posterior summary table on a GetDist corner plot.
 
-    Behaviour:
-      * Band height mainly depends on the number of TABLE ROWS (obs combos),
-        with extra room when there is 1 row but many parameters.
-      * The table hugs the top of the corner grid with a small vertical pad.
-      * Font size and cell size adapt to BOTH rows and parameters.
+    The layout is computed in physical units (inches) from the measured size
+    of every label and value, so cells always fit their contents:
+
+      * The font follows the corner plot's axis-label size and is reduced only
+        when the table would be wider than the corner grid.
+      * ``table_position`` "auto" (default) puts the table in the empty
+        upper-right triangle of the corner plot when it fits there, and
+        otherwise in a band above the grid. For the band the figure is made
+        taller by exactly the table height, so the corner panels keep their
+        size and no extra whitespace is created.
+      * A table that is too wide even at the smallest allowed font is split
+        into column blocks stacked vertically; long observation names are
+        wrapped at " + " first.
+      * Each row label carries the colour and line style of its posterior, so
+        the separate figure legend is removed unless ``table_keep_legend``.
+
+    PLOT_SETTINGS keys (all optional):
+      table_position      "auto" | "top" | "triangle"
+      table_font_scale    font size relative to the axis labels (1.0)
+      table_min_font_frac smallest font relative to that size before the
+                          table is split into blocks (0.7)
+      table_max_font_frac largest font relative to that size, used when the
+                          corner plot leaves room (1.4)
+      table_min_width_in  width allowed for a band table above a narrow grid (6.0)
+      table_style         "booktabs" (rules, shaded rows) | "grid"
+      table_keep_legend   keep GetDist's figure legend (False)
+
+    ``flat_parameters`` and ``num_params`` are accepted for backward
+    compatibility and not used. Returns the table axes, or None.
     """
-    import matplotlib
-    matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    import numpy as np
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Rectangle
 
-    # Get figure from GetDist plotter
-    fig = getattr(g, "fig", None)
-    if fig is None:
-        fig = plt.gcf()
+    fig = getattr(g, "fig", None) or plt.gcf()
 
-    if not latex_table or not any(isinstance(r, (list, tuple)) and len(r) for r in latex_table):
+    # ------------------------------------------------------------------
+    # Content
+    # ------------------------------------------------------------------
+    rows_in = [list(r) for r in (latex_table or []) if isinstance(r, (list, tuple))]
+    if not rows_in or not parameter_labels:
         return None
-    
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-    def _renderer(f):
-        try:
-            return f.canvas.get_renderer()
-        except Exception:
-            f.canvas.draw()
-            return f.canvas.get_renderer()
+    n_all = len(parameter_labels)
+    blank = {"", "—", "-", "nan", "$nan$"}
+    rows_full = [[("" if str(c).strip() in blank else str(c)) for c in (r[:n_all] + [""] * (n_all - len(r)))]
+                 for r in rows_in]
+    cols = [j for j in range(n_all) if any(r[j] for r in rows_full)]   # drop all-empty columns
+    if not cols:
+        return None
+    n_rows = len(rows_full)
+    latex_on = bool(PLOT_SETTINGS.get("latex_enabled", False))
+    head_all = (format_for_latex(greek_Symbols(list(parameter_labels))) if latex_on
+                else [str(p) for p in parameter_labels])
+    row_labels = [str(x) for x in (list(labels) + [""] * n_rows)[:n_rows]]
+
+    position = str(PLOT_SETTINGS.get("table_position", "auto")).lower()
+    style = str(PLOT_SETTINGS.get("table_style", "booktabs")).lower()
+    keep_legend = bool(PLOT_SETTINGS.get("table_keep_legend", False))
 
     # ------------------------------------------------------------------
-    # Determine footprint of the main corner grid
+    # Colour key per row (taken from GetDist's legend so it matches exactly)
     # ------------------------------------------------------------------
-    axes = [
-        ax for ax in fig.axes
-        if ax.get_visible() and ax.xaxis.get_visible() and ax.yaxis.get_visible()
-    ]
-    if not axes:
-        axes = [ax for ax in fig.axes if ax.get_visible()]
-    if not axes:
+    fills = [None] * n_rows
+    for lg in list(getattr(fig, "legends", [])):
+        handles = getattr(lg, "legend_handles", None) or getattr(lg, "legendHandles", [])
+        for i, h in enumerate(handles[:n_rows]):
+            try:
+                fills[i] = h.get_facecolor()
+            except Exception:
+                pass
+    styles = list(line_args or [])
+    for i in range(n_rows):
+        st = styles[i] if i < len(styles) else {}
+        if fills[i] is None:
+            import matplotlib.colors as mcolors
+            fills[i] = mcolors.to_rgba(st.get("color", "k"), 0.45)
+    if not keep_legend:
+        for lg in list(getattr(fig, "legends", [])):
+            lg.remove()
+        if getattr(g, "legend", None) is not None:
+            g.legend = None
+
+    # ------------------------------------------------------------------
+    # Corner grid geometry and obstacles (inches)
+    # ------------------------------------------------------------------
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    dpi = fig.dpi
+    W_fig, H_fig = fig.get_size_inches()
+    panels = [ax for ax in fig.axes if ax.get_visible() and ax.axison]
+    if not panels:
+        return None
+    pos = [ax.get_position() for ax in panels]
+    g_left = min(p.x0 for p in pos) * W_fig
+    g_right = max(p.x1 for p in pos) * W_fig
+    g_top = max(p.y1 for p in pos) * H_fig
+    obstacles = []
+    for ax in panels:
+        bb = ax.get_tightbbox(renderer)
+        if bb is not None:
+            obstacles.append((bb.x0 / dpi, bb.y0 / dpi, bb.x1 / dpi, bb.y1 / dpi))
+    for lg in list(getattr(fig, "legends", [])):          # only when kept
+        bb = lg.get_window_extent(renderer)
+        obstacles.append((bb.x0 / dpi, bb.y0 / dpi, bb.x1 / dpi, bb.y1 / dpi))
+    content_top = max([g_top] + [o[3] for o in obstacles])
+    avail_w = max(1e-3, g_right - g_left)
+
+    # ------------------------------------------------------------------
+    # Text measurement at a reference size (extents scale with font size)
+    # ------------------------------------------------------------------
+    F_REF = 10.0
+    _cache = {}
+
+    def _size(s, f=F_REF):
+        """Extent (w, h) in inches of text ``s`` drawn at font size ``f``."""
+        key = (s, round(float(f), 2))
+        if key not in _cache:
+            if not s.strip():
+                _cache[key] = (0.0, 0.0)
+            else:
+                t = fig.text(0, 0, s, fontsize=key[1])
+                bb = t.get_window_extent(renderer)
+                t.remove()
+                _cache[key] = (bb.width / dpi, bb.height / dpi)
+        return _cache[key]
+
+    def _ext(s, f, exact):
+        # Searching uses extents measured once at F_REF and scaled (cheap);
+        # the chosen layout is re-measured at its real size, because TeX and
+        # pixel rounding make small sizes slightly wider than the scaling says.
+        if exact:
+            return _size(s, f)
+        w, h = _size(s)
+        return w * f / F_REF, h * f / F_REF
+
+    def _wrap(label, max_w):
+        parts = label.split(" + ")
+        if len(parts) < 2 or _size(label)[0] <= max_w:
+            return label
+        lines, cur = [], parts[0]
+        for p in parts[1:]:
+            trial = cur + " + " + p
+            if _size(trial)[0] <= max_w:
+                cur = trial
+            else:
+                lines.append(cur + " +")
+                cur = p
+        lines.append(cur)
+        return "\n".join(lines)
+
+    def _geometry(f, block_cols, labs, exact=False):
+        em = f / 72.0
+        padx, pady = 0.55 * em, 0.30 * em
+        sw = 1.8 * em
+        lab_w = max(_ext(l, f, exact)[0] for l in labs) + sw + 0.45 * em + 2 * padx
+        col_w = [max([_ext(head_all[j], f, exact)[0]] + [_ext(r[j], f, exact)[0] for r in rows_full]) + 2 * padx
+                 for j in block_cols]
+        head_h = max(_ext(head_all[j], f, exact)[1] for j in block_cols) + 2 * pady
+        body_h = max([_ext(r[j], f, exact)[1] for r in rows_full for j in block_cols]
+                     + [_ext(l, f, exact)[1] for l in labs]) + 2 * pady
+        return {"f": f, "em": em, "padx": padx, "sw": sw, "lab_w": lab_w, "col_w": col_w,
+                "head_h": head_h, "body_h": body_h,
+                "W": lab_w + sum(col_w), "H": head_h + n_rows * body_h, "cols": block_cols}
+
+    def _split(k):
+        """Contiguous column blocks of similar width."""
+        w = [max([_size(head_all[j])[0]] + [_size(r[j])[0] for r in rows_full]) for j in cols]
+        target = sum(w) / k
+        blocks, cur, acc = [], [], 0.0
+        for j, wj in zip(cols, w):
+            if cur and acc + wj > target * 1.05 and len(blocks) < k - 1:
+                blocks.append(cur)
+                cur, acc = [], 0.0
+            cur.append(j)
+            acc += wj
+        blocks.append(cur)
+        return blocks
+
+    def _layout(f, blocks, labs, exact=False):
+        geos = [_geometry(f, b, labs, exact) for b in blocks]
+        gap = 0.7 * f / 72.0
+        return geos, max(gg["W"] for gg in geos), sum(gg["H"] for gg in geos) + gap * (len(geos) - 1)
+
+    def _fits(x0, y0, x1, y1, margin):
+        return all(x0 >= o[2] + margin or x1 <= o[0] - margin or y0 >= o[3] + margin or y1 <= o[1] - margin
+                   for o in obstacles)
+
+    def _in_triangle(f, labs, exact):
+        geos, W, H = _layout(f, [cols], labs, exact)
+        if _fits(g_right - W, g_top - H, g_right, g_top, 0.5 * f / 72.0):
+            return geos, W, H
         return None
 
-    fig.canvas.draw()
-    pos = [ax.get_position().bounds for ax in axes]  # (left, bottom, width, height)
-    grid_left  = min(l for (l, b, w, h) in pos)
-    grid_right = max(l + w for (l, b, w, h) in pos)
-    grid_top   = max(b + h for (l, b, w, h) in pos)
+    f_target = float(PLOT_SETTINGS.get("table_font_scale", 1.0)) * float(
+        getattr(g.settings, "axes_labelsize", None) or PLOT_SETTINGS.get("label_font_size", 12))
+    f_min = max(6.0, float(PLOT_SETTINGS.get("table_min_font_frac", 0.7)) * f_target)
+    # Large corner plots leave room for a larger table, which stays readable
+    # when the figure is viewed scaled down.
+    f_max = float(PLOT_SETTINGS.get("table_max_font_frac", 1.4)) * f_target
 
     # ------------------------------------------------------------------
-    # Row/column counts
+    # 1) Upper-right triangle
     # ------------------------------------------------------------------
-    n_rows = max(1, len(latex_table))        # table rows (obs combos)
-    n_cols = max(1, len(parameter_labels))   # parameters (columns)
-    n_obs  = max(1, len(labels))             # legend labels (for completeness)
-
-    # ------------------------------------------------------------------
-    # Band height: primarily rows, with extra for wide 1-row tables
-    # ------------------------------------------------------------------
-    base_band     = float(PLOT_SETTINGS.get("table_band_base", 0.14))
-    per_row       = float(PLOT_SETTINGS.get("table_band_per_row", 0.018))
-    per_col_wide  = float(PLOT_SETTINGS.get("table_band_per_col_wide", 0.012))
-    max_band_frac = float(PLOT_SETTINGS.get("table_max_band_fraction", 0.28))
-
-    # Start from row-based budget
-    band_frac = base_band + per_row * (n_rows - 1)
-
-    # Extra room if we have 1 row but many parameters (your CMB_hi case)
-    if n_rows == 1 and n_cols > 6:
-        band_frac += per_col_wide * (n_cols - 6)
-
-    # Clamp to sensible range
-    band_frac = max(0.12, min(max_band_frac, band_frac))
-
-    # Base vertical padding between grid and table
-    vpad = float(PLOT_SETTINGS.get("table_vpad", 0.018))
-    # For very shallow tables, use a smaller gap so they sit closer
-    if n_rows == 1:
-        vpad = min(vpad, 0.010)
-
-    # Push the corner grid down so `band_frac` of the figure height
-    # is available above it for the table + padding.
-    new_top = 1.0 - band_frac
-    fig.subplots_adjust(top=new_top)
-    fig.canvas.draw()
-
-    # Recompute grid after margin change
-    pos = [ax.get_position().bounds for ax in axes]
-    grid_left  = min(l for (l, b, w, h) in pos)
-    grid_right = max(l + w for (l, b, w, h) in pos)
-    grid_top   = max(b + h for (l, b, w, h) in pos)
-    headroom   = max(0.0, 1.0 - grid_top)
+    choice = None
+    if position in ("auto", "triangle") and not keep_legend:
+        tri_min = f_target * (0.8 if position == "auto" else 0.5)
+        wrapped_tri = [_wrap(l, 0.45 * avail_w / (f_target / F_REF)) for l in row_labels]
+        for labs in (row_labels, wrapped_tri):
+            f = f_max
+            while f >= tri_min - 1e-9 and choice is None:
+                if _in_triangle(f, labs, False):
+                    res = None
+                    for _ in range(4):                       # confirm at the real size
+                        res = _in_triangle(f, labs, True)
+                        if res or f < tri_min * 0.95:
+                            break
+                        f *= 0.96
+                    if res:
+                        geos, W, H = res
+                        choice = ("triangle", geos, labs, g_right - W, g_top - H, W, H)
+                    break
+                f *= 0.95
+            if choice is not None:
+                break
 
     # ------------------------------------------------------------------
-    # Geometry of the table band
+    # 2) Band above the grid (fallback, or forced)
     # ------------------------------------------------------------------
-    width_grid = grid_right - grid_left
-    width      = 0.94 * width_grid
-    height     = max(0.01, headroom - 2.0 * vpad)
+    if choice is None:
+        # A one- or two-panel corner plot is narrower than a readable table,
+        # so the band may be wider than the grid; the figure then widens.
+        band_w = max(avail_w, float(PLOT_SETTINGS.get("table_min_width_in", 6.0)))
+        wrapped = [_wrap(l, 0.5 * band_w / (f_target / F_REF)) for l in row_labels]
+        chosen, best = None, None
+        for k in range(1, len(cols) + 1):
+            blocks = _split(k)
+            for labs in (row_labels, wrapped):
+                _, W, _ = _layout(f_target, blocks, labs)
+                # A band adds height to the figure, so it is enlarged less than a
+                # table in the empty triangle, and wrapped labels not at all.
+                f_cap = min(f_max, 1.2 * f_target) if labs is row_labels else f_target
+                f = min(f_cap, f_target * band_w / W)
+                if f >= f_min:
+                    chosen = (f, blocks, labs)
+                    break
+                if best is None or f > best[0]:
+                    best = (f, blocks, labs)
+            if chosen is not None:
+                break
+        if chosen is None:              # one column per block and still too wide
+            chosen = (max(6.0, best[0]), best[1], best[2])
+        f, blocks, labs = chosen
+        for _ in range(4):                                   # confirm at the real size
+            geos, W, H = _layout(f, blocks, labs, True)
+            if W <= band_w * 1.0001 or f <= 6.0:
+                break
+            f = max(6.0, 0.995 * f * band_w / W)
+        gap = 0.8 * f / 72.0
+        top_margin = 0.25 * f / 72.0
+        side = 0.1
+        y0 = content_top + gap
+        new_W = max(W_fig, W + 2 * side)
+        new_H = max(H_fig, y0 + H + top_margin)
+        shift = 0.5 * (new_W - W_fig)
+        if new_W > W_fig or new_H > H_fig:
+            # grow the figure (upwards, and sideways if needed) keeping every
+            # existing axes at its physical size and relative place
+            for ax in fig.axes:
+                p = ax.get_position()
+                ax.set_position([(p.x0 * W_fig + shift) / new_W, p.y0 * H_fig / new_H,
+                                 p.width * W_fig / new_W, p.height * H_fig / new_H])
+            fig.set_size_inches(new_W, new_H, forward=False)
+        centre = 0.5 * (g_left + g_right) + shift
+        x0 = min(max(centre - 0.5 * W, side), new_W - W - side)
+        choice = ("top", geos, labs, x0, y0, W, H)
+        W_fig, H_fig = new_W, new_H
 
-    # Horizontal centre, with optional user offset
-    xoffset = float(PLOT_SETTINGS.get("table_xoffset", 0.0))
-    xoffset = max(-0.25, min(0.25, xoffset))
-    left    = grid_left + (width_grid - width) * (0.5 + xoffset)
-
-    # Table band sits directly above the grid
-    bottom = grid_top + vpad
-
-    # ------------------------------------------------------------------
-    # Font size based on physical cell size
-    # ------------------------------------------------------------------
-    fmin = float(PLOT_SETTINGS.get("table_font_min", 9))
-    fmax = float(PLOT_SETTINGS.get("table_font_max", 14))
-
-    # For shallow but wide tables we allow a bit more fontsize
-    if n_rows <= 2 and n_cols >= 5:
-        fmax = min(fmax, 13.0)
-
-    fig_w_in, fig_h_in = fig.get_size_inches()
-
-    # Height constraint
-    cell_h_in = max(1e-3, (height * fig_h_in) / (n_rows + 1))
-    fontsize_h = 0.85 * 72.0 * cell_h_in
-
-    # Width constraint: ~10 characters per cell
-    approx_cols = float(n_cols + 1)  # +1 for Observation column
-    cell_w_in   = max(1e-3, (width * fig_w_in) / approx_cols)
-    fontsize_w  = 72.0 * cell_w_in / (10.0 * 0.6)
-
-    raw_fs   = min(fontsize_h, fontsize_w)
-    fontsize = float(np.clip(raw_fs, fmin, fmax))
-
-    # Row height factor; boost for single-row, many-parameter tables
-    cell_k = float(
-        PLOT_SETTINGS.get(
-            "table_cell_height_factor",
-            PLOT_SETTINGS.get("cell_height_factor", 6.0)
-        )
-    )
-    if n_rows == 1 and n_cols >= 5:
-        # make rows noticeably taller in the 1-obs / many-param case
-        cell_k *= 2.1
-
-    # ------------------------------------------------------------------
-    # Draw the table
-    # ------------------------------------------------------------------
-    cols_tex = (
-        format_for_latex(greek_Symbols(list(parameter_labels)))
-        if PLOT_SETTINGS.get("latex_enabled", False)
-        else list(parameter_labels)
-    )
-
-    # Pad rows to full width
-    rows = [row + [""] * (n_cols - len(row)) for row in latex_table]
-
-    ax = fig.add_axes([left, bottom, width, height], facecolor="none", zorder=3)
-    ax.axis("off")
-    ax.patch.set_alpha(0)
-
-    row_labels = list(labels)
-    if len(row_labels) < n_rows:
-        row_labels += [""] * (n_rows - len(row_labels))
-    elif len(row_labels) > n_rows:
-        row_labels = row_labels[:n_rows]
-
-    tbl = ax.table(
-        cellText=rows,
-        rowLabels=row_labels,
-        colLabels=cols_tex,
-        cellLoc="center",
-        loc="upper left",
-    )
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(fontsize)
-
-    # 1) scale Y to hit the desired physical cell height
-    target_cell_h_in = cell_k * fontsize / 72.0
-
-    # Allow a bit more vertical stretch for the 1-row, many-parameter case
-    max_y = 1.8
-    if n_rows == 1 and n_cols >= 7:
-        max_y = 3.5
-
-    yscale = float(np.clip(target_cell_h_in / cell_h_in, 0.65, max_y))
-    tbl.scale(1.0, yscale)
-
-    # 2) scale X so the table fills ~98% of the available width
-    fig.canvas.draw()
-    bb0 = tbl.get_window_extent(_renderer(fig)).transformed(
-        fig.transFigure.inverted()
-    )
-    cur_w = max(bb0.width, 1e-6)
-    xscale = float(np.clip((width * 0.98) / cur_w, 0.70, 2.2))
-    tbl.scale(xscale, 1.0)
-
-    # For very large tables thin the borders slightly
-    if n_rows > 6 or n_cols > 6:
-        for (row, col), cell in tbl.get_celld().items():
-            cell.set_linewidth(0.4)
+    kind, geos, labs, x0, y0, W, H = choice
 
     # ------------------------------------------------------------------
-    # Re-position the legend into the gap between grid and table
+    # Draw (axes in inches: x 0..W, y 0..H)
     # ------------------------------------------------------------------
-    legend = None
-    for ax0 in fig.axes:
-        lg = ax0.get_legend()
-        if lg is not None:
-            legend = lg
-            break
+    tax = fig.add_axes([x0 / W_fig, y0 / H_fig, W / W_fig, H / H_fig], zorder=5)
+    tax.set_xlim(0, W)
+    tax.set_ylim(0, H)
+    tax.axis("off")
+    tax.patch.set_alpha(0)
+    tax.set_in_layout(False)
 
-    if legend is not None:
-        gap = max(0.0, bottom - grid_top)
-        y_legend = max(
-            grid_top + 0.01,
-            min(bottom - 0.01, grid_top + 0.5 * gap),
-        )
-        x_center = 0.5 * (grid_left + grid_right)
+    y_top = H
+    for b, gg in enumerate(geos):
+        f, em, padx, sw = gg["f"], gg["em"], gg["padx"], gg["sw"]
+        Wb = gg["W"]
+        xb = 0.5 * (W - Wb) if kind == "top" else W - Wb
+        lw_thick, lw_thin = max(0.6, f / 11.0), max(0.4, f / 20.0)
+        # header
+        yh = y_top - gg["head_h"]
+        xc = xb + gg["lab_w"]
+        for j, cw in zip(gg["cols"], gg["col_w"]):
+            tax.text(xc + 0.5 * cw, yh + 0.5 * gg["head_h"], head_all[j], fontsize=f,
+                     ha="center", va="center")
+            xc += cw
+        # body
+        for i in range(n_rows):
+            yr = yh - (i + 1) * gg["body_h"]
+            ym = yr + 0.5 * gg["body_h"]
+            if style == "grid":
+                pass
+            elif i % 2 == 1:
+                tax.add_patch(Rectangle((xb, yr), Wb, gg["body_h"], facecolor=(0, 0, 0, 0.045),
+                                        edgecolor="none", zorder=0))
+            st = styles[i] if i < len(styles) else {}
+            tax.add_patch(Rectangle((xb + padx, ym - 0.32 * em), sw, 0.64 * em, facecolor=fills[i],
+                                    edgecolor="none", zorder=1))
+            tax.add_line(Line2D([xb + padx, xb + padx + sw], [ym, ym], color=st.get("color", "k"),
+                                ls=st.get("ls", "-"), lw=max(1.0, st.get("lw", 1.2) * f / 12.0), zorder=2))
+            tax.text(xb + padx + sw + 0.45 * em, ym, labs[i], fontsize=f, ha="left", va="center",
+                     linespacing=1.1)
+            xc = xb + gg["lab_w"]
+            for j, cw in zip(gg["cols"], gg["col_w"]):
+                if rows_full[i][j]:
+                    tax.text(xc + 0.5 * cw, ym, rows_full[i][j], fontsize=f, ha="center", va="center")
+                xc += cw
+        y_bot = yh - n_rows * gg["body_h"]
+        if style == "grid":
+            xs = [xb, xb + gg["lab_w"]]
+            for cw in gg["col_w"]:
+                xs.append(xs[-1] + cw)
+            ys = [y_top, yh] + [yh - (i + 1) * gg["body_h"] for i in range(n_rows)]
+            for x in xs:
+                tax.plot([x, x], [y_bot, y_top], color="k", lw=lw_thin)
+            for y in ys:
+                tax.plot([xb, xb + Wb], [y, y], color="k", lw=lw_thin)
+        else:
+            tax.plot([xb, xb + Wb], [y_top, y_top], color="k", lw=lw_thick)
+            tax.plot([xb, xb + Wb], [yh, yh], color="k", lw=lw_thin)
+            tax.plot([xb, xb + Wb], [y_bot, y_bot], color="k", lw=lw_thick)
+        y_top = y_bot - 0.7 * f / 72.0
 
-        base_leg_fs = PLOT_SETTINGS.get("legend_font_size", fontsize)
-        n_leg_labels = len(legend.get_texts())
-        leg_fs = base_leg_fs
-        if n_leg_labels >= 8:
-            leg_fs = max(7, min(base_leg_fs, fontsize - 2))
-        for txt in legend.get_texts():
-            txt.set_fontsize(leg_fs)
-
-        legend.set_bbox_to_anchor(
-            (x_center, y_legend),
-            transform=fig.transFigure,
-            loc="center",
-        )
-        legend.set_frame_on(True)
-        legend.get_frame().set_alpha(0.9)
-
-    return legend
+    return tax
 
 
 

@@ -828,7 +828,9 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     g = gd_plots.get_subplot_plotter(subplot_size=4, subplot_size_ratio=0.8)
     g.settings.figure_legend_frame = True
     plot_table_flag = bool(PLOT_SETTINGS.get("plot_table", False))
-    g.settings.tight_layout = not plot_table_flag
+    # The table is placed after the corner grid is laid out (it measures the
+    # finished grid), so the grid always uses GetDist's normal tight layout.
+    g.settings.tight_layout = True
     g.settings.alpha_filled_add = 0.4
     g.settings.solid_colors = list(reversed(PLOT_SETTINGS.get("color_schemes", ["r","b","g","c","m"])))
     base_leg = float(PLOT_SETTINGS.get("legend_font_size", 12))
@@ -1205,6 +1207,7 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
             trimmed_labels,          # <-- header equals row width
             trimmed_labels,
             len(trimmed_labels),
+            line_args=line_args,     # colour/line key drawn in each row label
         )
     else:
         try:
