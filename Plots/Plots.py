@@ -16,6 +16,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from contextlib import contextmanager
 from getdist import plots as gd_plots, MCSamples
+import getdist.chains as _gd_chains
+# Kosmulator removes the burn-in itself, so GetDist's load messages
+# ("Removed no burn in") carry no information here.
+_gd_chains.print_load_details = False
 
 from Kosmulator_main import Statistical_packages as SP
 from Kosmulator_main.constants import CODE_STYLE, C_KM_S, R_D_SINGLETON, GAMMA_FS8_SINGLETON
@@ -550,11 +554,15 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
         for obs_key, stats in obs_results.items():
             # Diagnostics vs reference
             reference_chi2 = None if model == reference_model else ref_chi2.get(obs_key)
+            _grp = next((o for o in CONFIG[model]["observations"]
+                         if "+".join(o) == obs_key or "_".join(o) == obs_key), None)
             diagnostics = PP.provide_model_diagnostics(
                 reduced_chi_squared=stats["Reduced_Chi_squared"],
                 model_name=model,
                 reference_chi_squared=reference_chi2,
                 dof=stats.get("dof"),
+                datasets=_grp if _grp is not None else obs_key.split("+"),
+                is_reference=(model == reference_model),
             )
             IC_lines = PP.interpret_delta_IC(stats['dAIC'], stats['dBIC'], stats['dAICc'], stats['dDIC'], stats['dWAIC'], stats['sigma']).splitlines()
             aic_text = IC_lines[0].strip() if len(IC_lines) > 0 else "No AIC interpretation available."
@@ -599,8 +607,19 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
             # IMPORTANT: Do NOT include S in the stats row — it will be printed as a stand-alone line
             stats_dict[model].append(row)
 
+            _ref_stats = statistical_results.get(reference_model, {}).get(obs_key, {})
+            try:
+                _dk = int(stats.get("num_params")) - int(_ref_stats.get("num_params"))
+            except (TypeError, ValueError):
+                _dk = None
             interp_dict[model].append({
-                "Observation": _displayize_key(obs_key),
+                "Observation": obs_text,
+                "chi2": stats.get("Chi_squared"),
+                "dof": stats.get("dof"),
+                "chi2_nu": stats.get("Reduced_Chi_squared"),
+                "dChi": stats.get("dChi"), "sigma": stats.get("sigma"), "dk": _dk,
+                "dAIC": stats.get("dAIC"), "dBIC": stats.get("dBIC"), "dAICc": stats.get("dAICc"),
+                "dDIC": stats.get("dDIC"), "dWAIC": stats.get("dWAIC"),
                 "Reduced Chi2 Diagnostics": diagnostics.strip(),
                 "AIC Interpretation": aic_text,
                 "BIC Interpretation": bic_text,
@@ -672,7 +691,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
 
         # 2) Then save stats & interpretations (unchanged)
         save_stats_to_file(model, model_folder, stats_dict[model])
-        save_interpretations_to_file(model, model_folder, interp_dict[model])
+        save_interpretations_to_file(model, model_folder, interp_dict[model], reference_model=reference_model)
 
     # Pretty-print to console (no duplicate headers)
     for model, rows in stats_dict.items():
@@ -681,7 +700,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
         print_rule()
         print()
 
-    # ----- 5) Convergence report (console + convergence_summary.{txt,csv,tex}) ----
+    # ----- 5) Convergence report (console + convergence_summary.txt) ----
     _report_convergence(CONFIG, PLOT_SETTINGS, main_folder)
 
     return all_best_fit, all_tables, statistical_results
@@ -1228,7 +1247,12 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         )
     else:
         try:
-            fig.tight_layout()
+            import warnings as _w
+            with _w.catch_warnings():
+                # GetDist's legend axes are not tight_layout-compatible; the legend is
+                # placed by measurement below, so the warning carries no information.
+                _w.filterwarnings("ignore", message=".*not compatible with tight_layout.*")
+                fig.tight_layout()
         except Exception:
             pass
         # Measured legend placement (triangle or band), same rules as the table
@@ -1283,6 +1307,47 @@ def _adjust_bestfit_margins(fig, ncols: int, PLOT_SETTINGS: dict) -> None:
     left = max(left_min, base_left - left_step * (max(1, ncols) - 1))
     fig.subplots_adjust(left=left, right=right, top=top, bottom=bottom)
     
+def _layout_bestfit(fig, axes, PLOT_SETTINGS: dict, n_pass: int = 3) -> None:
+    """
+    Measured horizontal layout for the best-fit figure. Every column keeps the
+    same panel width (PLOT_SETTINGS["bestfit_panel_width_in"], default 4.9 in);
+    the space to its left and right is what its own tick labels, axis labels and
+    residual label actually need (measured after drawing), plus a fixed gap.
+    The figure width follows, so columns can no longer run into each other,
+    whatever the number of columns or the length of the labels.
+    """
+    import numpy as _np
+    panel_w = float(PLOT_SETTINGS.get("bestfit_panel_width_in", 4.9))
+    gap = float(PLOT_SETTINGS.get("bestfit_column_gap_in", 0.25))
+    margin = float(PLOT_SETTINGS.get("bestfit_side_margin_in", 0.08))
+    axes = _np.atleast_2d(axes)
+    ncols = axes.shape[1]
+    for _ in range(max(1, n_pass)):
+        fig.canvas.draw()
+        r = fig.canvas.get_renderer()
+        W, H = fig.get_size_inches()
+        dpi = fig.dpi
+        left_need, right_need = [], []
+        for c in range(ncols):
+            col = [a for a in axes[:, c] if a.get_visible()]
+            pos_x0 = min(a.get_position().x0 for a in col) * W
+            pos_x1 = max(a.get_position().x1 for a in col) * W
+            tb = [a.get_tightbbox(r) for a in col]
+            t_x0 = min(b.x0 for b in tb if b is not None) / dpi
+            t_x1 = max(b.x1 for b in tb if b is not None) / dpi
+            left_need.append(max(0.0, pos_x0 - t_x0))
+            right_need.append(max(0.0, t_x1 - pos_x1))
+        new_W = 2 * margin + sum(left_need) + sum(right_need) + ncols * panel_w + gap * (ncols - 1)
+        x = margin
+        for c in range(ncols):
+            x0 = x + left_need[c]
+            for a in axes[:, c]:
+                p = a.get_position()
+                a.set_position([x0 / new_W, p.y0, panel_w / new_W, p.height])
+            x = x0 + panel_w + right_need[c] + gap
+        fig.set_size_inches(new_W, H, forward=True)
+
+
 def _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS):
     """
     Up to PLOT_SETTINGS["band_draws"] (default 200) random posterior draws for one
@@ -1339,6 +1404,35 @@ def _posterior_band(draws, curve_fn):
         return None
     ys = np.vstack(ys)
     return np.percentile(ys, 16, axis=0), np.percentile(ys, 84, axis=0)
+
+
+def _rd_badge_policy(model_cfg: dict, obs_tokens) -> str:
+    """
+    'calibrated' (BBN or CMB in the group), 'free' (r_d sampled in this group) or
+    'fixed' (BAO alone, or BAO with data that fix neither H0 nor r_d), read from
+    the group's sampled parameters as Config set them up.
+    """
+    toks = [str(t) for t in obs_tokens]
+    if any(t.startswith(("BBN", "CMB")) for t in toks):
+        return "calibrated"
+    pars = _group_parameters(model_cfg, toks)
+    if pars is not None:
+        return "free" if "r_d" in pars else "fixed"
+    # Group not found in CONFIG: previous heuristic (BAO with an anchor -> free)
+    anchors = {"CC", "OHD", "PantheonPS", "PantheonP_SH0ES"}
+    return "free" if any(t in anchors for t in toks) else "fixed"
+
+
+def _group_parameters(model_cfg: dict, obs_tokens) -> list | None:
+    """Sampled parameters of the observation group with these dataset tags (None if not found)."""
+    def norm(t):
+        t = str(t)
+        return "PantheonPS" if t in ("PantheonP_SH0ES", "Pantheon+SH0ES") else t
+    want = sorted(norm(t) for t in obs_tokens)
+    for grp, pars in zip(model_cfg.get("observations", []) or [], model_cfg.get("parameters", []) or []):
+        if sorted(norm(t) for t in grp) == want:
+            return list(pars)
+    return None
 
 
 def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples=None):
@@ -1546,34 +1640,20 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
                         except KeyError:
                             return fixed_rd
 
-                    has_cal = any(x in {
-                        "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",
-                        "CMB_hil", "CMB_lowl", "CMB_lensing"
-                    } for x in obs_list_raw)
-                    has_bao = any(x in {"BAO", "DESI_DR1", "DESI_DR2"} for x in obs_list_raw)
-                    has_unanch = any(x in {
-                        "JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS",
-                        "DESY5", "Union3", "f", "f_sigma_8"
-                    } for x in obs_list_raw)
-
-                    if has_cal:
-                        rs_med = _rd_from_params(params_med)
-                        rs_lo = _rd_from_params(params_lo) if params_lo is not None else rs_med
-                        rs_hi = _rd_from_params(params_hi) if params_hi is not None else rs_med
-                    elif has_bao and has_unanch:
-                        rs_med = _rd_from_params(params_med)
-                        rs_lo = _rd_from_params(params_lo) if params_lo is not None else rs_med
-                        rs_hi = _rd_from_params(params_hi) if params_hi is not None else rs_med
-                    else:
+                    # r_d for the curves and the badge, decided by this group's sampled
+                    # parameters (the same policy Config applied when it built the group):
+                    #   BBN/CMB in the group -> calibrated (CLASS from the background)
+                    #   r_d sampled          -> free (its posterior value)
+                    #   otherwise            -> fixed (BAO alone, or BAO with data that fix
+                    #                           neither H0 nor r_d; H_0 then measures h*r_d)
+                    _policy = _rd_badge_policy(CONFIG.get(model_name, {}), obs_list)
+                    if _policy == "fixed":
                         rs_med = rs_lo = rs_hi = fixed_rd
-
-                    # Compact in-panel rd badge
-                    if has_cal:
-                        _policy, rd_show = "calibrated", float(rs_med)
-                    elif has_bao and has_unanch:
-                        _policy, rd_show = "free", float(rs_med)
                     else:
-                        _policy, rd_show = "fixed", float(fixed_rd)
+                        rs_med = _rd_from_params(params_med)
+                        rs_lo = _rd_from_params(params_lo) if params_lo is not None else rs_med
+                        rs_hi = _rd_from_params(params_hi) if params_hi is not None else rs_med
+                    rd_show = float(rs_med)
 
                     fs = int(PLOT_SETTINGS.get("label_font_size", 12))
                     rd_text = (rf"$r_d$ ({_policy}): ${rd_show:.2f}\,\mathrm{{Mpc}}$"
@@ -1619,7 +1699,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
                         _codes = sorted(codes_present)
 
                         def _bao_curves(p, _codes=_codes):
-                            rs_p = _rd_from_params(p) if (has_cal or (has_bao and has_unanch)) else fixed_rd
+                            rs_p = fixed_rd if _policy == "fixed" else _rd_from_params(p)
                             dm_p = MODEL_FUNCS["DM"](z_dense, p, model_name)
                             dh_p = C_KM_S / (float(p["H_0"]) * MODEL_FUNCS["E"](z_dense, p, model_name))
                             dv_p = MODEL_FUNCS["DV"](z_dense, p, model_name)
@@ -1833,6 +1913,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
 
                 ax.tick_params(labelbottom=False)
 
+            _layout_bestfit(fig, axes, PLOT_SETTINGS)
             save_figure(fig, model_name, obs_key, "bestfit", PLOT_SETTINGS)
             plt.close(fig)
 

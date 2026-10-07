@@ -73,6 +73,12 @@ JLA_HOST_MASS_SPLIT: float = 10.0
 #: evaluating them in one vectorised call on a single core.
 POOL_PREFERRED_DATASETS: Set[str] = {"JLA"}
 
+#: BLAS/OpenMP threads in the main process while a model samples without a
+#: worker pool (vectorised zeus). 1 is fastest for the SN covariances
+#: (measured 1.7x faster than the default threads for DESI DR2 + DES-Y5);
+#: None keeps NumPy's default.
+MAIN_BLAS_THREADS_NO_POOL = 1
+
 
 # ======================================================================
 # 2. Data / path defaults
@@ -190,11 +196,11 @@ MODEL_COLOR: str = "r"
 # --- DESI/BAO code → (label, linestyle) ---------------------------------
 
 CODE_STYLE: Dict[int, Tuple[str, object]] = {
-    8: (r"$D_M/r_s$", "-"),
-    6: (r"$D_H/r_s$", "--"),
-    5: (r"$D_A/r_s$", "-."),
+    8: (r"$D_M/r_d$", "-"),
+    6: (r"$D_H/r_d$", "--"),
+    5: (r"$D_A/r_d$", "-."),
     3: (r"$D_V/r_d$", ":"),
-    7: (r"$r_s/D_V$", (0, (1, 2))),
+    7: (r"$r_d/D_V$", (0, (1, 2))),
 }
 
 

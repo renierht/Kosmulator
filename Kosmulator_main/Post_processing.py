@@ -793,7 +793,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                     if all_rows:
                         full_matrix = np.concatenate(all_rows, axis=1)  # (S, N_total)
                         waic = compute_waic(full_matrix)
-                        print(f"[WAIC] {model_name} {obs_name}: {waic:.4f}")
+                        logger.debug("[WAIC] %s %s: %.4f", model_name, obs_name, waic)
                 except Exception as e:
                     print(f"[WAIC WARNING] {model_name} {obs_name}: {e}")
                     waic = float('nan')
@@ -849,9 +849,15 @@ def provide_model_diagnostics(
     model_name: str = "",
     reference_chi_squared=None,
     dof=None,
+    datasets=None,
+    is_reference=None,
 ) -> str:
     """
     Plain-language reading of the reduced chi-squared, chi^2_nu = chi^2 / dof.
+
+    datasets: dataset tags of the group, used to name the likely cause of a low
+    chi^2_nu. is_reference: True for the reference model (no comparison with
+    itself); if None, any model whose name starts with "LCDM" counts as reference.
 
     For a model that describes the data, chi^2_nu scatters around 1 with a
     standard deviation of sqrt(2/dof), so the same value can be ordinary for a
@@ -874,14 +880,28 @@ def provide_model_diagnostics(
     except (TypeError, ValueError):
         nu = float("nan")
 
+    # Name only the causes that apply to the datasets in this group
+    tags = [str(t) for t in (datasets or [])]
+    sn_tags = [t for t in tags if t in ("JLA", "JLA_legacy", "Pantheon", "PantheonP",
+                                         "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")]
+    diag_tags = [t for t in tags if t in ("CC", "OHD", "f", "f_sigma_8", "BAO")]
+    causes = []
+    if sn_tags:
+        causes.append("supernova covariances that include conservative systematic terms ("
+                      + ", ".join(sn_tags) + ")")
+    if diag_tags:
+        causes.append("compilations with conservative errors, or correlated errors treated as "
+                      "independent (" + ", ".join(diag_tags) + ")")
+    if not causes:
+        causes.append("conservative (overestimated) error bars or correlations treated as independent")
     low_text = (
         "This is too low to be overfitting: a model with a few free parameters "
-        "cannot absorb that much chi-squared. The usual cause is conservative "
-        "(overestimated) error bars or correlations treated as independent, "
-        "which is common for cosmic-chronometer, OHD and growth-rate (f, fs8) "
-        "compilations. Compare models with dChi, sigma and the information "
-        "criteria rather than with the absolute chi^2_nu."
+        "cannot absorb that much chi-squared. The usual cause is "
+        + "; or ".join(causes) + ". Compare models with dChi, sigma and the "
+        "information criteria rather than with the absolute chi^2_nu."
     )
+    if is_reference is None:
+        is_reference = str(model_name).lower().startswith("lcdm")
     high_text = (
         "The data scatter more than their error bars allow. Possible causes are "
         "a model that misses structure in the data, underestimated or missing "
@@ -941,30 +961,30 @@ def provide_model_diagnostics(
 
     # Benchmark comparison: only for non-reference models
     if reference_chi_squared is not None and np.isfinite(reference_chi_squared) \
-            and model_name.lower() != "lcdm":
+            and not is_reference:
         feedback += "\nBenchmark Comparison (Relative to LCDM):\n"
         if rcs < reference_chi_squared:
             feedback += (
-                f"  - chi^2_nu ({rcs:.2f}) is lower than for LCDM "
-                f"({reference_chi_squared:.2f}): the fit improves by more than "
+                f"  - chi^2_nu ({rcs:.3f}) is lower than for LCDM "
+                f"({reference_chi_squared:.3f}): the fit improves by more than "
                 "the change in the number of free parameters. Whether "
                 "the improvement is significant is given by dChi, sigma and the "
                 "information criteria.\n"
             )
         elif rcs > reference_chi_squared:
             feedback += (
-                f"  - chi^2_nu ({rcs:.2f}) is higher than for LCDM "
-                f"({reference_chi_squared:.2f}): any extra parameters do not "
+                f"  - chi^2_nu ({rcs:.3f}) is higher than for LCDM "
+                f"({reference_chi_squared:.3f}): any extra parameters do not "
                 "improve the fit enough to offset the degrees of freedom "
                 "they use.\n"
             )
         else:
             feedback += (
-                f"  - chi^2_nu matches the LCDM value ({reference_chi_squared:.2f}), "
+                f"  - chi^2_nu matches the LCDM value ({reference_chi_squared:.3f}), "
                 "a comparable fit.\n"
             )
 
-    if model_name.lower() == "lcdm":
+    if is_reference:
         feedback += (
             "\nLCDM is the reference model. Because chi^2_nu depends on how the "
             "data uncertainties were estimated, its absolute value says more "

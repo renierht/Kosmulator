@@ -1702,63 +1702,80 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
         f.write("\n")
 
 
+def _interp_prose(text: str) -> str:
+    """Diagnostic text from provide_model_diagnostics as one paragraph with the file's symbols."""
+    import re as _re
+    t = str(text or "")
+    t = t.replace("Statistical Interpretation:", " ")
+    t = t.replace("Benchmark Comparison (Relative to LCDM):", " ")
+    t = _re.sub(r"\s*\n\s*-\s*", " ", t)
+    t = _re.sub(r"^\s*-\s*", "", t.strip())
+    t = " ".join(t.split())
+    for a, b in (("chi^2_nu", "χ²_ν"), ("P(chi^2", "P(χ²"), ("chi^2", "χ²"), ("+/-", "±"),
+                 ("dChi", "Δχ²"), ("dAIC", "ΔAIC"), ("dBIC", "ΔBIC"), ("dDIC", "ΔDIC")):
+        t = t.replace(a, b)
+    # "sigma" as a word only (dataset tags such as f_sigma_8 stay as they are)
+    t = _re.sub(r"(?<![\w])sigma(?![\w])", "σ", t)
+    return t
+
+
+def _ic_words(line: str) -> str:
+    """'Delta AIC: Slight evidence ... (ΔAIC = -0.67).' -> 'Slight evidence ...' (wording unchanged)."""
+    import re as _re
+    m = _re.match(r"^\s*(?:Delta \w+|Significance):\s*(.*?)\s*\((?:Δ\w+|Sigma)\s*=\s*[^)]*\)\.?\s*$", str(line))
+    return m.group(1) if m else str(line).strip()
+
+
 def save_interpretations_to_file(
     model: str,
     folder: str,
-    interpretations_list: List[Dict[str, str]],
+    interpretations_list: List[Dict[str, Any]],
+    reference_model: Optional[str] = None,
 ) -> None:
+    """
+    interpretations_summary.txt: one block per observation group.
+
+      Fit     chi^2, dof, chi^2_nu and its reading (provide_model_diagnostics)
+      Δχ², ΔAIC, ΔBIC, ΔAICc, ΔDIC, ΔWAIC with the wording of interpret_delta_IC
+              (model minus reference; omitted for the reference model itself)
+    """
+    def num(x, fmt):
+        try:
+            v = float(x)
+        except (TypeError, ValueError):
+            return "n/a"
+        return "n/a" if not np.isfinite(v) else format(v, fmt)
+
+    width, ind = 96, " " * 12
+    is_ref = reference_model is not None and model == reference_model
     file_path = os.path.join(folder, "interpretations_summary.txt")
-    obs_w, diag_w, aic_w, bic_w, aicc_w, dic_w, waic_w, sigma_w = 30, 50, 35, 35, 35, 35, 35, 35
-
-    with open(file_path, "w") as f:
-        f.write(f"Interpretations for Model: {model}\n\n")
-        header = (
-            f"{'Observation':<{obs_w}} | "
-            f"{'Reduced Chi2 Diagnostics':<{diag_w}} | "
-            f"{'AIC Interpretation':<{aic_w}} | "
-            f"{'BIC Interpretation':<{bic_w}} |" 
-            f"{'AICc Interpretation':<{aicc_w}} |"
-            f"{'DIC Interpretation':<{dic_w}} |"
-            f"{'WAIC Interpretation':<{waic_w}} |"
-            f"{'Significance Interpretation':<{sigma_w}} |"
-        )
-        f.write(header + "\n")
-        total = obs_w + diag_w + aic_w + bic_w + aicc_w + dic_w + 9
-        f.write("-" * total + "\n")
-
-        for it in interpretations_list:
-            obs = it["Observation"]
-            diag = it["Reduced Chi2 Diagnostics"]
-            aic_i = it["AIC Interpretation"]
-            bic_i = it["BIC Interpretation"]
-            aicc_i = it["AICc Interpretation"]
-            dic_i = it["DIC Interpretation"]
-            waic_i = it["WAIC Interpretation"]
-            sigma_i = it["Significance Interpretation"]
-
-
-            diag_lines = textwrap.wrap(diag, width=diag_w)
-            aic_lines = textwrap.wrap(aic_i, width=aic_w)
-            bic_lines = textwrap.wrap(bic_i, width=bic_w)
-            aicc_lines = textwrap.wrap(aicc_i, width = aicc_w)
-            dic_lines = textwrap.wrap(dic_i, width = dic_w)
-            waic_lines = textwrap.wrap(waic_i, width = waic_w)
-            sigma_lines = textwrap.wrap(sigma_i, width = sigma_w)
-            obs_line = obs.ljust(obs_w)
-            max_lines = max(1, len(diag_lines), len(aic_lines), len(bic_lines), len(aicc_lines), len(dic_lines), len(waic_lines), len(sigma_lines))
-
-            for i in range(max_lines):
-                line = (
-                    f"{(obs_line if i == 0 else ' ' * obs_w):<{obs_w}} | "
-                    f"{(diag_lines[i] if i < len(diag_lines) else ''):<{diag_w}} | "
-                    f"{(aic_lines[i] if i < len(aic_lines) else ''):<{aic_w}} | "
-                    f"{(bic_lines[i] if i < len(bic_lines) else ''):<{bic_w}} |"
-                    f"{(aicc_lines[i] if i < len(aicc_lines) else ''):<{aicc_w}} |"
-                    f"{(dic_lines[i] if i < len(dic_lines) else ''):<{dic_w}} |"
-                    f"{(waic_lines[i] if i < len(waic_lines) else ''):<{waic_w}} |"
-                    f"{(sigma_lines[i] if i < len(sigma_lines) else ''):<{sigma_w}} |"
-                )
-                f.write(line + "\n")
+    out = [f"Interpretations for model {model}"
+           + (" (the reference model)" if is_ref else
+              (f", compared with the reference model {reference_model}" if reference_model else ""))]
+    if not is_ref:
+        out.append(f"Δ = {model} minus reference: negative values favour {model}.")
+    out.append("=" * width)
+    for it in interpretations_list:
+        out.append("")
+        out.append(str(it.get("Observation", "")))
+        out.append("-" * width)
+        chi2, dof, rchi = it.get("chi2"), it.get("dof"), it.get("chi2_nu")
+        head = f"χ² = {num(chi2, '.2f')} for ν = {num(dof, '.0f')}, χ²_ν = {num(rchi, '.3f')}"
+        out.append(f"  {'Fit':<10}" + head)
+        for ln in textwrap.wrap(_interp_prose(it.get("Reduced Chi2 Diagnostics", "")), width=width - len(ind)):
+            out.append(ind + ln)
+        if is_ref:
+            out.append(f"  {'Δ':<10}Reference model: every Δ is zero by definition.")
+            continue
+        dchi, sig, dk = it.get("dChi"), it.get("sigma"), it.get("dk")
+        extra = (f" with {int(dk)} extra parameter{'s' if int(dk) != 1 else ''}"
+                 if dk is not None and np.isfinite(float(dk)) and int(dk) > 0 else "")
+        sig_words = _ic_words(it.get("Significance Interpretation", ""))
+        out.append(f"  {'Δχ²':<10}{num(dchi, '+.2f'):>8}{extra}: {num(sig, '.1f')}σ ({sig_words})")
+        for lab, key in (("ΔAIC", "AIC"), ("ΔBIC", "BIC"), ("ΔAICc", "AICc"), ("ΔDIC", "DIC"), ("ΔWAIC", "WAIC")):
+            out.append(f"  {lab:<10}{num(it.get('d' + key), '+.2f'):>8}  {_ic_words(it.get(key + ' Interpretation', ''))}")
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(out) + "\n")
 
 
 def _obs_col_width_from_names(names, base=30, wmin=28, wmax=72, pad=2):
@@ -1943,36 +1960,12 @@ def format_convergence_table(model: str, rows: List[Dict[str, Any]]) -> str:
 
 
 def write_convergence_reports(model: str, rows: List[Dict[str, Any]], folder: str) -> List[str]:
-    """Write convergence_summary.{txt,csv,tex} for one model; returns the paths written."""
+    """Write convergence_summary.txt for one model; returns the paths written."""
     os.makedirs(folder, exist_ok=True)
     paths = []
     p = os.path.join(folder, "convergence_summary.txt")
     with open(p, "w", encoding="utf-8") as fh:
         fh.write(format_convergence_table(model, rows) + "\n")
-    paths.append(p)
-    p = os.path.join(folder, "convergence_summary.csv")
-    with open(p, "w", encoding="utf-8") as fh:
-        fh.write("observation,engine,steps,burn_in,walkers,retained_samples,tau_max,tau_max_param,"
-                 "n_post_over_tau_max,ess_min,acceptance,converged,stuck_walkers\n")
-        for r in rows:
-            fh.write(",".join(str(v) for v in (
-                r["observation"], r["engine"], r["steps"], r["burn"], r["walkers"], r["retained"],
-                r["tau_max"], r["tau_param"], r["n_over_tau"], r["ess_min"], r["acceptance"],
-                r["converged"], r["stuck"])) + "\n")
-    paths.append(p)
-    p = os.path.join(folder, "convergence_summary.tex")
-    def tex(s: str) -> str:
-        return str(s).replace("_", r"\_").replace("+", r"$+$")
-    with open(p, "w", encoding="utf-8") as fh:
-        fh.write("% Convergence summary for model " + tex(model) + " (Kosmulator)\n")
-        fh.write("\\begin{tabular}{lrrrrrr}\n\\hline\n")
-        fh.write("Data & Completed steps & Retained samples & $\\tau_{\\max}$ & "
-                 "$N_{\\rm post}/\\tau_{\\max}$ & Approx.\\ ESS$_{\\min}$ & Acceptance \\\\\n\\hline\n")
-        for r in rows:
-            c = _fmt_conv_row(r)
-            fh.write(" & ".join([tex(c[0]), c[2], c[4], c[5].split(" (")[0], c[6], c[7], c[8]]) + " \\\\\n")
-        fh.write("\\hline\n\\end{tabular}\n")
-        fh.write("% " + CONVERGENCE_NOTE + "\n")
     paths.append(p)
     return paths
 

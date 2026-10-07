@@ -562,7 +562,31 @@ def run_mcmc_for_all_models(
         # To avoid starving those runs of parallelism, we create a Pool whenever
         # parallelism is allowed for this model. run_mcmc() will then decide
         # per observation whether to actually use it (vectorised Zeus ignores it).
-        need_pool = parallel_flag
+        # Only create workers when this model has a group that uses them: emcee,
+        # non-vectorised zeus, or a pool-preferred dataset (official JLA).
+        # Vectorised zeus never uses the pool, so creating one there only left
+        # idle worker processes. Under MPI the old behaviour is kept, because
+        # the other ranks wait in the pool.
+        model_needs_pool = (
+            engine == "emcee"
+            or not can_vec
+            or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set())
+                   for grp in CONFIG[model_name].get("observations", []) for o in grp)
+        )
+        need_pool = parallel_flag and (use_mpi or model_needs_pool)
+
+        # Vectorised zeus without a pool runs in this process; there the BLAS/OpenMP
+        # threads of NumPy only add overhead for the SN covariances (DESI DR2 + DES-Y5:
+        # 5.6 steps/s with 1 thread against 3.3 with the default threads).
+        # constants.MAIN_BLAS_THREADS_NO_POOL = None keeps the library default.
+        _blas_limit = None
+        _n_blas = getattr(K, "MAIN_BLAS_THREADS_NO_POOL", 1)
+        if (not model_needs_pool) and _n_blas:
+            try:
+                from threadpoolctl import threadpool_limits
+                _blas_limit = threadpool_limits(limits=int(_n_blas))
+            except Exception:
+                _blas_limit = None
 
         pool_for_model = None
         if need_pool:
@@ -718,6 +742,11 @@ def run_mcmc_for_all_models(
             data_work = cleanup_pantheon_cov(data_work)
 
         All_Samples[model_name] = Samples
+        if _blas_limit is not None:
+            try:
+                _blas_limit.restore_original_limits()
+            except Exception:
+                pass
 
     # Tidy up any workers we created
     for p in getattr(locals().get("pool_cache", {}), "values", lambda: [])():
