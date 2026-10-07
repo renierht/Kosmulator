@@ -1,0 +1,5 @@
+# Correlation coefficients between cosmic-chronometer rows of CC.dat, matched by redshift.
+# z_i  z_j  rho  source
+0.46  0.67  0.932  # Loubser 2025, arXiv:2511.02730, Sect. 3.3 (systematics common to the three points)
+0.46  0.83  0.830  # Loubser 2025, arXiv:2511.02730, Sect. 3.3
+0.67  0.83  0.776  # Loubser 2025, arXiv:2511.02730, Sect. 3.3

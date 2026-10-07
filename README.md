@@ -377,6 +377,12 @@ Kosmulator/
 
 ### Expansion Rate Measurements
 #### Cosmic Chronometers (CC)
+`Observations/CC.dat` lists the source paper of every point after a `#`. Each row was checked
+against its paper; where a paper gives statistical and systematic errors separately they are
+combined in quadrature. The three DESI points of Loubser (2025) are correlated, and the
+correlations are read from `Observations/CC_corr.txt` and used in the CC chi^2. The SPS-model
+systematic covariance of the D4000 points (Moresco et al. 2020) is not included.
+
 1. Moresco, M., Jimenez, R., Verde, L., et al. (2020).  
    *Setting the Stage for Cosmic Chronometers II*.  
    ApJ, 898(1), 82.  
@@ -456,10 +462,25 @@ library.
    https://doi.org/10.1051/0004-6361/201833910
 
 #### Big Bang Nucleosynthesis (BBN)
+`BBN_DH` uses the 12 quasar D/H systems of the PDG 2025 BBN review (weighted mean
+25.08 ± 0.29 × 10⁻⁶, scale factor 1.08; values in `constants.BBN_DH_PDG_SYSTEMS`). Without
+AlterBBN the predicted D/H(ω_b) is a power law fitted to the PRyMordial table
+(D/H = 2.508 × 10⁻⁵ (ω_b/0.0224)^−1.640). Every backend adds a 4.1% theory error
+(nuclear rates), common to all systems.
+
 1. Cooke, R. J., Pettini, M., Jorgenson, R. A., Murphy, M. T., & Steidel, C. C. (2014).  
    *Precision Measures of the Primordial Abundance of Deuterium*.  
    The Astrophysical Journal, **781**(1), 31.  
    https://doi.org/10.1088/0004-637X/781/1/31
+
+2. Fields, B. D., Molaro, P., & Sarkar, S. (2025).  
+   *Big-Bang Nucleosynthesis*, in the Review of Particle Physics (Particle Data Group), 2025 update.  
+   https://pdg.lbl.gov
+
+3. Burns, A.-K., Tait, T. M. P., & Valli, M. (2023).  
+   *PRyMordial: the first three minutes, within and beyond the standard model*.  
+   arXiv:2307.07061.  
+   https://doi.org/10.48550/arXiv.2307.07061
 
 ---
 ## Citation

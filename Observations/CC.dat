@@ -1,36 +1,42 @@
-0.07 69.0 19.6
-0.09 69.0 12.0
-0.12 68.6 26.2
-0.12 71.33 4.20
-0.17 83.0 8.0
-0.179 75.0 4.0
-0.199 75.0 5.0
-0.2 72.9 29.6
-0.27 77.0 14.0
-0.28 88.8 36.6
-0.352 83.0 14.0
-0.3802 83.0 13.5
-0.4 95.0 17.0
-0.4004 77.0 10.2
-0.4247 87.1 11.2
-0.44497 92.8 12.9
-0.46 88.48 12.89
-0.47 89 23
-0.4783 80.9 9.0
-0.48 97.0 62.0
-0.50 72.1 41.2
-0.593 104.0 13.0
-0.67 119.45 23.03
-0.68 92.0 8.0
-0.781 105.0 12.0
-0.83 108.28 25.15
-0.875 125.0 17.0
-0.88 90.0 40.0
-0.9 117.0 23.0
-1.037 154.0 20.0
-1.3 168.0 17.0
-1.363 160.0 33.6
-1.43 177.0 18.0
-1.53 140.0 14.0
-1.75 202.0 40.0
-1.965 186.5 50.4
+# Cosmic chronometer H(z): z, H [km/s/Mpc], sigma [km/s/Mpc] (diagonal error).
+# Every row was checked against its source paper on 7 October 2026 (source after '#').
+# sigma combines statistical and systematic errors in quadrature where the paper
+# gives both. Correlations between rows are listed in CC_corr.txt. The Moresco
+# D4000 points (2012, 2015, 2016) have an SPS-model systematic covariance
+# (Moresco et al. 2020, arXiv:2003.07362) that is not included here.
+0.07    69.0    19.6    # Zhang et al. 2014, arXiv:1207.4541
+0.09    69.0    12.0    # Jimenez et al. 2003, astro-ph/0302560
+0.12    68.6    26.2    # Zhang et al. 2014, arXiv:1207.4541
+0.12    71.33   4.20    # Wang, Lei & Fan 2026, arXiv:2601.07345 (preprint; stat+sys in quadrature, SPS-model systematic not included)
+0.17    83.0    8.0     # Simon et al. 2005, astro-ph/0412269 (values as in Stern et al. 2010, Table 2)
+0.179   75.0    4.0     # Moresco et al. 2012, arXiv:1201.3609
+0.199   75.0    5.0     # Moresco et al. 2012, arXiv:1201.3609
+0.2     72.9    29.6    # Zhang et al. 2014, arXiv:1207.4541
+0.27    77.0    14.0    # Simon et al. 2005 (Stern et al. 2010, Table 2)
+0.28    88.8    36.6    # Zhang et al. 2014, arXiv:1207.4541
+0.352   83.0    14.0    # Moresco et al. 2012, arXiv:1201.3609
+0.3802  83.0    13.5    # Moresco et al. 2016, arXiv:1601.01701
+0.4     95.0    17.0    # Simon et al. 2005 (Stern et al. 2010, Table 2)
+0.4004  77.0    10.2    # Moresco et al. 2016, arXiv:1601.01701
+0.4247  87.1    11.2    # Moresco et al. 2016, arXiv:1601.01701
+0.4497  92.8    12.9    # Moresco et al. 2016, arXiv:1601.01701 (z was 0.44497, a typo)
+0.46    88.48   12.33   # Loubser 2025, arXiv:2511.02730: 0.57 stat, 12.32 sys in quadrature (was 12.89, linear sum); correlated, see CC_corr.txt
+0.47    89.0    49.6    # Ratsimbazafy et al. 2017, arXiv:1702.00418: 23 stat, 44 sys in quadrature (was 23, stat only)
+0.4783  80.9    9.0     # Moresco et al. 2016, arXiv:1601.01701
+0.48    97.0    62.0    # Stern et al. 2010, arXiv:0907.3149
+0.50    72.1    34.68   # Loubser et al. 2025, arXiv:2506.03836: 33.9 stat, 7.3 sys in quadrature (was 41.2, linear sum)
+0.593   104.0   13.0    # Moresco et al. 2012, arXiv:1201.3609
+0.67    119.45  17.82   # Loubser 2025, arXiv:2511.02730: 6.39 stat, 16.64 sys in quadrature (was 23.03, linear sum); correlated
+0.68    92.0    8.0     # Moresco et al. 2012, arXiv:1201.3609
+0.781   105.0   12.0    # Moresco et al. 2012, arXiv:1201.3609
+0.83    108.28  18.13   # Loubser 2025, arXiv:2511.02730: 10.07 stat, 15.08 sys in quadrature (was 25.15, linear sum); correlated
+0.875   125.0   17.0    # Moresco et al. 2012, arXiv:1201.3609
+0.88    90.0    40.0    # Stern et al. 2010, arXiv:0907.3149
+0.9     117.0   23.0    # Simon et al. 2005 (Stern et al. 2010, Table 2)
+1.037   154.0   20.0    # Moresco et al. 2012, arXiv:1201.3609
+1.3     168.0   17.0    # Simon et al. 2005 (Stern et al. 2010, Table 2)
+1.363   160.0   33.6    # Moresco 2015, arXiv:1503.01116
+1.43    177.0   18.0    # Simon et al. 2005 (Stern et al. 2010, Table 2)
+1.53    140.0   14.0    # Simon et al. 2005 (Stern et al. 2010, Table 2)
+1.75    202.0   40.0    # Simon et al. 2005 (Stern et al. 2010, Table 2)
+1.965   186.5   50.4    # Moresco 2015, arXiv:1503.01116

@@ -13,7 +13,7 @@ Responsibilities:
           "parameters", "reference_values", "prior_limits",
           "restrictions", "ndim",
           "rd_policy", "pantheonp_mode",
-          "fs8_gamma_fixed_by_group",
+          "fs8_gamma_fixed_by_group", "fixed_params_by_group",
           "nwalker", "nwalker_by_obs",
       }
   - Build a single shared `data` dict with loaded datasets.
@@ -87,6 +87,40 @@ def load_data(file_path: Union[str, Path]) -> Dict[str, np.ndarray]:
         'type_data': data[:, 1],
         'type_data_error': data[:, 2] if data.shape[1] > 2 else np.ones(data.shape[0]),
     }
+
+
+def _attach_correlations(d: Dict[str, np.ndarray], corr_path: Union[str, Path], logger=None) -> Dict[str, np.ndarray]:
+    """
+    Full covariance for a diagonal-error dataset (CC) when `corr_path` lists
+    correlated rows as "z_i z_j rho" (matched by redshift, each must match one
+    row): C = diag(sigma^2) with C_ij = rho sigma_i sigma_j. Adds d["cov"] and
+    d["inv_cov"]; without the file the dataset stays diagonal.
+    """
+    path = Path(corr_path)
+    if not path.exists():
+        return d
+    pairs = np.atleast_2d(np.loadtxt(path, usecols=(0, 1, 2)))
+    if pairs.size == 0:
+        return d
+    z = np.asarray(d["redshift"], dtype=float)
+    s = np.asarray(d["type_data_error"], dtype=float)
+    C = np.diag(s ** 2)
+
+    def _row(zz):
+        idx = np.where(np.isclose(z, zz, rtol=0.0, atol=1e-6))[0]
+        if idx.size != 1:
+            raise ValueError(f"{path.name}: z = {zz} matches {idx.size} rows of the data (need exactly 1)")
+        return int(idx[0])
+
+    for zi, zj, rho in pairs:
+        i, j = _row(zi), _row(zj)
+        C[i, j] = C[j, i] = float(rho) * s[i] * s[j]
+    np.linalg.cholesky(C)      # must be positive definite
+    d["cov"] = C
+    d["inv_cov"] = np.linalg.inv(C)
+    if logger:
+        logger.info("%s: %d correlated pairs from %s", path.stem.replace("_corr", ""), len(pairs), path.name)
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -757,22 +791,11 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     # "per_system": uses full list of individual systems (default).
                     "mode": "per_system",
                     "units": "scaled1e6",  # PDG numbers as printed (1e6 * D/H)
-                    "S": 1.137,            # scale factor for error inflation
-                    "weighted_mean": {"DH": 25.47, "sigma": 0.29},
-                    "bbn_model": "approx",  # simple BBN backend
-                    "systems": [
-                        {"name": "SDSS J1419+0829", "DH": 25.06, "sig_up": 0.52, "sig_dn": 0.52},
-                        {"name": "HS 0105+1619",    "DH": 25.76, "sig_up": 1.54, "sig_dn": 1.54},
-                        {"name": "QSO B0913+0715",  "DH": 25.29, "sig_up": 1.05, "sig_dn": 1.05},
-                        {"name": "SDSS J1358+0349", "DH": 26.18, "sig_up": 0.72, "sig_dn": 0.72},
-                        {"name": "SDSS J1358+6522", "DH": 25.82, "sig_up": 0.71, "sig_dn": 0.71},
-                        {"name": "SDSS J1558-0031", "DH": 24.04, "sig_up": 1.44, "sig_dn": 1.44},
-                        {"name": "PKS 1937-1009 A", "DH": 24.49, "sig_up": 2.80, "sig_dn": 2.80},
-                        {"name": "QSO J1444+2919",  "DH": 19.68, "sig_up": 3.3,  "sig_dn": 2.8},
-                        {"name": "PKS 1937-1009 B", "DH": 26.24, "sig_up": 0.48, "sig_dn": 0.48},
-                        {"name": "QSO 1009+2956",   "DH": 24.77, "sig_up": 4.1,  "sig_dn": 3.5},
-                        {"name": "QSO 1243+307",    "DH": 23.88, "sig_up": 0.82, "sig_dn": 0.82},
-                    ],
+                    "S": K.BBN_DH_PDG_S,   # PDG scale factor for error inflation
+                    "weighted_mean": dict(K.BBN_DH_PDG_MEAN),
+                    "bbn_model": "approx",  # standard-BBN power law (constants.BBN_DH_*)
+                    "theory_frac_error": K.BBN_DH_THEORY_FRAC,
+                    "systems": [dict(x) for x in K.BBN_DH_PDG_SYSTEMS],
                     "bbn_model_effective": "approx",
                 }
 
@@ -784,9 +807,11 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 observation_data[obs] = {
                     "mode": "per_system",  # or "mean"
                     "units": "scaled1e6",
-                    "S": 1.137,
-                    "weighted_mean": {"DH": 25.47, "sigma": 0.29},
-                    "bbn_model": "alterbbn_grid",  # request high-precision BBN backend
+                    "S": K.BBN_DH_PDG_S,
+                    "weighted_mean": dict(K.BBN_DH_PDG_MEAN),
+                    "systems": [dict(x) for x in K.BBN_DH_PDG_SYSTEMS],
+                    "theory_frac_error": K.BBN_DH_THEORY_FRAC,
+                    "bbn_model": "alterbbn_grid",  # AlterBBN grid (close to PRIMAT, about 3% below the power law)
                    #"bbn_force_rebuild": True,
 
                     # Precomputed grid path; comment this out to run AlterBBN live.
@@ -932,6 +957,10 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
             # ------------------
             else:
                 observation_data[obs] = load_data(file_path)
+                if obs == "CC":
+                    _attach_correlations(
+                        observation_data[obs], os.path.join(K.OBSERVATIONS_BASE, "CC_corr.txt"), logger
+                    )
                 if obs == "JLA_legacy":
                     logger.warning(
                         "JLA_legacy is the old 359-SN file (JLA redshifts, distance moduli "
@@ -1218,6 +1247,7 @@ def create_config(
 
         param_sets_policy = []
         fs8_gamma_fixed_by_group = {}
+        fixed_params_by_group = {}
 
         for gi, obs_grp in enumerate(config[mod]["observations"]):
             grp_params = list(config[mod]["parameters"][gi])
@@ -1275,17 +1305,24 @@ def create_config(
                     grp_params.remove("r_d")
 
             # Uncalibrated SNe without BAO or an H0 anchor: H_0 drops out of the
-            # likelihood once the offset is marginalised, so its posterior is the prior.
+            # likelihood once the offset is marginalised (5 log10 H_0 is absorbed by
+            # the offset), so it is not sampled. Distances still need a value: H_0
+            # is fixed at the reference value, which changes no chi^2.
             if (bool(getattr(K, "SN_MARGINALISE_OFFSET", True))
                     and any(x in _sn_offset_only for x in obs_grp)
                     and not _has_bao_desi(obs_grp)
                     and not any(x in _h0_anchors for x in obs_grp)
-                    and "H_0" in grp_params and logger):
-                logger.warning(
-                    "H_0 is not constrained by %s: the supernova offset is marginalised, "
-                    "so its posterior is the prior (model %s)",
-                    obs_grp, mod,
-                )
+                    and "H_0" in grp_params):
+                grp_params.remove("H_0")
+                h0_fix = float(reference_values.get("H_0", K.H0_RADIATION_FALLBACK))
+                fixed_params_by_group.setdefault(gi, {})["H_0"] = h0_fix
+                if logger:
+                    logger.warning(
+                        "Uncalibrated SNe %s: H_0 is not constrained (the supernova offset is "
+                        "marginalised), so it is not sampled; distances use H_0 = %.1f, which "
+                        "the offset absorbs (model %s)",
+                        obs_grp, h0_fix, mod,
+                    )
 
             # fσ8 singleton: fix gamma to GR-like value to avoid degeneracy
             if len(obs_grp) == 1 and obs_grp[0] == "f_sigma_8":
@@ -1303,6 +1340,7 @@ def create_config(
 
         config[mod]["parameters"] = param_sets_policy
         config[mod]["fs8_gamma_fixed_by_group"] = fs8_gamma_fixed_by_group
+        config[mod]["fixed_params_by_group"] = fixed_params_by_group
         # After our policy choices, singleton_mode is effectively "fixed"
         config[mod]["rd_policy"]["singleton_mode"] = "fixed"
         config[mod]["prior_limits_global"] = dict(prior_limits)

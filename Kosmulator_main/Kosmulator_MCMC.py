@@ -53,6 +53,8 @@ def _theta_params(theta: np.ndarray, CONFIG: dict, obs_index: int) -> dict:
     param_dict = {p: theta[i] for i, p in enumerate(params)}
     # Derive background vars if using CMB params / 100theta_s
     param_dict = utils.ensure_background_params(param_dict)
+    # Values the configuration fixes for this group (e.g. H_0 for uncalibrated SNe)
+    param_dict = utils.with_fixed_params(param_dict, CONFIG, obs_index)
     # If BBN is present in this observation set and r_d wasn't sampled,
     # compute r_d from (Omega_bh^2, Omega_m, H_0[, N_eff]).
     RD._maybe_calibrate_rd(param_dict, CONFIG, obs_index)
@@ -253,7 +255,7 @@ def model_likelihood(
 
     else:
         # Fallback for CC, f_sigma_8, OHD, etc.
-        chi2 = SP.Calc_chi(obs_type, type_data, type_err, model)
+        chi2 = SP.Calc_obs_chi(obs_type, obs_data, model)
 
     return -0.5 * chi2
 
@@ -585,8 +587,8 @@ def _zeus_warmup(
     segment = max(1, int(segment))
     while done_w < n_steps:
         k = min(segment, n_steps - done_w)
-        s = zeus.EnsembleSampler(nwalker, ndim, logprob_fn, args=args, pool=pool,
-                                 vectorize=vectorize, verbose=False)
+        s = _zeus_ensemble(nwalker, ndim, logprob_fn, args=args, pool=pool,
+                           vectorize=vectorize, verbose=False)
         s.run_mcmc(X, k, progress=False)
         X = np.array(s.get_chain()[-1], float)
         lp = np.asarray(s.get_log_prob()[-1], float)
@@ -727,6 +729,79 @@ def regenerate_invalid_walkers(
 
 _BLAS_LIMITER = None
 
+# ── Pool workers: data sent once per group, not with every walker evaluation ────
+# The likelihood arguments (data, CONFIG, ...) are written to a file once per
+# observation group; each pool task carries only theta and the file's path, and a
+# worker loads the file the first time it sees that path. Before, every task
+# pickled the whole data dictionary (26 MB with JLA, 74 MB with DES-Y5 and
+# Pantheon+). The file sits next to the chain, so MPI ranks on other nodes can
+# read it from the shared file system.
+_SHARED_ARGS: Dict[str, tuple] = {}
+_SHARED_FILES: List[str] = []
+
+
+class _PoolLogProb:
+    """Picklable log-probability for pool workers (see the note above)."""
+
+    def __init__(self, fn: Callable, path: str):
+        self.fn, self.path = fn, path
+
+    def __call__(self, theta):
+        args = _SHARED_ARGS.get(self.path)
+        if args is None:
+            import pickle
+            with open(self.path, "rb") as fh:
+                args = pickle.load(fh)
+            _SHARED_ARGS.clear()            # keep only the current group's data
+            _SHARED_ARGS[self.path] = args
+        return self.fn(theta, *args)
+
+
+def _pool_logprob(fn: Callable, args: tuple, near: str) -> _PoolLogProb:
+    """Write `args` once (next to the chain file `near`) and return the pool callable."""
+    import pickle
+    import tempfile
+    folder = os.path.dirname(os.path.abspath(near)) if near else tempfile.gettempdir()
+    os.makedirs(folder, exist_ok=True)
+    fd, path = tempfile.mkstemp(prefix=".kosm_pool_args_", suffix=".pkl", dir=folder)
+    with os.fdopen(fd, "wb") as fh:
+        pickle.dump(args, fh, protocol=pickle.HIGHEST_PROTOCOL)
+    _SHARED_FILES.append(path)
+    _SHARED_ARGS.clear()
+    _SHARED_ARGS[path] = args               # the main process needs no reload
+    return _PoolLogProb(fn, path)
+
+
+def _remove_shared_files() -> None:
+    while _SHARED_FILES:
+        path = _SHARED_FILES.pop()
+        _SHARED_ARGS.pop(path, None)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _zeus_ensemble(*args, **kwargs):
+    """
+    zeus.EnsembleSampler without its side effect on logging: zeus replaces every
+    handler of the root logger with a plain one (and sets the root level), so all
+    later Kosmulator messages lost their "INFO |" / "WARNING |" prefix. The
+    previous handlers and level are restored.
+    """
+    root = logging.getLogger()
+    handlers, level = list(root.handlers), root.level
+    try:
+        return zeus.EnsembleSampler(*args, **kwargs)
+    finally:
+        for h in list(root.handlers):
+            if h not in handlers:
+                root.removeHandler(h)
+        for h in handlers:
+            if h not in root.handlers:
+                root.addHandler(h)
+        root.setLevel(level)
+
 
 def _limit_main_blas(uses_pool: bool, engine: str = "", vectorised: bool = True, label: str = "") -> None:
     """
@@ -773,6 +848,7 @@ def run_mcmc(*args, **kwargs):
         return _run_mcmc_impl(*args, **kwargs)
     finally:
         _restore_main_blas()
+        _remove_shared_files()
         counts = RD.rd_fallback_counts()
         if counts:
             label = kwargs.get("obs_key") or "+".join(map(str, kwargs.get("obs") or []))
@@ -1121,6 +1197,11 @@ def _run_mcmc_impl(
         logprob_fn = (
             _zeus_logpost_vectorized if zeus_vectorize else _zeus_logpost_scalar
         )
+        zeus_args = (data, CONFIG, MODEL_func, model_name, obs, Type, obs_index)
+        if pool_for_zeus is not None:
+            # Pool: the arguments travel once per group (file), each task only theta
+            logprob_fn = _pool_logprob(logprob_fn, zeus_args, zeus_chain)
+            zeus_args = ()
 
         # Warm-up (fresh runs only, nothing saved): reset walkers that sit far
         # below the ensemble before the recorded chain starts. A zeus walker that
@@ -1130,7 +1211,7 @@ def _run_mcmc_impl(
             try:
                 pos0, n_reset = _zeus_warmup(
                     np.asarray(pos0, float), logprob_fn,
-                    (data, CONFIG, MODEL_func, model_name, obs, Type, obs_index),
+                    zeus_args,
                     nwalker, ndim, zeus_vectorize, pool_for_zeus, n_warm,
                     int(PLOT_SETTINGS.get("zeus_warmup_segment", 25)),
                     np.array([prior_map[p][0] for p in param_names], float),
@@ -1143,11 +1224,11 @@ def _run_mcmc_impl(
             except Exception as e:
                 log.warning("zeus warm-up skipped (%s); starting from the initial ball", e)
 
-        sampler = zeus.EnsembleSampler(
+        sampler = _zeus_ensemble(
             nwalker,
             ndim,
             logprob_fn,
-            args=(data, CONFIG, MODEL_func, model_name, obs, Type, obs_index),
+            args=zeus_args,
             pool=pool_for_zeus,
             vectorize=zeus_vectorize,
         )
@@ -1253,6 +1334,11 @@ def _run_mcmc_impl(
         )
         emcee_pool = None if emcee_vectorize else pool
         emcee_fn = emcee_prob_vectorized if emcee_vectorize else emcee_prob
+        emcee_args = (data, Type, CONFIG, MODEL_func, model_name, obs, obs_index)
+        if emcee_pool is not None:
+            # Pool: the arguments travel once per group (file), each task only theta
+            emcee_fn = _pool_logprob(emcee_prob, emcee_args, chain_path)
+            emcee_args = ()
         _limit_main_blas(emcee_pool is not None, "emcee", emcee_vectorize, f"{model_name} | {_resolved_key}")
 
         # ------------------------------------------------------------
@@ -1298,7 +1384,7 @@ def _run_mcmc_impl(
                     nwalker,
                     ndim,
                     emcee_fn,
-                    args=(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index),
+                    args=emcee_args,
                     pool=emcee_pool,
                     backend=backend,
                     vectorize=emcee_vectorize,
@@ -1395,7 +1481,7 @@ def _run_mcmc_impl(
             nwalker,
             ndim,
             emcee_fn,
-            args=(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index),
+            args=emcee_args,
             pool=emcee_pool,
             backend=backend,
             vectorize=emcee_vectorize,

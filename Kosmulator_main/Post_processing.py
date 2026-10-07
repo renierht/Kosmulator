@@ -69,13 +69,19 @@ def _scalarize(x: Any) -> float:
 
 
 def _format_pm(value, minus, plus):
-    # ... whatever you already have before computing errors ...
+    """
+    value^{+plus}_{-minus} with the precision set by the uncertainty: the smaller
+    error is shown to two significant figures and the value to the same decimal
+    place (0.2974^{+0.0087}_{-0.0083}, 68.83^{+0.50}_{-0.50}, 1452^{+21}_{-20}).
+    Four decimals when the errors are zero or not finite.
+    """
     lo = abs(minus)
     hi = abs(plus)
-    err = max(lo, hi)
-
-    # Force FOUR decimal places everywhere
-    prec = 4
+    small = min(e for e in (lo, hi)) if np.isfinite(lo) and np.isfinite(hi) else float("nan")
+    if np.isfinite(small) and small > 0:
+        prec = int(min(max(1 - int(np.floor(np.log10(small))), 0), 8))
+    else:
+        prec = 4
 
     fmt = f"{{:.{prec}f}}"
     v_str  = fmt.format(value)
@@ -555,6 +561,9 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             def _compute_chi2_total(p_eval: dict) -> tuple[float, int]:
                 chi_total = 0.0
                 n_points = 0
+                # Values fixed for this group (e.g. H_0 for uncalibrated SNe); the
+                # same object when nothing is fixed, so the gamma note below still works
+                p_eval = U.with_fixed_params(p_eval, CONFIG[model_name], obs_index)
 
                 for i, obs in enumerate(obs_entry):
                     obs_type = obs_types[i]
@@ -605,7 +614,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                     elif obs_type in ["OHD", "CC"]:
                         redshift = obs_data["redshift"]
                         model_val = p_eval["H_0"] * np.array([MODEL_func(z, p_eval) for z in redshift])
-                        chi_total += float(Calc_chi(obs_type, obs_data["type_data"], obs_data["type_data_error"], model_val))
+                        chi_total += float(SP.Calc_obs_chi(obs_type, obs_data, model_val))
                         n_points += len(obs_data["type_data"])
 
                     elif obs_type in ["f", "f_sigma_8"]:
@@ -620,7 +629,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                         else:
                             model_val = UDM.matter_density_z_array(redshift, p_eval, MODEL_func) ** float(p_eval["gamma"])
 
-                        chi_total += float(Calc_chi(obs_type, obs_data["type_data"], obs_data["type_data_error"], model_val))
+                        chi_total += float(SP.Calc_obs_chi(obs_type, obs_data, model_val))
                         n_points += len(obs_data["type_data"])
 
                     elif obs_type in ("BBN_DH", "BBN_DH_AlterBBN"):
@@ -724,12 +733,16 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             log_likelihood = -0.5 * chi_squared_total
 
 
-            if obs_entry == ["PantheonP"]:
-                n_data = num_data_points_total
-                n_param = len(CONFIG[model_name]["parameters"][obs_index])  # should be 3
-                dof = n_data - n_param
-            else:
-                dof = num_data_points_total - num_params
+            # k: sampled parameters plus the SN magnitude offsets fitted analytically
+            # (1 per SN set with a marginalised offset, 2 for the official JLA)
+            n_offsets = U.sn_fitted_offsets(obs_entry, data)
+            if n_offsets:
+                num_params = len(param_dict) + n_offsets
+                notes.append(f"k includes {n_offsets} analytically fitted SN offset(s)")
+            fixed_here = (CONFIG[model_name].get("fixed_params_by_group", {}) or {}).get(obs_index) or {}
+            if "H_0" in fixed_here:
+                notes.append("H_0 not sampled (uncalibrated SNe: the offset absorbs it)")
+            dof = num_data_points_total - num_params
 
             if dof <= 0:
                 raise ValueError(
@@ -851,6 +864,7 @@ def provide_model_diagnostics(
     dof=None,
     datasets=None,
     is_reference=None,
+    reference_name=None,
 ) -> str:
     """
     Plain-language reading of the reduced chi-squared, chi^2_nu = chi^2 / dof.
@@ -858,6 +872,7 @@ def provide_model_diagnostics(
     datasets: dataset tags of the group, used to name the likely cause of a low
     chi^2_nu. is_reference: True for the reference model (no comparison with
     itself); if None, any model whose name starts with "LCDM" counts as reference.
+    reference_name: name of the reference model used in the text (default "LCDM").
 
     For a model that describes the data, chi^2_nu scatters around 1 with a
     standard deviation of sqrt(2/dof), so the same value can be ordinary for a
@@ -959,13 +974,15 @@ def provide_model_diagnostics(
                 "any calibration or nuisance parameters.\n"
             )
 
+    ref = str(reference_name) if reference_name else "LCDM"
+
     # Benchmark comparison: only for non-reference models
     if reference_chi_squared is not None and np.isfinite(reference_chi_squared) \
             and not is_reference:
-        feedback += "\nBenchmark Comparison (Relative to LCDM):\n"
+        feedback += f"\nBenchmark Comparison (Relative to {ref}):\n"
         if rcs < reference_chi_squared:
             feedback += (
-                f"  - chi^2_nu ({rcs:.3f}) is lower than for LCDM "
+                f"  - chi^2_nu ({rcs:.3f}) is lower than for {ref} "
                 f"({reference_chi_squared:.3f}): the fit improves by more than "
                 "the change in the number of free parameters. Whether "
                 "the improvement is significant is given by dChi, sigma and the "
@@ -973,20 +990,20 @@ def provide_model_diagnostics(
             )
         elif rcs > reference_chi_squared:
             feedback += (
-                f"  - chi^2_nu ({rcs:.3f}) is higher than for LCDM "
+                f"  - chi^2_nu ({rcs:.3f}) is higher than for {ref} "
                 f"({reference_chi_squared:.3f}): any extra parameters do not "
                 "improve the fit enough to offset the degrees of freedom "
                 "they use.\n"
             )
         else:
             feedback += (
-                f"  - chi^2_nu matches the LCDM value ({reference_chi_squared:.3f}), "
+                f"  - chi^2_nu matches the {ref} value ({reference_chi_squared:.3f}), "
                 "a comparable fit.\n"
             )
 
     if is_reference:
         feedback += (
-            "\nLCDM is the reference model. Because chi^2_nu depends on how the "
+            f"\n{ref} is the reference model. Because chi^2_nu depends on how the "
             "data uncertainties were estimated, its absolute value says more "
             "about the dataset than about the model; comparisons of models on "
             "the same data (dChi, sigma, dAIC, dBIC, dDIC) remove that "

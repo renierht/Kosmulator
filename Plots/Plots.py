@@ -563,6 +563,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
                 dof=stats.get("dof"),
                 datasets=_grp if _grp is not None else obs_key.split("+"),
                 is_reference=(model == reference_model),
+                reference_name=reference_model,
             )
             IC_lines = PP.interpret_delta_IC(stats['dAIC'], stats['dBIC'], stats['dAICc'], stats['dDIC'], stats['dWAIC'], stats['sigma']).splitlines()
             aic_text = IC_lines[0].strip() if len(IC_lines) > 0 else "No AIC interpretation available."
@@ -1375,6 +1376,7 @@ def _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS):
     else:
         return None
     names = cfg["parameters"][i]
+    obs_index = i
     arr = None
     for cand in ("+".join(toks), "_".join(toks), obs_key, obs_key.replace("+", "_")):
         if cand in S:
@@ -1388,7 +1390,8 @@ def _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS):
     n = max(1, int(PLOT_SETTINGS.get("band_draws", 200)))
     rng = np.random.default_rng(12345)
     idx = rng.choice(arr.shape[0], size=min(n, arr.shape[0]), replace=False)
-    return [dict(zip(names, map(float, arr[j]))) for j in idx]
+    from Kosmulator_main.utils import with_fixed_params
+    return [with_fixed_params(dict(zip(names, map(float, arr[j]))), cfg, obs_index) for j in idx]
 
 
 def _posterior_band(draws, curve_fn):
@@ -1465,6 +1468,18 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
 
             combined = {k: v for k, v in All_best_fit_values[model_name][obs_key].items() if k != "__D_bar__"}
             params_med, params_hi, params_lo = fetch_best_fit_values(combined)
+            # Values fixed for this group (e.g. H_0 for uncalibrated SNe)
+            try:
+                from Kosmulator_main.utils import with_fixed_params
+                _cfg_m = CONFIG.get(model_name, {})
+                _norm = lambda k: str(k).replace("PantheonP_SH0ES", "PantheonPS").replace("Pantheon+SH0ES", "PantheonPS")
+                _gi = next((i for i, g in enumerate(_cfg_m.get("observations", []))
+                            if _norm("+".join(g)) == _norm(obs_key)), None)
+                params_med = with_fixed_params(params_med, _cfg_m, _gi)
+                params_hi = with_fixed_params(params_hi, _cfg_m, _gi)
+                params_lo = with_fixed_params(params_lo, _cfg_m, _gi)
+            except Exception:
+                pass
 
             # (Optional) diagnostics
             try:

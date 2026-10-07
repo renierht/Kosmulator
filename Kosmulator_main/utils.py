@@ -615,6 +615,47 @@ def is_main_process() -> bool:
 # 4) Plot settings / paths (non-noisy LaTeX detection)
 # ───────────────────────────────────────────────────────────────────────────────
 
+def group_colours(n: int, base=None) -> List[str]:
+    """
+    n distinct colours: `base` (default DEFAULT_PLOT_COLORS) without entries that
+    are the same colour under another name, then tab20 colours and golden-angle
+    hues, each kept only if it is clearly different (RGB distance > 0.25) from
+    every colour already chosen.
+    """
+    import colorsys
+    import matplotlib.colors as mcolors
+    base = list(base if base is not None else DEFAULT_PLOT_COLORS)
+    out, rgbs = [], []
+
+    def add(c):
+        try:
+            rgb = np.array(mcolors.to_rgb(c))
+        except ValueError:
+            return
+        if all(np.linalg.norm(rgb - r) > 0.25 for r in rgbs):
+            out.append(c if isinstance(c, str) else mcolors.to_hex(c))
+            rgbs.append(rgb)
+
+    for c in base:
+        if len(out) >= n:
+            return out[:n]
+        add(c)
+    import matplotlib
+    for c in matplotlib.colormaps["tab20"].colors:
+        if len(out) >= n:
+            return out[:n]
+        add(mcolors.to_hex(c))
+    k = 0
+    while len(out) < n and k < 10000:
+        h = (0.618033988749895 * k) % 1.0
+        s, v = (0.85, 0.75) if k % 2 == 0 else (0.55, 0.95)
+        add(mcolors.to_hex(colorsys.hsv_to_rgb(h, s, v)))
+        k += 1
+    while len(out) < n:                       # more groups than distinguishable colours
+        out.append(out[len(out) % max(1, len(rgbs))])
+    return out[:n]
+
+
 def build_plot_settings(
     observations,
     suffix: str,
@@ -631,14 +672,9 @@ def build_plot_settings(
 
     n_obs = len(observations)
 
-    # Make sure we have at least one colour per observation group.
-    # If there are more obs than base colours, cycle through the list.
-    if n_obs <= len(colors):
-        color_schemes = list(colors[:n_obs])
-    else:
-        # tile and trim
-        repeats = (n_obs + len(colors) - 1) // len(colors)
-        color_schemes = (colors * repeats)[:n_obs]
+    # One distinct colour per observation group: the default list first, then
+    # further colours that differ from every colour already used (no repeats).
+    color_schemes = group_colours(n_obs, colors)
 
     settings: Dict[str, Any] = {
         # Style
@@ -1727,7 +1763,7 @@ def _interp_prose(text: str) -> str:
     import re as _re
     t = str(text or "")
     t = t.replace("Statistical Interpretation:", " ")
-    t = t.replace("Benchmark Comparison (Relative to LCDM):", " ")
+    t = _re.sub(r"Benchmark Comparison \(Relative to [^)]*\):", " ", t)
     t = _re.sub(r"\s*\n\s*-\s*", " ", t)
     t = _re.sub(r"^\s*-\s*", "", t.strip())
     t = " ".join(t.split())
@@ -2406,6 +2442,46 @@ def _scalar_or_array(x):
     if x.size == 1:
         return x.squeeze().item()
     return x
+
+def with_fixed_params(p: dict, model_config: Optional[dict], obs_index: Optional[int]) -> dict:
+    """
+    Parameter dict of one observation group completed with the values the
+    configuration fixes for that group (model_config["fixed_params_by_group"],
+    e.g. H_0 for uncalibrated supernovae). Returns `p` itself when nothing is
+    fixed, otherwise a new dict; sampled values are never overwritten.
+    """
+    try:
+        fixed = (model_config or {}).get("fixed_params_by_group", {}) or {}
+        extra = fixed.get(obs_index) if obs_index is not None else None
+        if extra is None and obs_index is not None:
+            extra = fixed.get(str(obs_index))
+    except AttributeError:
+        extra = None
+    if not extra:
+        return p
+    out = dict(p)
+    for k, v in extra.items():
+        out.setdefault(k, float(v))
+    return out
+
+
+def sn_fitted_offsets(obs_list, data: dict) -> int:
+    """
+    Number of SN magnitude offsets fitted analytically in a group (counted in k
+    for AIC/BIC and the degrees of freedom): 2 for the official JLA (M_B and
+    Delta_M), 1 for any other SN set whose offset is marginalised, 0 otherwise.
+    """
+    n = 0
+    for o in obs_list or []:
+        d = (data or {}).get(o) or {}
+        if not isinstance(d, dict):
+            continue
+        if d.get("jla_full"):
+            n += 2
+        elif d.get("marginalise_offset", False):
+            n += 1
+    return n
+
 
 def ensure_background_params(p: dict) -> dict:
     """

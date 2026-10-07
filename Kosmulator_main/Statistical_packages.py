@@ -39,6 +39,10 @@ from Kosmulator_main.constants import (
     OBSERVATIONS_BASE,
     BBN_GRID_RELATIVE,
     PLANCK_NUISANCE_DEFAULTS,
+    BBN_DH_REF,
+    BBN_DH_OMEGA_B_REF,
+    BBN_DH_SLOPE,
+    BBN_DH_THEORY_FRAC,
 )
 
 from . import Class_run as CR
@@ -934,6 +938,19 @@ def Covariance_matrix(
     return float(np.sum(delta * delta * inv_diag))
 
 
+def Calc_obs_chi(obs_type: str, obs_data: dict, model: np.ndarray) -> float:
+    """
+    chi^2 of an H(z) or growth dataset: the full covariance when the dataset
+    carries one (obs_data["inv_cov"], e.g. CC with the correlated DESI points of
+    CC_corr.txt), otherwise diagonal errors (Calc_chi).
+    """
+    inv = obs_data.get("inv_cov")
+    if inv is not None:
+        r = np.asarray(obs_data["type_data"], dtype=float) - np.asarray(model, dtype=float)
+        return float(r @ (np.asarray(inv, dtype=float) @ r))
+    return Calc_chi(obs_type, obs_data["type_data"], obs_data["type_data_error"], model)
+
+
 def Calc_chi(
     Type: str,
     type_data: np.ndarray,
@@ -1427,23 +1444,17 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
 
 def _bbn_predict_DH(param_dict: Dict[str, float]) -> float:
     """
-    Approximate primordial D/H (number ratio) from Omega_b h^2.
+    Standard-BBN primordial D/H (number ratio) from Omega_b h^2:
+      D/H = BBN_DH_REF * (omega_b / BBN_DH_OMEGA_B_REF)^BBN_DH_SLOPE
+    a power law fitted to the PRyMordial table (Burns et al. 2023,
+    arXiv:2307.07061; constants.py has the details); 2.508e-5 at omega_b = 0.0224.
 
-    Uses a calibrated power law:
-      D/H = K * (6 / eta10)^alpha,   alpha ≈ 1.6
-
-    with K chosen such that
-      Omega_b h^2 = 0.02205  →  D/H = 25.47 × 10^{-6}.
+    The earlier version fixed its normalisation by forcing the curve through the
+    observed PDG mean (25.47e-6) at the omega_b PDG infers from it (0.02205), so
+    the "prediction" was set by the data it was fitted to.
     """
     obh2 = float(param_dict["Omega_bh^2"])
-    alpha = 1.6
-    eta10 = 273.9 * obh2
-
-    eta10_ref = 273.9 * 0.02205
-    DH_ref = 25.47e-6
-
-    K = DH_ref * (eta10_ref / 6.0) ** alpha
-    return K * (6.0 / eta10) ** alpha
+    return float(BBN_DH_REF * (obh2 / BBN_DH_OMEGA_B_REF) ** BBN_DH_SLOPE)
 
 
 def bbn_predict_approx(p: Dict[str, float], data: Optional[dict] = None) -> float:
@@ -1570,10 +1581,14 @@ def Calc_BBN_DH_chi(
     units = obs.get("units", "absolute")
     scale = 1e-6 if units == "scaled1e6" else 1.0
     S = float(obs.get("S", 1.0))
+    # Theory uncertainty of the prediction: one error common to every system
+    sig_th = float(obs.get("theory_frac_error", BBN_DH_THEORY_FRAC)) * abs(float(DH_th))
 
     systems = obs.get("systems", []) or []
     if len(systems) > 0:
-        chi2 = 0.0
+        # chi^2 with covariance C = diag(S^2 sigma_i^2) + sig_th^2 1 1^T (fully correlated
+        # theory error), by Sherman-Morrison: A - sig_th^2 B^2 / (1 + sig_th^2 E)
+        A = B = E = 0.0
         for s in systems:
             y = float(s["DH"]) * scale
             if "sigma" in s:
@@ -1587,17 +1602,20 @@ def Calc_BBN_DH_chi(
                 resid = y - DH_th
                 sig = su if resid >= 0.0 else sd
 
-            sig_eff = max(S * sig, 1e-18)
-            chi2 += ((y - DH_th) / sig_eff) ** 2
-        return float(chi2)
+            w = 1.0 / max(S * sig, 1e-18) ** 2
+            r = y - DH_th
+            A += w * r * r
+            B += w * r
+            E += w
+        return float(A - sig_th ** 2 * B * B / (1.0 + sig_th ** 2 * E))
 
     # Fallback: weighted mean only
     if "weighted_mean" in obs:
         wm = obs["weighted_mean"]
         y = float(wm["DH"]) * scale
         sig = float(wm["sigma"]) * scale
-        sig_eff = max(S * sig, 1e-18)
-        return float(((y - DH_th) / sig_eff) ** 2)
+        var = max(S * sig, 1e-18) ** 2 + sig_th ** 2
+        return float((y - DH_th) ** 2 / var)
 
     raise ValueError("BBN_DH obs has neither 'systems' nor 'weighted_mean'.")
 
@@ -2130,10 +2148,15 @@ def dArd(
 # -----------------------------------------------------------------------------
 
 def pointwise_log_like_CC(obs_data, model, param_dict):
-    H_data = obs_data['type_data']
-    H_err = obs_data['type_data_error']
-    residual = H_data - model
-
+    H_data = np.asarray(obs_data['type_data'], dtype=float)
+    residual = H_data - np.asarray(model, dtype=float)
+    if obs_data.get("cov") is not None:
+        # Correlated points: terms of the whitened residual L^-1 r (C = L L^T),
+        # which sum to the full chi^2
+        L = np.linalg.cholesky(np.asarray(obs_data["cov"], dtype=float))
+        u = la.solve_triangular(L, residual, lower=True, check_finite=False)
+        return -0.5 * u ** 2
+    H_err = np.asarray(obs_data['type_data_error'], dtype=float)
     return -0.5 * (residual / H_err) ** 2
 
 def pointwise_log_like_DESI(obs_data, Model_func, param_dict, obs_type):
@@ -2147,14 +2170,14 @@ def pointwise_log_like_SNe(obs_data, model, param_dict):
         return np.array([-0.5 * chi2])
     else:
         # Diagonal errors (JLA_legacy, Pantheon) → N = number of SNe
-        err = obs_data["type_data_error"]
+        # Same residual as the chi^2 (generic_sn_residual), so the per-SN terms sum
+        # to it: M_abs only enters when it is sampled and the data are magnitudes.
+        err = np.asarray(obs_data["type_data_error"], dtype=float)
+        residual = generic_sn_residual(obs_data, model, param_dict)
         if obs_data.get("marginalise_offset", False):
-            r = np.asarray(obs_data["type_data"], dtype=float) - model
-            _, B, E = sn_offset_terms(obs_data, r)
-            residual = r - B / E       # per-SN terms sum to the marginalised chi^2
-        else:
-            residual = obs_data["type_data"] - param_dict.get("M_abs", 0.0) - model
-        return -0.5 * (residual / err) ** 2                 # shape (N,) — only valid if no inv_cov 
+            _, B, E = sn_offset_terms(obs_data, residual)
+            residual = residual - B / E    # per-SN terms sum to the marginalised chi^2
+        return -0.5 * (residual / err) ** 2                 # shape (N,) - only valid if no inv_cov
 
 def pointwise_log_like_PantP(obs_data, model, param_dict):
     chi2 = Calc_PantP_chi(
@@ -2177,6 +2200,7 @@ def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
     rows = []
     for theta in draws:
         param_dict = dict(zip(params, theta))
+        param_dict = utils.with_fixed_params(param_dict, CONFIG, obs_index)
         param_dict = utils.ensure_background_params(param_dict)
 
         if obs_name in ("DESI_DR1", "DESI_DR2", "BAO"):

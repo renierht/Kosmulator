@@ -73,6 +73,48 @@ JLA_HOST_MASS_SPLIT: float = 10.0
 #: evaluating them in one vectorised call on a single core.
 POOL_PREFERRED_DATASETS: Set[str] = {"JLA"}
 
+# ----------------------------------------------------------------------
+# BBN deuterium (BBN_DH likelihood)
+# ----------------------------------------------------------------------
+#: Standard-BBN D/H(omega_b) used by the "approx" backend: a power law fitted to
+#: the PRyMordial table PRyM_Yp_DH_cosmoMC_2023.dat (Burns et al. 2023,
+#: arXiv:2307.07061; NACRE II rates with the LUNA d(p,gamma)3He rate, N_eff =
+#: 3.044, Delta N = 0) over omega_b = 0.018 - 0.027, where it matches the table
+#: to 0.7% (the table's own Monte Carlo noise). PArthENoPE 3.0 (Pisanti et al.
+#: 2021, arXiv:2011.11537) gives the same value to 0.2%; PRIMAT (arXiv:2011.11320)
+#: is about 3% lower, which is the present nuclear-rate systematic.
+BBN_DH_REF: float = 2.508e-5          # D/H at omega_b = BBN_DH_OMEGA_B_REF
+BBN_DH_OMEGA_B_REF: float = 0.0224
+BBN_DH_SLOPE: float = -1.640          # d ln(D/H) / d ln(omega_b)
+#: Fractional theory (nuclear-rate and neutron-lifetime) uncertainty of the D/H
+#: prediction, from the PRyMordial Monte Carlo errors in the same table (3.8 -
+#: 4.4% over omega_b = 0.018 - 0.027). It is one common error for all quasar
+#: systems (fully correlated) and is added to every BBN_DH backend.
+BBN_DH_THEORY_FRAC: float = 0.041
+
+#: Primordial D/H measurements, PDG Review of Particle Physics 2025, "Big-Bang
+#: nucleosynthesis" (Fields, Molaro, Sarkar), Table 24.1 (12 quasar absorption
+#: systems; values 1e6 D/H) and eq. (24.2): weighted mean 25.08 +/- 0.29 with
+#: scale factor S = 1.08. The 2023 revision used before had 11 systems
+#: (25.47 +/- 0.29, S = 1.137); PKS 1937-1009 at z = 3.572 changed from
+#: 26.24 +/- 0.48 to 26.08 +/- 1.02 and QSO J1332+0052 was added.
+BBN_DH_PDG_SYSTEMS = (
+    {"name": "SDSS J1419+0829", "DH": 25.06, "sig_up": 0.52, "sig_dn": 0.52},
+    {"name": "HS 0105+1619",    "DH": 25.76, "sig_up": 1.54, "sig_dn": 1.54},
+    {"name": "QSO B0913+0715",  "DH": 25.29, "sig_up": 1.05, "sig_dn": 1.05},
+    {"name": "SDSS J1358+0349", "DH": 26.18, "sig_up": 0.72, "sig_dn": 0.72},
+    {"name": "SDSS J1358+6522", "DH": 25.82, "sig_up": 0.71, "sig_dn": 0.71},
+    {"name": "SDSS J1558-0031", "DH": 24.04, "sig_up": 1.44, "sig_dn": 1.44},
+    {"name": "PKS 1937-1009 A", "DH": 24.49, "sig_up": 2.80, "sig_dn": 2.80},
+    {"name": "QSO J1444+2919",  "DH": 19.68, "sig_up": 3.3,  "sig_dn": 2.8},
+    {"name": "PKS 1937-1009 B", "DH": 26.08, "sig_up": 1.02, "sig_dn": 1.02},
+    {"name": "QSO 1009+2956",   "DH": 24.77, "sig_up": 4.1,  "sig_dn": 3.5},
+    {"name": "QSO 1243+307",    "DH": 23.88, "sig_up": 0.82, "sig_dn": 0.82},
+    {"name": "QSO J1332+0052",  "DH": 23.88, "sig_up": 0.77, "sig_dn": 0.77},
+)
+BBN_DH_PDG_MEAN = {"DH": 25.08, "sigma": 0.29}
+BBN_DH_PDG_S: float = 1.08
+
 #: BLAS/OpenMP threads in the main process while a group samples without a
 #: worker pool (vectorised zeus and emcee, or any run with --num_cores 1).
 #: None keeps NumPy's default (all cores). The best value depends on the
@@ -205,7 +247,7 @@ COMBINE_GROUPS: List[Set[str]] = [
 
 #: Global colour palette for plotting
 DEFAULT_PLOT_COLORS: List[str] = [
-     "b", "green", "r", "cyan", "purple", "grey", "yellow", "m", "k", "gray",
+     "b", "green", "r", "cyan", "purple", "grey", "yellow", "m", "k", "olive",
     "orange", "pink", "crimson", "darkred", "salmon",
 ]
 
