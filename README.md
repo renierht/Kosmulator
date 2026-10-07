@@ -195,7 +195,7 @@ python Kosmulator.py --help
 
 Every `--autocorr-check-every` steps Kosmulator evaluates, on the chain after burn-in:
 τ_max, the largest integrated autocorrelation time over the sampled parameters
-(zeus's default estimator, Karamanis & Beutler 2020); the effective sample size
+(zeus's default estimator, Karamanis, Beutler & Peacock 2021); the effective sample size
 ESS = N_post × walkers / τ_max; and the split-R̂ of every parameter (each walker's
 chain cut in two halves, Gelman et al. 2013). The run stops once
 N_post ≥ 50 τ_max, ESS ≥ 2000, split-R̂ < 1.01 and τ_max changed by less than

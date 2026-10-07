@@ -1274,7 +1274,7 @@ def autocorr_time_mk(chain, c: float = 5.0) -> np.ndarray:
     """
     Integrated autocorrelation time of every parameter of an ensemble chain
     (n_steps, n_walkers, n_dim), with zeus's default estimator ("mk";
-    Karamanis & Beutler 2020; zeus.autocorr.AutoCorrTime): the walkers' chains
+    Karamanis, Beutler & Peacock 2021; zeus.autocorr.AutoCorrTime): the walkers' chains
     are joined end to end, the autocorrelation function is taken about the
     overall mean and summed up to Sokal's automated window (M >= c tau).
 
