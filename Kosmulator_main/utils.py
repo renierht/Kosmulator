@@ -170,22 +170,22 @@ def parse_cli_args():
     )
     parser.add_argument(
         "--tau-consecutive", "--consecutive-required",
-        dest="consecutive_required", type=int, default=3,
+        dest="consecutive_required", type=int, default=1,
         help=(
-            "For Zeus early-stop: require this many consecutive callback checks "
-            "with |Δτ|/τ < target. Default 3."
+            "Convergence rule (zeus and emcee): number of consecutive checks at which "
+            "all its conditions must hold before the run stops. Default 1."
         ),
     )
     parser.add_argument(
         "--autocorr-buffer", type=int, default=None,
         help=(
-            "Extra iterations AFTER burn before convergence checks start. "
-            "Default: max(1000, burn/5)."
+            "Earliest stop: the convergence rule may end a run only after burn + this "
+            "many steps. Default: max(1000, burn/5)."
         ),
     )
     parser.add_argument(
         "--autocorr-check-every", type=int, default=100,
-        help="Check autocorrelation every N iterations (default 100)",
+        help="Check the convergence rule (and redraw its plot) every N steps (default 100)",
     )
     parser.add_argument(
         "--init-log", choices=["terse", "normal", "verbose"], default="terse",
@@ -1240,8 +1240,230 @@ def load_or_run_chain(
 
 
 # ───────────────────────────────────────────────────────────────────────────────
-# 8) emcee helpers (autocorr stopping)
+# 8) Convergence diagnostics and stopping rule (zeus and emcee)
 # ───────────────────────────────────────────────────────────────────────────────
+#
+# One rule for both engines, checked every `check_every` steps on the chain
+# after burn-in (n_post steps x n_walkers):
+#
+#   1. n_post >= CONV_TAU_FACTOR x tau_max       (50 autocorrelation times)
+#   2. ESS = n_post x n_walkers / tau_max >= CONV_ESS_MIN
+#   3. tau_max changed by less than `convergence` (relative) since the previous check
+#   4. split-Rhat of every parameter < CONV_RHAT_MAX
+#
+# tau_max is the largest integrated autocorrelation time over the sampled
+# parameters, estimated with zeus's default method (autocorr_time_mk). The run
+# may stop at the first check at or after burn + autocorr_buffer_after_burn where
+# all four hold for `tau_consecutive` checks in a row. The saved chain's
+# "converged" attribute records whether the rule was met.
+
+def _acf_1d(x: np.ndarray) -> Optional[np.ndarray]:
+    """Normalised autocorrelation function of a 1-D series (FFT), or None if it is constant."""
+    x = np.asarray(x, dtype=float)
+    n = 1
+    while n < len(x):
+        n <<= 1
+    f = np.fft.fft(x - np.mean(x), n=2 * n)
+    acf = np.fft.ifft(f * np.conjugate(f))[: len(x)].real
+    if not (acf[0] > 0):
+        return None
+    return acf / acf[0]
+
+
+def autocorr_time_mk(chain, c: float = 5.0) -> np.ndarray:
+    """
+    Integrated autocorrelation time of every parameter of an ensemble chain
+    (n_steps, n_walkers, n_dim), with zeus's default estimator ("mk";
+    Karamanis & Beutler 2020; zeus.autocorr.AutoCorrTime): the walkers' chains
+    are joined end to end, the autocorrelation function is taken about the
+    overall mean and summed up to Sokal's automated window (M >= c tau).
+
+    Unlike the emcee estimator, which averages the autocorrelation functions of
+    the walkers about each walker's own mean, this keeps the differences between
+    the walkers' means, so a parameter whose walkers drift slowly is not
+    reported as well mixed. Returns NaN for a parameter that does not move.
+    """
+    x = np.asarray(chain, dtype=float)
+    n, w, d = x.shape
+    taus = np.full(d, np.nan)
+    for k in range(d):
+        f = _acf_1d(x[:, :, k].T.reshape(-1))      # walker after walker
+        if f is None:
+            continue
+        t = 2.0 * np.cumsum(f) - 1.0
+        m = np.arange(len(t)) < c * t
+        taus[k] = t[int(np.argmin(m))] if np.any(m) else t[-1]
+    return taus
+
+
+def split_rhat(chain) -> np.ndarray:
+    """
+    Split-Rhat of every parameter (Gelman et al. 2013, Bayesian Data Analysis,
+    Sec. 11.4): each walker's chain is cut into two halves and the
+    2 x n_walkers half-chains are compared (between- and within-chain variance).
+    Values above ~1.01 mean that walkers, or the first and second halves of the
+    chain, still sample different regions.
+    """
+    x = np.asarray(chain, dtype=float)
+    n, w, d = x.shape
+    h = n // 2
+    if h < 2:
+        return np.full(d, np.nan)
+    parts = np.concatenate([x[:h], x[h:2 * h]], axis=1)          # (h, 2w, d)
+    means = parts.mean(axis=0)
+    W = parts.var(axis=0, ddof=1).mean(axis=0)
+    B = h * means.var(axis=0, ddof=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.sqrt(((h - 1) / h * W + B / h) / W)
+
+
+def convergence_rules(PLOT_SETTINGS: Optional[dict] = None, convergence: Optional[float] = None) -> Dict[str, float]:
+    """Thresholds of the stopping rule (constants, overridable through PLOT_SETTINGS)."""
+    ps = PLOT_SETTINGS or {}
+    return {
+        "tau_factor": float(ps.get("conv_tau_factor", K.CONV_TAU_FACTOR)),
+        "ess_min": float(ps.get("conv_ess_min", K.CONV_ESS_MIN)),
+        "rhat_max": float(ps.get("conv_rhat_max", K.CONV_RHAT_MAX)),
+        "rtol": float(convergence if convergence is not None else ps.get("conv_tau_rtol", K.CONV_TAU_RTOL)),
+    }
+
+
+def convergence_status(post_chain, rules: Dict[str, float], tau_prev: Optional[float] = None,
+                       param_names: Optional[List[str]] = None) -> Dict[str, Any]:
+    """All quantities of the stopping rule for a post-burn-in chain (n_post, n_walkers, n_dim)."""
+    x = np.asarray(post_chain, dtype=float)
+    n, w, d = x.shape
+    names = list(param_names) if param_names else [f"p{i}" for i in range(d)]
+    tau = autocorr_time_mk(x)
+    rhat = split_rhat(x)
+    j = int(np.nanargmax(tau)) if np.isfinite(tau).any() else 0
+    jr = int(np.nanargmax(rhat)) if np.isfinite(rhat).any() else 0
+    tau_max = float(tau[j]) if np.isfinite(tau[j]) else float("nan")
+    rhat_max = float(rhat[jr]) if np.isfinite(rhat[jr]) else float("nan")
+    n_over = n / tau_max if tau_max > 0 else float("nan")
+    ess = n * w / tau_max if tau_max > 0 else float("nan")
+    rel = (abs(tau_max - tau_prev) / tau_max
+           if (tau_prev is not None and np.isfinite(tau_prev) and tau_max > 0) else float("nan"))
+    crit = {
+        "length": bool(np.isfinite(n_over) and n_over >= rules["tau_factor"]),
+        "ess": bool(np.isfinite(ess) and ess >= rules["ess_min"]),
+        "stable": bool(np.isfinite(rel) and rel < rules["rtol"]),
+        "rhat": bool(np.isfinite(rhat_max) and rhat_max < rules["rhat_max"]),
+    }
+    return {
+        "n_post": int(n), "walkers": int(w), "tau": tau, "tau_max": tau_max,
+        "tau_param": names[j] if j < len(names) else f"p{j}",
+        "n_over_tau": n_over, "ess": ess, "rel_change": rel,
+        "rhat": rhat, "rhat_max": rhat_max, "rhat_param": names[jr] if jr < len(names) else f"p{jr}",
+        "criteria": crit, "ok": all(crit.values()),
+    }
+
+
+class ConvergenceMonitor:
+    """
+    Applies the stopping rule during a run (zeus callback or emcee loop) and
+    keeps the history that convergence_plot draws.
+
+    update(it, chain) takes the GLOBAL chain up to step `it` (steps, walkers,
+    dim), including steps from a resumed file, and returns True when the run
+    may stop.
+    """
+
+    def __init__(self, burn: int, rules: Dict[str, float], check_every: int = 100,
+                 earliest_stop: Optional[int] = None, consecutive: int = 1,
+                 param_names: Optional[List[str]] = None):
+        self.burn = int(burn)
+        self.rules = dict(rules)
+        self.check_every = max(1, int(check_every))
+        self.earliest_stop = int(earliest_stop if earliest_stop is not None else burn)
+        self.consecutive = max(1, int(consecutive))
+        self.param_names = list(param_names) if param_names else None
+        self.hist: Dict[str, List[Any]] = {k: [] for k in
+                                           ("it", "tau_max", "tau_param", "n_post", "ess", "rel", "rhat_max", "ok")}
+        self.walkers = None
+        self.streak = 0
+        self.stopped_at: Optional[int] = None
+        self.last: Optional[Dict[str, Any]] = None
+
+    def _evaluate(self, it: int, chain) -> Optional[Dict[str, Any]]:
+        it = int(it)
+        n_post = it - self.burn
+        if n_post < max(2 * self.check_every, 20):
+            return None
+        post = np.asarray(chain[self.burn:it], dtype=float)
+        prev = self.hist["tau_max"][-1] if self.hist["tau_max"] else None
+        st = convergence_status(post, self.rules, prev, self.param_names)
+        st["it"] = it
+        self.walkers = st["walkers"]
+        for k, v in (("it", it), ("tau_max", st["tau_max"]), ("tau_param", st["tau_param"]),
+                     ("n_post", st["n_post"]), ("ess", st["ess"]), ("rel", st["rel_change"]),
+                     ("rhat_max", st["rhat_max"]), ("ok", st["ok"])):
+            self.hist[k].append(v)
+        self.last = st
+        return st
+
+    def update(self, it: int, chain) -> bool:
+        st = self._evaluate(it, chain)
+        if st is None:
+            return False
+        self.streak = self.streak + 1 if st["ok"] else 0
+        if self.stopped_at is None and self.streak >= self.consecutive and int(it) >= self.earliest_stop:
+            self.stopped_at = int(it)
+            return True
+        return False
+
+    def final(self, it: int, chain) -> Dict[str, Any]:
+        """Status at the end of the run; 'converged' is True if the rule stopped the run or holds now."""
+        if self.last is None or self.last.get("it") != int(it):
+            st = self._evaluate(it, chain)
+            if st is not None:
+                self.streak = self.streak + 1 if st["ok"] else 0
+        st = dict(self.last or {})
+        st["converged"] = bool(self.stopped_at is not None
+                               or (st.get("ok", False) and self.streak >= self.consecutive))
+        st["stopped_at"] = self.stopped_at
+        return st
+
+    def steps_needed(self, st: Dict[str, Any]) -> Optional[int]:
+        """Rough number of extra steps for the length and ESS conditions at the current tau_max."""
+        tau, w = st.get("tau_max"), st.get("walkers") or self.walkers
+        if not (tau and np.isfinite(tau) and w):
+            return None
+        need = max(self.rules["tau_factor"] * tau, self.rules["ess_min"] * tau / w)
+        return int(max(0, np.ceil(need - st.get("n_post", 0))))
+
+    def message(self, st: Dict[str, Any], model_name: str, group: str, engine: str) -> str:
+        """One-line verdict with the numbers behind each condition."""
+        r = self.rules
+        if not st or "tau_max" not in st:
+            return (f"[{model_name} | {group}] {engine}: the chain after burn-in is too short to estimate "
+                    "the autocorrelation time. Treat these results as preliminary; increase nsteps.")
+        c = st["criteria"]
+
+        def mark(ok):
+            return "ok" if ok else "NOT MET"
+        rel = st["rel_change"]
+        parts = [
+            f"tau_max = {st['tau_max']:.1f} ({st['tau_param']}), N_post/tau = {st['n_over_tau']:.0f} "
+            f"(needs >= {r['tau_factor']:.0f}: {mark(c['length'])})",
+            f"ESS = {st['ess']:.0f} (needs >= {r['ess_min']:.0f}: {mark(c['ess'])})",
+            ("tau_max change since the previous check = "
+             + ("n/a" if not np.isfinite(rel) else f"{100 * rel:.1f}%")
+             + f" (needs < {100 * r['rtol']:.0f}%: {mark(c['stable'])})"),
+            f"split-Rhat = {st['rhat_max']:.4f} ({st['rhat_param']}) (needs < {r['rhat_max']:.2f}: {mark(c['rhat'])})",
+        ]
+        if st.get("converged"):
+            where = (f"stopped at step {st['stopped_at']}" if st.get("stopped_at")
+                     else f"met the rule at the end ({st['it']} steps)")
+            return f"[{model_name} | {group}] {engine} converged, {where}: " + "; ".join(parts) + "."
+        more = self.steps_needed(st)
+        extra = f" Roughly {more} more steps are needed at this tau_max." if more else ""
+        if not c["rhat"]:
+            extra += " Split-Rhat falls as the walkers mix, so a longer chain is needed."
+        return (f"[{model_name} | {group}] {engine} reached {st['it']} steps without meeting the "
+                f"convergence rule: " + "; ".join(parts) + "." + extra
+                + " Treat these results as preliminary; increase nsteps.")
+
 
 def emcee_autocorr_stopping(
     pos: np.ndarray,
@@ -1251,373 +1473,151 @@ def emcee_autocorr_stopping(
     colors: list,
     obs: list,
     PLOT_SETTINGS: dict,
-    convergence: float = 0.01,
+    convergence: float = None,
     last_obs: bool = False,
     resume_offset: int = 0,
     local_burn: Optional[int] = None,
     global_burn: Optional[int] = None,
     buffer_after_burn: Optional[int] = None,
-    # ---------------- NEW ----------------
     print_enabled: bool = False,
     print_every: int = 0,
+    param_names: Optional[List[str]] = None,
 ) -> np.ndarray:
     """
-    emcee with periodic autocorr checks; only start checking once
-    global_iter >= global_burn + buffer_after_burn.
-
-    - resume_offset: steps already completed BEFORE this call
-    - local_burn:    how many steps in THIS call to still consider burn
-    - global_burn:   the absolute burn target for the overall chain
-    - buffer_after_burn: extra margin after burn before checking (default 100)
-
-    NEW:
-    - print_enabled / print_every:
-        Emit "[EMCEE Step N] Log-Post: Max=... | Mean=..." from the MAIN PROCESS
-        so it works even when emcee uses a multiprocessing Pool.
+    Run emcee for up to `nsteps` more steps, checking the convergence rule
+    (ConvergenceMonitor) every autocorr_check_every steps on the whole chain,
+    including steps from a resumed file, and stop once it holds. Sets
+    sampler.kosm_converged and sampler.kosm_monitor for the caller and draws the
+    convergence plot (auto_corr/<group>.png).
     """
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt  # noqa: F401
     import Plots.Plots as MP
 
-    if h5py is None:
-        raise RuntimeError(
-            "h5py required for autocorr plotting/checkpointing."
-        )
-
-    if local_burn is None:
-        local_burn = global_burn or 0
     if global_burn is None:
-        global_burn = local_burn
-
+        global_burn = local_burn or 0
     check_every = int(PLOT_SETTINGS.get("autocorr_check_every", 100))
-    buffer_after_burn = int(
-        buffer_after_burn
-        if buffer_after_burn is not None
-        else PLOT_SETTINGS.get("autocorr_buffer_after_burn", 1000)
-    )
-    min_check_global = int(global_burn + buffer_after_burn)
-
-    # ---------------- NEW ----------------
-    # Normalize/validate print cadence
+    buffer_after_burn = int(buffer_after_burn if buffer_after_burn is not None
+                            else PLOT_SETTINGS.get("autocorr_buffer_after_burn", 1000))
     try:
-        print_every = int(print_every or 0)
+        print_every = max(0, int(print_every or 0))
     except Exception:
         print_every = 0
-    if print_every < 0:
-        print_every = 0
-    # ------------------------------------
 
-    max_checks = int(np.ceil((resume_offset + nsteps) / max(check_every, 1))) + 2
-    autocorr = np.empty(max_checks)
-    index = 0
-    old_tau = np.inf
-
-    obs_label = generate_label(obs).replace("+", "_")
-    folder = os.path.join(
-        PLOT_SETTINGS["autocorr_save_path"], model_name, "auto_corr"
-    )
+    group = generate_label(obs)
+    folder = os.path.join(PLOT_SETTINGS["autocorr_save_path"], model_name, "auto_corr")
     os.makedirs(folder, exist_ok=True)
-    plot_path = os.path.join(folder, f"{obs_label}.png")
-    tau_target = convergence
-    sampler.kosm_converged = False   # read by the caller to flag the saved chain
+    plot_path = os.path.join(folder, f"{group.replace('+', '_')}.png")
 
-    # Drive step-by-step to control the check cadence
+    monitor = ConvergenceMonitor(
+        burn=int(global_burn),
+        rules=convergence_rules(PLOT_SETTINGS, convergence),
+        check_every=check_every,
+        earliest_stop=int(global_burn) + buffer_after_burn,
+        consecutive=int(PLOT_SETTINGS.get("tau_consecutive", 1)),
+        param_names=param_names,
+    )
+    sampler.kosm_converged = False
+    sampler.kosm_monitor = monitor
+
     for sample in sampler.sample(pos, iterations=nsteps, progress=True):
-        it_local = sampler.iteration            # steps in *this* call so far
-        it_global = resume_offset + it_local    # absolute progress
+        it_global = int(sampler.iteration)          # backend total (includes resumed steps)
 
-        # Pool-safe EMCEE logging (main process only)
-        if (
-            print_enabled
-            and (print_every > 0)
-            and (it_global % print_every) == 0
-            and is_rank0()
-            and is_main_process()
-        ):
+        if (print_enabled and print_every > 0 and (it_global % print_every) == 0
+                and is_rank0() and is_main_process()):
             lp = getattr(sample, "log_prob", None)
-
-            # Fallback for emcee state variants
-            if lp is None:
-                try:
-                    lp_all = sampler.get_log_prob()
-                    lp = lp_all[-1] if getattr(lp_all, "ndim", 0) > 1 else lp_all
-                except Exception:
-                    lp = None
-
             if lp is not None:
                 lp = np.asarray(lp, dtype=float)
                 if lp.size:
-                    lp_max = float(np.nanmax(lp))
-                    lp_mean = float(np.nanmean(lp))
-                    print(
-                        f"[EMCEE Step {it_global}] Log-Post: Max={lp_max:.4f} | Mean={lp_mean:.4f}",
-                        flush=True,
-                    )
+                    print(f"[EMCEE Step {it_global}] Log-Post: Max={np.nanmax(lp):.4f} | "
+                          f"Mean={np.nanmean(lp):.4f}", flush=True)
 
-        # only do work on our check cadence
         if (it_global % check_every) != 0:
             continue
-
-        # Try to get τ̂; early on this can fail or be noisy
-        tau = None
+        stop = monitor.update(it_global, sampler.get_chain())
         try:
-            tau = sampler.get_autocorr_time(tol=0, quiet=True)
-            tau_mean = float(np.mean(tau))
-        except Exception:
-            tau_mean = np.nan
+            MP.convergence_plot(monitor, plot_path, model_name, group, PLOT_SETTINGS)
+        except Exception as e:
+            logging.getLogger(__name__).debug("convergence plot failed: %s", e)
+        if stop:
+            break
 
-        # Record for the live plot (even before burn), then draw
-        autocorr[index] = tau_mean
-        index += 1
-
-        MP.autocorrPlot(
-            autocorr,
-            index,
-            model_name,
-            colors[0] if isinstance(colors, (list, tuple)) and colors else "C0",
-            obs,
-            PLOT_SETTINGS,
-            plot_path=plot_path,
-            close_plot=False,
-            resume_offset=resume_offset,
-            check_every=check_every,
-            global_burn=global_burn,
-            nsteps=nsteps,
-            convergence=convergence,
-        )
-
-        # Only attempt a STOP decision after burn + buffer, and only with finite τ̂
-        if (
-            (it_global >= min_check_global)
-            and (tau is not None)
-            and np.all(np.isfinite(tau))
-        ):
-            # Use a *global* effective iteration count since the start of sampling
-            effective_iter = max(0, it_global - global_burn)
-
-            # Same criterion you used, but vs global steps
-            converged = np.all(tau * check_every < effective_iter)
-
-            # Stable τ̂ (relative change tolerance)
-            if np.all(np.isfinite(old_tau)):
-                stable = np.all(
-                    np.abs(old_tau - tau)
-                    / np.maximum(tau, 1e-12)
-                    < tau_target
-                )
-            else:
-                stable = False
-
-            if converged and stable:
-                sampler.kosm_converged = True
-                MP.autocorrPlot(
-                    autocorr,
-                    index,
-                    model_name,
-                    colors,
-                    obs,
-                    PLOT_SETTINGS,
-                    plot_path=plot_path,
-                    close_plot=True,
-                    resume_offset=resume_offset,
-                    check_every=check_every,
-                    global_burn=global_burn,
-                    nsteps=nsteps,
-                    convergence=convergence,
-                )
-                break
-
-        # Update old_tau only if we got a valid estimate
-        if (tau is not None) and np.all(np.isfinite(tau)):
-            old_tau = tau
-    else:
-        # Finished all iterations without “break”: close the plot (or leave open if more obs)
-        MP.autocorrPlot(
-            autocorr,
-            index,
-            model_name,
-            colors,
-            obs,
-            PLOT_SETTINGS,
-            plot_path=plot_path,
-            close_plot=last_obs,
-            resume_offset=resume_offset,
-            check_every=check_every,
-            global_burn=global_burn,
-            nsteps=nsteps,
-            convergence=convergence,
-        )
-        # Not converged: say so, with the numbers behind the rule.
-        try:
-            tau_end = np.asarray(sampler.get_autocorr_time(tol=0, quiet=True), dtype=float)
-            n_eff_iter = max(0, resume_offset + sampler.iteration - global_burn)
-            logging.getLogger(__name__).warning(
-                "[%s | %s] emcee reached nsteps=%d without meeting the convergence rule "
-                "(N > %d tau and |dtau|/tau < %.3g): max tau = %.1f, N/tau = %.1f after burn-in. "
-                "Treat these results as preliminary; increase nsteps.",
-                model_name, generate_label(obs), resume_offset + sampler.iteration,
-                check_every, tau_target, float(np.max(tau_end)),
-                n_eff_iter / max(float(np.max(tau_end)), 1e-12),
-            )
-        except Exception:
-            logging.getLogger(__name__).warning(
-                "[%s | %s] emcee reached nsteps without meeting the convergence rule "
-                "(tau could not be estimated).", model_name, generate_label(obs),
-            )
-
-    backend = sampler.backend
-    return backend.get_chain(discard=global_burn, flat=True)
-
-
-
-# ───────────────────────────────────────────────────────────────────────────────
-# 9) Zeus callbacks / monitors
-# ───────────────────────────────────────────────────────────────────────────────
-
-def make_zeus_callbacks(
-    burn: int,
-    nsteps: int,
-    target_autocorr: float = 0.01,
-    plot_func=None,
-    debug: bool = False,
-    precision_switch_iter: Optional[int] = None,
-    coarse_kwargs: Optional[dict] = None,
-    fine_kwargs: Optional[dict] = None,
-    ncheck: Optional[int] = None,
-    append_writer: Optional[callable] = None,
-    consecutive_required: int = 3,
-    min_tau_factor: float = 50.0,
-):
-    """
-    Composite Zeus callback:
-      • updates τ every ncheck via AutocorrelationCallback
-      • plots (optional) and appends (optional)
-      • optional precision switch at precision_switch_iter
-      • early-stop AFTER local 'burn' when fractional change |Δτ|/τ < target_autocorr
-        for `consecutive_required` consecutive checks
-    """
+    chain = sampler.get_chain()
+    st = monitor.final(chain.shape[0], chain)
+    sampler.kosm_converged = bool(st.get("converged", False))
     try:
-        from zeus.callbacks import AutocorrelationCallback
+        MP.convergence_plot(monitor, plot_path, model_name, group, PLOT_SETTINGS)
     except Exception:
-        logging.getLogger(__name__).warning(
-            "Zeus not installed: no callbacks will be created."
-        )
-        return []
+        pass
+    msg = monitor.message(st, model_name, group, "emcee")
+    log = logging.getLogger(__name__)
+    (log.info if sampler.kosm_converged else log.warning)(msg)
 
-    import numpy as _np
-    from collections import deque
+    return sampler.get_chain(discard=int(global_burn), flat=True)
 
-    ncheck = int(ncheck) if ncheck is not None else 100
-    discard_frac = max(0.1, min(0.7, float(max(1, burn)) / float(max(nsteps, 1))))
-    consecutive_required = max(1, int(consecutive_required))
 
-    class CompositeAutoCorr(AutocorrelationCallback):
-        def __init__(self):
-            super().__init__(ncheck=ncheck, dact=1e9, nact=1, discard=discard_frac)
-            self._prev_tau = None
-            self._fracs = deque(maxlen=8)   # recent fractional |Δτ|/τ
-            self._taus = deque(maxlen=8)    # optional τ history (debug)
-            self._switched = False
-            self.stopped_early = False      # True if the convergence rule ended the run
-            self.last_tau = None
-            self.last_frac = None
+class ZeusConvergenceCallback:
+    """
+    zeus callback: every `ncheck` steps it writes the new samples (append_writer),
+    applies the convergence rule to the global chain (earlier steps of a resumed
+    run + this run) and redraws the convergence plot. Also handles the one-time
+    CMB precision switch and the optional log-posterior printout.
+    """
 
-        def __call__(self, iteration, chain, log_prob):
-            # Update τ̂ estimates every ncheck via the parent
-            super().__call__(iteration, chain, log_prob)
+    def __init__(self, monitor: "ConvergenceMonitor", ncheck: int, done: int = 0, prefix_chain=None,
+                 plot_func=None, append_writer=None, precision_switch_iter: Optional[int] = None,
+                 fine_kwargs: Optional[dict] = None, debug: bool = False):
+        self.monitor = monitor
+        self.ncheck = max(1, int(ncheck))
+        self.done = int(done)
+        self.prefix = None if prefix_chain is None else np.asarray(prefix_chain, dtype=float)
+        self.plot_func = plot_func
+        self.append_writer = append_writer
+        self.precision_switch_iter = precision_switch_iter
+        self.fine_kwargs = fine_kwargs
+        self.debug = debug
+        self._switched = False
 
-            # Optional precision switch (one-time)
-            if (
-                precision_switch_iter is not None
-                and (not self._switched)
-                and iteration >= int(precision_switch_iter)
-            ):
-                try:
-                    from Kosmulator_main import Statistical_packages as SP
-                    SP.set_precision("fine", **(fine_kwargs or {}))
-                    self._switched = True
-                    if debug:
-                        print(f"[Zeus] precision -> fine at iter {iteration}")
-                except Exception as e:
-                    if debug:
-                        print(f"[Zeus] precision switch failed: {e}")
+    def __call__(self, iteration, chain, log_prob):
+        if (self.precision_switch_iter is not None and not self._switched
+                and iteration >= int(self.precision_switch_iter)):
+            try:
+                from Kosmulator_main import Statistical_packages as SP
+                SP.set_precision("fine", **(self.fine_kwargs or {}))
+                self._switched = True
+            except Exception as e:
+                if self.debug:
+                    print(f"[Zeus] precision switch failed: {e}")
 
-            # --- NEW PRINT LOGIC FOR ZEUS ---
-            if K.print_loglike and (iteration % K.print_loglike_every == 0):
-                # log_prob is the Posterior (shape: nwalkers,)
-                valid_lp = log_prob[_np.isfinite(log_prob)]
-                if valid_lp.size > 0:
-                    max_p = _np.max(valid_lp)
-                    mean_p = _np.mean(valid_lp)
-                    # We print "Log-Post" because Zeus passes Posterior, not just Likelihood
-                    print(f"[Zeus Step {iteration}] Log-Post: Max={max_p:.4f} | Mean={mean_p:.4f}", flush=True)
-            # -------------------------------
+        if K.print_loglike and (iteration % K.print_loglike_every == 0):
+            valid_lp = log_prob[np.isfinite(log_prob)] if log_prob is not None else np.array([])
+            if valid_lp.size > 0:
+                print(f"[Zeus Step {iteration}] Log-Post: Max={np.max(valid_lp):.4f} | "
+                      f"Mean={np.mean(valid_lp):.4f}", flush=True)
 
-            # Only act on callback ticks for autocorr/plotting
-            if iteration % ncheck != 0:
-                return False
+        if iteration % self.ncheck != 0:
+            return False
+        if callable(self.append_writer):
+            try:
+                self.append_writer(iteration, chain, log_prob)
+            except Exception:
+                if self.debug:
+                    print("[Zeus] append_writer raised; ignored.")
+        full = chain if self.prefix is None else np.concatenate([self.prefix, chain], axis=0)
+        stop = self.monitor.update(self.done + int(iteration), full)
+        if callable(self.plot_func):
+            try:
+                self.plot_func(self.monitor)
+            except Exception:
+                if self.debug:
+                    print("[Zeus] plot_func raised; ignored.")
+        return stop
 
-            ests = getattr(self, "estimates", None)
-            if ests is None:
-                return False
 
-            # Current τ̂ (scalar summary from zeus’ estimates)
-            tau = float(_np.asarray(ests, dtype=float)[-1])
-            self.last_tau = tau
-            stopped = False
-
-            # Compute fractional change and record
-            if self._prev_tau is not None:
-                delta = abs(tau - self._prev_tau)
-                frac = delta / max(tau, 1e-12)
-                self.last_frac = frac
-                self._fracs.append(frac)
-                self._taus.append(tau)
-
-                # Plot (pass τ̂; plotter can compute its own metric)
-                if callable(plot_func):
-                    try:
-                        plot_func(ests, iteration)
-                    except Exception:
-                        if debug:
-                            print("[Zeus] plot_func raised; ignored.")
-
-                # Optional incremental writer
-                if callable(append_writer):
-                    try:
-                        append_writer(iteration, chain, log_prob)
-                    except Exception:
-                        if debug:
-                            print("[Zeus] append_writer raised; ignored.")
-
-                # ---- Early-stop rule (LOCAL burn gate) ----
-                # Require enough chain length for the current autocorrelation
-                # estimate before treating a stable tau as convergence.
-                tau_values = _np.asarray(ests, dtype=float)
-                tau_max = float(_np.nanmax(tau_values))
-                min_chain_length = int(burn) + int(
-                    _np.ceil(float(min_tau_factor) * max(tau_max, 1.0))
-                )
-                if (
-                    iteration >= min_chain_length
-                    and len(self._fracs) >= consecutive_required
-                ):
-                    window = list(self._fracs)[-consecutive_required:]
-                    if all(f < float(target_autocorr) for f in window):
-                        if debug:
-                            print(
-                                f"[Zeus] Early stop at iter={iteration}: "
-                                f"(Δτ/τ)={window[-1]:.3g} < target={target_autocorr} "
-                                f"(for {consecutive_required} consecutive checks)"
-                            )
-                        stopped = True
-                        self.stopped_early = True
-
-            self._prev_tau = tau
-            return stopped
-
-    return [CompositeAutoCorr()]
+def make_zeus_callbacks(monitor: "ConvergenceMonitor", ncheck: int, done: int = 0, prefix_chain=None,
+                        plot_func=None, append_writer=None, precision_switch_iter: Optional[int] = None,
+                        fine_kwargs: Optional[dict] = None, debug: bool = False):
+    """The zeus callback list used by Kosmulator (one ZeusConvergenceCallback)."""
+    return [ZeusConvergenceCallback(monitor, ncheck, done, prefix_chain, plot_func, append_writer,
+                                    precision_switch_iter, fine_kwargs, debug)]
 
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -1861,26 +1861,34 @@ class AppendProgressCallback:
 # ───────────────────────────────────────────────────────────────────────────────
 
 CONVERGENCE_NOTE = (
-    "tau: integrated autocorrelation time per parameter on the post-burn-in chain "
-    "(emcee estimator, window c = 5), largest over the sampled parameters. "
-    "N_post: retained steps per walker. ESS_min ~ N_post x walkers / tau_max "
-    "(walkers of one ensemble are not independent chains, so no Gelman-Rubin). "
-    "Acceptance: emcee, mean over walkers, including burn-in; zeus (slice sampling) "
-    "has no rejection step. Converged: Kosmulator's stopping rule. Stuck: walkers whose "
-    "post-burn-in median log P lies beyond the chi2(ndim) 1 - 1e-6 point below the ensemble."
+    "tau_max: largest integrated autocorrelation time over the sampled parameters, on "
+    "the chain after burn-in, with zeus's default estimator (walkers joined end to end, "
+    "Sokal window c = 5; used by the stopping rule for both engines). tau_emcee: the "
+    "emcee estimator (per-walker autocorrelation averaged), for comparison; it can be much "
+    "smaller when the walkers' means drift slowly. N_post: retained steps per walker. "
+    "ESS = N_post x walkers / tau_max. Split-Rhat: largest over the parameters, each "
+    "walker's chain cut in two halves (Gelman et al. 2013). Acceptance: emcee, mean over "
+    "walkers, including burn-in; zeus (slice sampling) has no rejection step. Converged: "
+    "the stopping rule was met (N_post >= {tau_factor:g} tau_max, ESS >= {ess_min:g}, "
+    "tau_max stable to {rtol_pct:g}% between checks, split-Rhat < {rhat_max:g}). Stuck: walkers "
+    "whose post-burn-in median log P lies beyond the chi2(ndim) 1 - 1e-6 point below the ensemble."
 )
 
 
-def chain_convergence_summary(output_dir: str, key: str, burn: int, param_names: List[str]) -> Dict[str, Any]:
+def chain_convergence_summary(output_dir: str, key: str, burn: int, param_names: List[str],
+                              rules: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     """
     Convergence numbers for one chain file (zeus '<key>_zeus.h5' or emcee '<key>.h5'
-    in output_dir; the more recently written one if both exist).
+    in output_dir; the more recently written one if both exist), computed with
+    convergence_status, i.e. the same quantities as the stopping rule.
     """
     import emcee as _emcee
+    rules = rules or convergence_rules()
     row: Dict[str, Any] = dict(
         observation=key, engine="n/a", steps=0, walkers=0, burn=int(burn), retained=0,
-        tau_max=float("nan"), tau_param="", n_over_tau=float("nan"), ess_min=float("nan"),
-        acceptance=float("nan"), converged=None, stuck=None,
+        tau_max=float("nan"), tau_param="", tau_emcee=float("nan"), n_over_tau=float("nan"),
+        ess_min=float("nan"), rhat=float("nan"), rhat_param="", acceptance=float("nan"),
+        converged=None, stuck=None,
     )
     paths = [(p, e) for p, e in ((os.path.join(output_dir, f"{key}_zeus.h5"), "zeus"),
                                   (os.path.join(output_dir, f"{key}.h5"), "emcee")) if os.path.exists(p)]
@@ -1908,22 +1916,19 @@ def chain_convergence_summary(output_dir: str, key: str, burn: int, param_names:
     post = chain[b:]
     row.update(engine=engine, steps=int(nsteps), walkers=int(nwalk), burn=b, retained=int(post.shape[0] * nwalk),
                acceptance=acc, converged=(None if conv is None else bool(conv)))
-    if post.shape[0] > 1:
+    if post.shape[0] >= 4:
+        st = convergence_status(post, rules, None, param_names)
+        row.update(tau_max=st["tau_max"], tau_param=st["tau_param"], n_over_tau=st["n_over_tau"],
+                   ess_min=st["ess"], rhat=st["rhat_max"], rhat_param=st["rhat_param"])
         lg = logging.getLogger("emcee.autocorr")
         old = lg.level
         lg.setLevel(logging.ERROR)
         try:
-            tau = np.asarray(_emcee.autocorr.integrated_time(post, quiet=True), float)
+            row["tau_emcee"] = float(np.nanmax(_emcee.autocorr.integrated_time(post, quiet=True)))
         except Exception:
-            tau = np.full(ndim, np.nan)
+            pass
         finally:
             lg.setLevel(old)
-        if np.isfinite(tau).any():
-            j = int(np.nanargmax(tau))
-            row.update(tau_max=float(tau[j]),
-                       tau_param=(param_names[j] if j < len(param_names) else f"p{j}"),
-                       n_over_tau=float(post.shape[0] / tau[j]),
-                       ess_min=float(post.shape[0] * nwalk / tau[j]))
     if stuck_attr is not None:
         row["stuck"] = int(np.size(stuck_attr))
     elif lp is not None and lp.shape[0] > b + 1:
@@ -1937,7 +1942,9 @@ def _fmt_conv_row(r: Dict[str, Any]) -> List[str]:
     return [
         str(r["observation"]), str(r["engine"]), str(r["steps"]), str(r["burn"]), str(r["retained"]),
         (num(r["tau_max"], ".1f") + (f" ({r['tau_param']})" if r["tau_param"] else "")),
+        num(r.get("tau_emcee"), ".1f"),
         num(r["n_over_tau"], ".1f"), num(r["ess_min"], ".0f"),
+        (num(r.get("rhat"), ".4f") + (f" ({r['rhat_param']})" if r.get("rhat_param") else "")),
         ("n/a" if r["engine"] == "zeus" else num(r["acceptance"], ".3f")),
         ("n/a" if r["converged"] is None else ("yes" if r["converged"] else "no")),
         ("n/a" if r["stuck"] is None else str(r["stuck"])),
@@ -1945,27 +1952,33 @@ def _fmt_conv_row(r: Dict[str, Any]) -> List[str]:
 
 
 CONVERGENCE_HEADER = ["Observation", "Engine", "Steps", "Burn-in", "Retained samples", "tau_max (param)",
-                      "N_post/tau_max", "ESS_min", "Acceptance", "Converged", "Stuck walkers"]
+                      "tau_emcee", "N_post/tau_max", "ESS", "Split-Rhat (param)", "Acceptance", "Converged",
+                      "Stuck walkers"]
 
 
-def format_convergence_table(model: str, rows: List[Dict[str, Any]]) -> str:
+def format_convergence_table(model: str, rows: List[Dict[str, Any]],
+                             rules: Optional[Dict[str, float]] = None) -> str:
     """Aligned plain-text convergence table for one model."""
+    rules = rules or convergence_rules()
     body = [_fmt_conv_row(r) for r in rows]
     widths = [max(len(h), *(len(b[i]) for b in body)) if body else len(h) for i, h in enumerate(CONVERGENCE_HEADER)]
     line = lambda cells: " | ".join(c.ljust(w) if i == 0 else c.rjust(w) for i, (c, w) in enumerate(zip(cells, widths)))
     out = [f"Convergence summary for model: {model}", line(CONVERGENCE_HEADER), "-" * len(line(CONVERGENCE_HEADER))]
     out += [line(b) for b in body]
-    out += ["", textwrap.fill(CONVERGENCE_NOTE, width=110)]
+    note = CONVERGENCE_NOTE.format(tau_factor=rules["tau_factor"], ess_min=rules["ess_min"],
+                                   rtol_pct=100 * rules["rtol"], rhat_max=rules["rhat_max"])
+    out += ["", textwrap.fill(note, width=110)]
     return "\n".join(out)
 
 
-def write_convergence_reports(model: str, rows: List[Dict[str, Any]], folder: str) -> List[str]:
+def write_convergence_reports(model: str, rows: List[Dict[str, Any]], folder: str,
+                              rules: Optional[Dict[str, float]] = None) -> List[str]:
     """Write convergence_summary.txt for one model; returns the paths written."""
     os.makedirs(folder, exist_ok=True)
     paths = []
     p = os.path.join(folder, "convergence_summary.txt")
     with open(p, "w", encoding="utf-8") as fh:
-        fh.write(format_convergence_table(model, rows) + "\n")
+        fh.write(format_convergence_table(model, rows, rules) + "\n")
     paths.append(p)
     return paths
 

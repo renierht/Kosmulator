@@ -211,6 +211,9 @@ def main(
         _user_buf if _user_buf is not None else max(1000, burn // 5)
     )
     PLOT_SETTINGS["tau_consecutive"] = max(1, int(args.consecutive_required))
+    # Tolerance on the relative change of tau_max (Kosmulator.py `convergence`),
+    # used by the stopping rule and quoted in the convergence report
+    PLOT_SETTINGS["conv_tau_rtol"] = float(convergence)
     PLOT_SETTINGS["callback_ncheck"] = PLOT_SETTINGS["autocorr_check_every"]
 
     # ------------------------------------------------------------------

@@ -651,102 +651,6 @@ def regenerate_invalid_walkers(
 
 
 # ───────────────────────────────────────────────────────────────────────────────
-# Zeus autocorr plotting callback
-# ───────────────────────────────────────────────────────────────────────────────
-
-class ZeusAutoCorrPlotter:
-    """
-    Plot |Δτ| / τ versus *global* iteration. Closes its figure every call.
-    """
-
-    def __init__(
-        self,
-        model_name,
-        obs_label,
-        global_burn,
-        target_tau,
-        done,
-        ncheck,
-        out_dir,
-        settings,
-    ):
-        import os
-
-        self.model_name  = model_name
-        self.obs_label   = obs_label
-        self.global_burn = int(global_burn)
-        self.target_tau  = float(target_tau)
-        self.done        = int(done)
-        self.ncheck      = int(ncheck)
-        self.out_dir     = out_dir
-        self.settings    = settings or {}
-        self.x, self.y   = [], []  # global iters, |Δτ|/τ
-        self._prev_tau   = None
-
-        os.makedirs(self.out_dir, exist_ok=True)
-        self.file_path = os.path.join(self.out_dir, f"{self.obs_label}.png")
-
-    def __call__(self, estimates, iteration):
-        import numpy as np
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        
-
-        if estimates is None:
-            return
-
-        tau = float(np.asarray(estimates, dtype=float)[-1])
-
-        # Wait for a previous τ̂ so that Δτ is well-defined
-        if self._prev_tau is None:
-            self._prev_tau = tau
-            return
-
-        d_tau = abs(tau - self._prev_tau)
-        frac  = d_tau / max(tau, 1e-12)
-        self._prev_tau = tau
-
-        global_iter = self.done + int(iteration)
-        self.x.append(global_iter)
-        self.y.append(max(frac, 1e-300))  # keep > 0 for log plots if needed
-
-        fig, ax = plt.subplots(figsize=(7, 4), dpi=self.settings.get("dpi", 200))
-        ax.plot(self.x, self.y, marker="o", ls="-", lw=1.5)
-        ax.set_yscale("linear")
-        ax.set_xlabel("Global iteration")
-        ax.set_ylabel(r"$|\Delta \tau|/\tau$ (fractional change)")
-
-        ax.axvline(
-            self.global_burn,
-            color="r",
-            ls="--",
-            alpha=0.6,
-            label="burn",
-        )
-        ax.axvline(
-            self.global_burn
-            + self.settings.get("autocorr_buffer_after_burn", 1000),
-            color="k",
-            ls=":",
-            alpha=0.6,
-            label="burn+buffer",
-        )
-        ax.axhline(
-            self.target_tau,
-            color="0.5",
-            ls="--",
-            alpha=0.6,
-            label=f"target frac={self.target_tau:g}",
-        )
-
-        ax.legend(loc="best", fontsize=9)
-        fig.tight_layout()
-        fig.savefig(self.file_path, bbox_inches="tight")
-        plt.close(fig)
-
-
-# ───────────────────────────────────────────────────────────────────────────────
 # Public API
 # ───────────────────────────────────────────────────────────────────────────────
 
@@ -1013,8 +917,6 @@ def _run_mcmc_impl(
             PLOT_SETTINGS.get("autocorr_buffer_after_burn", max(1000, burn // 5))
         )
         iters_per_cb = int(PLOT_SETTINGS.get("autocorr_check_every", 100))
-        target_tau   = float(convergence)
-        local_gate   = max(0, (burn + buffer_after_burn) - done)
 
         # Precision switch for CMB
         switch_iter_local = max(1, burn - done) if has_cmb else None
@@ -1030,36 +932,44 @@ def _run_mcmc_impl(
             except Exception:
                 pass
 
-        # Zeus plotter
-        obs_label = _resolved_label
-        out_dir   = os.path.join(
-            PLOT_SETTINGS["autocorr_save_path"], model_name, "auto_corr"
+        # Convergence monitor: one stopping rule for zeus and emcee (utils.ConvergenceMonitor),
+        # checked on the global chain after burn-in, earlier steps of a resumed run included.
+        prefix_chain = None
+        if done > 0:
+            try:
+                with h5py.File(zeus_chain, "r") as f:
+                    prefix_chain = np.asarray(f["samples"][:done], dtype=float)
+            except Exception:
+                prefix_chain = None
+        monitor = utils.ConvergenceMonitor(
+            burn=burn,
+            rules=utils.convergence_rules(PLOT_SETTINGS, convergence),
+            check_every=iters_per_cb,
+            earliest_stop=burn + buffer_after_burn,
+            consecutive=int(PLOT_SETTINGS.get("tau_consecutive", 1)),
+            param_names=list(param_names),
         )
-        plot_cb = ZeusAutoCorrPlotter(
-            model_name,
-            obs_label,
-            burn,
-            target_tau,
-            done,
-            iters_per_cb,
-            out_dir,
-            PLOT_SETTINGS,
+        plot_path = os.path.join(
+            PLOT_SETTINGS["autocorr_save_path"], model_name, "auto_corr",
+            f"{_resolved_label}.png",
         )
+        import Plots.Plots as MP   # lazy: Plots imports Kosmulator_main modules
+        plot_cb = lambda mon: MP.convergence_plot(mon, plot_path, model_name, _resolved_key, PLOT_SETTINGS)
 
-        # Append writer for HDF (injected into composite callback)
+        # Append writer for HDF (injected into the callback)
         writer = None
         if saveChains:
             writer = utils.AppendProgressCallback(
                 filename=zeus_chain, ncheck=iters_per_cb
             )
 
-        # Build the composite callback
         callbacks = utils.make_zeus_callbacks(
-            burn=local_gate,
-            nsteps=nsteps,
-            target_autocorr=target_tau,
+            monitor,
+            ncheck=iters_per_cb,
+            done=done,
+            prefix_chain=prefix_chain,
             plot_func=plot_cb,
-            debug=bool(PLOT_SETTINGS.get("debug", False)),
+            append_writer=writer,
             precision_switch_iter=switch_iter_local,
             fine_kwargs={
                 "lmax_cap": None,
@@ -1070,9 +980,7 @@ def _run_mcmc_impl(
             }
             if has_cmb
             else None,
-            ncheck=iters_per_cb,
-            append_writer=writer,
-            consecutive_required=int(PLOT_SETTINGS.get("tau_consecutive", 3)),
+            debug=bool(PLOT_SETTINGS.get("debug", False)),
         )
 
         # Optional: τ probe for CMB (debug only)
@@ -1186,26 +1094,17 @@ def _run_mcmc_impl(
                 except Exception as e:
                     print(f"\n[WARNING] Could not save 'log_prob'/'log_like' from Zeus: {e}")
 
-        # Convergence report. zeus stops early only when |dtau|/tau stays below
-        # the target; warn when the run ended without that, or when the chain
-        # is short compared with tau (N/tau < 50 after burn-in).
-        cb = callbacks[0] if callbacks else None
-        stopped = bool(getattr(cb, "stopped_early", False))
-        tau_last = getattr(cb, "last_tau", None)
-        n_post = max(0, all_samples.shape[0] - burn)
-        ratio = (n_post / tau_last) if (tau_last is not None and tau_last > 0) else float("nan")
-        converged = stopped and (not np.isfinite(ratio) or ratio >= 50.0)
-        if not converged:
-            log.warning(
-                "[%s | %s] zeus %s: tau = %s, N/tau = %.1f after burn-in "
-                "(rule: |dtau|/tau < %.3g, and N/tau >= 50). Treat these results "
-                "as preliminary; increase nsteps.",
-                model_name, _resolved_key,
-                "stopped on |dtau|/tau but the chain is short" if stopped
-                else "reached nsteps without meeting the convergence rule",
-                "n/a" if tau_last is None else f"{tau_last:.1f}", ratio,
-                float(convergence),
-            )
+        # Verdict of the convergence rule on the full recorded chain, with the
+        # numbers behind each condition (also drawn in the final plot).
+        st = monitor.final(all_samples.shape[0], all_samples)
+        converged = bool(st.get("converged", False))
+        try:
+            plot_cb(monitor)
+        except Exception:
+            pass
+        (log.info if converged else log.warning)(
+            monitor.message(st, model_name, _resolved_key, "zeus")
+        )
         # Stuck-walker check on the recorded post-burn-in chain
         stuck = []
         try:
@@ -1304,6 +1203,7 @@ def _run_mcmc_impl(
                         ),
                         print_enabled=print_enabled,
                         print_every=print_every,
+                        param_names=list(param_names),
                     )
                     flat_samples = res[0] if isinstance(res, tuple) else res
                 else:
@@ -1339,7 +1239,8 @@ def _run_mcmc_impl(
                     flat_log_prob = sampler.get_log_prob(discard = burn, flat = True)
                     blobs = sampler.get_blobs(discard = burn, flat = True)
                     with h5py.File(chain_path, "a") as h5f:
-                        h5f.attrs["converged"] = True
+                        # Resumed run: flag it only if the convergence rule was met
+                        h5f.attrs["converged"] = bool(getattr(sampler, "kosm_converged", False))
                         if "log_prob" in h5f:
                             del h5f["log_prob"]
                         h5f.create_dataset("log_prob",data = flat_log_prob)
@@ -1396,6 +1297,7 @@ def _run_mcmc_impl(
                 ),
                 print_enabled=print_enabled,
                 print_every=print_every,
+                param_names=list(param_names),
             )
             flat_samples = res[0] if isinstance(res, tuple) else res
             flat_log_prob = sampler.get_log_prob(discard = burn, flat = True)

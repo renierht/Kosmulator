@@ -126,7 +126,10 @@ reference_model: str = "LCDM_v"
 nwalkers: int = 32
 nsteps: int = 1500
 burn: int = 100
-convergence: float = 0.01
+# Convergence rule (zeus and emcee): the run stops once, after burn-in, the chain is
+# >= 50 tau_max long, ESS >= 2000, split-Rhat < 1.01 and tau_max changed by less than
+# `convergence` (relative) since the previous check (constants.CONV_*).
+convergence: float = 0.05
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),

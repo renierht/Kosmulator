@@ -60,7 +60,7 @@ from Plots.Plot_functions import (
 
 __all__ = [
     "generate_plots",
-    "autocorrPlot",
+    "convergence_plot",
     "make_CornerPlot",
     "best_fit_plots",
 ]
@@ -707,130 +707,118 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
 
 
 def _report_convergence(CONFIG, PLOT_SETTINGS, main_folder):
-    """Per model and group: completed steps, retained samples, tau_max, N_post/tau_max,
-    approximate ESS_min, acceptance (emcee), converged flag and stuck walkers."""
+    """Per model and group: completed steps, retained samples, tau_max (and the emcee
+    estimate), N_post/tau_max, ESS, split-Rhat, acceptance (emcee), converged flag and
+    stuck walkers, computed exactly as the stopping rule computes them."""
     from Kosmulator_main.utils import (
         chain_convergence_summary, format_convergence_table, write_convergence_reports,
+        convergence_rules,
     )
+    rules = convergence_rules(PLOT_SETTINGS)
     index = PLOT_SETTINGS.get("chain_index") or {}
     by_model = {}
     for (model, key), info in index.items():
         try:
             cfg = CONFIG[model]
             params = list(cfg["parameters"][info["obs_index"]])
-            row = chain_convergence_summary(info["dir"], key, int(cfg.get("burn", 0) or 0), params)
+            row = chain_convergence_summary(info["dir"], key, int(cfg.get("burn", 0) or 0), params, rules)
             row["observation"] = _displayize_key(key)
             by_model.setdefault(model, []).append(row)
         except Exception as e:
             print(f"[warning] convergence summary failed for {model} {key}: {e}")
     for model, rows in by_model.items():
         try:
-            write_convergence_reports(model, rows, os.path.join(main_folder, model))
+            write_convergence_reports(model, rows, os.path.join(main_folder, model), rules)
         except Exception as e:
             print(f"[warning] could not write the convergence summary for {model}: {e}")
         print_rule()
-        print(format_convergence_table(model, rows))
+        print(format_convergence_table(model, rows, rules))
         print_rule()
         print()
 
 
 
 # =============================================================================
-# Diagnostics plot: Autocorrelation (live)
+# Diagnostics plot: convergence (live, both engines)
 # =============================================================================
 
-def autocorrPlot(
-    autocorr: np.ndarray,
-    index: int,
-    model_name: str,
-    color: str,
-    obs: list,
-    PLOT_SETTINGS: dict,
-    plot_path: str | None = None,
-    close_plot: bool = False,
-    nsteps: int = 100,
-    resume_offset: int = 0,
-    check_every: int = 100,
-    global_burn: int | None = None,
-    convergence: float | None = None,
-):
-    """Live autocorrelation plot shown/saved during sampling."""
-    if close_plot:
-        plt.close()
+def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_SETTINGS: dict) -> None:
+    """
+    Convergence diagnostics of one run (auto_corr/<group>.png), redrawn at every check.
+
+    Top: tau_max (largest autocorrelation time over the parameters, zeus estimator)
+    against the step, with the two limits it must stay below: the length limit
+    (N - burn)/CONV_TAU_FACTOR and the ESS limit (N - burn) x walkers / CONV_ESS_MIN.
+    Bottom (log scale): the relative change of tau_max since the previous check
+    and split-Rhat - 1, each with its tolerance. Vertical lines: burn-in, the
+    earliest step at which the run may stop, and the step where it stopped.
+    """
+    h = monitor.hist
+    it = np.asarray(h["it"], dtype=float)
+    if it.size == 0:
         return
-    if index <= 0 or autocorr.size == 0:
-        return  # nothing to draw yet
+    r = monitor.rules
+    burn = float(monitor.burn)
+    W = monitor.walkers or 0
+    tau = np.asarray(h["tau_max"], dtype=float)
+    rel = np.asarray(h["rel"], dtype=float)
+    rhat = np.asarray(h["rhat_max"], dtype=float)
+    ok = np.asarray(h["ok"], dtype=bool)
 
-    plt.clf()
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.6, 6.4), sharex=True,
+                                   gridspec_kw={"height_ratios": (1.7, 1.0), "hspace": 0.08})
+    x_hi = max(float(it[-1]), float(monitor.earliest_stop)) * 1.03
+    xx = np.linspace(burn, x_hi, 300)
+    ax1.plot(it, tau, "o-", color="C0", ms=4, lw=1.4, label=r"$\tau_{\max}$ (largest over the parameters)")
+    ax1.plot(xx, (xx - burn) / r["tau_factor"], "k--", lw=1.2,
+             label=rf"length limit $(N-N_{{\rm burn}})/{r['tau_factor']:g}$")
+    if W:
+        ax1.plot(xx, (xx - burn) * W / r["ess_min"], ":", color="C3", lw=1.6,
+                 label=rf"ESS limit $(N-N_{{\rm burn}})\times{W}/{r['ess_min']:g}$")
+    fin = tau[np.isfinite(tau)]
+    top = 1.6 * float(fin.max()) if fin.size else 1.0
+    ax1.set_ylim(0, max(top, 1.0))
+    ax1.set_ylabel(r"$\tau_{\max}$ (steps)")
+    ax1.text(0.99, 0.03, r"needs $\tau_{\max}$ below both limits", transform=ax1.transAxes,
+             ha="right", va="bottom", fontsize=8, color="0.35")
 
-    # 1) Convergence threshold: emcee stops once tau_hat < (N - burn)/check_every
-    #    (and tau_hat is stable), so draw that line, measured from the burn-in.
-    iterations = resume_offset + check_every * np.arange(0, int(nsteps / check_every) + 1)
-    _burn0 = float(global_burn) if global_burn is not None else float(resume_offset)
-    diag_vals  = np.maximum(iterations - _burn0, 0.0) / check_every
-    plt.plot(iterations, diag_vals, linestyle="--", color="k",
-             label=f"(N - burn)/{check_every}: converged below")
+    good = np.isfinite(rel) & (rel > 0)
+    ax2.semilogy(it[good], rel[good], "o-", color="C0", ms=4, lw=1.0,
+                 label=r"$|\Delta\tau_{\max}|/\tau_{\max}$ since the previous check")
+    ax2.axhline(r["rtol"], color="C0", ls="--", lw=1.0, alpha=0.8, label=f"tolerance {r['rtol']:g}")
+    goodr = np.isfinite(rhat) & (rhat > 1.0)
+    ax2.semilogy(it[goodr], rhat[goodr] - 1.0, "s-", color="C2", ms=4, lw=1.0,
+                 label=r"split-$\hat{R}-1$ (largest over the parameters)")
+    ax2.axhline(r["rhat_max"] - 1.0, color="C2", ls="--", lw=1.0, alpha=0.8,
+                label=rf"$\hat{{R}}-1$ limit {r['rhat_max'] - 1.0:g}")
+    if ok.any():
+        ymin = ax2.get_ylim()[0]
+        ax2.plot(it[ok], np.full(ok.sum(), ymin * 1.5), "|", color="C2", ms=10, mew=2,
+                 label="all conditions met")
+    ax2.set_xlabel("Step")
+    ax2.set_ylabel("Relative change")
 
-    # 2) Autocorr points up to current index
-    its = resume_offset + check_every * np.arange(1, index + 1)
-    tau_hat = np.asarray(autocorr[:index], dtype=float)
-    # Keep non-finite as NaN so they don't collapse the y-scale
-    tau_hat[~np.isfinite(tau_hat)] = np.nan
-    obs_key = cfg_generate_label(obs)                  # e.g. "BAO+CC"
-    obs_label = obs_key.replace("+", "_")              # filename-safe
-    lbl = obs_key                                     # legend label (or pretty_obs_name(obs_key, latex_on))
-
-    plt.plot(its, tau_hat, label=lbl, color=color)
-
-    latex_on = bool(PLOT_SETTINGS.get("latex_enabled", False))
-
-    # 3) The stability tolerance is a relative change |dtau|/tau, not a tau value,
-    #    so state it in the legend instead of drawing it as a horizontal line.
-    if convergence is not None and np.isfinite(convergence):
-        if latex_on:
-            label_target = rf"and $|\Delta\tau|/\tau$ < {convergence:g}"
-        else:
-            label_target = f"and |Δτ|/τ < {convergence:g}"
-        plt.plot([], [], " ", label=label_target)
-
-    # 4) Global burn
-    if global_burn is not None:
-        plt.axvline(global_burn, linestyle=":", color="gray", label=f"burn = {global_burn}")
-
-    # 5) Axes/labels/legend
-    left  = resume_offset + check_every
-    right = resume_offset + nsteps
-    if not np.isfinite(left) or not np.isfinite(right) or left >= right:
-        plt.autoscale()              # or: right = left + 1; plt.xlim(left, right)
-    else:
-        plt.xlim(left, right)
-    # Use finite tau for y-scaling (ignore NaNs/Infs)
-    tau_finite = tau_hat[np.isfinite(tau_hat)]
-    tau_max = float(np.max(tau_finite)) if tau_finite.size else 0.0
-    diag_max = float(np.max(diag_vals)) if diag_vals.size else 1.0
-    ymax_candidates = [diag_max, tau_max + 1.0]
-
-    if convergence is not None and np.isfinite(convergence):
-        ymax_candidates.append(1.1 * float(convergence))
-
-    ymax = max(ymax_candidates)
-    ymax = max(1.0, 1.05 * ymax)    # small headroom; keep non-trivial minimum
-    plt.ylim(0, ymax)
-
-    plt.title(f"Auto-Correlator: {model_name}")
-    plt.xlabel("Iteration", fontsize=PLOT_SETTINGS.get("label_font_size", 12))
-    plt.ylabel(r"Mean $\hat{\tau}$", fontsize=PLOT_SETTINGS.get("label_font_size", 12))
-    plt.legend(fontsize=PLOT_SETTINGS.get("legend_font_size", 10))
-
-    # 6) Save
-    if plot_path is None:
-        folder = os.path.join(base_dir(PLOT_SETTINGS), model_name, "auto_corr")
-        os.makedirs(folder, exist_ok=True)
-        obs_label = cfg_generate_label(obs).replace("+", "_")
-        plot_path = os.path.join(folder, f"{obs_label}.png")
-
-    plt.tight_layout()
-    plt.savefig(plot_path, dpi=PLOT_SETTINGS.get("dpi", 300))
+    for ax in (ax1, ax2):
+        ax.axvline(burn, color="r", ls="--", lw=1.0, alpha=0.6, label="burn-in" if ax is ax1 else None)
+        if monitor.earliest_stop > burn:
+            ax.axvline(monitor.earliest_stop, color="0.4", ls=":", lw=1.0,
+                       label="earliest stop" if ax is ax1 else None)
+        if monitor.stopped_at is not None:
+            ax.axvline(monitor.stopped_at, color="C2", ls="-", lw=1.5,
+                       label="stopped (converged)" if ax is ax1 else None)
+        ax.set_xlim(0, x_hi)
+    ax1.legend(loc="upper left", fontsize=8, framealpha=0.85)
+    ax2.legend(loc="upper right", fontsize=7, framealpha=0.85, ncol=1)
+    status = "converged" if monitor.stopped_at is not None else (
+        "all conditions met" if ok.size and ok[-1] else "not converged yet")
+    title = f"Convergence: {model_name}, {group} ({status})"
+    if plt.rcParams.get("text.usetex", False):
+        from Plots.latex_labels import tex_escape_text
+        title = tex_escape_text(title)
+    ax1.set_title(title, fontsize=10)
+    os.makedirs(os.path.dirname(plot_path) or ".", exist_ok=True)
+    fig.savefig(plot_path, dpi=PLOT_SETTINGS.get("dpi", 200), bbox_inches="tight")
+    plt.close(fig)
 
 
 # =============================================================================

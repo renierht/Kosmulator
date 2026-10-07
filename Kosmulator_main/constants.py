@@ -79,6 +79,25 @@ POOL_PREFERRED_DATASETS: Set[str] = {"JLA"}
 #: None keeps NumPy's default.
 MAIN_BLAS_THREADS_NO_POOL = 1
 
+# ----------------------------------------------------------------------
+# Convergence rule (zeus and emcee, utils.ConvergenceMonitor)
+# ----------------------------------------------------------------------
+#: Checked every --autocorr-check-every steps on the chain after burn-in. tau_max
+#: is the largest integrated autocorrelation time over the sampled parameters,
+#: estimated with zeus's default method (utils.autocorr_time_mk).
+#: Chain after burn-in must be at least this many tau_max long (emcee and zeus
+#: documentation: tau estimates are reliable beyond ~50 tau).
+CONV_TAU_FACTOR = 50.0
+#: Effective sample size of the slowest parameter, N_post x walkers / tau_max
+#: (2000 gives a Monte Carlo error of ~2% of sigma on a posterior mean).
+CONV_ESS_MIN = 2000.0
+#: Split-Rhat limit (each walker's chain cut in two halves; Gelman et al. 2013;
+#: 1.01 is the zeus documentation's SplitRCallback tolerance).
+CONV_RHAT_MAX = 1.01
+#: Relative change of tau_max between two checks below which tau counts as
+#: stable; Kosmulator.py's `convergence` sets it for a run.
+CONV_TAU_RTOL = 0.05
+
 
 # ======================================================================
 # 2. Data / path defaults

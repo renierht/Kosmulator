@@ -145,7 +145,7 @@ reference_model: str = "LCDM_v"  # Against which model you want to test it
 nwalkers: int = 16
 nsteps: int = 500
 burn: int = 10
-convergence: float = 0.01  # How accurate do you want the auto-correlator to be before stopping the run
+convergence: float = 0.05  # Stability of tau_max between checks (relative) required by the convergence rule
 ```
 
 #### Step 4. Execute you MCMC simulation
@@ -191,13 +191,24 @@ python Kosmulator.py --help
 | `--disable_vectorisation` | flag | `False` | Disable vectorised likelihood evaluation even if available (forces scalar evaluation). |
 
 #### Convergence / Autocorrelation  
-*(mainly affects Zeus early-stop behaviour)*
+*(same rule for zeus and emcee)*
+
+Every `--autocorr-check-every` steps Kosmulator evaluates, on the chain after burn-in:
+τ_max, the largest integrated autocorrelation time over the sampled parameters
+(zeus's default estimator, Karamanis & Beutler 2020); the effective sample size
+ESS = N_post × walkers / τ_max; and the split-R̂ of every parameter (each walker's
+chain cut in two halves, Gelman et al. 2013). The run stops once
+N_post ≥ 50 τ_max, ESS ≥ 2000, split-R̂ < 1.01 and τ_max changed by less than
+`convergence` (Kosmulator.py, default 0.05) since the previous check
+(thresholds in `constants.CONV_*`). Otherwise it runs to `nsteps`, flags the chain
+as not converged and says which condition failed. `auto_corr/<group>.png` shows
+the same quantities, and `convergence_summary.txt` lists them per group.
 
 | Argument | Type | Default | Description |
 |---|---|---|---|
-| `--tau-consecutive` (alias: `--consecutive-required`) | int | `3` | For Zeus early-stop: require this many consecutive callback checks with \|Δτ\|/τ < target. |
-| `--autocorr-check-every` | int | `100` | Check autocorrelation every `N` iterations. |
-| `--autocorr-buffer` | int | `None` | Extra iterations after burn-in before convergence checks start. If not set, Kosmulator uses `max(1000, burn/5)` as a default buffer. |
+| `--tau-consecutive` (alias: `--consecutive-required`) | int | `1` | Number of consecutive checks at which all conditions must hold before the run stops. |
+| `--autocorr-check-every` | int | `100` | Check the convergence rule (and redraw its plot) every `N` steps. |
+| `--autocorr-buffer` | int | `None` | Earliest stop: the rule may end a run only after burn + this many steps. If not set, Kosmulator uses `max(1000, burn/5)`. |
 
 #### Plotting / Presentation
 
