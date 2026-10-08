@@ -535,7 +535,12 @@ int background_functions(
   if (pba->has_lambda == _TRUE_) {
     pvecback[pba->index_bg_rho_lambda] = pba->Omega0_lambda * pow(pba->H0,2);
     rho_tot += pvecback[pba->index_bg_rho_lambda];
-    //p_tot -= pvecback[pba->index_bg_rho_lambda];
+    /* f1CDM: kept (it was commented out). rho_lambda is in rho_tot above, which the
+       f(T) H(z) below needs; this line removes it again from rho_tot + p_tot, so H'
+       is sourced by matter and radiation only, divided by 1 + F' - 12 F'' H^2. Without
+       it the Lambda slot entered H' as pressureless matter: at n = 0 the model was not
+       LCDM (TT +19% at l = 2). */
+    p_tot -= pvecback[pba->index_bg_rho_lambda];
   }
 
   /* fluid with w(a) and constant cs2 */
