@@ -30,10 +30,19 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
+# Planck likelihood code: clik (compiled PLC) if installed, otherwise clipy, the
+# pure-Python clik (pip install "clipy-like>=0.15"), which reads the same .clik
+# folders through the same calls. CLIK_BACKEND records which one is in use.
 try:
     import clik
+    CLIK_BACKEND = "clik"
 except ImportError:
-    clik = None
+    try:
+        import clipy as clik
+        CLIK_BACKEND = "clipy"
+    except ImportError:
+        clik = None
+        CLIK_BACKEND = None
 
 import sysconfig 
 

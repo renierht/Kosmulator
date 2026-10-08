@@ -16,7 +16,9 @@ tqdm
 # Optional, not installed automatically:
 #   classy (CLASS)      built per model from Class/<model>; needed for CMB runs and
 #                       for the CLASS r_d in BAO/DESI + BBN/CMB groups (EH98 otherwise)
-#   clik (Planck PLC)   needed only for CMB likelihoods
+#   clik (Planck PLC)   needed only for CMB likelihoods; or, much easier,
+#   clipy-like>=0.15    pure-Python clik (import clipy), used automatically when
+#                       clik is missing; reads the same .clik folders (needs astropy)
 #   mpi4py, schwimmbad  MPI runs
 #   threadpoolctl       caps BLAS threads in pool workers
 #   astropy, cython     building CLASS / CMB extras

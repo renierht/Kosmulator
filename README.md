@@ -78,8 +78,9 @@ while others are required only when specific observational datasets are used.
 
 - **CLASS (classy)**  
   Used to compute background and perturbation quantities and CMB power spectra.
-- **Planck CLIK likelihoods**  
+- **Planck likelihood code: CLIK or clipy**  
   Required for Planck CMB likelihoods (TT, TTTEEE, low-ℓ, lensing).  
+  The easiest route is clipy, the pure-Python implementation of CLIK by K. Benabed and L. Balkenhol (https://github.com/benabed/clipy): `pip install "clipy-like>=0.15"`. Kosmulator uses CLIK when it is installed and clipy otherwise; both read the same `.clik` folders, and the run log records which one was used.  
   The corresponding `.clik` likelihood directories must be available locally.
 - **Astropy** 
 - **Cython** 
@@ -106,7 +107,11 @@ To verify your installation and check optional backends (CLASS, Planck CLIK, Alt
 ```bash
 kosmulator-doctor
 ```
-Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced installation section at the end for additional information.
+For the Planck CMB likelihoods without compiling CLIK, install clipy as well:
+```bash
+pip install "clipy-like>=0.15"
+```
+Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced installation section at the end for additional information. With clipy installed, the CLIK build (step 5 there) can be skipped.
 
 ---
 

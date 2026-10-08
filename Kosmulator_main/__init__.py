@@ -110,24 +110,32 @@ def check_planck_clik_assets(
     if not test_load:
         return items
 
+    # clik if installed, otherwise clipy (pure-Python clik), as in Class_run
     ok_clik, d_clik = _try_import("clik")
+    backend = "clik"
     if not ok_clik:
-        items.append(
-            CheckItem(
-                name="clik available for likelihood load test",
-                ok=False,
-                detail=d_clik,
-                hint="Build/install CLIK and ensure conda activation sources clik_profile.sh.",
+        ok_py, d_py = _try_import("clipy")
+        if not ok_py:
+            items.append(
+                CheckItem(
+                    name="clik or clipy available for likelihood load test",
+                    ok=False,
+                    detail=f"clik: {d_clik}; clipy: {d_py}",
+                    hint="pip install \"clipy-like>=0.15\", or build CLIK and source clik_profile.sh.",
+                )
             )
-        )
-        return items
+            return items
+        backend = "clipy"
 
     try:
-        import clik as _clik  # type: ignore
+        if backend == "clik":
+            import clik as _clik  # type: ignore
+        else:
+            import clipy as _clik  # type: ignore
     except Exception as e:
         items.append(
             CheckItem(
-                name="Import clik for likelihood load test",
+                name=f"Import {backend} for likelihood load test",
                 ok=False,
                 detail=f"{type(e).__name__}: {e}",
                 hint="Re-check CLIKROOT/PYTHONPATH/LD_LIBRARY_PATH from clik_profile.sh.",
@@ -138,11 +146,11 @@ def check_planck_clik_assets(
     if hi_l.exists():
         try:
             _clik.clik(str(hi_l))
-            items.append(CheckItem(name="clik can load high-l likelihood", ok=True, detail=str(hi_l)))
+            items.append(CheckItem(name=f"{backend} can load high-l likelihood", ok=True, detail=str(hi_l)))
         except Exception as e:
             items.append(
                 CheckItem(
-                    name="clik can load high-l likelihood",
+                    name=f"{backend} can load high-l likelihood",
                     ok=False,
                     detail=f"{type(e).__name__}: {e}",
                     hint="Check missing shared-library deps (ldd on clik .so) and env vars from clik_profile.sh.",
@@ -152,11 +160,11 @@ def check_planck_clik_assets(
     if low_l.exists():
         try:
             _clik.clik(str(low_l))
-            items.append(CheckItem(name="clik can load low-l likelihood", ok=True, detail=str(low_l)))
+            items.append(CheckItem(name=f"{backend} can load low-l likelihood", ok=True, detail=str(low_l)))
         except Exception as e:
             items.append(
                 CheckItem(
-                    name="clik can load low-l likelihood",
+                    name=f"{backend} can load low-l likelihood",
                     ok=False,
                     detail=f"{type(e).__name__}: {e}",
                     hint="Check missing shared-library deps (ldd on clik .so) and env vars from clik_profile.sh.",
@@ -214,26 +222,38 @@ def check_installation(
             )
         )
 
-    # CLIK
+    # Planck likelihood code: clik (compiled PLC) or, when it is missing, clipy
+    # (pure-Python clik: pip install "clipy-like>=0.15"), as in Class_run
     clik_import_ok = True
+    clik_required: set = set()
     if check_clik:
         ok, detail = _try_import("clik")
         clik_import_ok = ok
-        items.append(
-            CheckItem(
-                name="import clik (Planck/CLIK)",
-                ok=ok,
-                detail=detail,
-                hint="Build/install CLIK and ensure activation sources `$CLIKROOT/bin/clik_profile.sh`.",
-            )
-        )
         if ok:
+            items.append(CheckItem(name="import clik (Planck/CLIK)", ok=True, detail=detail))
             ok_lkl, d_lkl = _try_import("clik.lkl")
             ok_len, d_len = _try_import("clik.lkl_lensing")
             items.append(CheckItem(name="import clik.lkl", ok=ok_lkl, detail=d_lkl,
                                    hint="If this fails: lkl module may need the activation symlink fix."))
             items.append(CheckItem(name="import clik.lkl_lensing", ok=ok_len, detail=d_len,
                                    hint="If this fails: lkl_lensing module may need the activation symlink fix."))
+            clik_required = {"import clik (Planck/CLIK)", "import clik.lkl", "import clik.lkl_lensing"}
+        else:
+            ok_py, d_py = _try_import("clipy")
+            clik_import_ok = ok_py
+            name_py = "import clipy (pure-Python clik, used because clik is missing)"
+            items.append(
+                CheckItem(
+                    name=name_py,
+                    ok=ok_py,
+                    detail=d_py if ok_py else f"clik: {detail}; clipy: {d_py}",
+                    hint=(
+                        "Easiest: pip install \"clipy-like>=0.15\" (pure Python, reads the same .clik folders).\n"
+                        "Or build CLIK and source `$CLIKROOT/bin/clik_profile.sh` (README, advanced installation)."
+                    ),
+                )
+            )
+            clik_required = {name_py}
 
     # CLIKROOT check: only “required” if clik import failed
     if check_clik_env:
@@ -289,7 +309,7 @@ def check_installation(
     if check_class:
         required_names.add("import classy (CLASS python wrapper)")
     if check_clik:
-        required_names.update({"import clik (Planck/CLIK)", "import clik.lkl", "import clik.lkl_lensing"})
+        required_names.update(clik_required)
 
     overall_ok = all(it.ok for it in items if it.name in required_names)
 

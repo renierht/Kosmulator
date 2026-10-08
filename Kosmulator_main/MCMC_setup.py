@@ -509,6 +509,16 @@ def run_mcmc_for_all_models(
             "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing",
         )
 
+    # Planck likelihood code (clik, or clipy when clik is missing; see Class_run)
+    if need_hil or need_hilTT or need_lowl or need_lensing:
+        if CR.clik is None:
+            raise ImportError(
+                "CMB likelihoods need clik or clipy. Easiest: pip install \"clipy-like>=0.15\" "
+                "(pure Python); or build CLIK as in the README's advanced installation."
+            )
+        if rank == 0:
+            log.info("Planck likelihood code: %s (%s)", CR.CLIK_BACKEND, getattr(CR.clik, "__file__", ""))
+
     # Sanity-check clik files early (rank 0 only)
     if rank == 0:
         for name, path in [
