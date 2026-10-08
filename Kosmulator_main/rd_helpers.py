@@ -17,6 +17,7 @@ Public / semi-public pieces:
 from __future__ import annotations
 
 import math
+import sys
 from typing import Mapping
 from functools import lru_cache
 import logging
@@ -24,13 +25,21 @@ import logging
 logger = logging.getLogger("Kosmulator.rd_helpers")
 
 # ------------------------------------------------------------------
-# Optional CLASS backend
+# Optional CLASS backend, looked up when r_d is computed
 # ------------------------------------------------------------------
-try:
-    from classy import Class
-    _HAVE_CLASS = True
-except Exception:
-    _HAVE_CLASS = False
+# Not "from classy import Class" at import: when Kosmulator imports this module no model's
+# CLASS build is loaded yet (Class_run.ensure_class_ready puts it in sys.modules["classy"]
+# later), so without a globally installed classy every r_d fell back to EH98 (about 2%
+# high), and with one, r_d came from that build rather than the one Kosmulator loaded.
+def _classy_module():
+    """The classy Kosmulator has loaded (sys.modules), else an installed one, else None."""
+    mod = sys.modules.get("classy")
+    if mod is None:
+        try:
+            import classy as mod  # noqa: F811
+        except Exception:
+            return None
+    return mod if hasattr(mod, "Class") else None
 
 _RD_BACKEND_LOGGED = False
 
@@ -175,11 +184,14 @@ def _rd_class_core(
     Omega_k: float,
     YHe_mode,
     tau_n,
+    build: str = "",
 ) -> float:
     """
     Cached CLASS.rs_drag() evaluator.
 
-    Args are pre-quantised for cache friendliness; see compute_rd_class().
+    Args are pre-quantised for cache friendliness; see compute_rd_class(). `build` (the
+    classy file) is part of the cache key, so values from one CLASS build are never reused
+    for another.
     """
     pars = {
         "h":         float(h),
@@ -198,7 +210,7 @@ def _rd_class_core(
     else:
         pars["YHe"] = float(YHe_mode)
 
-    c = Class()
+    c = _classy_module().Class()
     c.set(pars)
     c.compute()
     rd = float(c.rs_drag())
@@ -222,7 +234,8 @@ def compute_rd_class(p: dict):
     Compute r_d via CLASS.rs_drag(), with conservative parameter quantisation.
     Returns None if CLASS is unavailable.
     """
-    if not _HAVE_CLASS:
+    mod = _classy_module()
+    if mod is None:
         return None
 
     H0   = float(p["H_0"])
@@ -253,7 +266,7 @@ def compute_rd_class(p: dict):
     okq   = _q(Ok,     5e-4)
     taunq = _q(tau_n,  0.1) if tau_n is not None else None
 
-    return _rd_class_core(hq, obq, ocq, nurq, tcmbq, okq, "BBN", taunq)
+    return _rd_class_core(hq, obq, ocq, nurq, tcmbq, okq, "BBN", taunq, str(getattr(mod, "__file__", "")))
 
 
 # ------------------------------------------------------------------
@@ -272,7 +285,8 @@ def _try_compute_rd(param_dict: dict):
         if rd is not None:
             if not _RD_BACKEND_LOGGED:
                 logger.debug(
-                    "r_d backend = CLASS; r_d = %.3f Mpc @ p=%s",
+                    "r_d backend = CLASS (%s); r_d = %.3f Mpc @ p=%s",
+                    getattr(_classy_module(), "__file__", "?"),
                     rd,
                     {
                         k: param_dict[k]

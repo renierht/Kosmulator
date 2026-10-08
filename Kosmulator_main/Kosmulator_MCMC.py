@@ -333,6 +333,13 @@ def log_likelihood_all(
     nwalkers, ndim = theta_batch.shape
     ll = np.zeros(nwalkers, dtype=float)
 
+    # A group with Planck data: the model's CLASS build is loaded before any term, so a term
+    # that uses CLASS without loading it (BAO's CMB-calibrated r_d, rd_helpers) gets that
+    # build from a worker's first point on (no-op once loaded)
+    if any(str(t) == "CMB" for t in Type):
+        from Kosmulator_main import Class_run as _CR
+        _CR.ensure_class_ready(model_name)
+
     for obs_name, obs_type in zip(obs, Type):
         if _sn_batched(data[obs_name], obs_type):
             # SN chi^2 of all walkers in one matrix product (the large covariances)

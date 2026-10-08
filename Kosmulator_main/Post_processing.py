@@ -574,6 +574,9 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 # Values fixed for this group (e.g. H_0 for uncalibrated SNe); the
                 # same object when nothing is fixed, so the gamma note below still works
                 p_eval = U.with_fixed_params(p_eval, CONFIG[model_name], obs_index)
+                # Planck data in the group: the model's CLASS build first (as the sampler does)
+                if any(str(t) == "CMB" for t in obs_types):
+                    CR.ensure_class_ready(model_name)
 
                 for i, obs in enumerate(obs_entry):
                     obs_type = obs_types[i]
