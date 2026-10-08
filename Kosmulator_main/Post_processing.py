@@ -36,7 +36,6 @@ from Kosmulator_main import Class_run as CR
 
 from Kosmulator_main.Statistical_packages import (
     Calc_PantP_chi,
-    Calc_BAO_chi,
     Calc_DESI_chi,
     Calc_chi,
     Calc_BBN_DH_chi,
@@ -392,18 +391,17 @@ def find_polished_mle(
     prior_bounds: dict[str, tuple[float, float]] | None = None,
     max_evals: int = 2000,
     candidate_starts: list[dict[str, float]] | None = None,
+    restrictions: dict | None = None,
+    coupled_restrictions: list | None = None,
 ) -> tuple[dict[str, float], float]:
     """
     Find the Maximum Likelihood Estimate (MLE) by polishing
     the posterior median with Nelder-Mead simplex minimization.
+    Points outside the prior box or failing the model's restrictions (the same
+    checks as log_prior_all, e.g. n < 0.5 for f1CDM_v) are rejected.
     """
     p_names = list(params_dict_median.keys())
     x0 = np.array([params_dict_median[p] for p in p_names], dtype=float)
-
-    # Initial baseline evaluation at median
-    baseline_chi2, _ = compute_chi2_fn(params_dict_median)
-    if not (np.isfinite(baseline_chi2) and abs(baseline_chi2) < 1e9):
-        baseline_chi2 = 1e12
 
     def objective(x_vec: np.ndarray) -> float:
         if prior_bounds:
@@ -414,6 +412,12 @@ def find_polished_mle(
                         return 1e12
 
         p_candidate = {p: float(x_vec[idx]) for idx, p in enumerate(p_names)}
+        for p, ok in (restrictions or {}).items():
+            if p in p_candidate and not ok(p_candidate[p]):
+                return 1e12
+        for ok in (coupled_restrictions or []):
+            if not ok(p_candidate):
+                return 1e12
         try:
             val, _ = compute_chi2_fn(p_candidate)
             if np.isfinite(val) and abs(val) < 1e9:
@@ -421,6 +425,11 @@ def find_polished_mle(
         except Exception:
             pass
         return 1e12
+
+    # Baseline at the median, with the same box and restrictions as the polish
+    # (per-parameter medians can fail a coupled restriction; then 1e12, so any
+    # admissible point found by the polish replaces it)
+    baseline_chi2 = objective(x0)
 
     starts = [x0]
     if candidate_starts:
@@ -591,11 +600,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                                                           marginalise=bool(obs_data.get("marginalise_offset", False))))
                         n_points += len(m_b_corr)
 
-                    elif obs == "BAO":
-                        chi_total += float(Calc_BAO_chi(obs_data, MODEL_func, dict(p_eval), "BAO"))
-                        n_points += len(obs_data["covd1"])
-
-                    elif obs in ("DESI_DR1", "DESI_DR2"):
+                    elif obs in ("BAO", "DESI_DR1", "DESI_DR2"):
                         calibrated = any(("BBN" in x) or ("CMB" in x) or ("THETA" in x) for x in obs_entry)
                         type_tag = obs + ("+BBN" if calibrated else "")
                         chi_total += float(Calc_DESI_chi(obs_data, MODEL_func, dict(p_eval), type_tag))
@@ -716,6 +721,8 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 prior_bounds=prior_map,
                 max_evals=300 if has_cmb_group else 2000,
                 candidate_starts= candidate_starts_list,
+                restrictions=CONFIG[model_name].get("restrictions") or {},
+                coupled_restrictions=CONFIG[model_name].get("coupled_restrictions") or [],
 
             )
 
@@ -742,6 +749,15 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             fixed_here = (CONFIG[model_name].get("fixed_params_by_group", {}) or {}).get(obs_index) or {}
             if "H_0" in fixed_here:
                 notes.append("H_0 not sampled (uncalibrated SNe: the offset absorbs it)")
+            # Sampled but absent from the likelihood (sample_H0_uncalibrated_SNe):
+            # not a fitted degree of freedom, so k and the dof are those of the fixed case
+            _unc = CONFIG[model_name].get("unconstrained_params_by_group", {}) or {}
+            _unc = _unc.get(obs_index, _unc.get(str(obs_index), [])) or []
+            unconstrained_here = [p for p in _unc if p in param_dict]
+            if unconstrained_here:
+                num_params -= len(unconstrained_here)
+                notes.append(f"{', '.join(unconstrained_here)} sampled but unconstrained "
+                             "(uncalibrated SNe: the offset absorbs it); its posterior is the prior, not counted in k")
             dof = num_data_points_total - num_params
 
             if dof <= 0:
@@ -899,7 +915,7 @@ def provide_model_diagnostics(
     tags = [str(t) for t in (datasets or [])]
     sn_tags = [t for t in tags if t in ("JLA", "JLA_legacy", "Pantheon", "PantheonP",
                                          "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")]
-    diag_tags = [t for t in tags if t in ("CC", "OHD", "f", "f_sigma_8", "BAO")]
+    diag_tags = [t for t in tags if t in ("CC", "OHD", "f", "f_sigma_8")]
     causes = []
     if sn_tags:
         causes.append("supernova covariances that include conservative systematic terms ("

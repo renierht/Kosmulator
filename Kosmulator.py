@@ -130,6 +130,11 @@ burn: int = 100
 # >= 50 tau_max long, ESS >= 2000, split-Rhat < 1.01 and tau_max changed by less than
 # `convergence` (relative) since the previous check (constants.CONV_*).
 convergence: float = 0.05
+# Uncalibrated supernovae without BAO/DESI or an H0 anchor (CC, OHD, SH0ES, CMB): once the
+# SN offset is marginalised H_0 cancels from the likelihood. False (default, the usual
+# choice): H_0 is not sampled and distances use reference_values["H_0"]. True: H_0 is
+# sampled anyway; its posterior is then the prior and it is not counted in k.
+sample_H0_uncalibrated_SNe: bool = False
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -235,6 +240,7 @@ def main() -> None:
         nsteps=nsteps,
         burn=burn,
         convergence=convergence,
+        sample_H0_uncalibrated_SNe=sample_H0_uncalibrated_SNe,
     )
 
 

@@ -1259,26 +1259,7 @@ def extract_observation_data(
             z = np.arange(len(systems), dtype=float)
         return z, y, yerr, meta
         
-    if obs_type == "BAO":
-        z = np.array([0.295, 0.510, 0.510, 0.706, 0.706, 0.930, 0.930, 1.317, 1.317, 1.491, 2.330, 2.330], dtype=float)
-        if "obs_vec" in obs_data and obs_data["obs_vec"] is not None:
-            y = np.asarray(obs_data["obs_vec"], dtype=float)
-        else:
-            y = np.array([
-                7.92512927,
-                13.6200308, 20.98334647,
-                16.84645313, 20.07872919,
-                21.70841761, 17.87612922,
-                27.78720817, 13.82372285,
-                26.07217182,
-                39.70838281, 8.52256583,
-            ], dtype=float)
-        cov  = np.asarray(obs_data["covd1"])
-        yerr = np.sqrt(np.diag(cov)) if cov.ndim == 2 else np.zeros_like(y)
-        meta = np.array([3, 8, 6, 8, 6, 8, 6, 8, 6, 3, 8, 6], dtype=int)
-        return z, y, yerr, meta
-        
-    if obs_type in ("DESI", "DESI_DR1", "DESI_DR2"):
+    if obs_type in ("BAO", "DESI", "DESI_DR1", "DESI_DR2"):
         # z
         if   "redshift" in obs_data: z = np.asarray(obs_data["redshift"])
         elif "z_eff"    in obs_data: z = np.asarray(obs_data["z_eff"])

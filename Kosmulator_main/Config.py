@@ -14,6 +14,7 @@ Responsibilities:
           "restrictions", "ndim",
           "rd_policy", "pantheonp_mode",
           "fs8_gamma_fixed_by_group", "fixed_params_by_group",
+          "unconstrained_params_by_group",
           "nwalker", "nwalker_by_obs",
       }
   - Build a single shared `data` dict with loaded datasets.
@@ -691,33 +692,6 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     )
 
             # ------------------
-            # BAO (13-element vector with fixed order)
-            # ------------------
-            elif obs == "BAO":
-                observation_data[obs] = {
-                    "covd1": np.loadtxt(file_path),
-                    # 12-slot observed vector in the SAME order as the chi^2 builder
-                    "obs_vec": np.array([
-                        7.92512927,
-                        13.6200308, 20.98334647,
-                        16.84645313, 20.07872919,
-                        21.70841761, 17.87612922,
-                        27.78720817, 13.82372285,
-                        26.07217182,
-                        39.70838281, 8.52256583,
-                    ], dtype=float),
-                    # Meta to keep plotting/chi² in sync
-                    "z_slots": [
-                        0.295, 0.510, 0.510, 0.706, 0.706, 0.930,
-                        0.930, 1.317, 1.317, 1.491, 2.330, 2.330
-                    ],
-                    "code_slots": [
-                        3, 8, 6, 8, 6, 8,
-                        6, 8, 6, 3, 8, 6  # 3=DV/rd, 8=DM/rd, 6=DH/rd
-                    ],
-                }
-
-            # ------------------
             # Planck CMB paths
             # ------------------
             elif obs == 'CMB_hil':
@@ -741,13 +715,20 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 observation_data[obs] = _lensing_file_nonmarg
 
             # ------------------
-            # DESI DR1 / DR2
+            # BAO / DESI, all in the DESI VI format (Calc_DESI_chi):
+            #   DESI_DR1  all 12 DESI DR1 measurements, full covariance (arXiv:2404.03002)
+            #   DESI_DR2  DESI DR2 (arXiv:2503.14738)
+            #   BAO       the 10 anisotropic DESI DR1 measurements (no D_V/r_d points)
+            # Before October 2026 the DESI_DR1 and BAO tags were the other way round.
             # ------------------
-            elif obs == "DESI_DR1":
-                # If your current files are named Isma_desi_*.txt, keep them here;
-                # otherwise rename them to DESI_DR1_* accordingly.
-                vi_path  = os.path.join(K.OBSERVATIONS_BASE, "Isma_desi_VI.txt")
-                cov_path = os.path.join(K.OBSERVATIONS_BASE, "Isma_desi_covtot_VI.txt")
+            elif obs in ("DESI_DR1", "DESI_DR2", "BAO"):
+                vi_file, cov_file = {
+                    "DESI_DR1": ("DESI_DR1.txt", "DESI_DR1_cov.txt"),
+                    "DESI_DR2": ("DESI_DR2_synced.txt", "DESI_DR2_covtot.txt"),
+                    "BAO": ("BAO.txt", "BAO_invcov.txt"),
+                }[obs]
+                vi_path  = os.path.join(K.OBSERVATIONS_BASE, vi_file)
+                cov_path = os.path.join(K.OBSERVATIONS_BASE, cov_file)
 
                 desi = load_DESI_data(vi_path)
                 cov, inv_cov = load_DESI_cov(cov_path)
@@ -757,27 +738,8 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 n = len(desi["redshift"])
                 if cov.shape != (n, n):
                     logger.error(
-                        "DESI_DR1 covariance shape %s != (%d,%d)",
-                        cov.shape, n, n,
-                    )
-
-                observation_data[obs] = desi
-
-            elif obs == "DESI_DR2":
-                # DR2 uses the same VI structure
-                vi_path  = os.path.join(K.OBSERVATIONS_BASE, "DESI_DR2_synced.txt")
-                cov_path = os.path.join(K.OBSERVATIONS_BASE, "DESI_DR2_covtot.txt")
-
-                desi = load_DESI_data(vi_path)
-                cov, inv_cov = load_DESI_cov(cov_path)
-                desi["cov"] = cov
-                desi["inv_cov"] = inv_cov
-
-                n = len(desi["redshift"])
-                if cov.shape != (n, n):
-                    logger.error(
-                        "DESI_DR2 covariance shape %s != (%d,%d)",
-                        cov.shape, n, n,
+                        "%s covariance shape %s != (%d,%d)",
+                        obs, cov.shape, n, n,
                     )
 
                 observation_data[obs] = desi
@@ -992,6 +954,7 @@ def create_config(
     burn: int = 20,
     model_name: List[str] = None,
     pantheonp_mode: str = "PplusSH0ES",  # DEPRECATED: use PantheonP/PantheonPS tags instead
+    sample_H0_uncalibrated_SNe: bool = False,
     logger=None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
@@ -1019,6 +982,10 @@ def create_config(
         List of keys in `models` to use for this run.
     pantheonp_mode : str
         One of {"Pplus", "PplusSH0ES"}; controls Pantheon+ anchor strategy.
+    sample_H0_uncalibrated_SNe : bool
+        Uncalibrated SNe without BAO/DESI or an H0 anchor: False fixes H_0 at the
+        reference value (it cancels from the likelihood); True samples it anyway
+        and records it in "unconstrained_params_by_group" (not counted in k).
 
     Returns
     -------
@@ -1248,6 +1215,7 @@ def create_config(
         param_sets_policy = []
         fs8_gamma_fixed_by_group = {}
         fixed_params_by_group = {}
+        unconstrained_params_by_group = {}
 
         for gi, obs_grp in enumerate(config[mod]["observations"]):
             grp_params = list(config[mod]["parameters"][gi])
@@ -1306,13 +1274,25 @@ def create_config(
 
             # Uncalibrated SNe without BAO or an H0 anchor: H_0 drops out of the
             # likelihood once the offset is marginalised (5 log10 H_0 is absorbed by
-            # the offset), so it is not sampled. Distances still need a value: H_0
-            # is fixed at the reference value, which changes no chi^2.
-            if (bool(getattr(K, "SN_MARGINALISE_OFFSET", True))
+            # the offset), so by default it is not sampled. Distances still need a
+            # value: H_0 is fixed at the reference value, which changes no chi^2.
+            # With sample_H0_uncalibrated_SNe (Kosmulator.py) it is sampled anyway;
+            # its posterior is then the prior and it is left out of k.
+            _h0_cancels = (bool(getattr(K, "SN_MARGINALISE_OFFSET", True))
                     and any(x in _sn_offset_only for x in obs_grp)
                     and not _has_bao_desi(obs_grp)
                     and not any(x in _h0_anchors for x in obs_grp)
-                    and "H_0" in grp_params):
+                    and "H_0" in grp_params)
+            if _h0_cancels and sample_H0_uncalibrated_SNe:
+                unconstrained_params_by_group.setdefault(gi, []).append("H_0")
+                if logger:
+                    logger.warning(
+                        "Uncalibrated SNe %s: H_0 is sampled (sample_H0_uncalibrated_SNe) but not "
+                        "constrained (the supernova offset absorbs it), so its posterior is the "
+                        "prior and it is not counted in k (model %s)",
+                        obs_grp, mod,
+                    )
+            elif _h0_cancels:
                 grp_params.remove("H_0")
                 h0_fix = float(reference_values.get("H_0", K.H0_RADIATION_FALLBACK))
                 fixed_params_by_group.setdefault(gi, {})["H_0"] = h0_fix
@@ -1341,6 +1321,7 @@ def create_config(
         config[mod]["parameters"] = param_sets_policy
         config[mod]["fs8_gamma_fixed_by_group"] = fs8_gamma_fixed_by_group
         config[mod]["fixed_params_by_group"] = fixed_params_by_group
+        config[mod]["unconstrained_params_by_group"] = unconstrained_params_by_group
         # After our policy choices, singleton_mode is effectively "fixed"
         config[mod]["rd_policy"]["singleton_mode"] = "fixed"
         config[mod]["prior_limits_global"] = dict(prior_limits)

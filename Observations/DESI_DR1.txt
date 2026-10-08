@@ -1,0 +1,26 @@
+# DESI_DR1: DESI DR1 BAO, all 12 measurements (DESI 2024 VI, arXiv:2404.03002).
+# Values and covariance (DESI_DR1_cov.txt, 12x12, same order) are those of the DESI 2024 likelihood
+# release (desi_2024_gaussian_bao_ALL_GCcomb_mean.txt / _cov.txt, github.com/CobayaSampler/bao_data).
+# The error column is sqrt(diag(cov)) and is not used in the chi^2.
+# type (D_V/rs=3, Dv/Mpc=4, DA/rs=5, c/Hrs=6, rs/D_v=7, Dm/rs=8)
+#Exp    z_eff  value          error      type
+#These are the chosen ones to compute: ordered as in the covariance
+#BGS
+DESI   0.295  7.92512927     0.150742   3
+#LRG1
+DESI   0.510  13.62003080    0.251925   8
+DESI   0.510  20.98334647    0.610712   6
+#LRG2
+DESI   0.706  16.84645313    0.319336   8
+DESI   0.706  20.07872919    0.595356   6
+#LRG3+ELG1
+DESI   0.930  21.70841761    0.282077   8
+DESI   0.930  17.87612922    0.346317   6
+#ELG2
+DESI   1.317  27.78720817    0.690340   8
+DESI   1.317  13.82372285    0.422221   6
+#QSO
+DESI   1.491  26.07217182    0.668682   3
+#Lya QSO
+DESI   2.330  39.70838281    0.943267   8
+DESI   2.330  8.52256583     0.170839   6

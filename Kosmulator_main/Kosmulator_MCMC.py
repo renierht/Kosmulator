@@ -175,14 +175,8 @@ def model_likelihood(
         return SP.cmb_lensing_loglike(param_dict, model_name)
 
 
-    # BAO / DESI: enforce r_d policy
-    if obs == "BAO":
-        try:
-            return -0.5 * SP.Calc_BAO_chi(obs_data, MODEL_func, param_dict, obs_type)
-        except RD.RdUnavailableError:
-            return -np.inf   # calibrated r_d could not be computed (counted in rd_helpers)
-
-    if obs in ("DESI_DR1", "DESI_DR2"):
+    # BAO / DESI (DESI VI files; Calc_DESI_chi applies the r_d policy)
+    if obs in ("BAO", "DESI_DR1", "DESI_DR2"):
         return -0.5 * SP.Calc_DESI_chi(obs_data, MODEL_func, param_dict, obs_type)
 
     # BBN: either full DH dataset or prior
@@ -1030,6 +1024,15 @@ def _run_mcmc_impl(
 
     # ── Zeus branch ────────────────────────────────────────────────────────────
     engine   = _choose_engine(vectorised, model_name, has_cmb, has_bbn)
+    if engine == "zeus" and int(ndim) == 1:
+        # zeus moves a walker along the difference of two other walkers. With one
+        # parameter two walkers can be arbitrarily close, the slice then needs more
+        # than zeus's 10^4 expansions and the run stops ("Number of expansions
+        # exceeded"; 7 of 8 runs of 3000 steps on a 1-D Gaussian, zeus 2.5.4).
+        # One-parameter groups (e.g. LCDM with one uncalibrated SN set) use emcee.
+        log.info("[%s | %s] one sampled parameter: emcee instead of zeus "
+                 "(zeus's differential move is unreliable in one dimension)", model_name, _resolved_key)
+        engine = "emcee"
     use_zeus = (engine == "zeus" and zeus is not None)
     
     if use_zeus:

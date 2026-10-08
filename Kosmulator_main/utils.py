@@ -808,17 +808,6 @@ def detect_vectorisation(models, get_model_fn, config, data, sample_n: int = 10)
             z_vals = None
             tested_obs = None
             for obs in obs_list:
-                if obs == "BAO":
-                    z_vals = np.array(
-                        [
-                            0.295, 0.510, 0.510, 0.706, 0.706,
-                            0.930, 0.930, 1.317, 1.317, 1.491,
-                            2.330, 2.330,
-                        ],
-                        dtype=float,
-                    )
-                    tested_obs = obs
-                    break
                 # Skip scalar-only observations or string placeholders
                 if obs not in data or isinstance(data[obs], str):
                     continue
@@ -1088,6 +1077,16 @@ def load_or_run_chain(
             # Unknown mode -> behave like mixed
             engine = "zeus" if (can_vec and zeus is not None) else "emcee"
 
+    # One sampled parameter: Kosmulator_MCMC runs emcee instead of zeus (zeus's
+    # differential move is unreliable in one dimension), so the chain is loaded or
+    # resumed as an emcee chain (otherwise a rerun appended a new run to it).
+    if engine == "zeus":
+        try:
+            if int(CONFIG_model["ndim"][other_kwargs.get("obs_index")]) == 1:
+                engine = "emcee"
+        except (KeyError, IndexError, TypeError, ValueError):
+            pass
+
     is_zeus_run  = (engine == "zeus" and zeus is not None)
     is_emcee_run = not is_zeus_run
     
@@ -1166,7 +1165,7 @@ def load_or_run_chain(
                 "[INFO] Resuming chain from "
                 f"{chain_path} (step {backend.iteration}/{CONFIG_model['nsteps']})"
             )
-            return Kosmulator_MCMC.run_mcmc(
+            resumed = Kosmulator_MCMC.run_mcmc(
                 data=data,
                 saveChains=True,
                 chain_path=chain_path,
@@ -1191,6 +1190,15 @@ def load_or_run_chain(
                 pool=pool,
                 vectorised=vectorised,
                 obs_key=other_kwargs.get("obs_key"),
+            )
+            # run_mcmc returns the bare samples; reload them with the saved
+            # log-likelihoods, as for a fresh run, so DIC and WAIC are computed.
+            if isinstance(resumed, dict):
+                return resumed
+            return Kosmulator_MCMC.load_mcmc_results(
+                output_path=output_dir,
+                file_name=chain_file,
+                CONFIG=CONFIG_model,
             )
 
     # ------------------------------------------------------------------

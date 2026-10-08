@@ -26,8 +26,11 @@ The package is designed to be **modular**, **flexible**, and **user-friendly**, 
   - Type Ia Supernovae (JLA, Pantheon, Pantheon+, Union3, DES-Y5)
     - `JLA` is the official 740-SN likelihood (Betoule et al. 2014): `alpha_JLA` and `beta_JLA` are sampled, the absolute magnitudes (with the host-mass step) are fitted analytically, and the covariance is rebuilt for each alpha, beta. See `Observations/JLA/README.md`.
     - `JLA_legacy` is the old 359-SN file used as "JLA" before October 2026, kept only to reproduce earlier runs.
-  - Baryon Acoustic Oscillations (BAO)
-  - DESI (DR1 and DR2)
+  - Baryon acoustic oscillations from DESI, all read in the same format:
+    - `DESI_DR2`: DESI DR2, 13 measurements with the published covariance.
+    - `DESI_DR1`: DESI DR1, all 12 measurements with the published covariance.
+    - `BAO`: the 10 anisotropic DESI DR1 measurements (D_M/r_d and D_H/r_d), without the BGS and QSO D_V/r_d points.
+    - Before October 2026 the `BAO` and `DESI_DR1` tags were the other way round: older results labelled `BAO` are the 12-point DR1 set and older `DESI_DR1` results the 10-point set.
   - Cosmic Chronometers / OHD
   - Growth of structure (fσ₈ and f)
   - Cosmic Microwave Background (Planck 2018 via CLIK)
@@ -146,7 +149,10 @@ nwalkers: int = 16
 nsteps: int = 500
 burn: int = 10
 convergence: float = 0.05  # Stability of tau_max between checks (relative) required by the convergence rule
+sample_H0_uncalibrated_SNe: bool = False  # see below
 ```
+
+Uncalibrated supernovae without BAO/DESI or an H0 anchor (for example `["Pantheon"]`, `["JLA", "DESY5"]` or `["f", "PantheonP"]`; anchors are `CC`, `OHD`, `PantheonPS` and the CMB) do not constrain H_0: the analytically marginalised magnitude offset absorbs 5 log10 H_0. By default H_0 is then not sampled and distances use `reference_values["H_0"]`, which changes no chi^2. With `sample_H0_uncalibrated_SNe = True` H_0 is sampled anyway, so its posterior is the prior. It is not counted in k in either case, so chi^2, AIC, BIC and the degrees of freedom do not depend on the switch.
 
 #### Step 4. Execute you MCMC simulation
 Run the script in the terminal:

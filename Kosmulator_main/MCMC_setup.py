@@ -158,6 +158,7 @@ def main(
     burn: int,
     convergence: float,
     pantheonp_mode: str = "PplusSH0ES",
+    sample_H0_uncalibrated_SNe: bool = False,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -240,6 +241,7 @@ def main(
                 burn=burn,
                 model_name=model_names,
                 pantheonp_mode=pantheonp_mode,
+                sample_H0_uncalibrated_SNe=sample_H0_uncalibrated_SNe,
                 logger=log,
             )
             issue_observation_warnings(CONFIG, models, token_mode=True)
