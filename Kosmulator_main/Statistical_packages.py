@@ -372,6 +372,38 @@ def _get_cls_from_model(
 
 
 
+def planck_nuisance_value(name: str, pd: Dict[str, float]) -> float:
+    """
+    Value passed to clik for a Planck nuisance parameter: the sampled value if the
+    point has it, else the Planck-baseline fixed value, else its reference value.
+    """
+    from Kosmulator_main import constants as _K
+    if name in pd:
+        return float(pd[name])
+    if name in _K.PLANCK_NUISANCE_FIXED:
+        return float(_K.PLANCK_NUISANCE_FIXED[name])
+    if name in PLANCK_NUISANCE_DEFAULTS:
+        return float(PLANCK_NUISANCE_DEFAULTS[name][0])
+    return 1.0 if (name.startswith("calib_") or name == "A_planck") else 0.0
+
+
+def planck_nuisance_prior_chi2(pd: Dict[str, float]) -> float:
+    """
+    -2 ln(prior) of the Planck nuisance parameters present in pd (Gaussian priors and the
+    SZ prior on ksz_norm + 1.6 A_sz), up to a constant; 0 when none are present.
+    Same terms as log_prior_all in Kosmulator_MCMC.
+    """
+    from Kosmulator_main import constants as _K
+    chi2 = 0.0
+    for name, (mu, sig) in _K.PLANCK_GAUSSIAN_PRIORS.items():
+        if name in pd:
+            chi2 += ((float(pd[name]) - mu) / sig) ** 2
+    if "ksz_norm" in pd and "A_sz" in pd:
+        c, mu, sig = _K.PLANCK_SZ_PRIOR
+        chi2 += ((float(pd["ksz_norm"]) + c * float(pd["A_sz"]) - mu) / sig) ** 2
+    return chi2
+
+
 def _spectra_key(pd: Dict[str, float], model_name: str) -> tuple:
     """Cache key: the model and every numeric parameter except Planck nuisances."""
     from Kosmulator_main import constants as _K
@@ -496,17 +528,9 @@ def cmb_hil_loglike(pd: Dict[str, float], model_name: str, floor: float = -1e10)
     except Exception:
         nuis_names = []
 
-    calib_ones = {
-        "A_planck",
-        "calib_100T", "calib_143T", "calib_217T",
-        "calib_100P", "calib_143P", "calib_217P",
-    }
-
-    def _nuis_default(name: str) -> float:
-        return 1.0 if name in calib_ones else 0.0
-
+    # Sampled nuisances from the point; the Planck-baseline fixed ones from constants
     nuis = (
-        np.array([pd.get(n, _nuis_default(n)) for n in nuis_names], dtype=np.float64)
+        np.array([planck_nuisance_value(n, pd) for n in nuis_names], dtype=np.float64)
         if nuis_names
         else np.empty(0, np.float64)
     )
@@ -601,10 +625,9 @@ def cmb_hilTT_loglike(pd: Dict[str, float], model_name: str) -> float:
         for n in nuis_raw
     ]
 
-    def _nuis_default(name: str) -> float:
-        return 1.0 if name in ("A_planck", "calib_100T", "calib_143T", "calib_217T") else 0.0
-
-    nuis = np.array([pd.get(n, _nuis_default(n)) for n in nuis_names], dtype=np.float64)
+    # Sampled nuisances from the point; the Planck-baseline fixed ones (cib_index,
+    # A_sbpx_*_TT) from constants
+    nuis = np.array([planck_nuisance_value(n, pd) for n in nuis_names], dtype=np.float64)
 
     vec = np.ascontiguousarray(np.concatenate([tt, nuis]), np.float64)
 
@@ -817,17 +840,8 @@ def cmb_lensing_loglike(pd: Dict[str, float], model_name: str) -> float:
     except Exception:
         nuis_names = []
 
-    nuis: list[float] = []
-    for name in nuis_names:
-        if name in pd:
-            # If the user/engine provided this nuisance explicitly, use it
-            val = float(pd[name])
-        else:
-            # Fall back to the PLANCK_NUISANCE_DEFAULTS mean (first element of tuple),
-            # or 0.0 if the nuisance is not in that dictionary.
-            default = PLANCK_NUISANCE_DEFAULTS.get(name, (0.0, (None, None)))[0]
-            val = float(default)
-        nuis.append(val)
+    # Sampled value if present (A_planck), else the Planck-baseline value
+    nuis: list[float] = [planck_nuisance_value(name, pd) for name in nuis_names]
 
     nuis = np.asarray(nuis, np.float64)
 
@@ -909,10 +923,7 @@ def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
 
     # Default nuisances: use PLANCK_NUISANCE_DEFAULTS mean if available, else 0.0
     # (low-ℓ SimAll usually has none, but keep this generic and robust)
-    nuis = np.array(
-        [pd.get(n, PLANCK_NUISANCE_DEFAULTS.get(n, (0.0, (None, None)))[0]) for n in nuis_names],
-        dtype=np.float64
-    )
+    nuis = np.array([planck_nuisance_value(n, pd) for n in nuis_names], dtype=np.float64)
 
     # EE block: need length 30 (ℓ=0..29) for this likelihood
     ee = np.asarray(cl.get("ee", []), dtype=float)

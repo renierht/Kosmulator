@@ -2654,9 +2654,12 @@ def _inject_planck_nuisance_defaults(
     """
     Ensure priors/initials exist for all requested Planck nuisance names.
     """
+    from Kosmulator_main.constants import PLANCK_NUISANCE_FIXED
     for n in names:
         if n in prior_limits and n in reference_values:
             continue
+        if n in PLANCK_NUISANCE_FIXED:
+            continue   # fixed in the Planck baseline: never sampled
         default = PLANCK_NUISANCE_DEFAULTS.get(n)
         if default is not None:
             tv, (lo, hi) = default

@@ -416,88 +416,92 @@ CMB_SPECTRA_CACHE_SIZE: int = 64
 # These give default true values and prior ranges for CMB runs.
 # ======================================================================
 
+# Planck 2018 baseline treatment of the plik nuisance parameters (Planck 2018 V,
+# arXiv:1907.12875; as in Cobaya's planck_2018_highl_plik likelihoods, checked against
+# Cobaya 3.6.2): 21 sampled with the priors below, the other 26 fixed, plus the SZ prior.
+# The lite likelihoods, Commander, SimAll and lensing have only A_planck.
+#
+# Sampled: name -> (reference value, (prior box low, high), Gaussian (mean, sigma) or None).
+# A Gaussian prior is applied in log_prior_all; its box is mean +- 5 sigma.
+def _g(mu: float, sigma: float, ref: float | None = None):
+    return (mu if ref is None else ref, (mu - 5.0 * sigma, mu + 5.0 * sigma), (mu, sigma))
+
+PLANCK_NUISANCE_SAMPLED: Dict[str, Tuple[float, Tuple[float, float], Tuple[float, float] | None]] = {
+    # Overall calibration (every Planck likelihood) and temperature calibrations
+    "A_planck":   _g(1.0, 0.0025),
+    "calib_100T": _g(1.0002, 0.0007),
+    "calib_217T": _g(0.99805, 0.00065),
+    # Foregrounds with uniform priors (reference values: Cobaya's starting points)
+    "A_cib_217":  (67.0, (0.0, 200.0), None),
+    "xi_sz_cib":  (0.1,  (0.0, 1.0), None),
+    "A_sz":       (7.0,  (0.0, 10.0), None),
+    "ksz_norm":   (3.0,  (0.0, 10.0), None),
+    "ps_A_100_100": (257.0, (0.0, 400.0), None),
+    "ps_A_143_143": (47.0,  (0.0, 400.0), None),
+    "ps_A_143_217": (40.0,  (0.0, 400.0), None),
+    "ps_A_217_217": (104.0, (0.0, 400.0), None),
+    # Galactic dust in TT (545 GHz template) and TE: Gaussian priors
+    "gal545_A_100":     _g(8.6, 2.0),
+    "gal545_A_143":     _g(10.6, 2.0),
+    "gal545_A_143_217": _g(23.5, 8.5),
+    "gal545_A_217":     _g(91.9, 20.0),
+    "galf_TE_A_100":     _g(0.130, 0.042),
+    "galf_TE_A_100_143": _g(0.130, 0.036),
+    "galf_TE_A_100_217": _g(0.46, 0.09),
+    "galf_TE_A_143":     _g(0.207, 0.072),
+    "galf_TE_A_143_217": _g(0.69, 0.09),
+    "galf_TE_A_217":     _g(1.938, 0.54),
+}
+
+# Fixed in the Planck baseline (values from Planck 2018 V and Cobaya's yaml files)
+PLANCK_NUISANCE_FIXED: Dict[str, float] = {
+    "cib_index": -1.3,
+    "A_pol": 1.0, "calib_100P": 1.021, "calib_143P": 0.966, "calib_217P": 1.040,
+    "galf_EE_index": -2.4, "galf_TE_index": -2.4,
+    "galf_EE_A_100": 0.055, "galf_EE_A_100_143": 0.040, "galf_EE_A_100_217": 0.094,
+    "galf_EE_A_143": 0.086, "galf_EE_A_143_217": 0.21, "galf_EE_A_217": 0.70,
+    "A_cnoise_e2e_100_100_EE": 1.0, "A_cnoise_e2e_143_143_EE": 1.0, "A_cnoise_e2e_217_217_EE": 1.0,
+    "A_sbpx_100_100_TT": 1.0, "A_sbpx_143_143_TT": 1.0, "A_sbpx_143_217_TT": 1.0, "A_sbpx_217_217_TT": 1.0,
+    "A_sbpx_100_100_EE": 1.0, "A_sbpx_100_143_EE": 1.0, "A_sbpx_100_217_EE": 1.0,
+    "A_sbpx_143_143_EE": 1.0, "A_sbpx_143_217_EE": 1.0, "A_sbpx_217_217_EE": 1.0,
+}
+
+# SZ prior on the sampled amplitudes: ksz_norm + PLANCK_SZ_PRIOR[0] * A_sz ~ N(mean, sigma)
+PLANCK_SZ_PRIOR: Tuple[float, float, float] = (1.6, 9.5, 3.0)
+
+# Gaussian priors applied in log_prior_all (name -> (mean, sigma))
+PLANCK_GAUSSIAN_PRIORS: Dict[str, Tuple[float, float]] = {
+    n: v[2] for n, v in PLANCK_NUISANCE_SAMPLED.items() if v[2] is not None
+}
+
+# All plik nuisance names (sampled and fixed); they do not change the theory spectra
+PLANCK_NUISANCE_NAMES: Set[str] = set(PLANCK_NUISANCE_SAMPLED) | set(PLANCK_NUISANCE_FIXED)
+
+# Reference value and prior box of every sampled nuisance (the format Config injects)
 PLANCK_NUISANCE_DEFAULTS: Dict[str, Tuple[float, Tuple[float, float]]] = {
-    # Calibration & overall amplitude
-    "A_planck": (1.0, (0.995, 1.005)),
-    "calib_100T": (1.0, (0.99, 1.01)),
-    "calib_217T": (1.0, (0.99, 1.01)),
-    "calib_100P": (1.0, (0.99, 1.01)),
-    "calib_143P": (1.0, (0.99, 1.01)),
-    "calib_217P": (1.0, (0.99, 1.01)),
-    "A_pol":      (0.75, (0.0, 1.5)),
-
-    # Foregrounds: CIB, SZ, tSZ×CIB, kSZ
-    "A_cib_217": (30.0, (0.0, 100.0)),
-    "cib_index": (-1.3, (-2.0, -0.5)),
-    "xi_sz_cib": (0.45, (0.0, 3.0)),
-    "A_sz":      (2.5,  (0.0, 15.0)),
-    "ksz_norm":  (1.6,  (0.0, 15.0)),
-
-    # Poisson point sources
-    "ps_A_100_100": (185.0, (50.0, 300.0)),
-    "ps_A_143_143": (72.0,  (20.0, 150.0)),
-    "ps_A_143_217": (59.0,  (20.0, 150.0)),
-    "ps_A_217_217": (151.0, (50.0, 300.0)),
-
-    # Galactic dust TT @545 template
-    "gal545_A_100":      (8.6,  (0.0, 200.0)),
-    "gal545_A_143":      (10.6, (0.0, 200.0)),
-    "gal545_A_143_217":  (23.5, (0.0, 200.0)),
-    "gal545_A_217":      (91.9, (0.0, 200.0)),
-
-    # Galactic EE
-    "galf_EE_A_100":      (20.0, (5.0, 50.0)),
-    "galf_EE_A_100_143":  (20.0, (5.0, 50.0)),
-    "galf_EE_A_100_217":  (20.0, (5.0, 50.0)),
-    "galf_EE_A_143":      (20.0, (5.0, 50.0)),
-    "galf_EE_A_143_217":  (20.0, (5.0, 50.0)),
-    "galf_EE_A_217":      (20.0, (5.0, 50.0)),
-    "galf_EE_index":      (0.0,  (-5.0, 5.0)),
-
-    # Galactic TE
-    "galf_TE_A_100":      (20.0, (5.0, 50.0)),
-    "galf_TE_A_100_143":  (20.0, (5.0, 50.0)),
-    "galf_TE_A_100_217":  (20.0, (5.0, 50.0)),
-    "galf_TE_A_143":      (20.0, (5.0, 50.0)),
-    "galf_TE_A_143_217":  (20.0, (5.0, 50.0)),
-    "galf_TE_A_217":      (20.0, (5.0, 50.0)),
-    "galf_TE_index":      (0.0,  (-5.0, 5.0)),
-
-    # End-to-end EE noise
-    "A_cnoise_e2e_100_100_EE": (5.0, (0.0, 10.0)),
-    "A_cnoise_e2e_143_143_EE": (5.0, (0.0, 10.0)),
-    "A_cnoise_e2e_217_217_EE": (5.0, (0.0, 10.0)),
-
-    # Spurious beam leakage (TT)
-    "A_sbpx_100_100_TT": (1.0, (0.0, 3.0)),
-    "A_sbpx_143_143_TT": (1.0, (0.0, 3.0)),
-    "A_sbpx_143_217_TT": (1.0, (0.0, 3.0)),
-    "A_sbpx_217_217_TT": (1.0, (0.0, 3.0)),
-
-    # Spurious beam leakage (EE)
-    "A_sbpx_100_100_EE": (1.0, (0.0, 3.0)),
-    "A_sbpx_100_143_EE": (1.0, (0.0, 3.0)),
-    "A_sbpx_100_217_EE": (1.0, (0.0, 3.0)),
-    "A_sbpx_143_143_EE": (1.0, (0.0, 3.0)),
-    "A_sbpx_143_217_EE": (1.0, (0.0, 3.0)),
-    "A_sbpx_217_217_EE": (1.0, (0.0, 3.0)),
+    n: (v[0], v[1]) for n, v in PLANCK_NUISANCE_SAMPLED.items()
 }
 
+# Sampled nuisances of plik TT (15) and plik TTTEEE (21)
 PLANCK_TT_ONLY_NUISANCE: Set[str] = {
-    "A_planck",
-    "calib_100T", "calib_217T",
-    "A_sbpx_100_100_TT","A_sbpx_143_143_TT",
-    "A_sbpx_143_217_TT","A_sbpx_217_217_TT",
-    "A_cib_217","cib_index","xi_sz_cib","A_sz","ksz_norm",
-    "ps_A_100_100","ps_A_143_143","ps_A_143_217","ps_A_217_217",
-    "gal545_A_100","gal545_A_143","gal545_A_143_217","gal545_A_217",
+    "A_planck", "calib_100T", "calib_217T",
+    "A_cib_217", "xi_sz_cib", "A_sz", "ksz_norm",
+    "ps_A_100_100", "ps_A_143_143", "ps_A_143_217", "ps_A_217_217",
+    "gal545_A_100", "gal545_A_143", "gal545_A_143_217", "gal545_A_217",
 }
 
-PLANCK_TTTEEE_NUISANCE: Set[str] = (
-    set(PLANCK_NUISANCE_DEFAULTS.keys())
-    - {"calib_100P","calib_143P","calib_217P"}
-    | {"calib_100P","calib_143P","calib_217P","A_pol"}
-)
+PLANCK_TTTEEE_NUISANCE: Set[str] = set(PLANCK_NUISANCE_SAMPLED)
+
+
+def planck_sampled_nuisances(tag: str) -> Set[str]:
+    """Planck nuisance parameters sampled for one Kosmulator CMB tag (A_planck is shared)."""
+    if tag == "CMB_hil":
+        return set(PLANCK_TTTEEE_NUISANCE)
+    if tag == "CMB_hil_TT":
+        return set(PLANCK_TT_ONLY_NUISANCE)
+    if tag in ("CMB_lowl", "CMB_lensing"):
+        return {"A_planck"}
+    return set()
 
 
 # Size of each Planck likelihood's data vector (bins or multipoles fitted), read from the

@@ -394,12 +394,16 @@ def find_polished_mle(
     candidate_starts: list[dict[str, float]] | None = None,
     restrictions: dict | None = None,
     coupled_restrictions: list | None = None,
+    penalty_fn=None,
 ) -> tuple[dict[str, float], float]:
     """
     Find the Maximum Likelihood Estimate (MLE) by polishing
     the posterior median with Nelder-Mead simplex minimization.
     Points outside the prior box or failing the model's restrictions (the same
     checks as log_prior_all, e.g. n < 0.5 for f1CDM_v) are rejected.
+    penalty_fn(p) is added to the chi^2 being minimised (the Planck nuisance priors,
+    so calibrations and foregrounds stay where their priors put them); the value
+    returned includes it.
     """
     p_names = list(params_dict_median.keys())
     x0 = np.array([params_dict_median[p] for p in p_names], dtype=float)
@@ -421,6 +425,8 @@ def find_polished_mle(
                 return 1e12
         try:
             val, _ = compute_chi2_fn(p_candidate)
+            if penalty_fn is not None:
+                val = val + float(penalty_fn(p_candidate))
             if np.isfinite(val) and abs(val) < 1e9:
                 return float(val)
         except Exception:
@@ -700,11 +706,12 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 candidate_starts= candidate_starts_list,
                 restrictions=CONFIG[model_name].get("restrictions") or {},
                 coupled_restrictions=CONFIG[model_name].get("coupled_restrictions") or [],
-
+                penalty_fn=(SP.planck_nuisance_prior_chi2 if has_cmb_group else None),
             )
 
-            # Re-evaluate once at the polished minimum to fetch exact N data points
-            _, num_data_points_total = _compute_chi2_total(param_dict)
+            # Re-evaluate once at the polished point: the data chi^2 (without the Planck
+            # nuisance priors used in the polish) and the exact N data points
+            chi_squared_total, num_data_points_total = _compute_chi2_total(param_dict)
 
             if num_data_points_total <= 0:
                 logger.error(

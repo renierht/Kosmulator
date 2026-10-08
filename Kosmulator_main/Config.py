@@ -1127,41 +1127,13 @@ def create_config(
     # ----------------------------------------------------------------------
     flat_obs = {o for grp in observation for o in grp}
     if {"CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lensing"} & flat_obs:
-        try:
-            # Lazy import to avoid loading clik when not needed
-            from Kosmulator_main.Class_run import (
-                get_clik_hil,
-                get_clik_hilTT,
-                get_clik_lowl,
-                get_clik_lensing,
-                quiet_cstdio,
-            )
-            names: set[str] = set()
-            if "CMB_hil" in flat_obs:
-                with quiet_cstdio():
-                    names |= set(get_clik_hil().get_extra_parameter_names())
-            if "CMB_hil_TT" in flat_obs:
-                with quiet_cstdio():
-                    names |= set(get_clik_hilTT().get_extra_parameter_names())
-            if "CMB_lowl" in flat_obs:
-                with quiet_cstdio():
-                    names |= set(get_clik_lowl().get_extra_parameter_names())
-            if "CMB_lensing" in flat_obs:
-                with quiet_cstdio():
-                    names |= set(get_clik_lensing().get_extra_parameter_names())
-        except Exception:
-            # If clik isn't available, fall back to our default nuisance table
-            names = set()
-
-        # Minimum safe set: if clik didn’t return anything, use the default
-        defaults = set(PLANCK_NUISANCE_DEFAULTS.keys())
-        if not names:
-            names = defaults
-        else:
-            # Always allow A_planck as a special case
-            if "A_planck" in defaults:
-                names.add("A_planck")
-
+        # Sampled Planck nuisances (constants.planck_sampled_nuisances: Planck's baseline
+        # treatment); the fixed ones never get a prior. Not asked from clik here: at this
+        # point only the lensing file has a default path, so the answer depended on which
+        # likelihoods the run used.
+        names: set[str] = set()
+        for o in flat_obs:
+            names |= K.planck_sampled_nuisances(o)
         _inject_planck_nuisance_defaults(reference_values, prior_limits, sorted(names))
 
     # Official JLA: default priors and starting values for alpha_JLA, beta_JLA
@@ -1440,30 +1412,16 @@ def create_config(
 
         def _nuisance_allowlist_for_group(obs_grp: list[str]) -> set[str]:
             """
-            For a given obs group, build the allowed set of Planck nuisance
-            parameters, based on:
-              - High-level policy (TT-only vs TTTEEE vs lowl vs lensing-only).
-              - What clik *actually* exposes for that combination.
+            Planck nuisance parameters sampled for this group: the union over its Planck
+            likelihoods (constants.planck_sampled_nuisances). This used to be intersected
+            with the names clik reported, but at configuration time only the lensing file
+            could be opened, so a group with CMB_hil and CMB_lensing kept A_planck only and
+            plik ran with every foreground amplitude at 0.
             """
-            # Choose base allowlist by combo (policy-driven)
-            if ("CMB_hil_TT" in obs_grp) and ("CMB_hil" not in obs_grp):
-                base = set(PLANCK_TT_ONLY_NUISANCE)
-                base.add("A_planck")  # ✅ ensure A_planck is never pruned for TT-only combos
-            elif ("CMB_hil" in obs_grp):
-                base = PLANCK_TTTEEE_NUISANCE   # TTTEEE: keep EE/TE & P-cal terms
-            elif ("CMB_lowl" in obs_grp):
-                base = _cmb_extra_names_for("CMB_lowl")  # usually empty/minimal
-            elif ("CMB_lensing" in obs_grp):
-                base = set()  # lensing 4pt exposes no sampler nuisances
-            else:
-                base = set()
-
-            # Intersect with what clik reports for the group
-            clik_reported = set()
+            allow: set[str] = set()
             for o in obs_grp:
-                clik_reported |= _cmb_extra_names_for(o)
-
-            return (set(base) & clik_reported) if clik_reported else set(base)
+                allow |= K.planck_sampled_nuisances(o)
+            return allow
 
         # Make a superset for safe membership tests
         ALL_PLANCK_NUISANCE = (

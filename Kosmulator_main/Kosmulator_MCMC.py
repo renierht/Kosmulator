@@ -259,6 +259,18 @@ def log_prior_all(theta_batch: np.ndarray, CONFIG: Dict[str, Any], obs_index: in
         mask = (theta_batch[:, i] < low) | (theta_batch[:, i] > high)
         lp[mask] = -np.inf
 
+    # 1b) Gaussian priors of the Planck nuisance parameters (calibrations, dust
+    #     amplitudes) and the SZ prior on ksz_norm + 1.6 A_sz, as in Planck's baseline
+    #     and Cobaya (constants.PLANCK_GAUSSIAN_PRIORS, PLANCK_SZ_PRIOR)
+    for i, p in enumerate(params):
+        g = K.PLANCK_GAUSSIAN_PRIORS.get(p)
+        if g is not None:
+            lp += -0.5 * ((theta_batch[:, i] - g[0]) / g[1]) ** 2
+    if ("ksz_norm" in params) and ("A_sz" in params):
+        c_sz, mu_sz, sig_sz = K.PLANCK_SZ_PRIOR
+        sz = theta_batch[:, params.index("ksz_norm")] + c_sz * theta_batch[:, params.index("A_sz")]
+        lp += -0.5 * ((sz - mu_sz) / sig_sz) ** 2
+
     # 2) per-parameter restrictions (1D predicates)
     restr = CONFIG.get("restrictions", {})
     for i, p in enumerate(params):
