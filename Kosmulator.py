@@ -148,7 +148,7 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "q0": (-0.8, -0.01),
     "q1": (-0.75, 1.0),
     "beta": (0.01, 5.0),
-    "tau_reio": (0.04, 0.09),
+    "tau_reio": (0.01, 0.8),      # Planck 2018's range; (0.04, 0.09) cut Planck's tau at about 2 sigma
     "Omega_dh^2": (0.05, 0.2),
     "Omega_bh^2": (0.015, 0.031),
     "ln10^10_As": (2.5, 3.5),
