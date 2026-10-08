@@ -39,6 +39,8 @@ from Kosmulator_main.constants import (
     OBSERVATIONS_BASE,
     BBN_GRID_RELATIVE,
     PLANCK_NUISANCE_DEFAULTS,
+    CMB_CLASS_LMAX,
+    CMB_SPECTRA_CACHE_SIZE,
     BBN_DH_REF,
     BBN_DH_OMEGA_B_REF,
     BBN_DH_SLOPE,
@@ -96,6 +98,11 @@ TCMB2 = _T_CMB_uK ** 2               # (µK)^2
 
 # Simple per-process cache for theory Cℓs
 _CMB_THEORY_CACHE: Dict[str, Any] = {"key": None, "cls": None}
+
+# Lensed spectra of the last CMB_SPECTRA_CACHE_SIZE points (get_cmb_spectra), keyed on
+# the model and the parameters other than Planck nuisance parameters
+from collections import OrderedDict as _OrderedDict
+_CMB_SPECTRA: "_OrderedDict[tuple, Optional[Dict[str, np.ndarray]]]" = _OrderedDict()
 _classy_cache_sp = None             # reusable low-ℓ CLASS instance
 
 # -----------------------------------------------------------------------------
@@ -365,6 +372,48 @@ def _get_cls_from_model(
 
 
 
+def _spectra_key(pd: Dict[str, float], model_name: str) -> tuple:
+    """Cache key: the model and every numeric parameter except Planck nuisances."""
+    from Kosmulator_main import constants as _K
+    skip = set(getattr(_K, "PLANCK_NUISANCE_NAMES", ())) | set(PLANCK_NUISANCE_DEFAULTS)
+    items = []
+    for k, v in pd.items():
+        if k in skip:
+            continue
+        try:
+            items.append((k, float(v)))
+        except (TypeError, ValueError):
+            continue
+    return (model_name, tuple(sorted(items)))
+
+
+def get_cmb_spectra(pd: Dict[str, float], model_name: str) -> Optional[Dict[str, np.ndarray]]:
+    """
+    Lensed C_l (tt, ee, te, bb, pp; dimensionless, l = 0..CMB_CLASS_LMAX) for this point.
+
+    One CLASS run serves every CMB likelihood of a group: the high-l, low-l and lensing
+    likelihoods take their slices from the same spectra, and the last
+    CMB_SPECTRA_CACHE_SIZE points are kept, so a point is computed once whatever order
+    the likelihoods are called in. Uses the model's <model>_CMB helper (mode "cmb"), or
+    the generic CLASS call for models without one. None if CLASS failed or the helper
+    rejected the point.
+    """
+    key = _spectra_key(pd, model_name)
+    if key in _CMB_SPECTRA:
+        _CMB_SPECTRA.move_to_end(key)
+        return _CMB_SPECTRA[key]
+    if getattr(UDM, f"{model_name}_CMB", None) is not None:
+        cl = _get_cls_from_model(pd, model_name, mode="cmb")
+    else:
+        cl = _compute_cls_cached(pd, Lmax=CMB_CLASS_LMAX, mode="cmb", model_name=model_name)
+    if cl is not None and not isinstance(cl, dict):
+        cl = None
+    _CMB_SPECTRA[key] = cl
+    while len(_CMB_SPECTRA) > max(1, int(CMB_SPECTRA_CACHE_SIZE)):
+        _CMB_SPECTRA.popitem(last=False)
+    return cl
+
+
 # -----------------------------------------------------------------------------
 # Planck high-ℓ TTTEEE likelihood
 # -----------------------------------------------------------------------------
@@ -408,11 +457,11 @@ def cmb_hil_loglike(pd: Dict[str, float], model_name: str, floor: float = -1e10)
     nEE = _n_ell(lEE)
     nTE = _n_ell(lTE)
 
-    # 2) Theory Cℓ from the user model, as for TT-only
+    # 2) Theory Cℓ: the point's single lensed CLASS run (shared with low-l and lensing)
     try:
-        cl = _get_cls_from_model(pd, model_name, mode="hil")
+        cl = get_cmb_spectra(pd, model_name)
     except Exception as e:
-        logger.error("cmb_hil_loglike: _get_cls_from_model failed: %s", e)
+        logger.error("cmb_hil_loglike: get_cmb_spectra failed: %s", e)
         return float(floor)
 
     # CLASS returns None for numerically invalid proposals. Treat those points
@@ -528,9 +577,9 @@ def cmb_hilTT_loglike(pd: Dict[str, float], model_name: str) -> float:
     lmax = int(lmax)
     need = lmax + 1  # ℓ = 0..lmax
 
-    # 2) Theory TT in µK^2
+    # 2) Theory TT in µK^2 (the point's single lensed CLASS run)
     try:
-        cl = _get_cls_from_model(pd, model_name, mode="hil")
+        cl = get_cmb_spectra(pd, model_name)
     except Exception as e:
         logger.warning("cmb_hilTT_loglike: theory failed (%s). Returning sentinel.", e)
         return -1e10
@@ -693,7 +742,7 @@ def cmb_lensing_loglike(pd: Dict[str, float], model_name: str) -> float:
     # ------------------------------------------------------------------
     # 3. Compute theory Cℓ up to at least φφ(Lpp_req)
     # ------------------------------------------------------------------
-    cl = _compute_cls_cached(pd, Lmax=Lpp_req, mode="lensing")
+    cl = get_cmb_spectra(pd, model_name)
     if (cl is None) or ("pp" not in cl):
         logger.warning("cmb_lensing_loglike: theory Cl computation failed; returning sentinel")
         return -1e10
@@ -835,9 +884,11 @@ def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
             model_name, e,
         )
 
-    # Ask for a low-ℓ CMB setup
+    # Low-l EE from the point's single lensed CLASS run. A separate short run at
+    # l_max_scalars = 31 (the old "lowl" mode) is unlensed and 2 - 45% low in TT and up
+    # to 8% low in EE near l = 29; the lensed run is right to 0.06%.
     try:
-        cl = _get_cls_from_model(pd, model_name, mode="lowl")
+        cl = get_cmb_spectra(pd, model_name)
     except Exception:
         return float(-1e10)
 

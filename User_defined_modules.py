@@ -436,7 +436,7 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
     else:
         output_str = "tCl,pCl,lCl"
         class_params = {
-            "l_max_scalars": 2509,  # enough for Planck high-ℓ
+            "l_max_scalars": _K.CMB_CLASS_LMAX,  # one run for Planck high-l, low-l and lensing
             "lensing": "yes",
         }
 
@@ -498,7 +498,7 @@ def f1CDM_v_CMB(p: dict, mode: str = "hil"):
 
     class_params = {
         "output": "tCl,pCl,lCl" if not is_lowl else "tCl,pCl",
-        "l_max_scalars": 2509 if not is_lowl else 31,
+        "l_max_scalars": _K.CMB_CLASS_LMAX if not is_lowl else 31,
         "lensing": "yes" if not is_lowl else "no",
         "n_s": float(p["n_s"]),
         "h": float(p["H_0"]) / 100.0,
@@ -568,7 +568,7 @@ def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
     else:
         output_str = "tCl,pCl,lCl"
         class_params = {
-            "l_max_scalars": 2509,
+            "l_max_scalars": _K.CMB_CLASS_LMAX,
             "lensing": "yes"
         }
 

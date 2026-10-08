@@ -401,6 +401,17 @@ def set_engine_overrides(
 
 
 # ======================================================================
+# 6a. CMB theory spectra
+# One lensed CLASS run per point serves every CMB likelihood of a group (high-l, low-l,
+# lensing). l_max_scalars = 3000: at 2509, lensed TT is 0.5% low at l = 2500 against
+# l_max 4000; at 3000 it is 0.05% (about 2.05 s against 1.83 s per point). The last
+# CMB_SPECTRA_CACHE_SIZE points are kept per process.
+# ======================================================================
+
+CMB_CLASS_LMAX: int = 3000
+CMB_SPECTRA_CACHE_SIZE: int = 64
+
+# ======================================================================
 # 6. Planck CMB nuisance parameters (centralised here)
 # These give default true values and prior ranges for CMB runs.
 # ======================================================================
