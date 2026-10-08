@@ -143,6 +143,31 @@ def _toolchain_sig() -> dict:
     }
 
 
+def _source_newer_than(model_dir: str, artifact: str) -> Optional[str]:
+    """First build-relevant source (the files _source_tree_hash reads) that is newer than
+    the built classy `artifact`, or None. A newer source means the build is stale."""
+    t_built = os.path.getmtime(artifact)
+    for extra in ("Makefile", os.path.join("python", "setup.py")):
+        p = os.path.join(model_dir, extra)
+        if os.path.exists(p) and os.path.getmtime(p) > t_built:
+            return p
+    for root in ("source", "tools", "external", "include", "python"):
+        r = os.path.join(model_dir, root)
+        if not os.path.isdir(r):
+            continue
+        for dp, _, fns in os.walk(r):
+            for fn in sorted(fns):
+                if not fn.endswith((".c", ".h", ".cc", ".cpp", ".hpp", ".py", ".txt")):
+                    continue
+                fp = os.path.join(dp, fn)
+                try:
+                    if os.path.getmtime(fp) > t_built:
+                        return fp
+                except OSError:
+                    continue
+    return None
+
+
 def _source_tree_hash(model_dir: str) -> str:
     """Stable hash of all build-relevant sources for this CLASS model."""
     h = hashlib.sha256()
@@ -352,8 +377,11 @@ def _build_python_extension(model_dir: str) -> None:
     _ensure_libclass(str(model_dir_path))
     subprocess.run(["make", "-C", str(model_dir_path), "libclass.a"], check=True)
     _strip_mvec_from_setup(str(model_dir_path / "python"))
+    # --force: classy links libclass.a, which setup.py does not list as a dependency, so
+    # without it build_ext sees classy.pyx unchanged, keeps the old in-place classy*.so and
+    # a change to the C sources never reaches Python
     subprocess.run(
-        [sys.executable, "setup.py", "build_ext", "--inplace"],
+        [sys.executable, "setup.py", "build_ext", "--inplace", "--force"],
         cwd=str(model_dir_path / "python"),
         check=True,
     )
@@ -501,7 +529,8 @@ def ensure_class_ready(
     """
     Ensure the correct classy for `model_name` is loaded.
 
-    - Cache key includes: source tree, Python ABI, toolchain/libc.
+    - Cache key includes: source tree, Python ABI (and NumPy major version), toolchain/libc.
+    - On a cache miss an in-tree build is used only if it is newer than its sources.
     - Rank 0 rebuilds behind a lock; workers wait for the artifact to appear.
     - If the same model+signature is already active in this process, this is a no-op.
     """
@@ -537,10 +566,22 @@ def ensure_class_ready(
                 e,
             )
 
-        # Try existing model-local build (pre-cache behaviour)
+    # Try the existing in-tree build (pre-cache behaviour), but only if it is newer than
+    # every source it is built from: after a source edit there is no cache entry for the
+    # new hash, and an older in-tree build must not be taken (and cached) as the new one
     if not force:
         try:
             local_so = find_classy_so(model_name)
+            newer = _source_newer_than(model_dir, local_so)
+            if newer:
+                msg = (f"[CLASS] In-tree build for {model_name} is older than "
+                       f"{os.path.relpath(newer, model_dir)}; "
+                       f"{'not using it (no_rebuild)' if no_rebuild else 'rebuilding'}")
+                if announce:
+                    print(msg, flush=True)
+                else:
+                    logger.info(msg)
+                raise RuntimeError(msg)
             load_classy_so(local_so, model_name, sig_hash)
             from classy import Class  # type: ignore
             _ = Class()
