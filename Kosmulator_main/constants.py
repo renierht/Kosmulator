@@ -434,3 +434,8 @@ PLANCK_TTTEEE_NUISANCE: Set[str] = (
     - {"calib_100P","calib_143P","calib_217P"}
     | {"calib_100P","calib_143P","calib_217P","A_pol"}
 )
+
+
+# WAIC: the draws used for the pointwise log-likelihood matrix (at most 1000) are picked
+# with this seed, so a rerun of the statistics gives the same WAIC
+WAIC_SUBSAMPLE_SEED: int = 20260108

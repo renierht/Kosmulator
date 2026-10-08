@@ -31,6 +31,7 @@ from scipy.stats import chi2, norm #used by significance
 
 import User_defined_modules as UDM
 from Kosmulator_main import utils as U
+from Kosmulator_main import constants as K
 from Kosmulator_main.constants import GAMMA_FS8_SINGLETON
 from Kosmulator_main import Class_run as CR
 
@@ -801,7 +802,9 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                     all_rows = []
                     N_total = obs_samples_for_waic.shape[0]
                     S = 1000
-                    shared_idx = np.random.choice(N_total, size = min(S, N_total), replace = False)
+                    # seeded: the same draws, so the same WAIC, on every rerun
+                    shared_idx = np.random.default_rng(K.WAIC_SUBSAMPLE_SEED).choice(
+                        N_total, size=min(S, N_total), replace=False)
                     for single_obs, single_type in zip(obs_entry, obs_types):
                         if single_obs not in data:
                             continue

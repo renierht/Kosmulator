@@ -2108,7 +2108,8 @@ def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
 
     N_total = flat_samples.shape[0]
     if idx is None:
-        idx = np.random.choice(N_total, size=min(S, N_total), replace=False)
+        from Kosmulator_main import constants as _K
+        idx = np.random.default_rng(_K.WAIC_SUBSAMPLE_SEED).choice(N_total, size=min(S, N_total), replace=False)
     draws   = flat_samples[idx]
     params  = CONFIG["parameters"][obs_index]
 
