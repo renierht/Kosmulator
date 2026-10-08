@@ -739,6 +739,17 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 num_params -= len(unconstrained_here)
                 notes.append(f"{', '.join(unconstrained_here)} sampled but unconstrained "
                              "(uncalibrated SNe: the offset absorbs it); its posterior is the prior, not counted in k")
+            # BAO without an early-time calibrator and r_d not sampled: r_d is the fiducial
+            # value, so these data measure H_0 r_d, and H_0 is that product over 147.5 Mpc
+            # (H_0 alone enters only through the radiation term, Omega_r = omega_r / h^2)
+            _bao = {"BAO", "DESI_DR1", "DESI_DR2"}
+            if (any(o in _bao for o in obs_entry)
+                    and not any(str(o).startswith(("BBN", "CMB")) for o in obs_entry)
+                    and "r_d" not in param_dict and "H_0" in param_dict):
+                _rd_fid = float((CONFIG[model_name].get("rd_policy") or {}).get("fixed_value", K.R_D_SINGLETON))
+                notes.append(f"H_0 at the fiducial r_d = {_rd_fid:g} Mpc (no early-time calibrator): "
+                             f"these data measure H_0 r_d, h r_d = {param_dict['H_0'] / 100.0 * _rd_fid:.2f} Mpc "
+                             "at the best fit (H_0 alone only through the radiation term)")
             dof = num_data_points_total - num_params
 
             if dof <= 0:
