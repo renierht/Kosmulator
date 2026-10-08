@@ -105,6 +105,7 @@ _OBS_ORDER = [
     "BBN_PryMordial",
     "CC",
     "CMB_hil",
+    "CMB_hil_TT",
     "CMB_lensing",
     "CMB_lowl",
     "DESI_DR1",
