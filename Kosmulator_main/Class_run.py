@@ -143,6 +143,18 @@ def _toolchain_sig() -> dict:
     }
 
 
+# Files a CLASS build reads, for the cache key and the staleness test. classy.pyx and
+# cclassy.pxd are sources; python/classy.c or .cpp is what Cython writes from classy.pyx
+# during the build (git-ignored, with absolute paths inside), so it is output, not source.
+_SOURCE_SUFFIXES = (".c", ".h", ".cc", ".cpp", ".hpp", ".py", ".txt", ".pyx", ".pxd")
+_GENERATED_SOURCES = (os.path.join("python", "classy.c"), os.path.join("python", "classy.cpp"))
+
+
+def _is_build_source(model_dir: str, fp: str) -> bool:
+    """True for a file the CLASS build reads (not one it writes)."""
+    return fp.endswith(_SOURCE_SUFFIXES) and os.path.relpath(fp, model_dir) not in _GENERATED_SOURCES
+
+
 def _source_newer_than(model_dir: str, artifact: str) -> Optional[str]:
     """First build-relevant source (the files _source_tree_hash reads) that is newer than
     the built classy `artifact`, or None. A newer source means the build is stale."""
@@ -155,11 +167,12 @@ def _source_newer_than(model_dir: str, artifact: str) -> Optional[str]:
         r = os.path.join(model_dir, root)
         if not os.path.isdir(r):
             continue
-        for dp, _, fns in os.walk(r):
+        for dp, dns, fns in os.walk(r):
+            dns.sort()
             for fn in sorted(fns):
-                if not fn.endswith((".c", ".h", ".cc", ".cpp", ".hpp", ".py", ".txt")):
-                    continue
                 fp = os.path.join(dp, fn)
+                if not _is_build_source(model_dir, fp):
+                    continue
                 try:
                     if os.path.getmtime(fp) > t_built:
                         return fp
@@ -185,11 +198,12 @@ def _source_tree_hash(model_dir: str) -> str:
         r = os.path.join(model_dir, root)
         if not os.path.isdir(r):
             continue
-        for dp, _, fns in os.walk(r):
+        for dp, dns, fns in os.walk(r):
+            dns.sort()   # same order on every file system
             for fn in sorted(fns):
-                if not fn.endswith((".c", ".h", ".cc", ".cpp", ".hpp", ".py", ".txt")):
-                    continue
                 fp = os.path.join(dp, fn)
+                if not _is_build_source(model_dir, fp):
+                    continue
                 rel = fp[len(model_dir) :].encode()
                 h.update(rel)
                 try:
