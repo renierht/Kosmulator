@@ -254,6 +254,24 @@ def check_installation(
                 )
             )
             clik_required = {name_py}
+            if ok_py:
+                # clipy 0.15's SimAll (CMB_lowl) calls numpy.astype: NumPy >= 2.0, or clipy on JAX.
+                # Not required: CMB_hil, CMB_hil_TT and CMB_lensing work either way.
+                try:
+                    import numpy as _np
+                    import clipy as _cp  # type: ignore
+                    ok_low = hasattr(getattr(_cp, "jnp", _np), "astype")
+                    d_low = f"NumPy {_np.__version__}"
+                except Exception as e:
+                    ok_low, d_low = False, f"{type(e).__name__}: {e}"
+                items.append(
+                    CheckItem(
+                        name="clipy can run CMB_lowl (SimAll)",
+                        ok=ok_low,
+                        detail=d_low,
+                        hint="clipy's SimAll needs NumPy >= 2.0; with older NumPy, CMB_lowl needs clik.",
+                    )
+                )
 
     # CLIKROOT check: only “required” if clik import failed
     if check_clik_env:

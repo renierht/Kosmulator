@@ -44,6 +44,27 @@ except ImportError:
         clik = None
         CLIK_BACKEND = None
 
+
+def clipy_lowl_problem() -> Optional[str]:
+    """Why CMB_lowl (Planck SimAll EE) cannot run through clipy here, or None.
+
+    clipy 0.15's SimAll calls numpy.astype, which NumPy has only from 2.0 (clipy
+    declares numpy >= 1.23.5). clipy on JAX is not affected (jax.numpy has astype).
+    Nothing in clipy is changed; this only reads which array module it uses.
+    """
+    if CLIK_BACKEND != "clipy":
+        return None
+    import numpy as _np
+    arrays = getattr(clik, "jnp", _np)   # the array module clipy computes with
+    if hasattr(arrays, "astype"):
+        return None
+    return (
+        f"CMB_lowl through clipy needs NumPy >= 2.0 (clipy {getattr(clik, '__version__', '?')}'s "
+        f"SimAll calls numpy.astype); this environment has NumPy {_np.__version__}. "
+        "Install clik, or use NumPy >= 2.0."
+    )
+
+
 import sysconfig 
 
 from Kosmulator_main import utils as U
@@ -98,10 +119,14 @@ def _first_line(cmd: str) -> str:
 
 def _python_abi_sig() -> dict:
     """Describe the Python ABI relevant to compiled extensions."""
+    import numpy as _np
     return {
         "py": sys.version.split()[0],
         "soabi": sysconfig.get_config_var("SOABI") or "",
         "plat": sysconfig.get_platform(),
+        # classy is compiled against NumPy's C API: a build made under NumPy 1.x does
+        # not import under 2.x, so a new NumPy major version means a new build
+        "numpy": _np.__version__.split(".")[0],
     }
 
 

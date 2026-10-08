@@ -80,7 +80,7 @@ while others are required only when specific observational datasets are used.
   Used to compute background and perturbation quantities and CMB power spectra.
 - **Planck likelihood code: CLIK or clipy**  
   Required for Planck CMB likelihoods (TT, TTTEEE, low-ℓ, lensing).  
-  The easiest route is clipy, the pure-Python implementation of CLIK by K. Benabed and L. Balkenhol (https://github.com/benabed/clipy): `pip install "clipy-like>=0.15"`. Kosmulator uses CLIK when it is installed and clipy otherwise; both read the same `.clik` folders, and the run log records which one was used.  
+  The easiest route is clipy, the pure-Python implementation of CLIK by K. Benabed and L. Balkenhol (https://github.com/benabed/clipy): `pip install "clipy-like>=0.15"`. Kosmulator uses CLIK when it is installed and clipy otherwise; both read the same `.clik` folders, and the run log records which one was used. clipy 0.15's low-ℓ EE likelihood (SimAll, tag `CMB_lowl`) needs NumPy 2.0 or newer; with an older NumPy, Kosmulator stops at start-up and asks for CLIK for that tag.  
   The corresponding `.clik` likelihood directories must be available locally.
 - **Astropy** 
 - **Cython** 

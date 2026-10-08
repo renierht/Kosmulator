@@ -516,6 +516,10 @@ def run_mcmc_for_all_models(
                 "CMB likelihoods need clik or clipy. Easiest: pip install \"clipy-like>=0.15\" "
                 "(pure Python); or build CLIK as in the README's advanced installation."
             )
+        if need_lowl:
+            problem = CR.clipy_lowl_problem()
+            if problem:
+                raise ImportError(problem)
         if rank == 0:
             log.info("Planck likelihood code: %s (%s)", CR.CLIK_BACKEND, getattr(CR.clik, "__file__", ""))
 
