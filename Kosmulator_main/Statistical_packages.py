@@ -962,6 +962,51 @@ def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
 
 
 # -----------------------------------------------------------------------------
+# Planck low-ℓ TT likelihood (Commander)
+# -----------------------------------------------------------------------------
+
+def cmb_lowlTT_loglike(pd: Dict[str, float], model_name: str) -> float:
+    """
+    Planck 2018 low-ℓ TT likelihood (Commander, ℓ = 2 - 29; Planck's "lowl").
+    TT from the point's single lensed CLASS run, in µK², plus A_planck.
+    Returns log-likelihood; bad points get -1e10.
+    """
+    try:
+        CR.ensure_class_ready(model_name)
+    except Exception as e:
+        logger.warning("ensure_class_ready(%s) failed (%s); proceeding anyway", model_name, e)
+    try:
+        cl = get_cmb_spectra(pd, model_name)
+    except Exception:
+        return float(-1e10)
+    if cl is None or (not isinstance(cl, dict)) or ("tt" not in cl):
+        return float(-1e10)
+
+    like = CR.get_clik_lowlTT()
+    try:
+        lmax_tt = int(list(like.get_lmax())[0])
+    except Exception:
+        lmax_tt = 29
+    need = lmax_tt + 1
+    tt = np.asarray(cl["tt"], float)
+    tt = np.pad(tt, (0, need - tt.size), mode="constant") if tt.size < need else tt[:need]
+    try:
+        raw_names = like.get_extra_parameter_names()
+        nuis_names = [n.decode() if isinstance(n, (bytes, bytearray)) else str(n) for n in raw_names]
+    except Exception:
+        nuis_names = []
+    nuis = np.array([planck_nuisance_value(n, pd) for n in nuis_names], dtype=np.float64)
+    v = np.ascontiguousarray(np.concatenate([tt * TCMB2, nuis]), dtype=np.float64)
+    try:
+        with U.quiet_cstdio():
+            out = like(v)
+        return float(np.asarray(out).reshape(-1)[0])
+    except Exception as e:
+        logger.error("cmb_lowlTT_loglike: clik evaluation failed: %s", e)
+        return -np.inf
+
+
+# -----------------------------------------------------------------------------
 # Generic background / χ² helpers (CC, Pantheon+, etc.)
 # -----------------------------------------------------------------------------
 

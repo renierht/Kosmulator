@@ -83,6 +83,7 @@ _clik_path_lowl: str | None = None
 _clik_path_lensing: str | None = None
 _clik_path_lensing_cmbmarg: str | None = None
 _clik_path_hilTT: str | None = None
+_clik_path_lowlTT: str | None = None
 
 # Per-process clik instances
 _clik_pid: int | None = None
@@ -91,6 +92,7 @@ _clik_instance_lowl: Optional[clik.clik] = None
 _clik_instance_lensing: Optional[clik.clik_lensing] = None
 _clik_instance_lensing_cmbmarg: Optional[clik.clik_lensing] = None
 _clik_hilTT: Optional[clik.clik] = None
+_clik_instance_lowlTT: Optional[clik.clik] = None
 
 # CLASS build signature cache
 _current_class_model: Optional[str] = None
@@ -682,6 +684,7 @@ def init_clik_worker(
     hiltt_path: str | None = None,
     lens_raw_path: str | None = None,
     lens_cmbmarg_path: str | None = None,
+    lowltt_path: str | None = None,
 ) -> None:
     """
     Initialiser for worker processes that need Planck clik likelihoods.
@@ -710,12 +713,14 @@ def init_clik_worker(
         preload_clik_lensing_raw(lens_raw_path)
     if lens_cmbmarg_path:
         preload_clik_lensing_cmbmarg(lens_cmbmarg_path)
+    if lowltt_path:
+        preload_clik_lowlTT(lowltt_path)
 
 
 def _ensure_process_local() -> None:
     """Reset per-process clik instances when pid changes (e.g. after fork)."""
     global _clik_pid, _clik_instance_hil, _clik_instance_lowl, _clik_instance_lensing
-    global _clik_instance_lensing_cmbmarg, _clik_hilTT
+    global _clik_instance_lensing_cmbmarg, _clik_hilTT, _clik_instance_lowlTT
 
     pid = os.getpid()
     if _clik_pid != pid:
@@ -725,6 +730,7 @@ def _ensure_process_local() -> None:
         _clik_instance_lensing = None
         _clik_instance_lensing_cmbmarg = None
         _clik_hilTT = None
+        _clik_instance_lowlTT = None
 
 
 # ---------------------------------------------------------------------------
@@ -742,6 +748,13 @@ def preload_clik_lowl(path: str) -> None:
     """Preload path for low-ℓ EE likelihood."""
     global _clik_path_lowl
     _clik_path_lowl = U.fast_path_for_clik(path)
+
+
+def preload_clik_lowlTT(path: str) -> None:
+    """Preload path for the low-ℓ TT likelihood (Commander)."""
+    global _clik_path_lowlTT, _clik_instance_lowlTT
+    _clik_path_lowlTT = U.fast_path_for_clik(path)
+    _clik_instance_lowlTT = None
 
 
 def preload_clik_lensing_raw(path: str) -> None:
@@ -801,6 +814,19 @@ def get_clik_lowl():
     with U.quiet_cstdio():
         _clik_instance_lowl = clik.clik(_clik_path_lowl)
     return _clik_instance_lowl
+
+
+def get_clik_lowlTT():
+    """Return cached low-ℓ TT clik instance (Commander, silent)."""
+    global _clik_instance_lowlTT
+    _ensure_process_local()
+    if _clik_instance_lowlTT is not None:
+        return _clik_instance_lowlTT
+    if _clik_path_lowlTT is None:
+        raise RuntimeError("CMB_lowl_TT path not set")
+    with U.quiet_cstdio():
+        _clik_instance_lowlTT = clik.clik(_clik_path_lowlTT)
+    return _clik_instance_lowlTT
 
 
 def get_clik_lensing():

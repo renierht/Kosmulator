@@ -108,6 +108,7 @@ _OBS_ORDER = [
     "CMB_hil_TT",
     "CMB_lensing",
     "CMB_lowl",
+    "CMB_lowl_TT",
     "DESI_DR1",
     "DESI_DR2",
     "f",

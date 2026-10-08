@@ -656,11 +656,14 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
 
                     elif obs_type == "CMB":
                         # N = the likelihood's data-vector size (constants.PLANCK_N_DATA), not
-                        # the multipole count: plik is binned (2289 for TT,TE,EE, where
-                        # l_max - 1 per spectrum gave 7521), SimAll is l = 2 - 29
+                        # the multipole count: plik and plik_lite are binned (2289 / 613 for
+                        # TT,TE,EE, where l_max - 1 per spectrum gave 7521), low-l is l = 2 - 29
                         if obs == "CMB_lowl":
                             chi_total += float(-2.0 * SP.cmb_lowl_loglike(p_eval, model_name))
                             n_points += K.planck_n_data("CMB_lowl")
+                        elif obs == "CMB_lowl_TT":
+                            chi_total += float(-2.0 * SP.cmb_lowlTT_loglike(p_eval, model_name))
+                            n_points += K.planck_n_data("CMB_lowl_TT")
                         elif obs == "CMB_hil":
                             n_points += K.planck_n_data("CMB_hil")
                             chi_total += float(-2.0 * SP.cmb_hil_loglike(p_eval, model_name))
@@ -668,7 +671,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                             n_points += K.planck_n_data("CMB_hil_TT")
                             chi_total += float(-2.0 * float(SP.cmb_hilTT_loglike(p_eval, model_name)))
                         elif obs == "CMB_lensing":
-                            has_primary = any(x in {"CMB_hil", "CMB_hil_TT", "CMB_lowl"} for x in obs_entry)
+                            has_primary = any(x in K.CMB_PRIMARY_TAGS for x in obs_entry)
                             SP.set_lensing_mode("raw" if has_primary else "cmbmarged")
                             n_bins = K.planck_n_data("CMB_lensing", "raw" if has_primary else "cmbmarged")
                             logL, _, note = _stats_lensing_logL_safe(p_eval, model_name)

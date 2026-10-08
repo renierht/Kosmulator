@@ -159,6 +159,7 @@ def main(
     convergence: float,
     pantheonp_mode: str = "PplusSH0ES",
     sample_H0_uncalibrated_SNe: bool = False,
+    cmb_nuisance: str = "baseline",
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -181,6 +182,19 @@ def main(
         force_e=getattr(args, "force_emcee", False),
         mode=getattr(args, "engine_mode", "mixed"),
     )
+
+    # Planck high-l likelihood: plik with Planck's nuisance parameters, or plik_lite.
+    # Set before the config is built (the sampled nuisances and the files depend on it).
+    _mode = str(cmb_nuisance).strip().lower()
+    if _mode not in K.CMB_NUISANCE_MODES:
+        raise ValueError(f"cmb_nuisance must be one of {K.CMB_NUISANCE_MODES}, not {cmb_nuisance!r}")
+    K.CMB_NUISANCE = _mode
+    if _mode == "lite":
+        # figures and tables name the likelihood that was used
+        for _t in ("CMB_hil", "CMB_hil_TT"):
+            _tex, _txt = K.OBS_PRETTY_MAP[_t]
+            if not _txt.endswith(" lite"):
+                K.OBS_PRETTY_MAP[_t] = (_tex + " lite", _txt + " lite")
 
     # ------------------------------------------------------------------
     # 2) Plot settings
@@ -487,12 +501,17 @@ def run_mcmc_for_all_models(
     need_hil     = any("CMB_hil"     in grp for grp in observations)
     need_hilTT   = any("CMB_hil_TT"  in grp for grp in observations)
     need_lowl    = any("CMB_lowl"    in grp for grp in observations)
+    need_lowlTT  = any("CMB_lowl_TT" in grp for grp in observations)
     need_lensing = any("CMB_lensing" in grp for grp in observations)
 
-    # Define ALL paths first
-    hil_path   = os.path.join(K.OBSERVATIONS_BASE, "plik_rd12_HM_v22b_TTTEEE.clik") if need_hil else None
-    hiltt_path = os.path.join(K.OBSERVATIONS_BASE, "plik_rd12_HM_v22_TT.clik")      if need_hilTT else None
-    lowl_path  = os.path.join(K.OBSERVATIONS_BASE, "simall_100x143_offlike5_EE_Aplanck_B.clik") if need_lowl else None
+    # Define ALL paths first (plik or plik_lite: constants.CMB_NUISANCE)
+    def _planck_path(tag: str, needed: bool):
+        return os.path.join(K.OBSERVATIONS_BASE, K.planck_clik_file(tag)) if needed else None
+
+    hil_path    = _planck_path("CMB_hil", need_hil)
+    hiltt_path  = _planck_path("CMB_hil_TT", need_hilTT)
+    lowl_path   = _planck_path("CMB_lowl", need_lowl)
+    lowltt_path = _planck_path("CMB_lowl_TT", need_lowlTT)
     # Lensing files (Config.load_all_data provides both)
     lens_raw     = data.get("CMB_lensing_RAW") if need_lensing else None
     lens_cmbmarg = data.get("CMB_lensing_CMBMARGED") if need_lensing else None
@@ -510,7 +529,7 @@ def run_mcmc_for_all_models(
         )
 
     # Planck likelihood code (clik, or clipy when clik is missing; see Class_run)
-    if need_hil or need_hilTT or need_lowl or need_lensing:
+    if need_hil or need_hilTT or need_lowl or need_lowlTT or need_lensing:
         if CR.clik is None:
             raise ImportError(
                 "CMB likelihoods need clik or clipy. Easiest: pip install \"clipy-like>=0.15\" "
@@ -520,8 +539,24 @@ def run_mcmc_for_all_models(
             problem = CR.clipy_lowl_problem()
             if problem:
                 raise ImportError(problem)
+        # Compiled clik holds one plik_lite likelihood per process ("plik_cmbonly
+        # already initialized"); clipy has no such limit.
+        if K.CMB_NUISANCE == "lite" and need_hil and need_hilTT and CR.CLIK_BACKEND == "clik":
+            raise RuntimeError(
+                "cmb_nuisance = \"lite\" with both CMB_hil and CMB_hil_TT in one run: compiled clik "
+                "can load only one plik_lite likelihood per process. Run them separately, or use "
+                "clipy (pip install \"clipy-like>=0.15\" and make clik unimportable)."
+            )
         if rank == 0:
             log.info("Planck likelihood code: %s (%s)", CR.CLIK_BACKEND, getattr(CR.clik, "__file__", ""))
+            if need_hil or need_hilTT:
+                log.info("Planck high-l likelihood: %s (cmb_nuisance = %s)",
+                         "plik_lite" if K.CMB_NUISANCE == "lite" else "plik", K.CMB_NUISANCE)
+            # Planck's "TT" includes the low-l TT likelihood (Commander)
+            for grp in observations:
+                if ("CMB_hil" in grp or "CMB_hil_TT" in grp) and "CMB_lowl_TT" not in grp:
+                    log.warning("Group %s has Planck high-l without CMB_lowl_TT (Commander, l = 2 - 29); "
+                                "Planck 2018's TT,TE,EE+lowE and TT+lowE combinations include it.", grp)
 
     # Sanity-check clik files early (rank 0 only)
     if rank == 0:
@@ -529,6 +564,7 @@ def run_mcmc_for_all_models(
             ("Plik TTTEEE", hil_path),
             ("Plik TT",     hiltt_path),
             ("SimAll EE",   lowl_path),
+            ("Commander TT", lowltt_path),
             ("Lensing RAW",      lens_raw),
             ("Lensing CMBmarg",  lens_cmbmarg),
         ]:
@@ -542,6 +578,8 @@ def run_mcmc_for_all_models(
         CR.preload_clik_hilTT(hiltt_path)
     if lowl_path:
         CR.preload_clik_lowl(lowl_path)
+    if lowltt_path:
+        CR.preload_clik_lowlTT(lowltt_path)
 
     if lens_raw:
         CR.preload_clik_lensing_raw(lens_raw)
@@ -636,6 +674,7 @@ def run_mcmc_for_all_models(
                         hiltt_path,
                         lens_raw,
                         lens_cmbmarg,
+                        lowltt_path,
                     ),
                 )
             pool_for_model = pool_cache[key]
@@ -671,7 +710,7 @@ def run_mcmc_for_all_models(
                 print("-" * 66)
 
             # One-time CLASS run for CMB pipelines (avoid repeated heavy prep)
-            if not did_class_prep and any(x in obs_set for x in ("CMB_hil", "CMB_hil_TT", "CMB_lensing", "CMB_lowl")):
+            if not did_class_prep and any(x in obs_set for x in K.CMB_TAGS):
                 no_rebuild = str(os.environ.get("KOSM_NO_CLASS_REBUILD", "")).strip().lower() in ("1", "true", "yes", "on")
                 ok = CR.ensure_class_ready(
                     model_name,
@@ -710,9 +749,14 @@ def run_mcmc_for_all_models(
                 config_model=CONFIG[model_name],
                 obs_index=i,
             )  # e.g. "CC+PantheonP_SH0ES" or "CC+PantheonP"
+            # plik_lite chains go to their own folder, so a lite run never loads or
+            # resumes a plik chain of the same group (and the reverse)
+            out_key = key.replace("+", "_")
+            if K.CMB_NUISANCE == "lite" and any(o in ("CMB_hil", "CMB_hil_TT") for o in obs_set):
+                out_key += "_plik_lite"
             output_dir = prepare_output(
                 model_name,
-                key.replace("+", "_"),
+                out_key,
                 suffix,
             )  # .../LCDM_v/CC_PantheonP_SH0ES
 

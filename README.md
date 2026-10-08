@@ -159,6 +159,22 @@ sample_H0_uncalibrated_SNe: bool = False  # see below
 
 Uncalibrated supernovae without BAO/DESI or an H0 anchor (for example `["Pantheon"]`, `["JLA", "DESY5"]` or `["f", "PantheonP"]`; anchors are `CC`, `OHD`, `PantheonPS` and the CMB) do not constrain H_0: the analytically marginalised magnitude offset absorbs 5 log10 H_0. By default H_0 is then not sampled and distances use `reference_values["H_0"]`, which changes no chi^2. With `sample_H0_uncalibrated_SNe = True` H_0 is sampled anyway, so its posterior is the prior. It is not counted in k in either case, so chi^2, AIC, BIC and the degrees of freedom do not depend on the switch.
 
+##### Planck 2018 CMB likelihoods
+| Tag | Likelihood (folder in `Observations/`) | Planck 2018 name |
+|---|---|---|
+| `CMB_hil` | plik TT,TE,EE, ℓ = 30 - 2508 (`plik_rd12_HM_v22b_TTTEEE.clik`); lite: `plik_lite_v22_TTTEEE.clik` | TT,TE,EE |
+| `CMB_hil_TT` | plik TT (`plik_rd12_HM_v22_TT.clik`); lite: `plik_lite_v22_TT.clik` | TT |
+| `CMB_lowl_TT` | Commander TT, ℓ = 2 - 29 (`commander_dx12_v3_2_29.clik`) | lowl |
+| `CMB_lowl` | SimAll EE, ℓ = 2 - 29 (`simall_100x143_offlike5_EE_Aplanck_B.clik`) | lowE |
+| `CMB_lensing` | lensing reconstruction (`smicadx12_..._consext8.clik_lensing`; CMB-marginalised version when no primary CMB is in the group) | lensing |
+
+Planck's "TT,TE,EE+lowE" is `["CMB_hil", "CMB_lowl_TT", "CMB_lowl"]`: Planck's TT includes the low-ℓ TT likelihood, and Kosmulator warns when a group has `CMB_hil` or `CMB_hil_TT` without `CMB_lowl_TT`. The plik_lite and Commander folders come with the Planck baseline likelihood data (`COM_Likelihood_Data-baseline_R3.00`, under `hi_l/plik_lite/` and `low_l/commander/`); copy them into `Observations/`.
+
+```python
+cmb_nuisance: str = "baseline"   # or "lite"
+```
+`"baseline"`: plik, with Planck's 2018 baseline nuisance treatment: 21 parameters sampled for TT,TE,EE (15 for TT) with Planck's Gaussian priors and the SZ prior, the other 26 (polarisation calibrations, EE dust, beam leakage and subpixel terms) fixed at Planck's values. `"lite"`: plik_lite, Planck's foreground-marginalised likelihood, with only `A_planck` (6 + 1 parameters for LCDM; much faster to converge). Lite chains are saved in folders ending in `_plik_lite`, so they never mix with plik chains. With compiled CLIK only one plik_lite likelihood can be open per process, so a lite run cannot contain both `CMB_hil` and `CMB_hil_TT` (clipy has no such limit). For each point all Planck likelihoods take their spectra from one lensed CLASS run (ℓ_max = 3000).
+
 #### Step 4. Execute you MCMC simulation
 Run the script in the terminal:
 ```bash

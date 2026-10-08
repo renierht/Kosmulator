@@ -135,6 +135,11 @@ convergence: float = 0.05
 # choice): H_0 is not sampled and distances use reference_values["H_0"]. True: H_0 is
 # sampled anyway; its posterior is then the prior and it is not counted in k.
 sample_H0_uncalibrated_SNe: bool = False
+# Planck high-l likelihood (CMB_hil, CMB_hil_TT). "baseline": plik, with Planck's nuisance
+# parameters sampled (21 for TTTEEE, 15 for TT) under Planck's priors. "lite": plik_lite,
+# Planck's foreground-marginalised likelihood with A_planck only (6 + 1 parameters for LCDM,
+# much faster to converge; its chains go to folders ending in _plik_lite).
+cmb_nuisance: str = "baseline"
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -241,6 +246,7 @@ def main() -> None:
         burn=burn,
         convergence=convergence,
         sample_H0_uncalibrated_SNe=sample_H0_uncalibrated_SNe,
+        cmb_nuisance=cmb_nuisance,
     )
 
 

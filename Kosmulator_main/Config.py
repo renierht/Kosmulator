@@ -769,21 +769,9 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
             # ------------------
             # Planck CMB paths
             # ------------------
-            elif obs == 'CMB_hil':
-                observation_data[obs] = os.path.join(
-                    K.OBSERVATIONS_BASE, "plik_rd12_HM_v22b_TTTEEE.clik"
-                )
-
-            elif obs == 'CMB_hil_TT':
-                observation_data[obs] = os.path.join(
-                    K.OBSERVATIONS_BASE, "plik_rd12_HM_v22_TT.clik"
-                )
-
-            elif obs == 'CMB_lowl':
-                observation_data[obs] = os.path.join(
-                    K.OBSERVATIONS_BASE,
-                    "simall_100x143_offlike5_EE_Aplanck_B.clik",
-                )
+            elif obs in ('CMB_hil', 'CMB_hil_TT', 'CMB_lowl', 'CMB_lowl_TT'):
+                # plik or plik_lite (constants.CMB_NUISANCE), SimAll EE, Commander TT
+                observation_data[obs] = os.path.join(K.OBSERVATIONS_BASE, K.planck_clik_file(obs))
 
             elif obs == 'CMB_lensing':
                 # We store RAW here; likelihood will decide whether to swap to CMBMARGED
@@ -1118,6 +1106,7 @@ def create_config(
         'CMB_hil':    'CMB',
         'CMB_hil_TT': 'CMB',
         'CMB_lowl':   'CMB',
+        'CMB_lowl_TT':'CMB',
         'CMB_lensing':'CMB',
     }
 
@@ -1126,7 +1115,7 @@ def create_config(
     #    globally (we'll later prune them per group based on clik).
     # ----------------------------------------------------------------------
     flat_obs = {o for grp in observation for o in grp}
-    if {"CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lensing"} & flat_obs:
+    if set(K.CMB_TAGS) & flat_obs:
         # Sampled Planck nuisances (constants.planck_sampled_nuisances: Planck's baseline
         # treatment); the fixed ones never get a prior. Not asked from clik here: at this
         # point only the lensing file has a default path, so the answer depended on which
@@ -1233,7 +1222,7 @@ def create_config(
         def _has_early_calibrator(grp: list[str]) -> bool:
             early = {
                 "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",
-                "CMB_hil", "CMB_hil_TT", "CMB_lowl",
+                *K.CMB_PRIMARY_TAGS,
             }  # note: CMB_lensing excluded by design
             return any(x in early for x in grp)
 
@@ -1251,7 +1240,7 @@ def create_config(
         _no_distance_scale = {"f", "f_sigma_8"}
         _h0_anchors = {
             "CC", "OHD", "PantheonPS",
-            "CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lensing",
+            *K.CMB_TAGS,
         }
 
         def _is_bao_desi_uncalibrated(grp: list[str]) -> bool:
@@ -1280,7 +1269,7 @@ def create_config(
                 if logger:
                     early = {
                         "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",
-                        "CMB_hil", "CMB_hil_TT", "CMB_lowl",
+                        *K.CMB_PRIMARY_TAGS,
                     }
                     calibs = [x for x in obs_grp if x in early]
                     logger.warning(
@@ -1534,6 +1523,13 @@ def Add_required_parameters(
            {H_0, Omega_bh^2, Omega_dh^2} in that group only.
         Non-CMB groups keep the model's native parametrisation (e.g. Omega_m).
     """
+    def _sampled_nuisances(tag: str, lead: tuple = ()) -> list:
+        """Planck nuisances sampled for tag (constants.planck_sampled_nuisances: plik's
+        21 or 15, or A_planck for plik_lite), in a fixed order."""
+        allow = K.planck_sampled_nuisances(tag)
+        order = [*lead, *PLANCK_NUISANCE_DEFAULTS.keys()]
+        return [n for i, n in enumerate(order) if n in allow and n not in order[:i]]
+
     params_map = {
         'BAO': ['H_0', 'r_d'],
         'DESI_DR1': ['H_0', 'r_d'],
@@ -1556,19 +1552,23 @@ def Add_required_parameters(
         'BBN_DH_AlterBBN': ['Omega_bh^2'],
         'BBN_PryMordial': ['Omega_bh^2'],
 
-        # CMB core + nuisance to *sample* (we prune nuisances later)
+        # CMB core + the Planck nuisances to sample (plik or plik_lite: constants.CMB_NUISANCE)
         "CMB_hil": [
             "H_0", "Omega_bh^2", "Omega_dh^2",
             "ln10^10_As", "n_s", "tau_reio",
-            *PLANCK_NUISANCE_DEFAULTS.keys(),
+            *_sampled_nuisances("CMB_hil"),
         ],
         "CMB_hil_TT": [
             "H_0", "Omega_bh^2", "Omega_dh^2",
             "ln10^10_As", "n_s", "tau_reio",
-            "calib_100T", "calib_217T",
-            *PLANCK_NUISANCE_DEFAULTS.keys(),  # pruned later by clik
+            *_sampled_nuisances("CMB_hil_TT", ("calib_100T", "calib_217T")),
         ],
         "CMB_lowl": [
+            "H_0", "Omega_bh^2", "Omega_dh^2",
+            "ln10^10_As", "n_s", "tau_reio",
+            "A_planck",
+        ],
+        "CMB_lowl_TT": [
             "H_0", "Omega_bh^2", "Omega_dh^2",
             "ln10^10_As", "n_s", "tau_reio",
             "A_planck",
@@ -1581,7 +1581,7 @@ def Add_required_parameters(
     }
 
     # CMB datasets that trigger per-group reparametrisation
-    cmb_names = {"CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lensing"}
+    cmb_names = set(K.CMB_TAGS)
 
     for mod, mod_data in models.items():
         # Core parameter list specified by the model (e.g. LCDM parameters)
@@ -1621,7 +1621,7 @@ def Add_required_parameters(
             grp_has_cmb = any(o in cmb_names for o in obs_grp)
 
             # --- NEW: CMB r_d advisory (primary CMB only; exclude lensing-only) ---
-            has_primary_cmb = any(o in {"CMB_hil", "CMB_hil_TT", "CMB_lowl"} for o in obs_grp)
+            has_primary_cmb = any(o in K.CMB_PRIMARY_TAGS for o in obs_grp)
             if has_primary_cmb:
                 if "r_d" in grp_params:
                     grp_params.remove("r_d")

@@ -265,7 +265,8 @@ OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
     "PantheonP_SH0ES": (r"Pantheon$^{+}$+SH0ES","Pantheon+SH0ES"),
 
     # CMB datasets
-    "CMB_lowl":        (r"Planck low-$\ell$",          "Planck low-ℓ"),
+    "CMB_lowl":        (r"Planck low-$\ell$ EE",       "Planck low-ℓ EE"),
+    "CMB_lowl_TT":     (r"Planck low-$\ell$ TT",       "Planck low-ℓ TT"),
     "CMB_hil":         (r"Planck high-$\ell$ TTTEEE",  "Planck high-ℓ TTTEEE"),
     "CMB_hil_TT":      (r"Planck high-$\ell$ TT",      "Planck high-ℓ TT"),
     "CMB_lensing":     (r"Planck lensing",             "Planck lensing"),
@@ -493,20 +494,49 @@ PLANCK_TT_ONLY_NUISANCE: Set[str] = {
 PLANCK_TTTEEE_NUISANCE: Set[str] = set(PLANCK_NUISANCE_SAMPLED)
 
 
+# High-l nuisance treatment, set from Kosmulator.py (cmb_nuisance):
+#   "baseline": plik, with the nuisance parameters above (21 for TTTEEE, 15 for TT);
+#   "lite":     plik_lite, Planck's foreground-marginalised likelihood, A_planck only.
+CMB_NUISANCE: str = "baseline"
+CMB_NUISANCE_MODES: Tuple[str, ...] = ("baseline", "lite")
+
+# Planck 2018 likelihood folders (in Observations/) per Kosmulator tag
+PLANCK_CLIK_FILES: Dict[str, Dict[str, str]] = {
+    "baseline": {"CMB_hil": "plik_rd12_HM_v22b_TTTEEE.clik", "CMB_hil_TT": "plik_rd12_HM_v22_TT.clik"},
+    "lite":     {"CMB_hil": "plik_lite_v22_TTTEEE.clik", "CMB_hil_TT": "plik_lite_v22_TT.clik"},
+}
+PLANCK_LOWL_FILES: Dict[str, str] = {
+    "CMB_lowl": "simall_100x143_offlike5_EE_Aplanck_B.clik",      # low-l EE (SimAll, "lowE")
+    "CMB_lowl_TT": "commander_dx12_v3_2_29.clik",                 # low-l TT (Commander, "lowl")
+}
+
+# Planck tags (primary CMB: everything but lensing)
+CMB_TAGS: Tuple[str, ...] = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lensing")
+CMB_PRIMARY_TAGS: Tuple[str, ...] = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT")
+
+
+def planck_clik_file(tag: str) -> str:
+    """Planck likelihood folder name for a Kosmulator tag under the current CMB_NUISANCE."""
+    if tag in PLANCK_LOWL_FILES:
+        return PLANCK_LOWL_FILES[tag]
+    return PLANCK_CLIK_FILES[CMB_NUISANCE][tag]
+
+
 def planck_sampled_nuisances(tag: str) -> Set[str]:
     """Planck nuisance parameters sampled for one Kosmulator CMB tag (A_planck is shared)."""
+    lite = (CMB_NUISANCE == "lite")
     if tag == "CMB_hil":
-        return set(PLANCK_TTTEEE_NUISANCE)
+        return {"A_planck"} if lite else set(PLANCK_TTTEEE_NUISANCE)
     if tag == "CMB_hil_TT":
-        return set(PLANCK_TT_ONLY_NUISANCE)
-    if tag in ("CMB_lowl", "CMB_lensing"):
+        return {"A_planck"} if lite else set(PLANCK_TT_ONLY_NUISANCE)
+    if tag in ("CMB_lowl", "CMB_lowl_TT", "CMB_lensing"):
         return {"A_planck"}
     return set()
 
 
 # Size of each Planck likelihood's data vector (bins or multipoles fitted), read from the
-# clik files: plik's smica covariance (2289 for TT,TE,EE, 765 for TT), SimAll l = 2 - 29 (28),
-# the lensing bandpowers (9); plik_lite (613, 215) and Commander (28) for later use. N in the
+# clik files: plik's smica covariance (2289 for TT,TE,EE, 765 for TT), plik_lite's bins
+# (613, 215), SimAll and Commander l = 2 - 29 (28 each), the lensing bandpowers (9). N in the
 # statistics (reduced chi^2, BIC, AICc); clik's Python API does not report it.
 PLANCK_N_DATA: Dict[str, int] = {
     "plik_rd12_HM_v22b_TTTEEE.clik": 2289,
@@ -518,21 +548,16 @@ PLANCK_N_DATA: Dict[str, int] = {
     "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8.clik_lensing": 9,
     "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing": 9,
 }
-# The Planck likelihood folder each tag uses (as in Config.load_all_data and MCMC_setup)
-PLANCK_TAG_FILES: Dict[str, str] = {
-    "CMB_hil": "plik_rd12_HM_v22b_TTTEEE.clik",
-    "CMB_hil_TT": "plik_rd12_HM_v22_TT.clik",
-    "CMB_lowl": "simall_100x143_offlike5_EE_Aplanck_B.clik",
-}
 
 
 def planck_n_data(tag: str, lensing_mode: str = "raw") -> int:
-    """Number of data points of a Planck tag's likelihood (PLANCK_N_DATA)."""
+    """Number of data points of a Planck tag's likelihood under the current CMB_NUISANCE."""
     if tag == "CMB_lensing":
         f = ("smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8.clik_lensing" if lensing_mode == "raw"
              else "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing")
         return PLANCK_N_DATA[f]
-    return PLANCK_N_DATA[PLANCK_TAG_FILES[tag]]
+    return PLANCK_N_DATA[planck_clik_file(tag)]
+
 
 # WAIC: the draws used for the pointwise log-likelihood matrix (at most 1000) are picked
 # with this seed, so a rerun of the statistics gives the same WAIC

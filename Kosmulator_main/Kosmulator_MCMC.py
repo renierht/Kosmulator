@@ -127,6 +127,8 @@ def model_likelihood(
         return SP.cmb_hilTT_loglike(param_dict, model_name)
     if obs == "CMB_lowl":
         return SP.cmb_lowl_loglike(param_dict, model_name)
+    if obs == "CMB_lowl_TT":
+        return SP.cmb_lowlTT_loglike(param_dict, model_name)
     if obs == "CMB_lensing":
         # Determine if we are using the RAW or CMBMARGED lensing likelihood.
         groups = CONFIG.get("observations", [])
@@ -135,7 +137,7 @@ def model_likelihood(
             group = [group]
 
         # Check if any primary Planck CMB likelihood is present in this specific group
-        primary_cmb_tags = {"CMB_hil", "CMB_hil_TT", "CMB_lowl"}
+        primary_cmb_tags = set(K.CMB_PRIMARY_TAGS)
         has_primary_cmb = any(str(g).strip() in primary_cmb_tags for g in group)
 
         # Rule: If primary CMB is present, use raw. If primary CMB is absent, use marged.
