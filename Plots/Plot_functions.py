@@ -1030,6 +1030,13 @@ def print_stats_table(model: str, stats_list):
             f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f} | {dchi:>11.3f} |  {sigma:>11.3f} | {dwaic:>11.3f} |"
         )
         #print(row)
+    # Per-group notes, as in stats_summary.txt
+    notes = [(str(s.get("Observation", "")), str(s.get("Note") or "")) for s in stats_list]
+    notes = [(o, n) for o, n in notes if n]
+    if notes:
+        print("Notes:")
+        for o, n in notes:
+            print(f"  {o}: {n}")
 
 # =============================================================================
 # Data helpers

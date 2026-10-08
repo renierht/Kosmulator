@@ -603,6 +603,8 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
                 'dWAIC': stats['dWAIC'],
                 'dChi': stats['dChi'],
                 'sigma': stats['sigma'],
+                # per-group notes from statistical_analysis (offsets in k, H_0 fixed, ...)
+                "Note": stats.get("Note", ""),
             }
 
             # IMPORTANT: Do NOT include S in the stats row — it will be printed as a stand-alone line
