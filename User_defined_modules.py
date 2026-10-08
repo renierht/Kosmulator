@@ -378,8 +378,20 @@ def f1CDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
 #  parameter dicts (not just Omega_m, n, etc.) and return raw C_ℓ arrays.
 # ============================================================================
 
-# Internal cache for CLASS; defined here so the CMB wrappers can share it.
-_class_cache = None
+def _free_class(cosmo) -> None:
+    """Release a CLASS instance's memory once its spectra have been copied out."""
+    for fn in ("struct_cleanup", "empty"):
+        try:
+            getattr(cosmo, fn)()
+        except Exception:
+            pass
+
+# The CMB helpers below create a new CLASS instance per call, from the build that
+# Class_run loaded for the model being run (sys.modules["classy"], hence the local
+# "import classy"). A single instance used to be shared by all helpers: after the
+# LCDM_v reference model ran, every f1CDM_v point failed with "Class did not read
+# input parameter(s): n_fT". A new instance costs nothing measurable (1.90 s per
+# lensed high-l call against 1.94 s reused).
 
 
 # User_defined_modules.py
@@ -409,11 +421,9 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
     if Om <= 0 or Ob <= 0 or Ob >= Om:
         return None
 
-    global _class_cache
-    if _class_cache is None:
-        _class_cache = classy.Class()  # <--- Now looks up the CURRENT binary
-    cosmo = _class_cache
-    
+    import classy
+    cosmo = classy.Class()
+
     # IMPORTANT:
     #   For low-ℓ SimAll EE we do NOT need lensing Cls at all.
     #   Requesting lCl in low-ℓ mode is unnecessary and can increase fragility.
@@ -455,17 +465,6 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
     cosmo_params = {**base_params, **class_params, **VERBOSE_OFF_SAFE}
 
     try:
-        # Hard-reset CLASS internal state between calls.
-        # This is CRITICAL when mixing low-ℓ and high-ℓ likelihoods in one run.
-        try:
-            cosmo.struct_cleanup()
-        except Exception:
-            pass
-        try:
-            cosmo.empty()
-        except Exception:
-            pass
-
         cosmo.set(cosmo_params)
         cosmo.compute()
 
@@ -479,24 +478,20 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
     except Exception as e:
         logger.exception("Unexpected error in LCDM_v_CMB: %s | cosmo_params=%s", e, cosmo_params)
         return None
+    finally:
+        _free_class(cosmo)
 
 
 def f1CDM_v_CMB(p: dict, mode: str = "hil"):
     """
-    Simplified CMB helper for f1CDM_v. 
-    Fixes the 'unread parameter' error by mapping n -> n_fT directly.
+    CMB helper for f1CDM_v (Robert Rugg): the f1CDM CLASS build, with n -> n_fT.
     """
     import classy
     p = _ensure_background_params(p)
-    
+
     # Mode setup
     m = (mode or "").lower()
     is_lowl = m.startswith("low")
-    
-    global _class_cache
-    if _class_cache is None:
-        _class_cache = classy.Class()
-    cosmo = _class_cache
 
     # 1. BUILD THE PARAMS MANUALLY
     fT_value = p.get("n", p.get("n_fT", 0.0))
@@ -521,17 +516,18 @@ def f1CDM_v_CMB(p: dict, mode: str = "hil"):
         "lensing_verbose": 0, "output_verbose": 0,
     })
 
+    cosmo = classy.Class()
     try:
-        cosmo.struct_cleanup()
-        cosmo.empty()
-        
         # 3. SET AND COMPUTE
         cosmo.set(class_params)
         cosmo.compute()
-        
+
         return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
     except Exception as e:
+        logger.debug("f1CDM_v_CMB: CLASS failed (%s) for %s", e, class_params)
         return None
+    finally:
+        _free_class(cosmo)
 
 
 def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
@@ -560,10 +556,8 @@ def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
     if(w0 + wa) >= 0.0:
         return None
 
-    global _class_cache
-    if _class_cache is None:
-        _class_cache = classy.Class()
-    cosmo = _class_cache
+    import classy
+    cosmo = classy.Class()
 
     if is_lowl:
         output_str = "tCl, pCl"
@@ -609,15 +603,6 @@ def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
     cosmo_params = {**base_params, **class_params, **VERBOSE_OFF_SAFE}
 
     try:
-        try:
-            cosmo.struct_cleanup()
-        except Exception:
-            pass
-        try:
-            cosmo.empty()
-        except Exception:
-            pass
-
         cosmo.set(cosmo_params)
         cosmo.compute()
 
@@ -628,6 +613,8 @@ def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
     except Exception as e:
         logger.exception("Unexpected error in wowaCDM_v_CMB: %s | cosmo_params=%s", e, cosmo_params)
         return None
+    finally:
+        _free_class(cosmo)
 
 # ============================================================================
 #  Model registry / discovery

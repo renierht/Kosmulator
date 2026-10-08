@@ -687,7 +687,6 @@ def run_mcmc_for_all_models(
                     # and load it explicitly so the right binary is active
                     CR.ensure_class_ready(model_name, force=False, no_rebuild=False)
                 did_class_prep = True
-                UDM._class_cache = None
 
             # Work on a copy so per-obs modifications don't leak into the next set
             data_work = deepcopy(data)

@@ -167,6 +167,10 @@ def _compute_cls_cached(
 
     cmb_fn = getattr(UDM, f"{model_name}_CMB", None)
     if cmb_fn is not None:
+        # The model's own helper decides; when it returns None (CLASS failed, or the
+        # point is unphysical) the point is rejected. No fallback to the generic
+        # CLASS call below: that would compute a different model (stock LCDM settings,
+        # no model parameters) for exactly the points the model's helper refused.
         try:
             sig = inspect.signature(cmb_fn)
             if "mode" in sig.parameters:
@@ -175,11 +179,14 @@ def _compute_cls_cached(
                 cl = cmb_fn(pd)
         except Exception as e:
             logger.exception("Model-specific CMB helper failed (%s_CMB): %s", model_name, e)
-            cl = None  # continue to generic CLASS fallback
-    else:
-        logger.warning("No model-specific CMB helper (%s_CMB). Using generic CLASS fallback.", model_name)
+            cl = None
+        _CMB_THEORY_CACHE["key"] = key
+        _CMB_THEORY_CACHE["cls"] = cl
+        return cl
 
-    # 2) Generic fallback: drive CLASS directly
+    logger.warning("No model-specific CMB helper (%s_CMB). Using generic CLASS fallback.", model_name)
+
+    # 2) Generic fallback (models without a CMB helper): drive CLASS directly
     if cl is None:
         try:
             from classy import Class, CosmoComputationError  # local import
@@ -229,7 +236,8 @@ def _compute_cls_cached(
             cosmo.set(pars)
             cosmo.compute()
 
-            raw = cosmo.raw_cl()
+            # lensed spectra unless low-l (the high-l and lensing likelihoods take lensed C_l)
+            raw = cosmo.lensed_cl() if lensing_on else cosmo.raw_cl()
             cl = {
                 "tt": np.asarray(raw.get("tt", []), dtype=float),
                 "ee": np.asarray(raw.get("ee", []), dtype=float),
