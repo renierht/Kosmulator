@@ -627,16 +627,12 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                         n_points += len(obs_data["type_data"])
 
                     elif obs_type in ["f", "f_sigma_8"]:
-                        redshift = obs_data["redshift"]
+                        gamma = None
                         if obs_type == "f_sigma_8":
                             gamma = _resolve_gamma_for_obs(model_name, obs_name, CONFIG, p_eval, default_gamma=GAMMA_FS8_SINGLETON)
                             if "gamma" not in p_eval and p_eval is param_dict:
                                 notes.append(f"γ fixed to {gamma:.3f} (fσ8-only)")
-                            Omega_z = UDM.matter_density_z_array(redshift, p_eval, MODEL_func)
-                            I = UDM.integral_term_array(redshift, p_eval, MODEL_func, gamma)
-                            model_val = float(p_eval["sigma_8"]) * (Omega_z**gamma) * np.exp(-I)
-                        else:
-                            model_val = UDM.matter_density_z_array(redshift, p_eval, MODEL_func) ** float(p_eval["gamma"])
+                        model_val = U.growth_prediction(obs_type, obs_data, p_eval, MODEL_func, gamma)
 
                         chi_total += float(SP.Calc_obs_chi(obs_type, obs_data, model_val))
                         n_points += len(obs_data["type_data"])

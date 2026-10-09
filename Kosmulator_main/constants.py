@@ -48,6 +48,23 @@ R_D_SINGLETON: float = 147.5
 #: GR-like growth index used when fσ8 is a singleton (and as a default)
 GAMMA_FS8_SINGLETON: float = 0.55
 
+#: f_sigma_8.dat (Skara & Perivolaropoulos 2020, arXiv:1911.10609, Table VI).
+#: WiggleZ rows (z, f sigma_8) and their covariance (Blake et al. 2012, as given in
+#: Kazantzidis & Perivolaropoulos 2018, arXiv:1803.01337, Eq. 3.3); the diagonal
+#: equals the squared errors in the file. Used when FS8_WIGGLEZ_COV is True.
+FS8_WIGGLEZ_COV: bool = False
+FS8_WIGGLEZ_ROWS: Tuple[Tuple[float, float], ...] = ((0.44, 0.413), (0.60, 0.390), (0.73, 0.437))
+FS8_WIGGLEZ_COV_MATRIX: Tuple[Tuple[float, ...], ...] = (
+    (6.400e-3, 2.570e-3, 0.0),
+    (2.570e-3, 3.969e-3, 2.540e-3),
+    (0.0, 2.540e-3, 5.184e-3),
+)
+#: Alcock-Paczynski-type correction of each f sigma_8 point to the sampled cosmology:
+#: the prediction is divided by q = H(z) d_A(z) / [H_fid(z) d_A_fid(z)], the fiducial
+#: being flat LCDM with the Omega_m of the file's 4th column (Kazantzidis &
+#: Perivolaropoulos 2018, Eqs. 1.7 and 3.1; Skara & Perivolaropoulos 2020, Eq. 3.1).
+FS8_AP_CORRECTION: bool = False
+
 #: Uncalibrated supernovae (Pantheon+ without SH0ES, DES-Y5, Union3, JLA,
 #: Pantheon): marginalise the magnitude offset (M_abs, or the H0 normalisation
 #: of the distance moduli) analytically, as in the Cobaya SN likelihoods

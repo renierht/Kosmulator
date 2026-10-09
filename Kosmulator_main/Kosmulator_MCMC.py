@@ -216,24 +216,16 @@ def model_likelihood(
         model = param_dict["H_0"] * E_z
 
     elif obs_type in ["f_sigma_8", "f"]:
-        Omz = utils.matter_density_z_array(z, param_dict, MODEL_func)
-        if (not np.isfinite(Omz).all()) or np.any(Omz <= 0):
-            return -np.inf
-
+        gamma = None
         if obs_type == "f_sigma_8":
             # read fixed gamma for this obs_index if it was removed from params
             gamma = param_dict.get("gamma", None)
             if gamma is None:
                 gamma = CONFIG.get("fs8_gamma_fixed_by_group", {}).get(obs_index, K.GAMMA_FS8_SINGLETON)
-            gamma = float(gamma)
-
-            integ = utils.integral_term_array(z, param_dict, MODEL_func, gamma)
-            if not np.isfinite(integ).all():
-                return -np.inf
-            model = param_dict["sigma_8"] * (Omz ** gamma) * np.exp(-integ)
-        else:
-            # f-only still samples gamma (no fix) unless you choose otherwise
-            model = Omz ** float(param_dict["gamma"])
+        # f-only still samples gamma (no fix) unless you choose otherwise
+        model = utils.growth_prediction(obs_type, obs_data, param_dict, MODEL_func, gamma)
+        if not np.isfinite(model).all():
+            return -np.inf
 
     else:
         return -np.inf

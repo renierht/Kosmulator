@@ -1,3 +1,9 @@
+# Growth rate f(z). Columns: z, f, sigma (diagonal error).
+# Rows 1 - 3 (SDSS z = 0.10; VIPERS PDR-2 z = 0.60, 0.86) are the f entries of
+# Perenon et al. 2019 (arXiv:1901.11063), Table 1, measured with sigma_8 (commented
+# columns). The source of rows 4 - 14 is not recorded (checked 9 October 2026: they are
+# not in that table). f_sigma_8.dat also has points from the same galaxy samples
+# (SDSS at z = 0.1, VIPERS PDR-2), so a group with both f and f_sigma_8 uses them twice.
 #red     f        f_error    #sigma       sigma_error
 0.10     0.464     0.040     #0.769      0.105
 0.60     0.93      0.22      #0.52       0.06

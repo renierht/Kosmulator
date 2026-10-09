@@ -2158,6 +2158,16 @@ def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
             model = param_dict["H_0"] * E_z
             ll_i  = pointwise_log_like_CC(obs_data, model, param_dict)
 
+        elif obs_type in ("f", "f_sigma_8"):
+            # Same prediction as the sampler; these data were skipped before, so WAIC
+            # of a group with f or f_sigma_8 left them out
+            gamma = None
+            if obs_type == "f_sigma_8" and "gamma" not in param_dict:
+                from Kosmulator_main import constants as _K
+                gamma = CONFIG.get("fs8_gamma_fixed_by_group", {}).get(obs_index, _K.GAMMA_FS8_SINGLETON)
+            model = utils.growth_prediction(obs_type, obs_data, param_dict, Model_func, gamma)
+            ll_i  = pointwise_log_like_CC(obs_data, model, param_dict)
+
         else:
             continue  # skip obs types not yet supported
 

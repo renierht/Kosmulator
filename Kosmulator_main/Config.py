@@ -165,6 +165,40 @@ def _attach_cc_systematics(d: Dict[str, np.ndarray], mode, logger=None) -> Dict[
     return d
 
 
+def _attach_fs8_extras(d: Dict[str, np.ndarray], file_path, logger=None) -> Dict[str, np.ndarray]:
+    """
+    f_sigma_8: the fiducial Omega_m of each row (4th column, for the AP-type
+    correction when constants.FS8_AP_CORRECTION is True) and the WiggleZ
+    covariance (constants.FS8_WIGGLEZ_COV), matched by (z, f sigma_8).
+    """
+    raw = np.loadtxt(file_path, ndmin=2)
+    if raw.shape[1] >= 4:
+        d["omega_m_fid"] = raw[:, 3]
+    if bool(getattr(K, "FS8_AP_CORRECTION", False)):
+        if "omega_m_fid" not in d:
+            raise ValueError("FS8_AP_CORRECTION needs the fiducial Omega_m column in f_sigma_8.dat")
+        d["ap_correction"] = True
+    if bool(getattr(K, "FS8_WIGGLEZ_COV", False)):
+        z = np.asarray(d["redshift"], dtype=float)
+        v = np.asarray(d["type_data"], dtype=float)
+        s = np.asarray(d["type_data_error"], dtype=float)
+        C = np.array(d["cov"], dtype=float) if "cov" in d else np.diag(s ** 2)
+        idx = []
+        for zz, vv in K.FS8_WIGGLEZ_ROWS:
+            hit = np.where(np.isclose(z, zz, atol=1e-6) & np.isclose(v, vv, atol=1e-6))[0]
+            if hit.size != 1:
+                raise ValueError(f"FS8_WIGGLEZ_ROWS: ({zz}, {vv}) matches {hit.size} rows (need exactly 1)")
+            idx.append(int(hit[0]))
+        C[np.ix_(idx, idx)] = np.asarray(K.FS8_WIGGLEZ_COV_MATRIX, dtype=float)
+        np.linalg.cholesky(C)
+        d["cov"] = C
+        d["inv_cov"] = np.linalg.inv(C)
+    if logger:
+        logger.info("f_sigma_8: WiggleZ covariance %s, AP correction %s",
+                    "on" if "inv_cov" in d else "off", "on" if d.get("ap_correction") else "off")
+    return d
+
+
 # ---------------------------------------------------------------------------
 # Pantheon+ helper
 # ---------------------------------------------------------------------------
@@ -965,6 +999,8 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                         observation_data[obs], os.path.join(K.OBSERVATIONS_BASE, "CC_corr.txt"), logger
                     )
                     _attach_cc_systematics(observation_data[obs], getattr(K, "CC_SYS_COV", None), logger)
+                if obs == "f_sigma_8":
+                    _attach_fs8_extras(observation_data[obs], file_path, logger)
                 if obs == "JLA_legacy":
                     logger.warning(
                         "JLA_legacy is the old 359-SN file (JLA redshifts, distance moduli "

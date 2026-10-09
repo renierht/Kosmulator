@@ -3014,6 +3014,50 @@ def matter_density_z_array(zs, param_dict, MODEL_func):
     return float(param["Omega_m"]) * (1.0 + zs) ** 3 / Ez2
 
 
+def fs8_ap_factor(zs, param_dict, MODEL_func, om_fid):
+    """
+    q(z) = H(z) d_A(z) / [H_fid(z) d_A_fid(z)] for each f sigma_8 point, the fiducial
+    being flat LCDM with Omega_m = om_fid (one value per point) and the model's
+    radiation, so q = 1 for LCDM at the fiducial Omega_m. H_0 and (1 + z) cancel,
+    so q = E(z) chi(z) / [E_fid(z) chi_fid(z)] with chi = int_0^z dz'/E.
+    """
+    import User_defined_modules as _UDM      # radiation_density (UDM imports this module)
+    zs = np.atleast_1d(zs).astype(float)
+    om_fid = np.broadcast_to(np.asarray(om_fid, dtype=float), zs.shape)
+    zg = np.linspace(0.0, float(zs.max()), max(800, int(600 * float(zs.max()))))
+    Eg = np.asarray(_Ez(MODEL_func, zg, param_dict), dtype=float)
+    if (not np.isfinite(Eg).all()) or np.any(Eg <= 0):
+        return np.full_like(zs, np.nan)
+    EX = np.interp(zs, zg, Eg) * np.interp(zs, zg, cumtrapz(1.0 / Eg, zg, initial=0.0))
+    q = np.ones_like(zs)                     # q -> 1 as z -> 0 (a z = 0 row would give 0/0)
+    o_r = float(_UDM.radiation_density(_inject_derived_background(param_dict)))
+    for om in np.unique(om_fid):
+        m = (om_fid == om) & (zs > 0.0)
+        Ef = np.sqrt(om * (1.0 + zg) ** 3 + o_r * (1.0 + zg) ** 4 + 1.0 - om - o_r)
+        q[m] = EX[m] / (np.interp(zs[m], zg, Ef) * np.interp(zs[m], zg, cumtrapz(1.0 / Ef, zg, initial=0.0)))
+    return q
+
+
+def growth_prediction(obs_type, obs_data, param_dict, MODEL_func, gamma=None):
+    """
+    Prediction for a growth dataset, used by the sampler, the statistics and WAIC:
+    f = Omega_m(z)^gamma, or f sigma_8 = sigma_8 Omega_m(z)^gamma exp(-int_0^z
+    Omega_m^gamma/(1+z') dz'), divided by the AP-type factor when the dataset asks
+    for it (constants.FS8_AP_CORRECTION). NaN entries mean an invalid background.
+    """
+    z = np.asarray(obs_data["redshift"], dtype=float)
+    Omz = matter_density_z_array(z, param_dict, MODEL_func)
+    if (not np.isfinite(Omz).all()) or np.any(Omz <= 0):
+        return np.full_like(z, np.nan)
+    if obs_type == "f":
+        return Omz ** float(param_dict["gamma"])
+    gamma = float(param_dict["gamma"]) if gamma is None else float(gamma)
+    model = float(param_dict["sigma_8"]) * Omz ** gamma * np.exp(-integral_term_array(z, param_dict, MODEL_func, gamma))
+    if obs_data.get("ap_correction"):
+        model = model / fs8_ap_factor(z, param_dict, MODEL_func, obs_data["omega_m_fid"])
+    return model
+
+
 def integral_term_array(zs, param_dict, MODEL_func, gamma):
     """
     ∫^z [(Ω_m(z')^γ)/(1+z')] dz' — vectorised in z (uses monotonic grid).
