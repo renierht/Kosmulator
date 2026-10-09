@@ -559,6 +559,13 @@ def planck_n_data(tag: str, lensing_mode: str = "raw") -> int:
     return PLANCK_N_DATA[planck_clik_file(tag)]
 
 
+# Best-fit polish of a group with Planck data (Post_processing.find_polished_mle): one
+# Nelder-Mead run of at most this many likelihood calls (each runs CLASS and clik), from the
+# best of the posterior median and the 5 best distinct samples (one call each beforehand).
+# On the step 8 lite chain (7 parameters) chi^2 stopped changing after about 200 calls.
+# Environment variable KOSM_POLISH_MAXFEV_CMB overrides it.
+POLISH_MAXFEV_CMB: int = 300
+
 # WAIC: the draws used for the pointwise log-likelihood matrix (at most 1000) are picked
 # with this seed, so a rerun of the statistics gives the same WAIC
 WAIC_SUBSAMPLE_SEED: int = 20260108

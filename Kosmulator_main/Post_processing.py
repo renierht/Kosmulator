@@ -22,6 +22,7 @@ from math import isfinite
 from typing import Any  # Dict unused; drop if you like
 
 import logging
+import os
 
 import numpy as np
 from scipy.optimize import minimize
@@ -151,10 +152,17 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
             mle_idx = np.nanargmax(valid_ll)
             mle_vector = valid_samples[mle_idx]
 
-            #Corrections need for better mle results
-            top_n = min(5, len(valid_ll))
-            top_idx = np.argsort(valid_ll)[-top_n:]
-            best_candidate = valid_samples[top_idx]
+            # Starts for the best-fit polish: the 5 best distinct samples, best last.
+            # emcee keeps a walker where it is when a move is rejected, so the best
+            # sample is often stored several times; identical starts give identical
+            # Nelder-Mead runs.
+            top_idx = []
+            for i in np.argsort(valid_ll)[::-1]:
+                if not any(np.array_equal(valid_samples[i], valid_samples[k]) for k in top_idx):
+                    top_idx.append(i)
+                    if len(top_idx) == 5:
+                        break
+            best_candidate = valid_samples[np.array(top_idx[::-1], dtype=int)]
 
             #For DIC calculations
             D_bar = float(np.nanmean(dev_samples))
@@ -395,15 +403,21 @@ def find_polished_mle(
     restrictions: dict | None = None,
     coupled_restrictions: list | None = None,
     penalty_fn=None,
+    n_polish: int | None = None,
 ) -> tuple[dict[str, float], float]:
     """
-    Find the Maximum Likelihood Estimate (MLE) by polishing
-    the posterior median with Nelder-Mead simplex minimization.
+    Find the Maximum Likelihood Estimate (MLE) by polishing a starting point with
+    Nelder-Mead simplex minimization. statistical_analysis passes the chain's best
+    sample as params_dict_median (the name is historical; the posterior median when
+    the run saved no log-likelihood) and the best distinct samples as
+    candidate_starts (for CMB groups also the posterior median).
     Points outside the prior box or failing the model's restrictions (the same
     checks as log_prior_all, e.g. n < 0.5 for f1CDM_v) are rejected.
     penalty_fn(p) is added to the chi^2 being minimised (the Planck nuisance priors,
     so calibrations and foregrounds stay where their priors put them); the value
     returned includes it.
+    n_polish: polish only the n_polish starts with the lowest objective (each start
+    is evaluated once first); None polishes every distinct start.
     """
     p_names = list(params_dict_median.keys())
     x0 = np.array([params_dict_median[p] for p in p_names], dtype=float)
@@ -433,18 +447,28 @@ def find_polished_mle(
             pass
         return 1e12
 
-    # Baseline at the median, with the same box and restrictions as the polish
-    # (per-parameter medians can fail a coupled restriction; then 1e12, so any
-    # admissible point found by the polish replaces it)
+    # Baseline at the first start, with the same box and restrictions as the polish
+    # (a point can fail a coupled restriction, e.g. per-parameter medians; then 1e12,
+    # so any admissible point found by the polish replaces it)
     baseline_chi2 = objective(x0)
 
+    # x0 (the chain's best sample) is usually also the last candidate: each distinct
+    # start is polished once
     starts = [x0]
     if candidate_starts:
         for cand in candidate_starts:
-            starts.append(np.array([cand[p] for p in p_names], dtype = float))
-
+            s = np.array([cand[p] for p in p_names], dtype=float)
+            if not any(np.array_equal(s, t) for t in starts):
+                starts.append(s)
     best_chi2 = baseline_chi2
     best_p = params_dict_median
+    if n_polish is not None and len(starts) > n_polish:
+        f_start = [baseline_chi2] + [objective(s) for s in starts[1:]]
+        order = np.argsort(f_start, kind="stable")
+        if f_start[order[0]] < best_chi2:      # kept even if Nelder-Mead makes no call
+            best_chi2 = float(f_start[order[0]])
+            best_p = {p: float(starts[order[0]][i]) for i, p in enumerate(p_names)}
+        starts = [starts[i] for i in order[:n_polish]]
 
     for start in starts:
         res = minimize(
@@ -467,6 +491,18 @@ def find_polished_mle(
         
 
     return best_p, best_chi2
+
+def _polish_maxfev_cmb() -> int:
+    """Nelder-Mead call cap for groups with Planck data: constants.POLISH_MAXFEV_CMB,
+    or the environment variable KOSM_POLISH_MAXFEV_CMB when it holds a number."""
+    raw = os.environ.get("KOSM_POLISH_MAXFEV_CMB", "").strip()
+    if raw:
+        try:
+            return max(0, int(float(raw)))
+        except ValueError:
+            logger.warning("KOSM_POLISH_MAXFEV_CMB=%r is not a number; using %d", raw, K.POLISH_MAXFEV_CMB)
+    return int(K.POLISH_MAXFEV_CMB)
+
 
 def compute_lppd(log_lik_matrix):
     """ 
@@ -697,16 +733,29 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             else:
                 prior_map = None
 
-            # Evaluation cap per Nelder-Mead start: 2000 for late-time groups,
-            # where a chi^2 call is cheap; 300 when CMB is in the group, where
-            # every call runs CLASS and clik.
+            # Late-time groups (a chi^2 call is cheap): Nelder-Mead from the best
+            # sample and the other best distinct samples, up to 2000 calls each.
+            # CMB groups (every call runs CLASS and clik, about 4 s): the best samples
+            # and the posterior median are evaluated once, and Nelder-Mead runs from
+            # the lowest of them only, up to constants.POLISH_MAXFEV_CMB calls
+            # (environment variable KOSM_POLISH_MAXFEV_CMB overrides it). The
+            # samples are ranked by likelihood, the polish includes the Planck
+            # nuisance priors, so the median is often the better start.
             has_cmb_group = any(str(t) == "CMB" for t in obs_types)
+            cmb_starts = list(candidate_starts_list or [])
+            if has_cmb_group and obs_samples_for_waic is not None and cand_param_names is not None:
+                S = np.asarray(obs_samples_for_waic, dtype=float)
+                S = S[np.all(np.isfinite(S), axis=1)]
+                if S.size:
+                    med = np.median(S, axis=0)
+                    cmb_starts.append({p: float(med[i]) for i, p in enumerate(cand_param_names)})
             param_dict, chi_squared_total = find_polished_mle(
                 compute_chi2_fn=_compute_chi2_total,
                 params_dict_median=param_dict,
                 prior_bounds=prior_map,
-                max_evals=300 if has_cmb_group else 2000,
-                candidate_starts= candidate_starts_list,
+                max_evals=(_polish_maxfev_cmb() if has_cmb_group else 2000),
+                candidate_starts=(cmb_starts if has_cmb_group else candidate_starts_list),
+                n_polish=(1 if has_cmb_group else None),
                 restrictions=CONFIG[model_name].get("restrictions") or {},
                 coupled_restrictions=CONFIG[model_name].get("coupled_restrictions") or [],
                 penalty_fn=(SP.planck_nuisance_prior_chi2 if has_cmb_group else None),
