@@ -1384,8 +1384,11 @@ def _bbn_call_cached(obh2_r: float, neff_r: float, tau_n_r: float) -> float:
 
     The AlterBBN interface is several orders of magnitude slower than the
     algebraic approximation; we cache on (Omega_b h^2, N_eff, tau_n).
+    run_bbn is found as in the grid build (PYTHONPATH, then AlterBBN_files/);
+    a bare import missed AlterBBN_files/, and the live backend then fell back
+    to the approximation without a message.
     """
-    from alterbbn_ctypes import run_bbn
+    run_bbn = _import_run_bbn()
     return float(run_bbn(obh2_r, neff_r, tau_n_r)["D_H"])
 
 
@@ -1393,12 +1396,13 @@ def bbn_predict_alterbbn(p: Dict[str, float], data: Optional[dict] = None) -> fl
     """
     Live AlterBBN D/H prediction.
 
-    If `data` is provided, we use any observational Neff/tau_n overrides;
-    otherwise we fall back to defaults.
+    N_eff and tau_n come from the parameters when sampled (as in the grid
+    backend), otherwise from `data` or the defaults.
     """
+    data = data or {}
     obh2 = round(float(p["Omega_bh^2"]), 6)
-    neff = round(float(p.get("N_eff", data.get("Neff", N_EFF_DEFAULT))) if data else N_EFF_DEFAULT, 6)
-    tau = round(float(data.get("tau_n", TAU_N_DEFAULT)) if data else TAU_N_DEFAULT, 3)
+    neff = round(float(p.get("N_eff", data.get("Neff", N_EFF_DEFAULT))), 6)
+    tau = round(float(p.get("tau_n", data.get("tau_n", TAU_N_DEFAULT))), 3)
     return _bbn_call_cached(obh2, neff, tau)
 
 
@@ -1491,7 +1495,11 @@ def Calc_BBN_DH_chi(
                 f"Original error: {e!r}"
             ) from e
 
-        # Otherwise keep the robust fallback
+        # Otherwise keep the robust fallback, but say so once per process
+        if not getattr(Calc_BBN_DH_chi, "_warned_fallback", False):
+            logger.warning("BBN_DH: backend %s failed (%r); using the D/H approximation "
+                           "for this and any later failing points.", backend, e)
+            Calc_BBN_DH_chi._warned_fallback = True
         DH_th = bbn_predict_approx(param_dict)
     units = obs.get("units", "absolute")
     scale = 1e-6 if units == "scaled1e6" else 1.0
@@ -1783,10 +1791,9 @@ def ensure_bbn_backend(
     # --- Build grid if needed
     if want_grid:
         try:
-            from alterbbn_ctypes import run_bbn
+            run_bbn = _import_run_bbn()   # PYTHONPATH, then AlterBBN_files/
         except Exception as e:
             strict = bool(out.get("bbn_strict", False))
-            run_bbn = _import_run_bbn()
             if strict:
                 raise RuntimeError(
                     "AlterBBN requested but alterbbn_ctypes could not be imported.\n"
@@ -1794,14 +1801,10 @@ def ensure_bbn_backend(
                     "and (3) keep alterbbn_ctypes.py either on PYTHONPATH or in Kosmulator/AlterBBN_files/.\n"
                     f"Original import error: {e}"
                 )
-            if model == "alterbbn_grid":
-                if log:
-                    log.warning("alterbbn_ctypes unavailable; reverting to approx (grid requested). %s", e)
-                set_backend("approx")
-                return out
+            # Live AlterBBN needs the same module, so the approximation is the only fallback
             if log:
-                log.warning("alterbbn_ctypes unavailable; falling back to live alterbbn. %s", e)
-            set_backend("alterbbn")
+                log.warning("alterbbn_ctypes unavailable; using the D/H approximation (%s requested). %s", model, e)
+            set_backend("approx")
             return out
 
         nO, nN, nT = obh2_nodes.size, neff_nodes.size, tau_nodes.size
@@ -1844,8 +1847,17 @@ def ensure_bbn_backend(
         set_backend("alterbbn_grid")
         return out
 
-    # --- live AlterBBN, no grid
+    # --- live AlterBBN, no grid (checked once here, not at every likelihood call)
     if model == "alterbbn":
+        try:
+            _import_run_bbn()
+        except Exception as e:
+            if bool(out.get("bbn_strict", False)):
+                raise RuntimeError(f"AlterBBN requested but alterbbn_ctypes could not be loaded: {e}") from e
+            if log:
+                log.warning("alterbbn_ctypes unavailable; using the D/H approximation (live AlterBBN requested). %s", e)
+            set_backend("approx")
+            return out
         set_backend("alterbbn")
         if log:
             log.info("BBN backend: alterbbn (live)")
