@@ -125,6 +125,42 @@ BBN_DH_PDG_S: float = 1.08
 MAIN_BLAS_THREADS_NO_POOL = 1
 
 # ----------------------------------------------------------------------
+# Cosmic chronometers: SPS-model systematic covariance (CC)
+# ----------------------------------------------------------------------
+#: Moresco et al. 2020 (arXiv:2003.07362), Table 3: percentage bias of H(z)
+#: from the IMF, the stellar library and the SPS model, for the D4000 method;
+#: columns z, IMF, stellar library, SPS, SPS without the most discordant model
+#: ("odd one out"). The quoted CC errors already include the SFH and
+#: metallicity terms (their Sect. 3.2), so only these three are added.
+CC_MORESCO2020_TABLE3: Tuple[Tuple[float, float, float, float, float], ...] = (
+    (0.075, 0.47, 7.40, 15.86, 9.91), (0.125, 0.47, 7.40, 14.23, 6.98),
+    (0.175, 0.47, 7.40, 13.34, 5.40), (0.225, 0.47, 7.40, 13.21, 5.40),
+    (0.275, 0.47, 7.40, 13.29, 5.40), (0.325, 0.47, 7.40, 12.20, 5.40),
+    (0.375, 0.47, 7.40, 12.99, 5.40), (0.425, 0.47, 7.40, 10.29, 6.20),
+    (0.475, 0.46, 7.39, 8.91, 5.86), (0.525, 0.23, 7.40, 9.99, 6.51),
+    (0.575, 0.28, 6.87, 10.09, 6.12), (0.625, 0.47, 6.65, 11.17, 6.21),
+    (0.675, 0.47, 6.57, 11.12, 5.71), (0.725, 0.47, 5.90, 10.81, 5.16),
+    (0.775, 0.45, 6.03, 10.75, 5.05), (0.825, 0.47, 6.10, 10.75, 5.05),
+    (0.875, 0.47, 5.89, 9.08, 2.79), (0.925, 0.44, 5.80, 8.62, 3.70),
+    (0.975, 0.40, 5.94, 7.32, 3.65), (1.025, 0.27, 6.07, 5.84, 3.37),
+    (1.075, 0.20, 6.08, 6.02, 3.49), (1.125, 0.20, 6.07, 4.72, 2.33),
+    (1.175, 0.19, 6.09, 4.31, 2.33), (1.225, 0.19, 6.09, 3.90, 2.33),
+    (1.275, 0.19, 6.09, 3.90, 2.33), (1.325, 0.20, 6.09, 3.91, 2.34),
+    (1.375, 0.19, 6.09, 3.90, 2.34), (1.425, 0.19, 6.09, 3.90, 2.33),
+    (1.475, 0.20, 6.09, 3.91, 2.34),
+)
+#: Redshifts of the CC.dat rows measured with the D4000 method (Moresco et al.
+#: 2012, Moresco 2015, Moresco et al. 2016), the only rows the table applies to.
+CC_D4000_Z: Tuple[float, ...] = (0.179, 0.199, 0.352, 0.3802, 0.4004, 0.4247, 0.4497,
+                                 0.4783, 0.593, 0.68, 0.781, 0.875, 1.037, 1.363, 1.965)
+#: SPS-model covariance added to CC (Moresco 2020, Eq. 9, summed over IMF, stellar
+#: library and SPS: C_ij += sum_X eta_X(z_i) H_i eta_X(z_j) H_j, H the measured
+#: values, eta interpolated linearly in z and held at the last row above z = 1.475):
+#: None (diagonal errors and CC_corr.txt only), "full" (SPS column) or "ooo"
+#: (SPS without the most discordant model).
+CC_SYS_COV = None
+
+# ----------------------------------------------------------------------
 # Convergence rule (zeus and emcee, utils.ConvergenceMonitor)
 # ----------------------------------------------------------------------
 #: Checked every --autocorr-check-every steps on the chain after burn-in. tau_max

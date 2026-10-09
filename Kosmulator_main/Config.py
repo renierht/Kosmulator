@@ -124,6 +124,47 @@ def _attach_correlations(d: Dict[str, np.ndarray], corr_path: Union[str, Path], 
     return d
 
 
+def cc_sps_covariance(z, H, mode: str) -> np.ndarray:
+    """
+    SPS-model systematic covariance of CC rows (constants.CC_SYS_COV): Moresco et
+    al. 2020 Eq. 9, C_ij = sum_X eta_X(z_i) H_i eta_X(z_j) H_j over X = IMF,
+    stellar library and SPS ("full") or SPS without the most discordant model
+    ("ooo"), for the D4000 rows (constants.CC_D4000_Z); zero elsewhere.
+    """
+    if mode not in ("full", "ooo"):
+        raise ValueError(f"CC_SYS_COV must be None, 'full' or 'ooo', not {mode!r}")
+    T = np.asarray(K.CC_MORESCO2020_TABLE3, dtype=float)
+    z = np.asarray(z, dtype=float)
+    H = np.asarray(H, dtype=float)
+    on = np.zeros(z.size, dtype=bool)
+    for zz in K.CC_D4000_Z:
+        idx = np.where(np.isclose(z, zz, rtol=0.0, atol=1e-6))[0]
+        if idx.size != 1:
+            raise ValueError(f"CC_D4000_Z: z = {zz} matches {idx.size} CC rows (need exactly 1)")
+        on[idx[0]] = True
+    C = np.zeros((z.size, z.size))
+    for col in (1, 2, 3 if mode == "full" else 4):
+        v = np.where(on, np.interp(z, T[:, 0], T[:, col]) / 100.0 * H, 0.0)  # np.interp holds the end rows
+        C += np.outer(v, v)
+    return C
+
+
+def _attach_cc_systematics(d: Dict[str, np.ndarray], mode, logger=None) -> Dict[str, np.ndarray]:
+    """Add cc_sps_covariance to CC's covariance (diagonal or CC_corr.txt) when mode is set."""
+    if not mode:
+        return d
+    s = np.asarray(d["type_data_error"], dtype=float)
+    C = np.array(d["cov"], dtype=float) if "cov" in d else np.diag(s ** 2)
+    C = C + cc_sps_covariance(d["redshift"], d["type_data"], mode)
+    np.linalg.cholesky(C)
+    d["cov"] = C
+    d["inv_cov"] = np.linalg.inv(C)
+    if logger:
+        logger.info("CC: Moresco 2020 SPS-model covariance added (%s) for %d D4000 rows",
+                    mode, len(K.CC_D4000_Z))
+    return d
+
+
 # ---------------------------------------------------------------------------
 # Pantheon+ helper
 # ---------------------------------------------------------------------------
@@ -923,6 +964,7 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     _attach_correlations(
                         observation_data[obs], os.path.join(K.OBSERVATIONS_BASE, "CC_corr.txt"), logger
                     )
+                    _attach_cc_systematics(observation_data[obs], getattr(K, "CC_SYS_COV", None), logger)
                 if obs == "JLA_legacy":
                     logger.warning(
                         "JLA_legacy is the old 359-SN file (JLA redshifts, distance moduli "
