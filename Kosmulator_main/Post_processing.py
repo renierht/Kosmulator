@@ -650,45 +650,22 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                         chi_total += SP.bbn_prior_chi2(obs_data, p_eval)
 
                     elif obs_type == "CMB":
+                        # N = the likelihood's data-vector size (constants.PLANCK_N_DATA), not
+                        # the multipole count: plik is binned (2289 for TT,TE,EE, where
+                        # l_max - 1 per spectrum gave 7521), SimAll is l = 2 - 29
                         if obs == "CMB_lowl":
                             chi_total += float(-2.0 * SP.cmb_lowl_loglike(p_eval, model_name))
-                            n_points += 30
+                            n_points += K.planck_n_data("CMB_lowl")
                         elif obs == "CMB_hil":
-                            like = SP._get_hil_like()
-                            try:
-                                raw_lmax = like.get_lmax()
-                            except Exception:
-                                raw_lmax = [2508, 0, 0, 0]
-                            if isinstance(raw_lmax, dict):
-                                Ltt = int(raw_lmax.get("tt") or raw_lmax.get("TT") or 0)
-                                Lee = int(raw_lmax.get("ee") or raw_lmax.get("EE") or 0)
-                                Lte = int(raw_lmax.get("te") or raw_lmax.get("TE") or 0)
-                            else:
-                                L_vals = list(map(int, raw_lmax)) + [0, 0, 0, 0]
-                                Ltt, Lee, _, Lte = L_vals[:4]
-                            n_points += max(Ltt - 1, 0) + max(Lee - 1, 0) + max(Lte - 1, 0)
+                            n_points += K.planck_n_data("CMB_hil")
                             chi_total += float(-2.0 * SP.cmb_hil_loglike(p_eval, model_name))
                         elif obs == "CMB_hil_TT":
-                            like = SP._get_hilTT_like()
-                            try:
-                                raw_lmax = like.get_lmax()
-                            except Exception:
-                                raw_lmax = 2508
-                            lTT = int(raw_lmax.get("tt") or raw_lmax.get("TT") or next(iter(raw_lmax.values()))) if isinstance(raw_lmax, dict) else int(raw_lmax[0] if isinstance(raw_lmax, (list, tuple, np.ndarray)) else raw_lmax)
-                            n_points += max(lTT - 1, 0)
+                            n_points += K.planck_n_data("CMB_hil_TT")
                             chi_total += float(-2.0 * float(SP.cmb_hilTT_loglike(p_eval, model_name)))
                         elif obs == "CMB_lensing":
                             has_primary = any(x in {"CMB_hil", "CMB_hil_TT", "CMB_lowl"} for x in obs_entry)
                             SP.set_lensing_mode("raw" if has_primary else "cmbmarged")
-                            like = SP._get_lensing_like()
-                            n_bins = 8
-                            try:
-                                if hasattr(like, "get_lensing_nbins"):
-                                    n_bins = int(like.get_lensing_nbins())
-                                elif hasattr(like, "get_lensing_bins"):
-                                    n_bins = len(like.get_lensing_bins())
-                            except Exception:
-                                pass
+                            n_bins = K.planck_n_data("CMB_lensing", "raw" if has_primary else "cmbmarged")
                             logL, _, note = _stats_lensing_logL_safe(p_eval, model_name)
                             if not (isfinite(logL) and abs(logL) < 1e9):
                                 continue

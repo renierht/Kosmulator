@@ -436,6 +436,36 @@ PLANCK_TTTEEE_NUISANCE: Set[str] = (
 )
 
 
+# Size of each Planck likelihood's data vector (bins or multipoles fitted), read from the
+# clik files: plik's smica covariance (2289 for TT,TE,EE, 765 for TT), SimAll l = 2 - 29 (28),
+# the lensing bandpowers (9); plik_lite (613, 215) and Commander (28) for later use. N in the
+# statistics (reduced chi^2, BIC, AICc); clik's Python API does not report it.
+PLANCK_N_DATA: Dict[str, int] = {
+    "plik_rd12_HM_v22b_TTTEEE.clik": 2289,
+    "plik_rd12_HM_v22_TT.clik": 765,
+    "plik_lite_v22_TTTEEE.clik": 613,
+    "plik_lite_v22_TT.clik": 215,
+    "simall_100x143_offlike5_EE_Aplanck_B.clik": 28,
+    "commander_dx12_v3_2_29.clik": 28,
+    "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8.clik_lensing": 9,
+    "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing": 9,
+}
+# The Planck likelihood folder each tag uses (as in Config.load_all_data and MCMC_setup)
+PLANCK_TAG_FILES: Dict[str, str] = {
+    "CMB_hil": "plik_rd12_HM_v22b_TTTEEE.clik",
+    "CMB_hil_TT": "plik_rd12_HM_v22_TT.clik",
+    "CMB_lowl": "simall_100x143_offlike5_EE_Aplanck_B.clik",
+}
+
+
+def planck_n_data(tag: str, lensing_mode: str = "raw") -> int:
+    """Number of data points of a Planck tag's likelihood (PLANCK_N_DATA)."""
+    if tag == "CMB_lensing":
+        f = ("smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8.clik_lensing" if lensing_mode == "raw"
+             else "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing")
+        return PLANCK_N_DATA[f]
+    return PLANCK_N_DATA[PLANCK_TAG_FILES[tag]]
+
 # WAIC: the draws used for the pointwise log-likelihood matrix (at most 1000) are picked
 # with this seed, so a rerun of the statistics gives the same WAIC
 WAIC_SUBSAMPLE_SEED: int = 20260108
