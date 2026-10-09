@@ -556,6 +556,27 @@ def run_mcmc_for_all_models(
     model_list = list(models.keys()) if isinstance(models, dict) else list(models)
     engine_mode = getattr(K, "engine_mode", "mixed")
 
+    def _model_needs_pool(m: str) -> bool:
+        """
+        A group of model m evaluates its likelihood in the worker pool: emcee for
+        CMB/BBN groups (also in engine mode "fastest", where main records no
+        model-level engine), a model that cannot be vectorised, or a pool-preferred
+        dataset (official JLA). The same rule as any_needs_pool in main.
+        """
+        cv = bool(vectorised.get(m, False))
+        eng = (getattr(K, "engine_for_model", {}) or {}).get(m)
+        if eng not in ("zeus", "emcee"):
+            eng = "zeus" if (cv and (zeus is not None)) else "emcee"
+        touches = _model_has_any_cmb_or_bbn(CONFIG, m)
+        return bool(
+            (touches and (eng == "emcee" or engine_mode == "fastest"))
+            or not cv
+            or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set())
+                   for grp in CONFIG[m].get("observations", []) for o in grp)
+        )
+
+    any_model_needs_pool = any(_model_needs_pool(m) for m in model_list)
+
     for model_name in model_list:
         # -------------------------------
         # 0) Model capabilities (always define)
@@ -586,15 +607,13 @@ def run_mcmc_for_all_models(
         # Only create workers when this model has a group that uses them: emcee,
         # non-vectorised zeus, or a pool-preferred dataset (official JLA).
         # Vectorised zeus never uses the pool, so creating one there only left
-        # idle worker processes. Under MPI the old behaviour is kept, because
-        # the other ranks wait in the pool.
-        model_needs_pool = (
-            (engine == "emcee" and _model_has_any_cmb_or_bbn(CONFIG, model_name))
-            or not can_vec
-            or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set())
-                   for grp in CONFIG[model_name].get("observations", []) for o in grp)
-        )
-        need_pool = parallel_flag and (use_mpi or model_needs_pool)
+        # idle worker processes. Under MPI the extra ranks must wait in the pool
+        # from the first model on (otherwise they would walk the group loop of the
+        # models rank 0 runs alone), so the pool is built at the first model when
+        # any model needs it; when none does, the extra ranks have already exited
+        # (step 9 of main) and no MPIPool is built for ranks that are gone.
+        model_needs_pool = _model_needs_pool(model_name)
+        need_pool = parallel_flag and (model_needs_pool or (use_mpi and any_model_needs_pool))
 
         # BLAS/OpenMP threads for groups that sample in this process without a pool
         # are set per group in Kosmulator_MCMC (constants.MAIN_BLAS_THREADS_NO_POOL).
