@@ -144,7 +144,7 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "M_abs": (-30.0, -5.0),
     "gamma": (0.01, 1.0),
     "sigma_8": (0.01, 1.0),
-    "n": (0.0, 0.6),
+    "n": (-0.6, 0.6),   # f1CDM; n < 0 is phantom-like (w < -1), n = 0 is LCDM; n < 0.5 by restrict_f1CDM_v
     "q0": (-0.8, -0.01),
     "q1": (-0.75, 1.0),
     "beta": (0.01, 5.0),

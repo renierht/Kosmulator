@@ -732,9 +732,10 @@ def restrict_LCDM_Omega_m(x: float) -> bool:
 
 def restrict_f1CDM_v(x: float) -> bool:
     """
-    Guard-rail prior for f1CDM exponent n.
-
-    Empirically, n < 0.5 keeps E(z) well-behaved and the root-finding stable.
+    f1CDM exponent n < 0.5: alpha = (6 H0^2)^(1-n) Omega_F / (2n - 1) (Linder 2010,
+    arXiv:1005.3039, Eq. 14) diverges at n = 1/2. Negative n is allowed: the
+    background has a unique root and, for z >= 0, 1 + f_T > 0 and the Hdot denominator
+    1 - n Omega_F E^(2n-2) > 1; the f(T) term then behaves like phantom dark energy.
     """
     return x < 0.5
 
