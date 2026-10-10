@@ -493,6 +493,7 @@ def optimise_initial_guess(
     maxiter: int,
     maxfun: int,
     disp: bool,
+    quiet_cap: bool = False,
 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
     """
     Nelder-Mead simplex optimization to find a robust MAP center across non-smooth boundaries.
@@ -520,7 +521,12 @@ def optimise_initial_guess(
 
     # If the simplex failed to move away from the starting guess, log or inspect
     if not sol.success:
-        logger.warning("Nelder-Mead pre-fit did not achieve full convergence: %s", sol.message)
+        if quiet_cap and int(getattr(sol, "nfev", 0)) >= int(maxfun):
+            # CMB groups: the cap is meant to stop it (item 34)
+            logger.info("Nelder-Mead pre-fit stopped at its cap of %d calls "
+                        "(it only centres the initial walker ball).", int(maxfun))
+        else:
+            logger.warning("Nelder-Mead pre-fit did not achieve full convergence: %s", sol.message)
 
     # Nelder-Mead gives no Hessian, so estimate the diagonal curvature by finite
     # differences (2*ndim + 1 calls). It sets the size of the initial walker ball.
@@ -740,7 +746,9 @@ _BLAS_LIMITER = None
 # The CMB likelihoods return a sentinel (-1e10) when CLASS or clik fails at a point
 # (e.g. tau_reio where reionisation cannot be computed); the sampler then rejects the
 # point. The sampler's map is wrapped so that the main process counts these points
-# among the values the pool, the MPI ranks or this process return, in every mode.
+# among the values the pool, the MPI ranks or this process return (serial). Not
+# counted: samplers that run vectorised (CMB groups only with --force_zeus or
+# --force_vectorisation) and the zeus warm-up.
 _FAILED_POINTS = {"failed": 0, "evaluated": 0}
 
 
@@ -906,7 +914,7 @@ def run_mcmc(*args, **kwargs):
         if nf:
             log.warning(
                 "[%s | %s] %d of %d points evaluated during sampling (%.2f%%) could not be "
-                "computed (CLASS or likelihood error, log-likelihood %.0e) and were rejected; "
+                "computed (CLASS or likelihood error: log-posterior <= %.0e) and were rejected; "
                 "the reasons are in the warnings above (pool workers: in their output).",
                 kwargs.get("model_name", "?"), label, nf, ne, 100.0 * nf / max(ne, 1),
                 K.LOGLIKE_FAILED_BELOW,
@@ -1048,6 +1056,7 @@ def _run_mcmc_impl(
             maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "2000")),
             maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", str(maxfun_default))),
             disp=False,
+            quiet_cap=has_cmb,
         )
         print(f"SciPy optimized IC: {ic}\n")
 

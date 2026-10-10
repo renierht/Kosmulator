@@ -389,7 +389,7 @@ def main(
                 atexit.register(mpi_wait_all, comm)
             print(
                 "MPI requested but every group runs vectorised in this process (zeus or emcee) → "
-                "proceeding on rank 0; extra ranks exited."
+                "proceeding on rank 0; the extra ranks wait idle until it ends."
             )
 
     # ------------------------------------------------------------------

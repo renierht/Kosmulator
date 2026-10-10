@@ -486,6 +486,10 @@ MPI_SPIN_S = 0.0005
 MPI_POLL_MAX_S = 0.005
 MPI_MASTER_POLL_MAX_S = 0.001
 MPI_END_POLL_MAX_S = 0.05
+# Rank 0 waits at most this long for the worker ranks at exit. They are normally waiting
+# already (they enter the barrier when the pool closes); a worker stopped by Ctrl-C
+# never comes, and rank 0 must not wait for it forever.
+MPI_END_JOIN_TIMEOUT_S = 30.0
 
 _QUIET_MPI_POOL = None
 
@@ -516,14 +520,19 @@ def set_main_threads(n: int) -> str:
     return f"{n} (CLASS and BLAS)"
 
 
-def mpi_wait_all(comm, max_dt: float = MPI_POLL_MAX_S) -> None:
+def mpi_wait_all(comm, max_dt: float = MPI_POLL_MAX_S, timeout: Optional[float] = None) -> bool:
     """Barrier on `comm` that sleeps between tests. MPICH ch3 waits in MPI_Barrier and
-    MPI_Finalize by spinning; a rank that waits here for the others uses no CPU."""
+    MPI_Finalize by spinning; a rank that waits here for the others uses no CPU.
+    Returns False if `timeout` (seconds) passed before every rank arrived."""
     req = comm.Ibarrier()
+    t_end = None if timeout is None else _time.monotonic() + float(timeout)
     dt = 1e-3
     while not req.Test():
+        if t_end is not None and _time.monotonic() > t_end:
+            return False
         _time.sleep(dt)
         dt = min(2.0 * dt, max_dt)
+    return True
 
 
 def quiet_mpi_pool_class():
@@ -559,11 +568,17 @@ def quiet_mpi_pool_class():
             atexit.register(self._finish)
 
         def _finish(self):
-            """Rank 0 at exit: close the pool (if not yet) and meet the workers' barrier."""
+            """Rank 0 at exit: close the pool (if not yet) and meet the workers' barrier.
+            A worker rank stopped by Ctrl-C never arrives: after MPI_END_JOIN_TIMEOUT_S
+            rank 0 gives up and ends the job (MPI_Abort), as one Ctrl-C did before."""
             try:
                 self.close()
-                mpi_wait_all(self.comm)
-            except Exception:
+                if not mpi_wait_all(self.comm, MPI_POLL_MAX_S, MPI_END_JOIN_TIMEOUT_S):
+                    sys.stderr.write("MPI worker ranks did not reach the end of the run "
+                                     "(interrupted?); ending the MPI job.\n")
+                    sys.stderr.flush()
+                    self.comm.Abort(1)
+            except BaseException:
                 pass
 
         def _await(self, source, status, max_dt):
@@ -580,18 +595,22 @@ def quiet_mpi_pool_class():
             if self.is_master():
                 return
             status = MPI.Status()
-            while True:
-                self._await(self.master, status, MPI_POLL_MAX_S)
-                task = self.comm.recv(source=self.master, tag=MPI.ANY_TAG, status=status)
-                if task is None:
-                    break
-                func, arg = task
-                result = func(arg)
-                self.comm.ssend(result, self.master, status.tag)
-            if callback is not None:
-                callback()
-            # The pool is closed: wait (sleeping) until rank 0 is done, then finalise
-            mpi_wait_all(self.comm, MPI_END_POLL_MAX_S)
+            try:
+                while True:
+                    self._await(self.master, status, MPI_POLL_MAX_S)
+                    task = self.comm.recv(source=self.master, tag=MPI.ANY_TAG, status=status)
+                    if task is None:
+                        break
+                    func, arg = task
+                    result = func(arg)
+                    self.comm.ssend(result, self.master, status.tag)
+                if callback is not None:
+                    callback()
+                # The pool is closed: wait (sleeping) until rank 0 is done, then finalise
+                mpi_wait_all(self.comm, MPI_END_POLL_MAX_S)
+            except KeyboardInterrupt:
+                # Ctrl-C (mpiexec passes it to every rank): end the whole job now
+                self.comm.Abort(1)
 
         def map(self, worker, tasks, callback=None):
             if not self.is_master():
