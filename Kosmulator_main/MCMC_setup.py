@@ -717,6 +717,7 @@ def run_mcmc_for_all_models(
                     force=False,
                     no_rebuild=no_rebuild,
                     announce=(rank == 0),
+                    recheck=True,   # hash the sources once per model; per-point calls skip it
                 )
                 if not ok and no_rebuild:
                     raise RuntimeError("classy missing and rebuild forbidden (KOSM_NO_CLASS_REBUILD=1).")

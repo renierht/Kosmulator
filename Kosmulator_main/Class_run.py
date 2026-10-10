@@ -16,6 +16,7 @@ Public API (used elsewhere in Kosmulator):
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import glob
@@ -132,8 +133,10 @@ def _python_abi_sig() -> dict:
     }
 
 
+@functools.lru_cache(maxsize=None)
 def _toolchain_sig() -> dict:
-    """Describe the toolchain/libc used to build CLASS."""
+    """Describe the toolchain/libc used to build CLASS. Three compiler/linker
+    subprocesses, so cached: the toolchain does not change during a run."""
     env = os.environ
     return {
         "CCv": _first_line((env.get("CC") or "gcc") + " --version"),
@@ -222,7 +225,7 @@ def _full_signature(model_dir: str) -> dict:
     return {
         "src": _source_tree_hash(model_dir),
         "pyabi": _python_abi_sig(),
-        "tool": _toolchain_sig(),
+        "tool": dict(_toolchain_sig()),   # a copy: the cached dict stays unchanged
     }
 
 
@@ -541,6 +544,7 @@ def ensure_class_ready(
     force: bool = False,
     no_rebuild: bool = False,
     announce: bool = False,
+    recheck: bool = False,
 ) -> bool:
     """
     Ensure the correct classy for `model_name` is loaded.
@@ -548,15 +552,22 @@ def ensure_class_ready(
     - Cache key includes: source tree, Python ABI (and NumPy major version), toolchain/libc.
     - On a cache miss an in-tree build is used only if it is newer than its sources.
     - Rank 0 rebuilds behind a lock; workers wait for the artifact to appear.
-    - If the same model+signature is already active in this process, this is a no-op.
+    - If this model's build is already loaded in this process, this is a no-op that does
+      not hash the sources (the likelihoods call it at every point). recheck=True (the
+      once-per-model call in MCMC_setup) hashes them and reloads if they changed.
     """
     global _current_class_model, _current_class_hash
+
+    # Fast path: this model's build is already loaded in this process
+    if (not force) and (not recheck) and _current_class_model == model_name \
+            and _current_class_hash is not None:
+        return True
 
     model_dir = os.path.join("./Class", model_name)
     sig = _full_signature(model_dir)
     sig_hash = _sig_hash(sig)
 
-    # Fast path: already loaded in this process
+    # Already loaded with the same sources (recheck=True)
     if (not force) and (_current_class_model == model_name) and (_current_class_hash == sig_hash):
         return True
 
