@@ -141,6 +141,11 @@ BBN_DH_PDG_S: float = 1.08
 #: machine, so a run never takes every core by default.
 MAIN_BLAS_THREADS_NO_POOL = 1
 
+#: A finite log-posterior at or below this value is a point the likelihood could not
+#: compute: the CMB likelihoods return -1e10 when CLASS or clik fails. Counted during
+#: sampling and reported per group (item 47).
+LOGLIKE_FAILED_BELOW: float = -1e9
+
 # ----------------------------------------------------------------------
 # Cosmic chronometers: SPS-model systematic covariance (CC)
 # ----------------------------------------------------------------------
@@ -565,6 +570,10 @@ def planck_n_data(tag: str, lensing_mode: str = "raw") -> int:
 # On the step 8 lite chain (7 parameters) chi^2 stopped changing after about 200 calls.
 # Environment variable KOSM_POLISH_MAXFEV_CMB overrides it.
 POLISH_MAXFEV_CMB: int = 300
+
+#: Calls of the Nelder-Mead pre-fit that centres the initial walker ball, for groups
+#: with Planck data (item 34; other groups 2000). KOSM_OPT_MAXFUN overrides.
+PREFIT_MAXFEV_CMB: int = 300
 
 # WAIC: the draws used for the pointwise log-likelihood matrix (at most 1000) are picked
 # with this seed, so a rerun of the statistics gives the same WAIC

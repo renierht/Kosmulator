@@ -317,9 +317,12 @@ def print_model_banner(
     touches_cmb_bbn: bool,
     *,
     single_engine_map: Optional[Dict[str, str]] = None,
+    pool_kind: Optional[str] = None,
 ) -> None:
     """
     Big banner for each model. Reports the *actual* execution policy.
+    pool_kind: "local" or "mpi" for the pool this model gets, "serial" when it gets
+    none (--num_cores 1, native Windows); None keeps the plain word "pool".
     """
     import Kosmulator_main.constants as K
 
@@ -334,15 +337,18 @@ def print_model_banner(
 
     parts = []
 
+    # Where the likelihood runs when it does not run vectorised in this process (item 44)
+    pool_word = {"serial": "serial", "mpi": "MPI pool"}.get(pool_kind, "pool")
+
     if eng == "zeus":
         parts.append("Zeus")
         if not can_vec:
             parts.append("scalar")
         if not can_vec:
-            parts.append("pool")
+            parts.append(pool_word)
     elif eng == "emcee":
         parts.append("EMCEE")
-        parts.append("vectorised" if (can_vec and not touches_cmb_bbn) else "pool")
+        parts.append("vectorised" if (can_vec and not touches_cmb_bbn) else pool_word)
     else:
         parts.append(eng)
 
@@ -482,6 +488,32 @@ MPI_MASTER_POLL_MAX_S = 0.001
 MPI_END_POLL_MAX_S = 0.05
 
 _QUIET_MPI_POOL = None
+
+# OMP_NUM_THREADS as the user set it before Kosmulator started (None if not set)
+_USER_OMP_NUM_THREADS = os.environ.get("OMP_NUM_THREADS")
+
+
+def set_main_threads(n: int) -> str:
+    """
+    Threads for this process's own CLASS and BLAS/OpenMP work (item 45): the pre-fit,
+    sampling without a pool, the best-fit polish and the best-fit bands. CLASS v3 runs
+    every call on one thread per CPU unless OMP_NUM_THREADS (or SLURM_CPUS_PER_TASK)
+    says otherwise, and it reads the variable at every call; threadpoolctl does not
+    reach it. Kosmulator passes 1 for a serial run and for MPI rank 0, and --num_cores
+    for a local pool run (the pool's workers have 1 thread each), so a run never uses
+    more cores than it was given. An OMP_NUM_THREADS set before Kosmulator started is
+    kept. Returns a short description for the log.
+    """
+    if _USER_OMP_NUM_THREADS is not None:
+        return f"OMP_NUM_THREADS={_USER_OMP_NUM_THREADS} as set before the run"
+    n = max(1, int(n))
+    os.environ["OMP_NUM_THREADS"] = str(n)
+    try:
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(n)          # BLAS/OpenMP libraries loaded already
+    except Exception:
+        pass
+    return f"{n} (CLASS and BLAS)"
 
 
 def mpi_wait_all(comm, max_dt: float = MPI_POLL_MAX_S) -> None:

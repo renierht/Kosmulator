@@ -1363,6 +1363,8 @@ def _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS):
     """
     Up to PLOT_SETTINGS["band_draws"] (default 200) random posterior draws for one
     observation group, as parameter dicts. Returns None if the samples are not found.
+    Groups with Planck data take PLOT_SETTINGS["band_draws_cmb"] (default 100) draws:
+    each draw is a full lensed CLASS run in this process (seconds each, item 41).
     """
     if not All_Samples or model_name not in All_Samples:
         return None
@@ -1389,7 +1391,10 @@ def _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS):
             break
     if arr is None or arr.ndim != 2 or arr.shape[1] != len(names) or arr.shape[0] == 0:
         return None
-    n = max(1, int(PLOT_SETTINGS.get("band_draws", 200)))
+    if any(str(t).startswith("CMB_") for t in toks):
+        n = max(1, int(PLOT_SETTINGS.get("band_draws_cmb", 100)))
+    else:
+        n = max(1, int(PLOT_SETTINGS.get("band_draws", 200)))
     rng = np.random.default_rng(12345)
     idx = rng.choice(arr.shape[0], size=min(n, arr.shape[0]), replace=False)
     from Kosmulator_main.utils import with_fixed_params

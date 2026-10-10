@@ -736,6 +736,43 @@ def regenerate_invalid_walkers(
 
 _BLAS_LIMITER = None
 
+# ── Points the likelihood could not compute (item 47) ──────────────────────────
+# The CMB likelihoods return a sentinel (-1e10) when CLASS or clik fails at a point
+# (e.g. tau_reio where reionisation cannot be computed); the sampler then rejects the
+# point. The sampler's map is wrapped so that the main process counts these points
+# among the values the pool, the MPI ranks or this process return, in every mode.
+_FAILED_POINTS = {"failed": 0, "evaluated": 0}
+
+
+class _CountingMap:
+    """map for emcee/zeus: the pool's map (or the built-in one) that counts the returned
+    log-posteriors at or below constants.LOGLIKE_FAILED_BELOW (finite)."""
+
+    def __init__(self, pool):
+        self.pool = pool
+
+    def map(self, fn, iterable):
+        res = list(map(fn, iterable) if self.pool is None else self.pool.map(fn, iterable))
+        bad = 0
+        for r in res:
+            v = r[0] if isinstance(r, (tuple, list)) else r
+            try:
+                v = float(v)
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite(v) and v <= K.LOGLIKE_FAILED_BELOW:
+                bad += 1
+        _FAILED_POINTS["evaluated"] += len(res)
+        _FAILED_POINTS["failed"] += bad
+        return res
+
+
+def _counting_pool(pool, vectorize: bool):
+    """The pool to give the sampler: a counting map unless the sampler is vectorised
+    (then it calls the log-probability itself and ignores the pool)."""
+    return pool if vectorize else _CountingMap(pool)
+
+
 # ── Pool workers: data sent once per group, not with every walker evaluation ────
 # The likelihood arguments (data, CONFIG, ...) are written to a file once per
 # observation group; each pool task carries only theta and the file's path, and a
@@ -851,18 +888,28 @@ def run_mcmc(*args, **kwargs):
     fallbacks through rd_helpers warnings.
     """
     RD.reset_rd_fallback_counts()
+    _FAILED_POINTS.update(failed=0, evaluated=0)
     try:
         return _run_mcmc_impl(*args, **kwargs)
     finally:
         _restore_main_blas()
         _remove_shared_files()
+        label = kwargs.get("obs_key") or "+".join(map(str, kwargs.get("obs") or []))
         counts = RD.rd_fallback_counts()
         if counts:
-            label = kwargs.get("obs_key") or "+".join(map(str, kwargs.get("obs") or []))
             log.warning(
                 "[%s | %s] r_d fallbacks during sampling (this process): %s",
                 kwargs.get("model_name", "?"), label,
                 "; ".join(f"{k}: {v}" for k, v in counts.items()),
+            )
+        nf, ne = _FAILED_POINTS["failed"], _FAILED_POINTS["evaluated"]
+        if nf:
+            log.warning(
+                "[%s | %s] %d of %d points evaluated during sampling (%.2f%%) could not be "
+                "computed (CLASS or likelihood error, log-likelihood %.0e) and were rejected; "
+                "the reasons are in the warnings above (pool workers: in their output).",
+                kwargs.get("model_name", "?"), label, nf, ne, 100.0 * nf / max(ne, 1),
+                K.LOGLIKE_FAILED_BELOW,
             )
 
 
@@ -989,12 +1036,17 @@ def _run_mcmc_impl(
     sol_diag = None
     if do_ic:
         bounds = [prior_map[p] for p in param_names]
+        # The pre-fit only centres the initial ball; the burn-in does the rest. A CMB
+        # point costs seconds of serial CLASS + Planck time while the pool waits, so
+        # CMB groups get at most constants.PREFIT_MAXFEV_CMB calls (item 34);
+        # KOSM_OPT_MAXFUN overrides both caps.
+        maxfun_default = int(K.PREFIT_MAXFEV_CMB) if has_cmb else 2000
         ic, sol_diag = optimise_initial_guess(
             reference_vals,
             bounds,
             nlp,
             maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "2000")),
-            maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", "2000")),
+            maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", str(maxfun_default))),
             disp=False,
         )
         print(f"SciPy optimized IC: {ic}\n")
@@ -1245,7 +1297,7 @@ def _run_mcmc_impl(
             ndim,
             logprob_fn,
             args=zeus_args,
-            pool=pool_for_zeus,
+            pool=_counting_pool(pool_for_zeus, zeus_vectorize),
             vectorize=zeus_vectorize,
         )
         try:
@@ -1401,7 +1453,7 @@ def _run_mcmc_impl(
                     ndim,
                     emcee_fn,
                     args=emcee_args,
-                    pool=emcee_pool,
+                    pool=_counting_pool(emcee_pool, emcee_vectorize),
                     backend=backend,
                     vectorize=emcee_vectorize,
                 )
@@ -1498,7 +1550,7 @@ def _run_mcmc_impl(
             ndim,
             emcee_fn,
             args=emcee_args,
-            pool=emcee_pool,
+            pool=_counting_pool(emcee_pool, emcee_vectorize),
             backend=backend,
             vectorize=emcee_vectorize,
         )

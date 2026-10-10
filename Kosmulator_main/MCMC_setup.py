@@ -38,6 +38,7 @@ from Kosmulator_main.utils import (
     cleanup_pantheon_cov,
     get_pool,
     get_parallel_flag,
+    set_main_threads,
     mpi_wait_all,
     MPI_END_POLL_MAX_S,
     prepare_output,
@@ -417,7 +418,7 @@ def main(
         num_cores = int(getattr(args, "num_cores", 1))
         parallel_flag = get_parallel_flag(use_mpi=use_mpi, num_cores=num_cores)
 
-        if any_needs_pool and parallel_flag and num_cores > 1:
+        if any_needs_pool and parallel_flag:
             if use_mpi:
                 log.info(
                     "Parallel plan: MPI Pool for emcee / non-vectorised Zeus. "
@@ -438,6 +439,27 @@ def main(
                 "Parallel plan: selected engines do not require a worker Pool "
                 "(vectorised zeus and emcee run in this process)."
             )
+
+        # Item 42: a CMB group without a pool evaluates its walkers one after another
+        cmb_groups = [f"{m}: {'+'.join(g)}" for m in model_names
+                      for g in CONFIG[m].get("observations", []) if any(o in K.CMB_TAGS for o in g)]
+        nw = max([int(CONFIG[m].get("nwalker", nwalkers)) for m in model_names] or [nwalkers])
+        if cmb_groups and not parallel_flag:
+            import platform as _platform
+            why = ("native Windows has no worker pool (run Kosmulator in WSL)"
+                   if _platform.system() == "Windows" else f"--num_cores {num_cores}")
+            log.warning(
+                "Serial CMB run (%s): %s. The walkers' CLASS + Planck evaluations (seconds each) "
+                "run one after another on one core, so a converged chain takes days. Use "
+                "--num_cores N (up to nwalker/2 = %d) or --use_mpi.",
+                why, "; ".join(cmb_groups), max(1, nw // 2))
+        if any_needs_pool and parallel_flag:
+            n_workers = ((comm.Get_size() - 1) if comm is not None else 0) if use_mpi else num_cores
+            if n_workers > max(1, nw // 2):
+                log.info(
+                    "%d workers for %d walkers: emcee and zeus move half the walkers at a time, "
+                    "so only %d workers are busy and %d wait at each half-step.",
+                    n_workers, nw, nw // 2, n_workers - nw // 2)
 
         log.info("────────────────────────────────────────────────────────")
 
@@ -598,6 +620,11 @@ def run_mcmc_for_all_models(
     parallel_flag = get_parallel_flag(use_mpi, num_cores)
     pool_cache = {"mpi": None, "local": None}
 
+    # Threads of this process's own CLASS/BLAS work (item 45): the cores the run was given
+    main_threads = set_main_threads(num_cores if (parallel_flag and not use_mpi) else 1)
+    if rank == 0:
+        log.info("Threads for CLASS and BLAS in the main process: %s", main_threads)
+
     # Build the model list from either dict or list
     model_list = list(models.keys()) if isinstance(models, dict) else list(models)
     engine_mode = getattr(K, "engine_mode", "mixed")
@@ -703,6 +730,7 @@ def run_mcmc_for_all_models(
                 can_vec=bool(vectorised.get(model_name, False)),
                 touches_cmb_bbn=_model_has_any_cmb_or_bbn(CONFIG, model_name),
                 single_engine_map=K.engine_for_model,
+                pool_kind=("serial" if pool_for_model is None else ("mpi" if use_mpi else "local")),
             )
             #print(bar, flush=True)
 
