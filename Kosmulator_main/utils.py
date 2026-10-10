@@ -467,6 +467,133 @@ def acquire_run_lock(suffix: str = ""):
     return fh
 
 
+# Thread variables set to 1 for pool workers (local pool: M6; MPI worker ranks: item 48).
+# CLASS v3 reads OMP_NUM_THREADS (else SLURM_CPUS_PER_TASK, else all CPUs) at every call.
+_POOL_THREAD_VARS = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+                     "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS")
+
+# A rank waiting for an MPI message (item 49) polls without sleeping for MPI_SPIN_S (fast
+# tasks lose no time), then sleeps between polls: at most MPI_POLL_MAX_S for a worker
+# waiting for a task, MPI_MASTER_POLL_MAX_S for rank 0 waiting for results (a result
+# is noticed within 1 ms), MPI_END_POLL_MAX_S for worker ranks waiting at the end
+MPI_SPIN_S = 0.0005
+MPI_POLL_MAX_S = 0.005
+MPI_MASTER_POLL_MAX_S = 0.001
+MPI_END_POLL_MAX_S = 0.05
+
+_QUIET_MPI_POOL = None
+
+
+def mpi_wait_all(comm, max_dt: float = MPI_POLL_MAX_S) -> None:
+    """Barrier on `comm` that sleeps between tests. MPICH ch3 waits in MPI_Barrier and
+    MPI_Finalize by spinning; a rank that waits here for the others uses no CPU."""
+    req = comm.Ibarrier()
+    dt = 1e-3
+    while not req.Test():
+        _time.sleep(dt)
+        dt = min(2.0 * dt, max_dt)
+
+
+def quiet_mpi_pool_class():
+    """schwimmbad's MPIPool with ranks that sleep while they wait (item 49).
+
+    schwimmbad 0.4.2 waits in a blocking recv (workers) and in Iprobe/Probe loops (master).
+    MPICH and Open MPI wait in those by polling at full speed, so every idle worker rank
+    used a whole core during rank 0's serial work (the pre-fit, the steps between groups),
+    next to rank 0's CLASS threads, and rank 0 used one while the workers computed. Here a
+    waiting rank polls with Iprobe for MPI_SPIN_S, then sleeps between polls (0.1 ms,
+    doubling to MPI_POLL_MAX_S; to 1 ms on rank 0). Tasks, tags and results are as in
+    schwimmbad; the class is built on first use, so schwimmbad and mpi4py stay optional.
+
+    After the pool is closed, a worker rank went on to MPI_Finalize, which waits for rank 0
+    (statistics, plots) and on MPICH ch3 (conda's MPICH 4.0.3) also spins: 95% CPU per
+    rank on Renier's machine. Worker ranks now wait in a barrier that they poll with
+    sleeps instead; rank 0 joins it when Python exits (atexit), and then all ranks
+    finalise together.
+    """
+    global _QUIET_MPI_POOL
+    if _QUIET_MPI_POOL is not None:
+        return _QUIET_MPI_POOL
+    import atexit
+    from mpi4py import MPI
+    from schwimmbad import MPIPool
+
+    class QuietMPIPool(MPIPool):
+        def __init__(self, *args, **kwargs):
+            # Worker ranks wait for tasks inside the constructor and exit from there
+            super().__init__(*args, **kwargs)
+            # Rank 0: close the pool and join the workers' end barrier when Python exits.
+            # Registered after schwimmbad's own close hook, so it runs first (LIFO).
+            atexit.register(self._finish)
+
+        def _finish(self):
+            """Rank 0 at exit: close the pool (if not yet) and meet the workers' barrier."""
+            try:
+                self.close()
+                mpi_wait_all(self.comm)
+            except Exception:
+                pass
+
+        def _await(self, source, status, max_dt):
+            """Return when a message from `source` is waiting; sleep while none comes."""
+            t_spin = _time.perf_counter() + MPI_SPIN_S
+            dt = 1e-4
+            while not self.comm.Iprobe(source=source, tag=MPI.ANY_TAG, status=status):
+                if _time.perf_counter() < t_spin:
+                    continue
+                _time.sleep(dt)
+                dt = min(2.0 * dt, max_dt)
+
+        def wait(self, callback=None):
+            if self.is_master():
+                return
+            status = MPI.Status()
+            while True:
+                self._await(self.master, status, MPI_POLL_MAX_S)
+                task = self.comm.recv(source=self.master, tag=MPI.ANY_TAG, status=status)
+                if task is None:
+                    break
+                func, arg = task
+                result = func(arg)
+                self.comm.ssend(result, self.master, status.tag)
+            if callback is not None:
+                callback()
+            # The pool is closed: wait (sleeping) until rank 0 is done, then finalise
+            mpi_wait_all(self.comm, MPI_END_POLL_MAX_S)
+
+        def map(self, worker, tasks, callback=None):
+            if not self.is_master():
+                self.wait()
+                return None
+            workerset = self.workers.copy()
+            tasklist = [(tid, (worker, arg)) for tid, arg in enumerate(tasks)]
+            resultlist = [None] * len(tasklist)
+            pending = len(tasklist)
+            status = MPI.Status()
+            while pending:
+                while workerset and tasklist:      # a task for every free worker
+                    w = workerset.pop()
+                    taskid, task = tasklist.pop()
+                    self.comm.send(task, dest=w, tag=taskid)
+                self._await(MPI.ANY_SOURCE, status, MPI_MASTER_POLL_MAX_S)
+                result = self.comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG, status=status)
+                if callback is not None:
+                    callback(result)
+                workerset.add(status.source)
+                resultlist[status.tag] = result
+                pending -= 1
+            return resultlist
+
+        def close(self):
+            if self.is_master():
+                super().close()
+                # Closed once: _finish and schwimmbad's atexit hook call close again
+                self.workers = set()
+
+    _QUIET_MPI_POOL = QuietMPIPool
+    return QuietMPIPool
+
+
 def get_pool(use_mpi: bool = False, num_cores: int | None = None, **pool_kwargs):
     """
     Create a parallel pool.
@@ -496,7 +623,7 @@ def get_pool(use_mpi: bool = False, num_cores: int | None = None, **pool_kwargs)
     )
     if use_mpi or mpi_env:
         try:
-            from schwimmbad import MPIPool
+            MPIPool = quiet_mpi_pool_class()
         except Exception:
             if rank == 0:
                 print(
@@ -504,6 +631,20 @@ def get_pool(use_mpi: bool = False, num_cores: int | None = None, **pool_kwargs)
                     "→ falling back to serial."
                 )
             return None
+
+        if rank != 0:
+            # Worker ranks: one BLAS/OpenMP/CLASS thread each, as the local pool's workers
+            # (M6). This must come before MPIPool(): a worker rank waits for tasks inside
+            # the constructor and exits from there. NumPy's BLAS is loaded already, so its
+            # thread pools are resized with threadpoolctl; CLASS reads OMP_NUM_THREADS at
+            # every call.
+            for k in _POOL_THREAD_VARS:
+                os.environ[k] = "1"
+            try:
+                from threadpoolctl import threadpool_limits
+                threadpool_limits(1)
+            except Exception:
+                pass
 
         pool = MPIPool()
         if not pool.is_master():
@@ -544,11 +685,9 @@ def get_pool(use_mpi: bool = False, num_cores: int | None = None, **pool_kwargs)
     # when NumPy loads, which happens while unpickling the initializer, so
     # setting them inside the initializer is too late. Set them in the parent
     # just for the pool start-up, then restore the parent's values.
-    _thread_vars = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
-                    "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS")
-    _saved = {k: os.environ.get(k) for k in _thread_vars}
+    _saved = {k: os.environ.get(k) for k in _POOL_THREAD_VARS}
     try:
-        for k in _thread_vars:
+        for k in _POOL_THREAD_VARS:
             os.environ[k] = "1"
         # Forward initializer/initargs/maxtasksperchild/etc.
         return ctx.Pool(processes=num_cores, **pool_kwargs)

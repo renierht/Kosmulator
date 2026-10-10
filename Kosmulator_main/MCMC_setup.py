@@ -38,6 +38,8 @@ from Kosmulator_main.utils import (
     cleanup_pantheon_cov,
     get_pool,
     get_parallel_flag,
+    mpi_wait_all,
+    MPI_END_POLL_MAX_S,
     prepare_output,
     load_or_run_chain,
     init_summary_context,
@@ -370,14 +372,20 @@ def main(
     # 9) MPI early-exit if no pool is ever needed
     # ------------------------------------------------------------------
     if bool(getattr(args, "use_mpi", False)) and not any_needs_pool:
+        # The extra ranks wait for rank 0 in a sleeping barrier (MPI_Finalize spins on
+        # MPICH ch3, a whole core per rank for the whole run); rank 0 joins it at exit
         if rank != 0:
             try:
                 if comm is not None:
                     from mpi4py import MPI as _MPI
+                    mpi_wait_all(comm, MPI_END_POLL_MAX_S)
                     _MPI.Finalize()
             finally:
                 os._exit(0)
         else:
+            if comm is not None:
+                import atexit
+                atexit.register(mpi_wait_all, comm)
             print(
                 "MPI requested but every group runs vectorised in this process (zeus or emcee) → "
                 "proceeding on rank 0; extra ranks exited."
