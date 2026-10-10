@@ -141,6 +141,10 @@ BBN_DH_PDG_S: float = 1.08
 #: machine, so a run never takes every core by default.
 MAIN_BLAS_THREADS_NO_POOL = 1
 
+#: MPI ranks on rank 0's machine, counted at start-up (MCMC_setup.main); rank 0 runs its
+#: own CLASS work (pre-fit, polish, bands) on this many threads while the others wait
+MPI_NODE_RANKS: int = 1
+
 #: A finite log-posterior at or below this value is a point the likelihood could not
 #: compute: the CMB likelihoods return -1e10 when CLASS or clik fails. Counted during
 #: sampling and reported per group (item 47).

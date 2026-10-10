@@ -39,6 +39,7 @@ from Kosmulator_main.utils import (
     get_pool,
     get_parallel_flag,
     set_main_threads,
+    mpi_node_ranks,
     mpi_wait_all,
     MPI_END_POLL_MAX_S,
     prepare_output,
@@ -238,6 +239,9 @@ def main(
     # 3) MPI init
     # ------------------------------------------------------------------
     comm, rank = init_mpi()
+    # MPI ranks on rank 0's machine (they sleep while rank 0 works alone, item 49): rank 0's
+    # threads for its own CLASS work (item 45). Counted here, while every rank is present.
+    K.MPI_NODE_RANKS = mpi_node_ranks(comm) if bool(getattr(args, "use_mpi", False)) else 1
 
     # ------------------------------------------------------------------
     # 4) Master builds CONFIG & data
@@ -620,8 +624,16 @@ def run_mcmc_for_all_models(
     parallel_flag = get_parallel_flag(use_mpi, num_cores)
     pool_cache = {"mpi": None, "local": None}
 
-    # Threads of this process's own CLASS/BLAS work (item 45): the cores the run was given
-    main_threads = set_main_threads(num_cores if (parallel_flag and not use_mpi) else 1)
+    # Threads of this process's own CLASS/BLAS work (item 45): the cores the run was given on
+    # this machine, which wait while the main process works: --num_cores with a local pool,
+    # the ranks on rank 0's machine under MPI, 1 for a serial run
+    if parallel_flag and use_mpi:
+        n_main = int(getattr(K, "MPI_NODE_RANKS", 1) or 1)
+    elif parallel_flag:
+        n_main = num_cores
+    else:
+        n_main = 1
+    main_threads = set_main_threads(n_main)
     if rank == 0:
         log.info("Threads for CLASS and BLAS in the main process: %s", main_threads)
 

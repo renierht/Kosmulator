@@ -503,14 +503,20 @@ def set_main_threads(n: int) -> str:
     sampling without a pool, the best-fit polish and the best-fit bands. CLASS v3 runs
     every call on one thread per CPU unless OMP_NUM_THREADS (or SLURM_CPUS_PER_TASK)
     says otherwise, and it reads the variable at every call; threadpoolctl does not
-    reach it. Kosmulator passes 1 for a serial run and for MPI rank 0, and --num_cores
-    for a local pool run (the pool's workers have 1 thread each), so a run never uses
-    more cores than it was given. An OMP_NUM_THREADS set before Kosmulator started is
-    kept. Returns a short description for the log.
+    reach it. Kosmulator passes 1 for a serial run, --num_cores for a local pool run and
+    the number of ranks on rank 0's machine for MPI (the pool's workers and the other
+    ranks have 1 thread each and wait while this process works), so a run never uses
+    more cores than it was given; at most the CPUs this process may run on. An
+    OMP_NUM_THREADS set before Kosmulator started is kept. Returns a short description
+    for the log.
     """
     if _USER_OMP_NUM_THREADS is not None:
         return f"OMP_NUM_THREADS={_USER_OMP_NUM_THREADS} as set before the run"
-    n = max(1, int(n))
+    try:   # never more than the CPUs this process may run on (e.g. a rank bound to one core)
+        n_cpu = len(os.sched_getaffinity(0))
+    except Exception:
+        n_cpu = os.cpu_count() or 1
+    n = max(1, min(int(n), n_cpu))
     os.environ["OMP_NUM_THREADS"] = str(n)
     try:
         from threadpoolctl import threadpool_limits
@@ -518,6 +524,21 @@ def set_main_threads(n: int) -> str:
     except Exception:
         pass
     return f"{n} (CLASS and BLAS)"
+
+
+def mpi_node_ranks(comm) -> int:
+    """MPI ranks on this process's machine (collective: every rank of `comm` must call
+    it). 1 without MPI or if the count fails."""
+    if comm is None:
+        return 1
+    try:
+        from mpi4py import MPI as _MPI
+        node = comm.Split_type(_MPI.COMM_TYPE_SHARED)
+        n = node.Get_size()
+        node.Free()
+        return int(n)
+    except Exception:
+        return 1
 
 
 def mpi_wait_all(comm, max_dt: float = MPI_POLL_MAX_S, timeout: Optional[float] = None) -> bool:
