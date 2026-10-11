@@ -262,7 +262,7 @@ def compute_rd_class(p: dict):
     obq   = _q(Obh2,   2e-7)   # ~1e-5 relative bins in ω_b
     ocq   = _q(ocdmh2, 2e-7)   # ~1e-5 relative bins in ω_cdm
     nurq  = _q(N_ur,   1e-3)
-    tcmbq = _q(Tcmb,   1e-3)
+    tcmbq = round(Tcmb, 6)   # a 1e-3 bin turned 2.7255 K into 2.725 K (item 14)
     okq   = _q(Ok,     5e-4)
     taunq = _q(tau_n,  0.1) if tau_n is not None else None
 
