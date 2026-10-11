@@ -1,3 +1,13 @@
+# H(z) compilation: z, H [km/s/Mpc], sigma [km/s/Mpc] (diagonal errors). Source of the
+# compilation not recorded (checked 11 October 2026). It mixes two kinds of points:
+#  - 31 cosmic-chronometer rows that are also in CC.dat (z = 0.1 here is CC.dat's 0.09;
+#    z = 0.47 and 0.48 keep older errors, 34 and 60, where CC.dat has 49.6 and 62);
+#  - 20 rows that are not chronometers but H(z) from BAO and clustering analyses (galaxies;
+#    Lyman-alpha forest at z > 2), quoted for a fiducial sound horizon: z = 0.24, 0.30,
+#    0.31, 0.35, 0.36, 0.38, 0.43, 0.44, 0.51, 0.52, 0.56, 0.57, 0.59, 0.60, 0.61, 0.64,
+#    0.73, 2.33, 2.34, 2.36.
+# So OHD with CC counts the 31 chronometer points twice, and OHD with BAO or DESI data
+# may count clustering information twice. For chronometers alone use CC.dat.
 #redshift   Hubble    error
    0.0700    69.00    19.60 
    0.1000    69.00    12.00 

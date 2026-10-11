@@ -7,7 +7,7 @@
 0.07    69.0    19.6    # Zhang et al. 2014, arXiv:1207.4541
 0.09    69.0    12.0    # Jimenez et al. 2003, astro-ph/0302560
 0.12    68.6    26.2    # Zhang et al. 2014, arXiv:1207.4541
-0.12    71.33   4.20    # Wang, Lei & Fan 2026, arXiv:2601.07345 (preprint; stat+sys in quadrature, SPS-model systematic not included)
+0.12    71.33   4.20    # Wang, Lei & Fan 2026, ApJ 1003, 81 (arXiv:2601.07345, doi:10.3847/1538-4357/ae610a; stat+sys in quadrature, SPS-model systematic not included)
 0.17    83.0    8.0     # Simon et al. 2005, astro-ph/0412269 (values as in Stern et al. 2010, Table 2)
 0.179   75.0    4.0     # Moresco et al. 2012, arXiv:1201.3609
 0.199   75.0    5.0     # Moresco et al. 2012, arXiv:1201.3609
