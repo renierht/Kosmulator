@@ -3362,30 +3362,88 @@ def quiet_cstdio():
         os.close(se)
 
 
+def _tree_listing(root: Path) -> List[Tuple[str, int]]:
+    """(relative path, size) of every file under root, sorted (symlinks followed)."""
+    out = []
+    for d, _, files in os.walk(root, followlinks=True):
+        for f in files:
+            p = os.path.join(d, f)
+            out.append((os.path.relpath(p, root), os.path.getsize(p)))
+    return sorted(out)
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except Exception:
+        return True
+    return True
+
+
 def fast_path_for_clik(path: str) -> str:
     """
-    Copy a .clik directory to a fast filesystem (/dev/shm if available, else /tmp)
-    and return that path. If `path` is an HDF5 file or copying fails, return the
-    original path unchanged.
+    Copy a .clik directory to a fast filesystem (/dev/shm if available, else the
+    temporary directory) and return the copy's path; the original path if `path` is a
+    file, staging is switched off (KOSM_CLIK_STAGE_DIR = "off"), or copying fails.
+    KOSM_CLIK_STAGE_DIR = <directory> sets where the copies go.
 
-    This is used to speed up Planck likelihood reads on HPC systems.
+    The copy is <root>/kosmulator-<user id>/<key>/<name>, where <key> is a hash of the
+    source path and of its files' names, sizes and modification times: per user
+    (/dev/shm is shared on a cluster node), per source (two checkouts never share a
+    copy) and per version (an edited source gets a new copy). It is written under a
+    temporary name and renamed into place, so a run killed while copying (Ctrl-C,
+    MPI_Abort, a time limit) or several ranks copying at once never leave or read a
+    partial copy; temporary copies of processes that no longer run are removed. Before
+    item 56 the copy was <root>/<name>, made only if that name did not exist and never
+    checked: a copy cut short once was read by every later run on that machine.
     """
     src = Path(path)
     try:
-        # If it doesn't exist or is a file (e.g. .hdf5), just return as is.
         if not src.exists() or src.is_file():
             return str(src)
+        setting = os.environ.get("KOSM_CLIK_STAGE_DIR", "").strip()
+        if setting.lower() in ("off", "0", "no", "none"):
+            return str(src)
+        root = Path(setting) if setting else (
+            Path("/dev/shm") if Path("/dev/shm").is_dir() else Path(tempfile.gettempdir()))
 
-        # Prefer RAM disk if present
-        tmp_root = Path("/dev/shm") if Path("/dev/shm").exists() else Path(
-            tempfile.gettempdir()
-        )
-        dst = tmp_root / src.name
+        import hashlib
+        import uuid
+        listing = _tree_listing(src)
+        stamp = [(r, s, os.stat(os.path.join(src, r)).st_mtime_ns) for r, s in listing]
+        key = hashlib.sha1(repr((str(src.resolve()), stamp)).encode()).hexdigest()[:16]
+        uid = os.getuid() if hasattr(os, "getuid") else 0
+        user_dir = root / f"kosmulator-{uid}"
+        user_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        base = user_dir / key
+        dst = base / src.name
 
-        if not dst.exists():
-            shutil.copytree(src, dst, dirs_exist_ok=True)
+        # temporary copies left by processes that were killed while copying
+        for t in user_dir.glob("*/.tmp-*"):
+            try:
+                if not _pid_alive(int(t.name.split("-")[1])):
+                    shutil.rmtree(t, ignore_errors=True)
+            except (IndexError, ValueError):
+                pass
 
-        return str(dst)
-    except Exception:
-        # Fallback: don't crash, just use the original path
+        if dst.is_dir() and _tree_listing(dst) == listing:
+            return str(dst)
+        base.mkdir(parents=True, exist_ok=True)
+        tmp = base / f".tmp-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        shutil.copytree(src, tmp / src.name, symlinks=False)
+        if _tree_listing(tmp / src.name) != listing:
+            raise OSError("incomplete copy")
+        try:
+            os.rename(tmp / src.name, dst)           # atomic; fails if dst exists
+        except OSError:
+            pass                                     # another process was first
+        shutil.rmtree(tmp, ignore_errors=True)
+        if dst.is_dir() and _tree_listing(dst) == listing:
+            return str(dst)
+        raise OSError(f"staged copy {dst} does not match {src}")
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            "Planck likelihood %s read from its own folder (copy to a fast disk failed: %s)", src, e)
         return str(src)
