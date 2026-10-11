@@ -164,6 +164,7 @@ def main(
     pantheonp_mode: str = "PplusSH0ES",
     sample_H0_uncalibrated_SNe: bool = False,
     cmb_nuisance: str = "baseline",
+    waic_include_cmb: bool = False,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -193,6 +194,8 @@ def main(
     if _mode not in K.CMB_NUISANCE_MODES:
         raise ValueError(f"cmb_nuisance must be one of {K.CMB_NUISANCE_MODES}, not {cmb_nuisance!r}")
     K.CMB_NUISANCE = _mode
+    # WAIC of groups with Planck data: one term per Planck likelihood, or n/a (item 53)
+    K.WAIC_INCLUDE_CMB = bool(waic_include_cmb)
     if _mode == "lite":
         # figures and tables name the likelihood that was used
         for _t in ("CMB_hil", "CMB_hil_TT"):

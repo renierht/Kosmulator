@@ -2283,8 +2283,17 @@ def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
             model = utils.growth_prediction(obs_type, obs_data, param_dict, Model_func, gamma)
             ll_i  = pointwise_log_like_CC(obs_data, model, param_dict)
 
+        elif obs_type == "BBN_DH":
+            # One term, as the sampler computes it: the D/H systems share the
+            # theory error, so they are correlated (one term, as DESI and Pantheon+)
+            ll_i = np.array([-0.5 * Calc_BBN_DH_chi(obs_data, Model_func, param_dict, "BBN_DH")])
+
+        elif obs_type == "BBN_prior":
+            # BBN_PryMordial: the Gaussian on Omega_b h^2, one term (as in chi^2 and DIC)
+            ll_i = np.array([-0.5 * bbn_prior_chi2(obs_data, param_dict)])
+
         else:
-            continue  # skip obs types not yet supported
+            continue  # Planck likelihoods: Post_processing adds them (item 53)
 
         rows.append(ll_i)
 

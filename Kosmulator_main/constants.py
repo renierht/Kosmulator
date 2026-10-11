@@ -582,3 +582,9 @@ PREFIT_MAXFEV_CMB: int = 300
 # WAIC: the draws used for the pointwise log-likelihood matrix (at most 1000) are picked
 # with this seed, so a rerun of the statistics gives the same WAIC
 WAIC_SUBSAMPLE_SEED: int = 20260108
+
+#: WAIC of groups with Planck data (item 53). The Planck likelihoods give one total
+#: log-likelihood per point, not one per data point, so each enters WAIC as one term,
+#: which costs one lensed CLASS run per WAIC draw (1000 draws). False: WAIC is n/a, with
+#: a note, for every group with Planck data. Set by waic_include_cmb in Kosmulator.py.
+WAIC_INCLUDE_CMB: bool = False

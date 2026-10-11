@@ -140,6 +140,12 @@ sample_H0_uncalibrated_SNe: bool = False
 # Planck's foreground-marginalised likelihood with A_planck only (6 + 1 parameters for LCDM,
 # much faster to converge; its chains go to folders ending in _plik_lite).
 cmb_nuisance: str = "baseline"
+# WAIC for groups with Planck data. The Planck likelihoods give one total log-likelihood,
+# not one per data point, so WAIC can only count each of them as one term, and that costs
+# one lensed CLASS run per WAIC draw (1000 draws per group, after sampling). False
+# (default): WAIC is reported as n/a, with a note, for groups with Planck data. True: it is
+# computed, if you are willing to wait.
+waic_include_cmb: bool = False
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -247,6 +253,7 @@ def main() -> None:
         convergence=convergence,
         sample_H0_uncalibrated_SNe=sample_H0_uncalibrated_SNe,
         cmb_nuisance=cmb_nuisance,
+        waic_include_cmb=waic_include_cmb,
     )
 
 

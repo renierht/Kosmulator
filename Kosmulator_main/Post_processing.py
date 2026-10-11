@@ -23,6 +23,7 @@ from typing import Any  # Dict unused; drop if you like
 
 import logging
 import os
+import time
 
 import numpy as np
 from scipy.optimize import minimize
@@ -529,6 +530,82 @@ def compute_waic(log_lik_matrix):
     return waic
 
 
+#: Note of a group with Planck data when constants.WAIC_INCLUDE_CMB is False (item 53)
+WAIC_CMB_OFF_NOTE = ("WAIC n/a: the Planck likelihoods give one total log-likelihood, not one per "
+                     "data point; waic_include_cmb = True in Kosmulator.py counts each as one term "
+                     "(one CLASS run per WAIC draw)")
+
+
+def group_waic(obs_entry, obs_types, data, samples, MODEL_func, CONFIG_model, obs_index,
+               model_name, S=1000, include_cmb=None):
+    """
+    WAIC of one group from S posterior draws (seeded), and a note (or None).
+
+    Each dataset adds its columns to the (S, N) log-likelihood matrix: one per data
+    point for diagonal data, one for data with a full covariance (DESI, Pantheon+) and
+    for BBN. The Planck likelihoods give only a total log-likelihood, so each is one
+    term, evaluated with the sampler's own likelihood (one lensed CLASS run per draw,
+    shared by the group's Planck likelihoods). Without include_cmb
+    (constants.WAIC_INCLUDE_CMB) a group with Planck data gets nan and a note, not a
+    WAIC of its other datasets only, which could not be compared with other groups.
+    Draws at which a term cannot be computed are left out and counted in the note.
+    """
+    include_cmb = K.WAIC_INCLUDE_CMB if include_cmb is None else bool(include_cmb)
+    types = [str(t[0] if isinstance(t, (list, tuple)) else t) for t in obs_types]
+    cmb = [(o, t) for o, t in zip(obs_entry, types) if t == "CMB"]
+    if cmb and not include_cmb:
+        return float("nan"), WAIC_CMB_OFF_NOTE
+
+    n_total = samples.shape[0]
+    # seeded: the same draws, so the same WAIC, on every rerun
+    idx = np.random.default_rng(K.WAIC_SUBSAMPLE_SEED).choice(n_total, size=min(S, n_total), replace=False)
+    cols = []
+    for single_obs, single_type in zip(obs_entry, types):
+        if single_type == "CMB" or single_obs not in data:
+            continue
+        matrix = SP.build_log_like_matrix(
+            flat_samples=samples, obs_data=data[single_obs], obs_type=single_type,
+            obs_name=single_obs, Model_func=MODEL_func, CONFIG=CONFIG_model,
+            obs_index=obs_index, S=S, idx=idx,
+        )
+        if matrix.size > 0:
+            cols.append(matrix)
+
+    if cmb:
+        from Kosmulator_main import Kosmulator_MCMC as KM   # the sampler's likelihood
+        draws = samples[idx]
+        M = np.full((len(draws), len(cmb)), np.nan)
+        t0, step = time.time(), max(1, len(draws) // 10)
+        logger.info("WAIC for %s %s: %d Planck likelihood(s) at %d draws (one CLASS run per draw)",
+                    model_name, "+".join(map(str, obs_entry)), len(cmb), len(draws))
+        for s, theta in enumerate(draws):
+            for j, (o, t) in enumerate(cmb):
+                try:
+                    M[s, j] = float(KM.model_likelihood(theta, data.get(o), t, CONFIG_model,
+                                                        MODEL_func, model_name, o, obs_index))
+                except Exception as e:                          # counted below as a left-out draw
+                    logger.debug("WAIC: %s failed at draw %d: %s", o, s, e)
+            if (s + 1) % step == 0 and s + 1 < len(draws):
+                dt = time.time() - t0
+                logger.info("WAIC Planck terms: %d of %d draws, %.0f s (about %.0f s left)",
+                            s + 1, len(draws), dt, dt / (s + 1) * (len(draws) - s - 1))
+        cols.append(M)
+
+    if not cols:
+        return float("nan"), None
+    full = np.concatenate(cols, axis=1)                       # (S, N)
+    ok = np.all(np.isfinite(full) & (full > K.LOGLIKE_FAILED_BELOW), axis=1)
+    notes = []
+    if cmb:
+        notes.append("WAIC: each Planck likelihood counted as one term (they give no "
+                     "per-point terms); compare WAIC only between models of the same group")
+    if not ok.all():
+        notes.append(f"WAIC from {int(ok.sum())} of {ok.size} draws (a term could not be computed at the others)")
+    if ok.sum() < 2:
+        return float("nan"), " | ".join(notes) or None
+    return float(compute_waic(full[ok])), (" | ".join(notes) or None)
+
+
 def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
     """
     Perform statistical analysis for all models and observation combinations,
@@ -842,36 +919,16 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 p_D = D_bar - D_hat       #Spiegelhalter: D_bar - D_hat   Gelman: D_var/2.0 (Effective parameters)
                 dic = D_hat + 2.0 * p_D  # Spiegelhalter: D_hat + 2.0*p_D
 
-            #WAIC Implememtation
+            #WAIC Implememtation (group_waic: BBN as one term each; Planck data one term
+            # per likelihood with waic_include_cmb, otherwise n/a with a note; item 53)
             if obs_samples_for_waic is not None:
                 try:
-                    all_rows = []
-                    N_total = obs_samples_for_waic.shape[0]
-                    S = 1000
-                    # seeded: the same draws, so the same WAIC, on every rerun
-                    shared_idx = np.random.default_rng(K.WAIC_SUBSAMPLE_SEED).choice(
-                        N_total, size=min(S, N_total), replace=False)
-                    for single_obs, single_type in zip(obs_entry, obs_types):
-                        if single_obs not in data:
-                            continue
-                        matrix = SP.build_log_like_matrix(
-                            flat_samples=obs_samples_for_waic,
-                            obs_data=data[single_obs],
-                            obs_type=single_type,
-                            obs_name=single_obs,
-                            Model_func=MODEL_func,
-                            CONFIG=CONFIG[model_name],
-                            obs_index=obs_index,
-                            S=1000,
-                            idx = shared_idx,
-                        )
-                        if matrix.size > 0:
-                            all_rows.append(matrix)
-
-                    if all_rows:
-                        full_matrix = np.concatenate(all_rows, axis=1)  # (S, N_total)
-                        waic = compute_waic(full_matrix)
-                        logger.debug("[WAIC] %s %s: %.4f", model_name, obs_name, waic)
+                    waic, waic_note = group_waic(
+                        obs_entry, obs_types, data, obs_samples_for_waic, MODEL_func,
+                        CONFIG[model_name], obs_index, model_name)
+                    if waic_note:
+                        notes.append(waic_note)
+                    logger.debug("[WAIC] %s %s: %.4f", model_name, obs_name, waic)
                 except Exception as e:
                     print(f"[WAIC WARNING] {model_name} {obs_name}: {e}")
                     waic = float('nan')
