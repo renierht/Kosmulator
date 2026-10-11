@@ -41,6 +41,22 @@ def _classy_module():
             return None
     return mod if hasattr(mod, "Class") else None
 
+def classy_import_problem():
+    """None if CLASS (classy) can compute r_d in this process, else the reason it cannot."""
+    mod = sys.modules.get("classy")
+    if mod is not None and hasattr(mod, "Class"):
+        return None
+    try:
+        import classy as mod  # noqa: F811
+    except Exception as e:
+        return f"import classy failed: {type(e).__name__}: {e}"
+    return None if hasattr(mod, "Class") else "the module 'classy' has no Class"
+
+
+#: Text used at start-up and in the statistics notes when r_d comes from EH98 (item 15)
+EH98_EFFECT = ("the Eisenstein & Hu (1998) fit is about 2% above CLASS, which lowers H_0 from "
+               "BAO/DESI + BBN by about 3 km/s/Mpc")
+
 _RD_BACKEND_LOGGED = False
 
 # ------------------------------------------------------------------

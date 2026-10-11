@@ -50,6 +50,7 @@ from Kosmulator_main.utils import (
 )
 import Plots.Plots as MP
 from Kosmulator_main import Class_run as CR
+from Kosmulator_main import rd_helpers as RDH
 import Kosmulator_main.constants as K   # live access to flags
 from Kosmulator_main.utils import generate_label as cfg_generate_label
 
@@ -470,6 +471,25 @@ def main(
                     "%d workers for %d walkers: emcee and zeus move half the walkers at a time, "
                     "so only %d workers are busy and %d wait at each half-step.",
                     n_workers, nw, nw // 2, n_workers - nw // 2)
+
+        # Item 15: BAO/DESI calibrated by BBN (no Planck data, so no CLASS build of
+        # Kosmulator's is loaded) take r_d from CLASS if `import classy` works, otherwise
+        # from the EH98 fit. The run goes on either way; say so before it starts.
+        _bao = {"BAO", "DESI_DR1", "DESI_DR2"}
+        rd_groups = [f"{m}: {'+'.join(g)}" for m in model_names for g in CONFIG[m].get("observations", [])
+                     if set(g) & _bao and any(str(o).startswith("BBN") for o in g)
+                     and not set(g) & set(K.CMB_TAGS)]
+        _rd_problem = RDH.classy_import_problem() if rd_groups else None
+        if _rd_problem:
+            bar = "#" * 78
+            log.warning(bar)
+            log.warning("r_d WILL COME FROM THE EH98 FIT, NOT CLASS, for: %s", "; ".join(rd_groups))
+            log.warning("  Reason: %s.", _rd_problem)
+            log.warning("  Effect: %s. The run continues; the statistics notes repeat this.",
+                        RDH.EH98_EFFECT)
+            log.warning("  Fix: make `import classy` work in this environment (CLASS with its Python "
+                        "wrapper) and rerun.")
+            log.warning(bar)
 
         log.info("────────────────────────────────────────────────────────")
 

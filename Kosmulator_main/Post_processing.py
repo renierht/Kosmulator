@@ -36,6 +36,7 @@ from Kosmulator_main import utils as U
 from Kosmulator_main import constants as K
 from Kosmulator_main.constants import GAMMA_FS8_SINGLETON
 from Kosmulator_main import Class_run as CR
+from Kosmulator_main import rd_helpers as RD
 
 from Kosmulator_main.Statistical_packages import (
     Calc_PantP_chi,
@@ -833,6 +834,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 if S.size:
                     med = np.median(S, axis=0)
                     cmb_starts.append({p: float(med[i]) for i, p in enumerate(cand_param_names)})
+            RD.reset_rd_fallback_counts()          # item 15: was r_d from EH98 for this group?
             param_dict, chi_squared_total = find_polished_mle(
                 compute_chi2_fn=_compute_chi2_total,
                 params_dict_median=param_dict,
@@ -848,6 +850,10 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             # Re-evaluate once at the polished point: the data chi^2 (without the Planck
             # nuisance priors used in the polish) and the exact N data points
             chi_squared_total, num_data_points_total = _compute_chi2_total(param_dict)
+            _eh98 = sum(v for k, v in RD.rd_fallback_counts().items() if "EH98 used" in k)
+            if _eh98:
+                notes.append(f"r_d from the EH98 fit, not CLASS ({RD.classy_import_problem() or 'CLASS failed'}): "
+                             f"{RD.EH98_EFFECT}")
 
             if num_data_points_total <= 0:
                 logger.error(
