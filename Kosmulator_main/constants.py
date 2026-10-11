@@ -283,13 +283,18 @@ BBN_DH_PDG_MEAN = {"DH": 25.08, "sigma": 0.29}
 BBN_DH_PDG_S: float = 1.08
 
 #: BLAS/OpenMP threads in the main process while a group samples without a
-#: worker pool (vectorised zeus and emcee, or any run with --num_cores 1).
-#: None keeps NumPy's default (all cores). The best value depends on the
-#: machine: compare the steps/s of a short run with 1, 2 and 4 threads.
-#: In a 2-core cloud test 2 threads were 1.3x faster than 1 for DESI DR2 +
-#: DES-Y5 and equal for Pantheon+; 1 is kept until measured on the target
-#: machine, so a run never takes every core by default.
-MAIN_BLAS_THREADS_NO_POOL = 1
+#: worker pool (vectorised zeus and emcee): at most this many, and never more than
+#: the run's own main-process threads (MAIN_THREADS: 1 for a serial run, so
+#: --num_cores 1 stays serial; --num_cores with a pool). None: the run's threads.
+#: Renier's 12-core machine (bench_blas_threads.py, 12 Oct, DESI DR2 + DES-Y5 and
+#: + Pantheon+): 2 - 4 threads 10 - 20% faster than 1, 8 and 12 slower; 4 was best
+#: or within 6% of best in every case (item 24).
+MAIN_BLAS_THREADS_NO_POOL = 4
+
+#: The main process's threads for CLASS and BLAS, set by utils.set_main_threads (item 45):
+#: 1 for a serial run, --num_cores with a local pool, the ranks on rank 0's machine
+#: under MPI, or the user's OMP_NUM_THREADS. None until a run sets it.
+MAIN_THREADS = None
 
 #: MPI ranks on rank 0's machine, counted at start-up (MCMC_setup.main); rank 0 runs its
 #: own CLASS work (pre-fit, polish, bands) on this many threads while the others wait

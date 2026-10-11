@@ -520,12 +520,17 @@ def set_main_threads(n: int) -> str:
     for the log.
     """
     if _USER_OMP_NUM_THREADS is not None:
+        try:
+            K.MAIN_THREADS = max(1, int(_USER_OMP_NUM_THREADS))
+        except ValueError:
+            K.MAIN_THREADS = None
         return f"OMP_NUM_THREADS={_USER_OMP_NUM_THREADS} as set before the run"
     try:   # never more than the CPUs this process may run on (e.g. a rank bound to one core)
         n_cpu = len(os.sched_getaffinity(0))
     except Exception:
         n_cpu = os.cpu_count() or 1
     n = max(1, min(int(n), n_cpu))
+    K.MAIN_THREADS = n                 # caps the BLAS threads of groups without a pool
     os.environ["OMP_NUM_THREADS"] = str(n)
     try:
         from threadpoolctl import threadpool_limits

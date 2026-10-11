@@ -887,11 +887,14 @@ def _limit_main_blas(uses_pool: bool, engine: str = "", vectorised: bool = True,
     """
     Groups that sample in this process without a worker pool (vectorised zeus and
     emcee, or --num_cores 1) use constants.MAIN_BLAS_THREADS_NO_POOL BLAS/OpenMP
-    threads; run_mcmc restores the previous setting when the group ends. Logs one
-    line saying where the likelihood is evaluated.
+    threads, but never more than the run's own threads (constants.MAIN_THREADS, so
+    a serial run stays serial); run_mcmc restores the previous setting when the
+    group ends. Logs one line saying where the likelihood is evaluated.
     """
     global _BLAS_LIMITER
-    n = getattr(K, "MAIN_BLAS_THREADS_NO_POOL", None)
+    cap = getattr(K, "MAIN_BLAS_THREADS_NO_POOL", None)
+    main = getattr(K, "MAIN_THREADS", None)
+    n = (min(int(cap), int(main)) if cap else int(main)) if main else cap
     if uses_pool:
         log.info("[%s] %s: likelihood evaluated by the worker pool", label, engine)
         return
