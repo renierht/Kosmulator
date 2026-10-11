@@ -581,7 +581,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
                     obs_list, obs_idx = o, i
                     break
 
-            label = rd_policy_label(obs_list, CONFIG[model], obs_index=obs_idx)
+            label = rd_policy_label(obs_list, CONFIG[model], obs_index=obs_idx, model_name=model)
             disp_key = _displayize_key(obs_key)
             obs_text = disp_key if not label else f"{disp_key} [{label}]"
 
@@ -1811,13 +1811,21 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
 
                     else:
                         if rep_type == "f_sigma_8":
-                            gamma_fixed = ("gamma" not in params_med)
+                            from Plots.Plot_functions import growth_is_geff as _geff_on
+                            from Kosmulator_main import constants as _Kgr
+                            import User_defined_modules as _UDMg
+                            gamma_fixed = ("gamma" not in params_med) and not _geff_on()
+                            txt = None
+                            if _geff_on() and _UDMg.get_geff_function(model_name) is None \
+                                    and model_name not in _Kgr.GR_GRAVITY_MODELS:
+                                txt = "GR growth (no G_eff function)"
                             if gamma_fixed:
                                 txt = (
                                     rf"$\gamma$ fixed to {GAMMA_FS8_SINGLETON:.2f} (GR)"
                                     if use_latex
                                     else f"γ fixed to {GAMMA_FS8_SINGLETON:.2f} (GR)"
                                 )
+                            if txt:
                                 ax.text(
                                     0.98, 0.98, txt,
                                     transform=ax.transAxes, ha="right", va="top",

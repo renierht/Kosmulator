@@ -2647,7 +2647,10 @@ class InitSummaryHandler(logging.Handler):
                 if msg == "SNe_solo_H0_Mabs":
                     # internal aggregation token; skip printing by itself
                     continue
-                if self._is_fs8_solo(msg):
+                if self._is_fs8_solo(msg) and K.GROWTH_MODEL == "geff":
+                    msg = ("fσ8 solo: σ₈ and Ωₘ are degenerate (growth_model 'geff', no γ); "
+                           "add BAO/CC or CMB/S₈.")
+                elif self._is_fs8_solo(msg):
                     msg = (
                         "fσ8 solo: fixed γ="
                         f"{GAMMA_FS8_SINGLETON:.2f} (GR) to avoid "
@@ -3164,6 +3167,13 @@ def issue_observation_warnings(CONFIG, models, *, token_mode: bool = True) -> No
                 if token_mode and not _FS8_TOKEN_EMITTED:
                     _FS8_TOKEN_EMITTED = True
                     _warn_once(f"fs8_solo::{resolved}", "fσ8 run solo")
+                elif not token_mode and K.GROWTH_MODEL == "geff":
+                    _warn_once(
+                        f"fs8_solo::{resolved}",
+                        "fσ₈ run solo: σ₈ and Ωₘ are degenerate (growth_model 'geff': γ is not a "
+                        "parameter). Recommended: add BAO or CC for geometry, or pair fσ₈ with CMB "
+                        "or weak lensing (S₈).",
+                    )
                 elif not token_mode:
                     _warn_once(
                         f"fs8_solo::{resolved}",
@@ -3327,14 +3337,90 @@ def fs8_ap_factor(zs, param_dict, MODEL_func, om_fid):
     return q
 
 
-def growth_prediction(obs_type, obs_data, param_dict, MODEL_func, gamma=None):
+def growth_ode(zs, param_dict, MODEL_func, mu_func=None):
     """
-    Prediction for a growth dataset, used by the sampler, the statistics and WAIC:
-    f = Omega_m(z)^gamma, or f sigma_8 = sigma_8 Omega_m(z)^gamma exp(-int_0^z
-    Omega_m^gamma/(1+z') dz'), divided by the AP-type factor when the dataset asks
-    for it (constants.FS8_AP_CORRECTION). NaN entries mean an invalid background.
+    Linear growth on sub-horizon scales with G_eff/G = mu(z) (constants.GROWTH_MODEL = "geff"):
+        df/dx = -f^2 - (2 + dlnE/dx) f + (3/2) Omega_m(a) mu,   x = ln a,  f = dlnD/dx
+    (Nesseris et al. 2013, arXiv:1308.6142, Eq. 23), from z = constants.GROWTH_Z_START (matter
+    era, f = Omega_m(z)^0.55; the error of that start decays fast) to z = 0 with
+    constants.GROWTH_STEPS fourth-order Runge-Kutta steps. mu_func(z, p) gives G_eff/G (the
+    model's <model>_Geff); None means GR (mu = 1). Omega_m(a) = Omega_m a^-3 / E^2 and E(z) come
+    from the model, so the expansion history is the model's own. Assumes pressureless matter that
+    is conserved (rho_m ~ a^-3) and exchanges no momentum: not valid for interacting dark sectors.
+    Returns (f(zs), D(zs)/D(0)); NaN arrays if the background or mu is invalid.
+    """
+    zs = np.atleast_1d(np.asarray(zs, dtype=float))
+    nan = (np.full_like(zs, np.nan), np.full_like(zs, np.nan))
+    if zs.size == 0:
+        return zs.copy(), zs.copy()
+    if (not np.isfinite(zs).all()) or zs.min() < 0:
+        return nan
+    p = _inject_derived_background(param_dict)
+    z_start = max(float(K.GROWTH_Z_START), 2.0 * float(zs.max()) + 10.0)
+    nstep = int(K.GROWTH_STEPS)
+    x = np.linspace(-np.log1p(z_start), 0.0, 2 * nstep + 1)      # half steps for RK4
+    zg = np.expm1(-x)
+    zg[-1] = 0.0
+    E = np.asarray(MODEL_func(zg, p), dtype=float)
+    if E.shape != zg.shape or (not np.isfinite(E).all()) or np.any(E <= 0):
+        return nan
+    Om = float(p["Omega_m"]) * (1.0 + zg) ** 3 / E ** 2
+    dlnE = np.gradient(np.log(E), x, edge_order=2)
+    mu = np.ones_like(zg) if mu_func is None else np.asarray(mu_func(zg, p), dtype=float) * np.ones_like(zg)
+    if (not np.isfinite(mu).all()) or np.any(mu <= 0):
+        return nan
+    A = 2.0 + dlnE                 # f' = -f^2 - A f + B
+    B = 1.5 * Om * mu
+    h = x[2] - x[0]
+    f = np.empty(nstep + 1)
+    f[0] = Om[0] ** 0.55
+    for i in range(nstep):
+        j = 2 * i
+        fi = f[i]
+        k1 = -fi * fi - A[j] * fi + B[j]
+        y = fi + 0.5 * h * k1
+        k2 = -y * y - A[j + 1] * y + B[j + 1]
+        y = fi + 0.5 * h * k2
+        k3 = -y * y - A[j + 1] * y + B[j + 1]
+        y = fi + h * k3
+        k4 = -y * y - A[j + 2] * y + B[j + 2]
+        f[i + 1] = fi + h / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+    if not np.isfinite(f).all():
+        return nan
+    # Cubic Hermite between the steps (f' from the equation): ln D = int f dx exactly for the
+    # cubic, and f and ln D at the requested z without linear-interpolation error
+    fp = -f * f - A[::2] * f + B[::2]
+    lnD = np.concatenate(([0.0], np.cumsum(0.5 * h * (f[1:] + f[:-1]) + h * h / 12.0 * (fp[:-1] - fp[1:]))))
+    lnD -= lnD[-1]                                                          # D(z = 0) = 1
+    xq = -np.log1p(zs)
+    i = np.clip(((xq - x[0]) / h).astype(int), 0, nstep - 1)
+    t = (xq - (x[0] + i * h)) / h
+    h00, h10, h01, h11 = 2 * t**3 - 3 * t**2 + 1, t**3 - 2 * t**2 + t, -2 * t**3 + 3 * t**2, t**3 - t**2
+    fq = h00 * f[i] + h10 * h * fp[i] + h01 * f[i + 1] + h11 * h * fp[i + 1]
+    lq = h00 * lnD[i] + h10 * h * f[i] + h01 * lnD[i + 1] + h11 * h * f[i + 1]
+    return fq, np.exp(lq)
+
+
+def growth_prediction(obs_type, obs_data, param_dict, MODEL_func, gamma=None, model_name=None):
+    """
+    Prediction for a growth dataset, used by the sampler, the statistics and WAIC.
+    constants.GROWTH_MODEL "gamma": f = Omega_m(z)^gamma, or f sigma_8 = sigma_8
+    Omega_m(z)^gamma exp(-int_0^z Omega_m^gamma/(1+z') dz'). "geff": f and D(z)/D(0)
+    from growth_ode with the model's G_eff (<model>_Geff in User_defined_modules; GR
+    without one), f sigma_8 = sigma_8 f D(z)/D(0). Divided by the AP-type factor when the
+    dataset asks for it (constants.FS8_AP_CORRECTION). NaN entries mean an invalid background.
     """
     z = np.asarray(obs_data["redshift"], dtype=float)
+    if getattr(K, "GROWTH_MODEL", "gamma") == "geff":
+        import User_defined_modules as _UDM
+        mu = _UDM.get_geff_function(model_name, MODEL_func)
+        fz, Dz = growth_ode(z, param_dict, MODEL_func, mu)
+        if obs_type == "f":
+            return fz
+        model = float(param_dict["sigma_8"]) * fz * Dz
+        if obs_data.get("ap_correction"):
+            model = model / fs8_ap_factor(z, param_dict, MODEL_func, obs_data["omega_m_fid"])
+        return model
     Omz = matter_density_z_array(z, param_dict, MODEL_func)
     if (not np.isfinite(Omz).all()) or np.any(Omz <= 0):
         return np.full_like(z, np.nan)

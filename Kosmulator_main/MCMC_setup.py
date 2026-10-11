@@ -171,6 +171,9 @@ def main(
     neutrinos: str = "massive",
     nu_mass_eV: float = 0.06,
     nu_N_eff: float = 3.044,
+    cmb_nonlinear="hmcode",
+    hmcode_version: str = "2020",
+    growth_model: str = "gamma",
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -212,6 +215,11 @@ def main(
     # Neutrinos in every CLASS call and in the late-time E(z) (items 27, 13). Before any pool
     # exists: spawned workers inherit them through the KOSM_* variables set here.
     K.set_neutrinos(neutrinos, nu_mass_eV, nu_N_eff)
+    # Non-linear correction of the CMB lensing (one setting for every model) and the growth
+    # model for f and f sigma_8 (gamma, or the model's G_eff): also before any pool, and
+    # before the config (with "geff" gamma is not sampled)
+    K.set_cmb_nonlinear(cmb_nonlinear, hmcode_version)
+    K.set_growth_model(growth_model)
     if _mode == "lite":
         # figures and tables name the likelihood that was used
         for _t in ("CMB_hil", "CMB_hil_TT"):
@@ -287,6 +295,7 @@ def main(
                 logger=log,
             )
             issue_observation_warnings(CONFIG, models, token_mode=True)
+        announce_growth_and_lensing(CONFIG, list(model_names))
     else:
         models = None
         CONFIG = None
@@ -515,14 +524,22 @@ def main(
     if rank == 0:
         acquire_run_lock((getattr(args, "output_suffix", "") or "").strip())
         # Item 54: what this run is, for --peek (written after the lock: a run refused
-        # because another one holds the folder must not overwrite that run's settings)
-        from Kosmulator_main.peek import write_run_settings
+        # because another one holds the folder must not overwrite that run's settings).
+        # Chains already in the folder are reused (or resumed) unless --overwrite: refuse when
+        # they were made with other likelihood settings, warn when that is unknown.
+        from Kosmulator_main.peek import write_run_settings, check_run_settings
+        check_run_settings((getattr(args, "output_suffix", "") or "").strip(), {
+            "neutrinos": K.NEUTRINOS, "nu_mass_eV": K.NU_MASS_EV, "nu_N_eff": K.NU_N_EFF,
+            "growth_model": K.GROWTH_MODEL, "cmb_nonlinear": K.CMB_NONLINEAR, "hmcode_version": K.HMCODE_VERSION,
+            "cmb_nuisance": K.CMB_NUISANCE, "sample_H0_uncalibrated_SNe": bool(sample_H0_uncalibrated_SNe),
+        }, overwrite=bool(getattr(args, "overwrite", False)))
         write_run_settings((getattr(args, "output_suffix", "") or "").strip(), {
             "models": list(model_names), "observations": [list(g) for g in observations],
             "nwalkers": nwalkers, "nsteps": nsteps, "burn": burn, "convergence": convergence,
             "cmb_nuisance": K.CMB_NUISANCE, "sample_H0_uncalibrated_SNe": bool(sample_H0_uncalibrated_SNe),
             "waic_include_cmb": bool(K.WAIC_INCLUDE_CMB), "neutrinos": K.NEUTRINOS,
-            "nu_mass_eV": K.NU_MASS_EV, "nu_N_eff": K.NU_N_EFF,
+            "nu_mass_eV": K.NU_MASS_EV, "nu_N_eff": K.NU_N_EFF, "growth_model": K.GROWTH_MODEL,
+            "cmb_nonlinear": K.CMB_NONLINEAR, "hmcode_version": K.HMCODE_VERSION,
             "num_cores": int(getattr(args, "num_cores", 1)), "use_mpi": bool(getattr(args, "use_mpi", False)),
         })
 
@@ -910,6 +927,15 @@ def run_mcmc_for_all_models(
                     num_cores=num_cores,
                     obs_key=key,
                 )
+                # A chain made with other settings can have other parameters (with growth_model
+                # "gamma", f and f_sigma_8 groups sample gamma; with "geff" they do not)
+                _s = Samples[key].get("samples") if isinstance(Samples[key], dict) else Samples[key]
+                _pars = list(CONFIG[model_name]["parameters"][i])
+                if _s is not None and getattr(_s, "ndim", 0) == 2 and _s.shape[1] != len(_pars):
+                    raise RuntimeError(
+                        f"{model_name} {key}: the chain in {output_dir} has {_s.shape[1]} parameters, but this "
+                        f"run's group has {len(_pars)} ({', '.join(_pars)}). It was made with other settings "
+                        "(for example growth_model). Use --overwrite or another --output_suffix.")
                 # Where this group's chain lives, for the convergence report
                 PLOT_SETTINGS.setdefault("chain_index", {})[(model_name, key)] = {
                     "dir": output_dir, "key": key, "obs_index": i,
@@ -936,6 +962,60 @@ def run_mcmc_for_all_models(
 
 #: Pools kept open after sampling for the statistics and plots (item 52)
 _OPEN_POOLS: list = []
+
+
+def announce_growth_and_lensing(CONFIG, model_names) -> None:
+    """
+    Start-up lines on how each model's growth data (f, f sigma_8) and lensed CMB spectra are
+    computed (growth_model, cmb_nonlinear in Kosmulator.py), with warnings where that is an
+    approximation for the model: GR growth for a model without <model>_Geff, non-linear
+    fits calibrated on GR simulations, G_eff in the growth but GR perturbations in CLASS.
+    """
+    import User_defined_modules as UDM
+
+    def _tags(m):
+        cfg = CONFIG.get(m, {})
+        return ({str(o) for g in cfg.get("observations", []) for o in g}
+                | {str(t) for ts in cfg.get("observation_types", []) for t in ts})
+
+    growth = [m for m in model_names if m in CONFIG and {"f", "f_sigma_8"} & _tags(m)]
+    cmb = [m for m in model_names if m in CONFIG and any(t.startswith("CMB") for t in _tags(m))]
+    bar = "#" * 78
+    if growth and K.GROWTH_MODEL == "gamma":
+        log.info("Growth (f, f sigma_8): growth index, f = Omega_m(z)^gamma (growth_model = 'gamma')")
+        unused = [m for m in growth if UDM.get_geff_function(m) is not None]
+        if unused:
+            log.info("  G_eff functions of %s are not used with growth_model = 'gamma' ('geff' uses them)",
+                     ", ".join(unused))
+    elif growth:
+        for m in growth:
+            if UDM.get_geff_function(m) is not None:
+                log.info("Growth of %s: linear growth equation with G_eff from %s_Geff", m, m)
+            elif m in K.GR_GRAVITY_MODELS:
+                log.info("Growth of %s: linear growth equation, GR (G_eff = G)", m)
+            else:
+                log.warning(bar)
+                log.warning("NO G_eff FUNCTION FOR %s: its growth (f, f sigma_8) is computed with G_eff = G,", m)
+                log.warning("  that is the GR (LCDM) growth equation on %s's own expansion history.", m)
+                log.warning("  If %s changes gravity, its true f and f sigma_8 can differ from these, and", m)
+                log.warning("  so can the fit and the model comparison. Fix: add %s_Geff(z, p), returning", m)
+                log.warning("  G_eff/G, to User_defined_modules.py (example: f1CDM_v_Geff); or, if %s is a", m)
+                log.warning("  GR model with conserved matter (dark energy only, no interaction), add it to")
+                log.warning("  constants.GR_GRAVITY_MODELS. The growth equation assumes conserved matter")
+                log.warning("  (rho_m ~ a^-3): interacting dark-sector models need their own growth equation.")
+                log.warning(bar)
+        for m in growth:
+            if m in cmb and UDM.get_geff_function(m) is not None:
+                log.warning("%s: f and f sigma_8 use %s_Geff, but its CLASS build computes the CMB with GR "
+                            "perturbations, so the two parts of the fit treat gravity differently", m, m)
+    if cmb:
+        log.info("Non-linear correction of the CMB lensing: %s, the same for every model (cmb_nonlinear)",
+                 K.nonlinear_description())
+        mg = [m for m in cmb if m not in K.GR_GRAVITY_MODELS]
+        if K.CMB_NONLINEAR and mg:
+            log.warning("%s for %s: these fits are calibrated on simulations with GR, so for a model that "
+                        "changes gravity on small scales they are an approximation (cmb_nonlinear = None "
+                        "in Kosmulator.py: linear lensing for every model)", K.nonlinear_description(), ", ".join(mg))
 
 
 def close_open_pools() -> None:

@@ -153,6 +153,21 @@ waic_include_cmb: bool = False
 neutrinos: str = "massive"
 nu_mass_eV: float = 0.06
 nu_N_eff: float = 3.044
+# Non-linear correction of the CMB lensing (lensed spectra and Planck lensing), as in Cobaya: one
+# setting for every model, passed to CLASS. "hmcode" (default; hmcode_version "2020", CAMB's default,
+# or "2015", the earlier HMcode that Planck 2018 used), "halofit", or None (linear). These fits are calibrated on
+# simulations with GR; for models that change gravity on small scales they are an approximation, and
+# Kosmulator warns for models not in constants.GR_GRAVITY_MODELS. Costs about 70% more time per CMB
+# point than None.
+cmb_nonlinear = "hmcode"
+hmcode_version: str = "2020"
+# Growth data (f, f_sigma_8). "gamma" (default): f = Omega_m(z)^gamma with the growth index gamma
+# sampled (fixed to 0.55 for f_sigma_8 alone), a phenomenological test of gravity. "geff": the model's
+# own linear growth with G_eff/G from <model>_Geff(z, p) in User_defined_modules.py (gamma not
+# sampled). A model without <model>_Geff is grown with G_eff = G, the GR (LCDM) growth equation on its
+# own expansion history; for a theory that changes gravity that can differ from its true growth, and
+# Kosmulator warns at start-up.
+growth_model: str = "gamma"
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -264,6 +279,9 @@ def main() -> None:
         neutrinos=neutrinos,
         nu_mass_eV=nu_mass_eV,
         nu_N_eff=nu_N_eff,
+        cmb_nonlinear=cmb_nonlinear,
+        hmcode_version=hmcode_version,
+        growth_model=growth_model,
     )
 
 

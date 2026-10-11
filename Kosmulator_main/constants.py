@@ -98,25 +98,93 @@ def class_neutrino_params() -> Dict[str, float]:
     return {"N_ur": NU_N_EFF}
 
 
-#: Non-linear matter power in the lensed CMB spectra (item 27): "hmcode" (Planck 2018 used HMcode,
-#: Mead et al. 2015, 2016, in CAMB: arXiv:1807.06209, Sect. 2.1; CLASS offers HMCODE_VERSION "2015"
-#: or "2020"), "halofit", or None (linear, as before item 27; the
-#: default until Renier decides). HMcode and halofit are calibrated on LCDM simulations, so only
-#: CMB_NONLINEAR_MODELS use them; other models stay linear. Cost per lensed CLASS run in the cloud
-#: (2 cores, one 0.06 eV neutrino): linear 3.7 s, halofit 3.9 s, HMcode 6.1 s. Planck lite at a
-#: Planck-like point: -2lnL (plik_lite) linear 614.5, halofit 611.9, HMcode 611.9.
-CMB_NONLINEAR = None
-HMCODE_VERSION: str = "2020"
-CMB_NONLINEAR_MODELS: Tuple[str, ...] = ("LCDM_v", "wowaCDM_v")
+#: Non-linear matter power for the CMB lensing potential (items 27, 13), as in Cobaya: one setting
+#: for every model, passed to CLASS (Kosmulator.py cmb_nonlinear, hmcode_version; set_cmb_nonlinear).
+#: "hmcode" (default): HMcode, HMCODE_VERSION "2020" (Mead et al. 2021, arXiv:2009.01858; CAMB's
+#: default) or "2015" (CLASS's earlier HMcode, Mead et al. 2015, 2016, which Planck 2018 used in CAMB:
+#: arXiv:1807.06209, Sect. 2.1); "halofit"; or
+#: None (linear lensing). These fits are calibrated on simulations with GR: for models that change
+#: gravity on small scales (not in GR_GRAVITY_MODELS) they are an approximation, and a warning says
+#: so. Cost per lensed CLASS run in the cloud (2 cores, one 0.06 eV neutrino): linear 3.6 s, halofit
+#: 3.9 s, HMcode 6.1 s; plik_lite -2lnL at a Planck-like point: linear 614.5, halofit 611.9, HMcode 611.9.
+CMB_NONLINEAR_MODES: Tuple[str, ...] = ("hmcode", "halofit", "none")
+HMCODE_VERSIONS: Tuple[str, ...] = ("2020", "2015")
+_nl_env = os.environ.get("KOSM_CMB_NONLINEAR", "hmcode").strip().lower()
+CMB_NONLINEAR = None if _nl_env in ("", "none") else _nl_env
+HMCODE_VERSION: str = os.environ.get("KOSM_HMCODE_VERSION", "2020")
+
+
+def set_cmb_nonlinear(mode="hmcode", version="2020") -> None:
+    """
+    Non-linear correction of this run (Kosmulator.py: cmb_nonlinear, hmcode_version), for every
+    model. Sets KOSM_CMB_NONLINEAR and KOSM_HMCODE_VERSION as well, for pool workers started
+    afterwards (see set_neutrinos). Call it before any pool is built.
+    """
+    global CMB_NONLINEAR, HMCODE_VERSION
+    m = "none" if mode is None else str(mode).strip().lower()
+    if m not in CMB_NONLINEAR_MODES:
+        raise ValueError(f"cmb_nonlinear must be one of 'hmcode', 'halofit' or None, not {mode!r}")
+    v = str(version).strip()
+    if m == "hmcode" and v not in HMCODE_VERSIONS:
+        raise ValueError(f"hmcode_version must be one of {HMCODE_VERSIONS}, not {version!r}")
+    CMB_NONLINEAR = None if m == "none" else m
+    HMCODE_VERSION = v
+    os.environ["KOSM_CMB_NONLINEAR"] = m
+    os.environ["KOSM_HMCODE_VERSION"] = v
 
 
 def class_nonlinear_params(model_name: str = "") -> Dict[str, str]:
-    """CLASS input for the non-linear correction of the lensing potential, for this model."""
-    if not CMB_NONLINEAR or (model_name and model_name not in CMB_NONLINEAR_MODELS):
+    """CLASS input for the non-linear correction of the lensing potential (the same for every
+    model; model_name is kept for the callers' signature)."""
+    if not CMB_NONLINEAR:
         return {}
-    if str(CMB_NONLINEAR).lower() == "hmcode":
+    if CMB_NONLINEAR == "hmcode":
         return {"non_linear": "hmcode", "hmcode_version": str(HMCODE_VERSION)}
     return {"non_linear": str(CMB_NONLINEAR)}
+
+
+def nonlinear_description() -> str:
+    """Short text for logs and notes."""
+    if not CMB_NONLINEAR:
+        return "linear (no non-linear correction)"
+    if CMB_NONLINEAR == "hmcode":
+        return f"HMcode {HMCODE_VERSION}"
+    return str(CMB_NONLINEAR)
+
+
+#: Models whose gravity is GR (LCDM, dark-energy fluids): the growth equation needs no G_eff,
+#: and the non-linear lensing fits (calibrated on GR simulations) apply. Add your own GR models.
+GR_GRAVITY_MODELS: Tuple[str, ...] = ("LCDM", "LCDM_v", "LCDM_nv", "wowaCDM_v")
+
+#: Linear growth for f and f_sigma_8 (Kosmulator.py growth_model; set_growth_model).
+#: "gamma" (default, Kosmulator's approach so far): f = Omega_m(z)^gamma with the growth index
+#: gamma sampled (fixed to GAMMA_FS8_SINGLETON for f_sigma_8 alone), a phenomenological test of
+#: gravity. "geff": the model's own prediction from the linear growth equation
+#:     df/dlna + f^2 + (2 + dlnE/dlna) f = (3/2) Omega_m(a) G_eff/G
+#: (Nesseris et al. 2013, arXiv:1308.6142, Eq. 23), with G_eff/G from <model>_Geff(z, p) in
+#: User_defined_modules.py; gamma is not sampled. A model without <model>_Geff gets G_eff = G:
+#: GR growth on its own expansion history (a warning says so unless it is in GR_GRAVITY_MODELS).
+GROWTH_MODES: Tuple[str, ...] = ("gamma", "geff")
+GROWTH_MODEL: str = os.environ.get("KOSM_GROWTH_MODEL", "gamma")
+#: geff: the growth equation starts at GROWTH_Z_START (matter era, f = Omega_m(z)^0.55) and is
+#: integrated with GROWTH_STEPS fourth-order Runge-Kutta steps in ln a
+GROWTH_Z_START: float = 100.0
+GROWTH_STEPS: int = 300
+
+
+def set_growth_model(mode="gamma") -> None:
+    """Growth model of this run (Kosmulator.py growth_model); also KOSM_GROWTH_MODEL for pool workers."""
+    global GROWTH_MODEL
+    m = str(mode).strip().lower()
+    if m not in GROWTH_MODES:
+        raise ValueError(f"growth_model must be one of {GROWTH_MODES}, not {mode!r}")
+    GROWTH_MODEL = m
+    os.environ["KOSM_GROWTH_MODEL"] = m
+
+
+def class_signature() -> Tuple:
+    """Settings that change CLASS results (neutrinos, non-linear correction), for cache keys."""
+    return neutrino_signature() + (CMB_NONLINEAR, HMCODE_VERSION if CMB_NONLINEAR == "hmcode" else "")
 
 #: h used for Omega_r when a group does not sample H_0 (e.g. f, f_sigma_8 alone)
 H0_RADIATION_FALLBACK: float = 67.4

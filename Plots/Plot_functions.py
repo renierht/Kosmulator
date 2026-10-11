@@ -1075,7 +1075,7 @@ def residual_unit(obs_type: str) -> str:
         return "D/H (absolute)"
     return ""  # BAO/DESI/f/f_sigma_8 dimensionless
 
-def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None) -> str:
+def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None, model_name: str | None = None) -> str:
     """
     Return concise policy tokens for an observation group, e.g.:
       BAO                -> "rd: fixed 147.5 (RD_SINGLETON) Mpc" / "rd: free"
@@ -1132,7 +1132,16 @@ def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None) 
 
     # -------- Part 2: gamma token for f_sigma_8 --------
     has_fs8 = any(("f_sigma_8" in L) or ("fσ8" in tags[i]) for i, L in enumerate(lower))
-    if has_fs8:
+    if has_fs8 and growth_is_geff():
+        from Kosmulator_main import constants as _K
+        mname = str(model_name or "")
+        if mname and UDM.get_geff_function(mname) is not None:
+            tokens.append("growth: G_eff")
+        elif mname and mname not in _K.GR_GRAVITY_MODELS:
+            tokens.append("growth: GR (no G_eff)")
+        else:
+            tokens.append("growth: GR")
+    elif has_fs8:
         fixed_map = model_config.get("fs8_gamma_fixed_by_group", {}) or {}
 
         matched_index = obs_index
@@ -1437,10 +1446,25 @@ def _rate_limited_warn(msg, _payload):
         logger.debug("%s (suppressed)", msg)
 
 
+def _growth_geff(z, param_dict, model_name):
+    """f(z) and D(z)/D(0) from the growth equation with the model's G_eff (growth_model "geff")."""
+    from Kosmulator_main import utils as _U
+    p = _with_derived_background(param_dict)
+    MODEL = _model_func_for(model_name)
+    return _U.growth_ode(z, p, MODEL, UDM.get_geff_function(model_name, MODEL))
+
+
+def growth_is_geff() -> bool:
+    from Kosmulator_main import constants as _K
+    return getattr(_K, "GROWTH_MODEL", "gamma") == "geff"
+
+
 def compute_f(z: np.ndarray | float, param_dict: Mapping[str, float], model_name: str) -> np.ndarray:
     z = np.atleast_1d(z)
     if z.size == 0:                       # ← NEW
         return z.astype(float)
+    if growth_is_geff():
+        return _growth_geff(z, param_dict, model_name)[0]
     p  = _with_derived_background(param_dict)
     Ez = compute_E(z, p, model_name)
     Omz = (p["Omega_m"] * (1.0 + z)**3) / (Ez**2)
@@ -1465,6 +1489,9 @@ def compute_sigma8z(
     z = np.atleast_1d(z)
     if z.size == 0:
         return z.astype(float)
+
+    if growth_is_geff():
+        return float(param_dict["sigma_8"]) * _growth_geff(z, param_dict, model_name)[1]
 
     p = _with_derived_background(param_dict)
     gamma = float(p.get("gamma", DEFAULT_GROWTH_INDEX))
@@ -1496,7 +1523,9 @@ def model_curve_for_type(
 
     # Work with a copy so we can safely inject gamma if needed
     p = dict(param_dict)
-    if "gamma" not in p:
+    if growth_is_geff():
+        gamma_fixed = False                 # no gamma: the model's G_eff (growth_model "geff")
+    elif "gamma" not in p:
         p["gamma"] = DEFAULT_GROWTH_INDEX
         gamma_fixed = True
     else:

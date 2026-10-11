@@ -70,6 +70,56 @@ def write_run_settings(suffix: str, settings: Dict[str, Any]) -> Optional[str]:
         return None
 
 
+#: Run settings that change the likelihood: chains made with other values must not be reused
+LIKELIHOOD_SETTINGS = ("neutrinos", "nu_mass_eV", "nu_N_eff", "growth_model", "cmb_nonlinear",
+                       "hmcode_version", "cmb_nuisance", "sample_H0_uncalibrated_SNe")
+
+
+def check_run_settings(suffix: str, settings: Dict[str, Any], overwrite: bool = False) -> None:
+    """
+    Before a run reuses (or resumes) the chains already in MCMC_Chains/<suffix>: stop if they
+    were made with other likelihood settings (run_settings.json), warn if that is unknown (runs
+    started before run_settings.json existed). Nothing to check with --overwrite or no chains.
+    """
+    root = _chain_root(suffix)
+    if overwrite or not glob.glob(os.path.join(root, "**", "*.h5"), recursive=True):
+        return
+    path = os.path.join(root, SETTINGS_FILE)
+    if not os.path.exists(path):
+        log.warning("The chains in %s were made before Kosmulator recorded its run settings. Kosmulator "
+                    "reuses them with the current settings (neutrinos %s, CMB lensing %s, growth_model %s), "
+                    "but runs before October 2026 used massless neutrinos and linear CMB lensing: to "
+                    "reprocess such chains consistently set neutrinos = \"massless\", nu_N_eff = 3.044 "
+                    "and cmb_nonlinear = None in Kosmulator.py; to start new chains use --overwrite or "
+                    "another --output_suffix.", root, settings.get("neutrinos"),
+                    settings.get("cmb_nonlinear") or "linear", settings.get("growth_model"))
+        return
+    try:
+        with open(path) as fh:
+            old = json.load(fh)
+    except Exception as e:
+        log.warning("Could not read %s (%s); the run settings of its chains are not checked", path, e)
+        return
+    diff = []
+    for k in LIKELIHOOD_SETTINGS:
+        if k not in old or k not in settings:
+            continue
+        if k == "hmcode_version" and not (old.get("cmb_nonlinear") == settings.get("cmb_nonlinear") == "hmcode"):
+            continue
+        if k == "nu_mass_eV" and not (old.get("neutrinos") == settings.get("neutrinos") == "massive"):
+            continue
+        a, b = old[k], settings[k]
+        same = (abs(float(a) - float(b)) < 1e-12) if isinstance(a, (int, float)) and isinstance(b, (int, float)) \
+            and not isinstance(a, bool) else (a == b)
+        if not same:
+            diff.append(f"{k}: chains {a!r}, now {b!r}")
+    if diff:
+        raise RuntimeError(
+            f"The chains in {root} were made with other settings ({'; '.join(diff)}), so reusing or "
+            "resuming them would mix two likelihoods. Set these back in Kosmulator.py, or start new "
+            "chains with --overwrite or another --output_suffix.")
+
+
 def _remove_stale_copies(max_age_h: float = STALE_COPY_AGE_H) -> int:
     """Remove chain copies left in the temp folder by a peek that was killed outright
     (a peek removes its own copies when it ends, also after an error or Ctrl-C)."""
@@ -181,6 +231,10 @@ def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
 
     if st.get("neutrinos"):           # the run's neutrinos (r_d column of the corner table)
         K.set_neutrinos(st["neutrinos"], st.get("nu_mass_eV", K.NU_MASS_EV), st.get("nu_N_eff", K.NU_N_EFF))
+    # the run's growth model decides whether gamma is a parameter of its f / f_sigma_8 groups
+    K.set_growth_model(st.get("growth_model", "gamma"))
+    # runs whose settings file has no cmb_nonlinear were made with linear lensing
+    K.set_cmb_nonlinear(st.get("cmb_nonlinear"), st.get("hmcode_version", K.HMCODE_VERSION))
     K.CMB_NUISANCE = str(st.get("cmb_nuisance", "baseline")).lower()
     if K.CMB_NUISANCE == "lite":
         for _t in ("CMB_hil", "CMB_hil_TT"):

@@ -168,8 +168,8 @@ def _compute_cls_cached(
             sorted((k, v) for k, v in pd.items() if isinstance(v, (int, float)))
         )
 
-    from Kosmulator_main import constants as _Knu      # neutrinos are part of the key
-    nu_sig = _Knu.neutrino_signature()
+    from Kosmulator_main import constants as _Knu      # neutrinos, non-linear part of the key
+    nu_sig = _Knu.class_signature()
     key = (model_name, ell_max, m, numeric_items, nu_sig)
 
     if _CMB_THEORY_CACHE.get("key") == key:
@@ -437,7 +437,7 @@ def prefetch_cls(param_dicts, model_name: str, modes) -> int:
     if getattr(UDM, f"{model_name}_CMB", None) is None or not param_dicts:
         return 0
     from Kosmulator_main import utils as _U, constants as _Knu
-    nu_sig = _Knu.neutrino_signature()
+    nu_sig = _Knu.class_signature()
     n = 0
     for mode in modes:
         m = (mode or "").lower()
@@ -459,7 +459,7 @@ def clear_cls_prefetch() -> None:
 
 
 def _spectra_key(pd: Dict[str, float], model_name: str) -> tuple:
-    """Cache key: the model, the neutrinos and every numeric parameter except Planck nuisances."""
+    """Cache key: the model, the CLASS settings (neutrinos, non-linear) and every numeric parameter except Planck nuisances."""
     from Kosmulator_main import constants as _K
     skip = set(getattr(_K, "PLANCK_NUISANCE_NAMES", ())) | set(PLANCK_NUISANCE_DEFAULTS)
     items = []
@@ -470,7 +470,7 @@ def _spectra_key(pd: Dict[str, float], model_name: str) -> tuple:
             items.append((k, float(v)))
         except (TypeError, ValueError):
             continue
-    return (model_name, _K.neutrino_signature(), tuple(sorted(items)))
+    return (model_name, _K.class_signature(), tuple(sorted(items)))
 
 
 def get_cmb_spectra(pd: Dict[str, float], model_name: str) -> Optional[Dict[str, np.ndarray]]:
@@ -2284,7 +2284,7 @@ def pointwise_log_like_PantP(obs_data, model, param_dict):
     return np.array([-0.5 * chi2])                    # shape (1,)
 
 def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
-                           Model_func, CONFIG, obs_index, S=1000, idx=None):
+                           Model_func, CONFIG, obs_index, S=1000, idx=None, model_name=None):
     from Kosmulator_main import utils
 
     N_total = flat_samples.shape[0]
@@ -2334,7 +2334,8 @@ def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
             if obs_type == "f_sigma_8" and "gamma" not in param_dict:
                 from Kosmulator_main import constants as _K
                 gamma = CONFIG.get("fs8_gamma_fixed_by_group", {}).get(obs_index, _K.GAMMA_FS8_SINGLETON)
-            model = utils.growth_prediction(obs_type, obs_data, param_dict, Model_func, gamma)
+            model = utils.growth_prediction(obs_type, obs_data, param_dict, Model_func, gamma,
+                                            model_name=model_name)
             ll_i  = pointwise_log_like_CC(obs_data, model, param_dict)
 
         elif obs_type == "BBN_DH":

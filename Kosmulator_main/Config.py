@@ -1343,8 +1343,9 @@ def create_config(
                         obs_grp, h0_fix, mod,
                     )
 
-            # fσ8 singleton: fix gamma to GR-like value to avoid degeneracy
-            if len(obs_grp) == 1 and obs_grp[0] == "f_sigma_8":
+            # fσ8 singleton: fix gamma to GR-like value to avoid degeneracy (growth_model
+            # "gamma" only; "geff" has no gamma)
+            if len(obs_grp) == 1 and obs_grp[0] == "f_sigma_8" and K.GROWTH_MODEL == "gamma":
                 if "gamma" in grp_params:
                     grp_params.remove("gamma")
                 gamma_fix = float(reference_values.get("gamma_fixed", K.GAMMA_FS8_SINGLETON))
@@ -1540,8 +1541,9 @@ def Add_required_parameters(
         'PantheonPS':['H_0', 'M_abs'],
         'DESY5': ['H_0'],
         'Union3':     ['H_0'],
-        'f_sigma_8': ['Omega_m','sigma_8', 'gamma'],
-        'f': ['Omega_m','gamma'],
+        # growth index gamma only with growth_model "gamma"; "geff" uses the model's G_eff
+        'f_sigma_8': ['Omega_m', 'sigma_8'] + (['gamma'] if K.GROWTH_MODEL == "gamma" else []),
+        'f': ['Omega_m'] + (['gamma'] if K.GROWTH_MODEL == "gamma" else []),
         # Official JLA: light-curve nuisance parameters are sampled; the two
         # absolute magnitudes are fitted analytically (Calc_JLA_chi).
         'JLA': ['H_0', 'alpha_JLA', 'beta_JLA'],

@@ -224,8 +224,10 @@ def model_likelihood(
             gamma = param_dict.get("gamma", None)
             if gamma is None:
                 gamma = CONFIG.get("fs8_gamma_fixed_by_group", {}).get(obs_index, K.GAMMA_FS8_SINGLETON)
-        # f-only still samples gamma (no fix) unless you choose otherwise
-        model = utils.growth_prediction(obs_type, obs_data, param_dict, MODEL_func, gamma)
+        # f-only still samples gamma (no fix) unless you choose otherwise; growth_model
+        # "geff" uses the model's G_eff instead (no gamma)
+        model = utils.growth_prediction(obs_type, obs_data, param_dict, MODEL_func, gamma,
+                                        model_name=model_name)
         if not np.isfinite(model).all():
             return -np.inf
 

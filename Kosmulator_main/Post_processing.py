@@ -360,6 +360,18 @@ def _stats_lensing_logL_safe(
 
 
 
+def growth_note(model_name: str) -> str:
+    """Note on how f and f sigma_8 were computed with growth_model = "geff"."""
+    import User_defined_modules as UDM
+    if UDM.get_geff_function(model_name) is not None:
+        return f"growth: linear growth equation with G_eff from {model_name}_Geff"
+    if model_name in K.GR_GRAVITY_MODELS:
+        return "growth: linear growth equation, GR (G_eff = G)"
+    return (f"growth: GR growth (G_eff = G) on {model_name}'s expansion history, because "
+            f"User_defined_modules.py has no {model_name}_Geff; if {model_name} changes gravity, its "
+            "f and f sigma_8 can differ from these")
+
+
 def _resolve_gamma_for_obs(
     model_name: str,
     obs_key: str,
@@ -576,7 +588,7 @@ def group_waic(obs_entry, obs_types, data, samples, MODEL_func, CONFIG_model, ob
         matrix = SP.build_log_like_matrix(
             flat_samples=samples, obs_data=data[single_obs], obs_type=single_type,
             obs_name=single_obs, Model_func=MODEL_func, CONFIG=CONFIG_model,
-            obs_index=obs_index, S=S, idx=idx,
+            obs_index=obs_index, S=S, idx=idx, model_name=model_name,
         )
         if matrix.size > 0:
             cols.append(matrix)
@@ -759,11 +771,17 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
 
                     elif obs_type in ["f", "f_sigma_8"]:
                         gamma = None
-                        if obs_type == "f_sigma_8":
+                        if K.GROWTH_MODEL == "geff":
+                            if p_eval is param_dict:
+                                note = growth_note(model_name)
+                                if note not in notes:
+                                    notes.append(note)
+                        elif obs_type == "f_sigma_8":
                             gamma = _resolve_gamma_for_obs(model_name, obs_name, CONFIG, p_eval, default_gamma=GAMMA_FS8_SINGLETON)
                             if "gamma" not in p_eval and p_eval is param_dict:
                                 notes.append(f"γ fixed to {gamma:.3f} (fσ8-only)")
-                        model_val = U.growth_prediction(obs_type, obs_data, p_eval, MODEL_func, gamma)
+                        model_val = U.growth_prediction(obs_type, obs_data, p_eval, MODEL_func, gamma,
+                                                        model_name=model_name)
 
                         chi_total += float(SP.Calc_obs_chi(obs_type, obs_data, model_val))
                         n_points += len(obs_data["type_data"])

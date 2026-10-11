@@ -372,6 +372,59 @@ def f1CDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
 
 
 # ============================================================================
+#  Effective gravitational constant for the growth of structure
+#  ---------------------------------------------------------------------------
+#  With growth_model = "geff" in Kosmulator.py, f and f_sigma_8 come from the
+#  linear growth equation with G_eff/G of the model, read from a function
+#  named <model name>_Geff(z, p) here (vectorised in z, returns G_eff/G).
+#  A model without one is grown with G_eff = G (GR), and Kosmulator warns
+#  unless the model is in constants.GR_GRAVITY_MODELS. Scale-independent
+#  G_eff only (sub-horizon, quasi-static).
+# ============================================================================
+
+
+def f1CDM_v_Geff(z: Number, p: Dict[str, float]) -> Number:
+    r"""
+    f1CDM (power-law f(T) = alpha (-T)^n, action T + f(T), T = -6H^2):
+        G_eff / G = 1 / (1 + f_T),   f_T = n Omega_F E^{2n-2} / (1 - 2n),
+    with Omega_F = 1 - Omega_m - Omega_r and E from f1CDM_MODEL_vectorised. G_eff/G = 1/(1 + f_T)
+    is Eq. 32 of Nesseris, Basilakos, Saridakis & Perivolaropoulos 2013 (PRD 88, 103010,
+    arXiv:1308.6142), same action and sign of T; f_T follows from alpha = (6 H0^2)^(1-n)
+    Omega_F / (2n - 1) (Linder 2010, arXiv:1005.3039, Eq. 14). n = 0 gives 1 (GR); at z = 0 and
+    Omega_m = 0.31, n = -0.2 gives 1.11, n = 0.3 gives 0.66; G_eff -> G at early times (n < 1).
+    Note: the f1CDM CLASS build uses GR perturbations, so CMB spectra do not include this.
+    """
+    z = _asarray(z)
+    n = float(p["n"])
+    Om = float(p["Omega_m"])
+    Or = radiation_density(p)
+    E = np.asarray(f1CDM_MODEL_vectorised(z, p), dtype=float)
+    fT = n * (1.0 - Om - Or) * E ** (2.0 * n - 2.0) / (1.0 - 2.0 * n)
+    out = 1.0 / (1.0 + fT)
+    return _scalar_or_array(out)
+
+
+f1CDM_nv_Geff = f1CDM_v_Geff
+
+
+def get_geff_function(model_name: str = None, MODEL_func: Callable = None):
+    """
+    The model's G_eff/G function (<model name>_Geff in this module), or None. Found by name when
+    the name is given; otherwise by the model's E(z) function, but only if exactly one registered
+    model uses that function (two models may share an E(z) and differ in G_eff).
+    """
+    if model_name:
+        fn = globals().get(f"{model_name}_Geff")
+        return fn if callable(fn) else None
+    if MODEL_func is not None:
+        names = [k for k, v in _MODEL_REGISTRY.items() if v[0] is MODEL_func]
+        if len(names) == 1:
+            fn = globals().get(f"{names[0]}_Geff")
+            return fn if callable(fn) else None
+    return None
+
+
+# ============================================================================
 #  CMB wrappers (CLASS C_ℓ)
 #  ---------------------------------------------------------------------------
 #  These are used by the CMB likelihood. They take *full* cosmological
@@ -389,8 +442,9 @@ def _free_class(cosmo) -> None:
 def _class_standard(model_name: str, lensed: bool) -> dict:
     """
     CLASS input every CMB helper adds (constants, item 27): the neutrinos (one 0.06 eV
-    neutrino, N_eff = 3.044 by default) and, for lensed spectra of the models in
-    constants.CMB_NONLINEAR_MODELS, the non-linear correction (constants.CMB_NONLINEAR; off by default).
+    neutrino, N_eff = 3.044 by default) and, for lensed spectra, the non-linear correction
+    (constants.CMB_NONLINEAR: HMcode 2020 by default, the same for every model; Kosmulator.py
+    cmb_nonlinear).
     Add **_class_standard("<your model>", lensed) to your own helper's CLASS input.
     """
     out = dict(_K.class_neutrino_params())
