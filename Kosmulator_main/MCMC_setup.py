@@ -183,6 +183,13 @@ def main(
     # 1) CLI
     # ------------------------------------------------------------------
     args = parse_cli_args()
+    if getattr(args, "peek", False):
+        # Item 54: look at the run --output_suffix (while it goes on, or afterwards); no sampling
+        from Kosmulator_main.peek import peek
+        peek((getattr(args, "output_suffix", "") or "").strip(), burn=getattr(args, "peek_burn", None),
+             all_params=bool(getattr(args, "corner_show_all_cmb_params", False)),
+             latex_enabled=bool(getattr(args, "latex_enabled", False)))
+        return {}
     K.set_engine_overrides(
         force_vec=getattr(args, "force_vectorisation", False),
         disable_vec=getattr(args, "disable_vectorisation", False),
@@ -501,6 +508,16 @@ def main(
     # writing to MCMC_Chains/<suffix> (it would interleave chain rows).
     if rank == 0:
         acquire_run_lock((getattr(args, "output_suffix", "") or "").strip())
+        # Item 54: what this run is, for --peek (written after the lock: a run refused
+        # because another one holds the folder must not overwrite that run's settings)
+        from Kosmulator_main.peek import write_run_settings
+        write_run_settings((getattr(args, "output_suffix", "") or "").strip(), {
+            "models": list(model_names), "observations": [list(g) for g in observations],
+            "nwalkers": nwalkers, "nsteps": nsteps, "burn": burn, "convergence": convergence,
+            "cmb_nuisance": K.CMB_NUISANCE, "sample_H0_uncalibrated_SNe": bool(sample_H0_uncalibrated_SNe),
+            "waic_include_cmb": bool(K.WAIC_INCLUDE_CMB), "neutrinos": getattr(K, "NEUTRINOS", None),
+            "num_cores": int(getattr(args, "num_cores", 1)), "use_mpi": bool(getattr(args, "use_mpi", False)),
+        })
 
     samples = run_mcmc_for_all_models(
         models=models,

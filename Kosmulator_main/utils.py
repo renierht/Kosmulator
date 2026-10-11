@@ -233,6 +233,15 @@ def parse_cli_args():
         help="Print likelihood diagnostics (components + TOTAL) for one walker. "
              "Optional N prints every Nth likelihood call (default if flag is present: 1, Higher N = less printouts).",
     )
+    parser.add_argument(
+        "--peek", action="store_true",
+        help="Do not run: show the run --output_suffix as it stands (corner plots of the chains so far "
+             "to Plots/Saved_Plots/Peek/<suffix>/, means, convergence table). Safe while the run goes on.",
+    )
+    parser.add_argument(
+        "--peek_burn", type=int, default=None,
+        help="With --peek: steps to discard (default: the run's burn-in, or half the steps so far if fewer).",
+    )
 
     args = parser.parse_args()
 
