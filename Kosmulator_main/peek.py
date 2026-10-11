@@ -35,6 +35,10 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 SETTINGS_FILE = "run_settings.json"
+COPY_PREFIX = "kosm_peek_"
+#: Copies older than this are from a peek that was killed outright (a running peek's copies
+#: are minutes old); they are removed at the start of the next peek
+STALE_COPY_AGE_H = 12.0
 
 
 def _chain_root(suffix: str) -> str:
@@ -64,6 +68,22 @@ def write_run_settings(suffix: str, settings: Dict[str, Any]) -> Optional[str]:
     except Exception as e:                      # a peek convenience; never stops a run
         log.warning("Could not write %s for --peek: %s", SETTINGS_FILE, e)
         return None
+
+
+def _remove_stale_copies(max_age_h: float = STALE_COPY_AGE_H) -> int:
+    """Remove chain copies left in the temp folder by a peek that was killed outright
+    (a peek removes its own copies when it ends, also after an error or Ctrl-C)."""
+    n = 0
+    for d in glob.glob(os.path.join(tempfile.gettempdir(), COPY_PREFIX + "*")):
+        try:
+            if os.path.isdir(d) and time.time() - os.path.getmtime(d) > max_age_h * 3600.0:
+                shutil.rmtree(d, ignore_errors=True)
+                n += 1
+        except OSError:
+            pass
+    if n:
+        log.info("--peek: removed %d chain copies left by an earlier peek", n)
+    return n
 
 
 def _settings_from_folders(suffix: str) -> Dict[str, Any]:
@@ -135,6 +155,7 @@ def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
     except Exception:
         pass
     os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")    # only our copies are opened
+    _remove_stale_copies()
 
     import Kosmulator as KZ
     import User_defined_modules as UDM
@@ -185,7 +206,7 @@ def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
     for model in models:
         c = CONFIG[model]
         Samples, shown, rows = {}, [], []
-        tmpdir = tempfile.mkdtemp(prefix="kosm_peek_")
+        tmpdir = tempfile.mkdtemp(prefix=COPY_PREFIX)
         try:
             for j, g in enumerate(c["observations"]):
                 key = U.generate_label(g, config_model=c, obs_index=j)
