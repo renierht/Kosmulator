@@ -171,7 +171,7 @@ def main(
     neutrinos: str = "massive",
     nu_mass_eV: float = 0.06,
     nu_N_eff: float = 3.044,
-    cmb_nonlinear="hmcode",
+    cmb_nonlinear=None,
     hmcode_version: str = "2020",
     growth_model: str = "gamma",
 ):

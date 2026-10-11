@@ -89,9 +89,9 @@ def check_run_settings(suffix: str, settings: Dict[str, Any], overwrite: bool = 
         log.warning("The chains in %s were made before Kosmulator recorded its run settings. Kosmulator "
                     "reuses them with the current settings (neutrinos %s, CMB lensing %s, growth_model %s), "
                     "but runs before October 2026 used massless neutrinos and linear CMB lensing: to "
-                    "reprocess such chains consistently set neutrinos = \"massless\", nu_N_eff = 3.044 "
-                    "and cmb_nonlinear = None in Kosmulator.py; to start new chains use --overwrite or "
-                    "another --output_suffix.", root, settings.get("neutrinos"),
+                    "reprocess such chains consistently set neutrinos = \"massless\" and nu_N_eff = 3.044 "
+                    "in Kosmulator.py (and keep cmb_nonlinear = None); to start new chains use --overwrite "
+                    "or another --output_suffix.", root, settings.get("neutrinos"),
                     settings.get("cmb_nonlinear") or "linear", settings.get("growth_model"))
         return
     try:

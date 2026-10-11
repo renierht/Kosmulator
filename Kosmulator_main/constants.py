@@ -100,21 +100,21 @@ def class_neutrino_params() -> Dict[str, float]:
 
 #: Non-linear matter power for the CMB lensing potential (items 27, 13), as in Cobaya: one setting
 #: for every model, passed to CLASS (Kosmulator.py cmb_nonlinear, hmcode_version; set_cmb_nonlinear).
-#: "hmcode" (default): HMcode, HMCODE_VERSION "2020" (Mead et al. 2021, arXiv:2009.01858; CAMB's
-#: default) or "2015" (CLASS's earlier HMcode, Mead et al. 2015, 2016, which Planck 2018 used in CAMB:
-#: arXiv:1807.06209, Sect. 2.1); "halofit"; or
-#: None (linear lensing). These fits are calibrated on simulations with GR: for models that change
+#: None (default, Renier 11 Oct): linear lensing. "halofit", or "hmcode": HMcode, HMCODE_VERSION
+#: "2020" (Mead et al. 2021, arXiv:2009.01858; CAMB's default) or "2015" (CLASS's earlier HMcode,
+#: Mead et al. 2015, 2016, which Planck 2018 used in CAMB: arXiv:1807.06209, Sect. 2.1). These fits
+#: are calibrated on simulations with GR: for models that change
 #: gravity on small scales (not in GR_GRAVITY_MODELS) they are an approximation, and a warning says
 #: so. Cost per lensed CLASS run in the cloud (2 cores, one 0.06 eV neutrino): linear 3.6 s, halofit
 #: 3.9 s, HMcode 6.1 s; plik_lite -2lnL at a Planck-like point: linear 614.5, halofit 611.9, HMcode 611.9.
 CMB_NONLINEAR_MODES: Tuple[str, ...] = ("hmcode", "halofit", "none")
 HMCODE_VERSIONS: Tuple[str, ...] = ("2020", "2015")
-_nl_env = os.environ.get("KOSM_CMB_NONLINEAR", "hmcode").strip().lower()
+_nl_env = os.environ.get("KOSM_CMB_NONLINEAR", "none").strip().lower()
 CMB_NONLINEAR = None if _nl_env in ("", "none") else _nl_env
 HMCODE_VERSION: str = os.environ.get("KOSM_HMCODE_VERSION", "2020")
 
 
-def set_cmb_nonlinear(mode="hmcode", version="2020") -> None:
+def set_cmb_nonlinear(mode=None, version="2020") -> None:
     """
     Non-linear correction of this run (Kosmulator.py: cmb_nonlinear, hmcode_version), for every
     model. Sets KOSM_CMB_NONLINEAR and KOSM_HMCODE_VERSION as well, for pool workers started
