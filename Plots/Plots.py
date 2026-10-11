@@ -999,7 +999,11 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         #Extract raw array from getdist without damaging the dictionary
         sample_array = sample_data["samples"] if isinstance(sample_data, dict) else sample_data
         names  = CONFIG["parameters"][i]
-        labels = greek_Symbols(names) if use_latex else names
+        # GetDist draws axis labels in math mode, so raw names broke there ("A_planck" as
+        # A_p + "lanck", "tau_reio" as tau_r + "eio", and "galf_TE_A_217" stopped the plot).
+        # greek_Symbols' labels are test-compiled with the active renderer (matplotlib's
+        # mathtext without --latex_enabled, LaTeX with it), so they work either way (item 33).
+        labels = greek_Symbols(names)
 
         # Give GetDist one chain per walker. The flat samples are step-major
         # (walkers interleaved), so GetDist saw no autocorrelation, took every

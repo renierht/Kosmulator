@@ -375,8 +375,8 @@ def add_corner_table(
         return None
     n_rows = len(rows_full)
     latex_on = bool(PLOT_SETTINGS.get("latex_enabled", False))
-    head_all = (format_for_latex(greek_Symbols(list(parameter_labels))) if latex_on
-                else [str(p) for p in parameter_labels])
+    # Typeset parameter names with or without --latex_enabled (item 33), as the corner axes
+    head_all = format_for_latex(greek_Symbols(list(parameter_labels)))
     row_labels = [str(x) for x in (list(labels) + [""] * n_rows)[:n_rows]]
 
     position = str(PLOT_SETTINGS.get("table_position", "auto")).lower()
