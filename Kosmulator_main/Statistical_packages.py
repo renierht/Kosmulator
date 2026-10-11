@@ -231,10 +231,15 @@ def _compute_cls_cached(
                 "tau_reio": float(pd["tau_reio"]),
                 "A_s": A_s,
                 "Omega_k": 0.0,
-                "N_ur": float(pd.get("N_eff", N_EFF_DEFAULT)),
-                "N_ncdm": 0,
-                "non linear": "none",
             }
+            # Neutrinos and non-linear lensing as in the model helpers (constants, item 27);
+            # a sampled N_eff sets the total
+            from Kosmulator_main import constants as _Kc
+            pars.update(_Kc.class_neutrino_params())
+            if "N_eff" in pd:
+                pars["N_ur"] = float(pd["N_eff"]) - (_Kc.NU_NEFF_PER_MASSIVE if "m_ncdm" in pars else 0.0)
+            if lensing_on:
+                pars.update(_Kc.class_nonlinear_params(model_name or ""))
 
             # Optional model-specific extensions (e.g. f(T) parameters)
             if "n" in pd:

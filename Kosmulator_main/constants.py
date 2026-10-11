@@ -35,7 +35,55 @@ N_EFF_DEFAULT: float = 3.046
 #: 0.06 eV neutrino in Omega_m, which corresponds to N_UR_LATE = 2.0328.
 #: A sampled or fixed 'Omega_r' in the parameters overrides this.
 LATE_TIME_RADIATION: bool = True
-N_UR_LATE: float = N_EFF_DEFAULT
+
+#: Neutrinos in every CLASS call (CMB spectra, r_d) and in the late-time E(z) (items 13, 27).
+#: "massive": the Planck 2018 / DESI baseline, one massive eigenstate of NU_MASS_EV = 0.06 eV
+#: (in Omega_m at late times) plus massless species, N_eff = NU_N_EFF = 3.044 in total (DESI DR2,
+#: arXiv:2503.14738; CLASS's default; Planck 2018 used 3.046). "massless": all NU_N_EFF massless
+#: (Kosmulator before item 27). BBN keeps N_EFF_DEFAULT (its grids).
+NEUTRINOS: str = "massive"
+NU_MASS_EV: float = 0.06
+NU_N_EFF: float = 3.044
+#: N_eff of one massive eigenstate while relativistic, for CLASS's T_ncdm = 0.71611
+#: ((0.71611 / (4/11)^(1/3))^4); with it N_ur = 3.044 - 1.0132 = 2.0308.
+NU_NEFF_PER_MASSIVE: float = 1.0132016
+#: omega_nu = m_nu / NU_EV_PER_OMEGA (CLASS's 93.14 eV for T_ncdm = 0.71611)
+NU_EV_PER_OMEGA: float = 93.14
+
+N_UR_LATE: float = (NU_N_EFF - NU_NEFF_PER_MASSIVE) if NEUTRINOS == "massive" else NU_N_EFF
+
+
+def omega_nu() -> float:
+    """Physical density of the massive neutrino (0 with NEUTRINOS = "massless")."""
+    return NU_MASS_EV / NU_EV_PER_OMEGA if NEUTRINOS == "massive" else 0.0
+
+
+def class_neutrino_params() -> Dict[str, float]:
+    """CLASS input for the neutrinos set above (the same in every CLASS call)."""
+    if NEUTRINOS == "massive":
+        return {"N_ur": NU_N_EFF - NU_NEFF_PER_MASSIVE, "N_ncdm": 1, "m_ncdm": NU_MASS_EV}
+    return {"N_ur": NU_N_EFF}
+
+
+#: Non-linear matter power in the lensed CMB spectra (item 27): "hmcode" (Planck 2018 baseline;
+#: CLASS's HMCODE_VERSION 2020 by default), "halofit", or None (linear, as before item 27; the
+#: default until Renier decides). HMcode and halofit are calibrated on LCDM simulations, so only
+#: CMB_NONLINEAR_MODELS use them; other models stay linear. Cost per lensed CLASS run in the cloud
+#: (2 cores, one 0.06 eV neutrino): linear 3.7 s, halofit 3.9 s, HMcode 6.1 s. Planck lite at a
+#: Planck-like point: -2lnL (plik_lite) linear 614.5, halofit 611.9, HMcode 611.9.
+CMB_NONLINEAR = None
+HMCODE_VERSION: str = "2020"
+CMB_NONLINEAR_MODELS: Tuple[str, ...] = ("LCDM_v", "wowaCDM_v")
+
+
+def class_nonlinear_params(model_name: str = "") -> Dict[str, str]:
+    """CLASS input for the non-linear correction of the lensing potential, for this model."""
+    if not CMB_NONLINEAR or (model_name and model_name not in CMB_NONLINEAR_MODELS):
+        return {}
+    if str(CMB_NONLINEAR).lower() == "hmcode":
+        return {"non_linear": "hmcode", "hmcode_version": str(HMCODE_VERSION)}
+    return {"non_linear": str(CMB_NONLINEAR)}
+
 #: h used for Omega_r when a group does not sample H_0 (e.g. f, f_sigma_8 alone)
 H0_RADIATION_FALLBACK: float = 67.4
 

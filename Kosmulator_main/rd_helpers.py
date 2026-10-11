@@ -31,6 +31,9 @@ logger = logging.getLogger("Kosmulator.rd_helpers")
 # CLASS build is loaded yet (Class_run.ensure_class_ready puts it in sys.modules["classy"]
 # later), so without a globally installed classy every r_d fell back to EH98 (about 2%
 # high), and with one, r_d came from that build rather than the one Kosmulator loaded.
+from Kosmulator_main import constants as _K   # neutrino settings (item 27), read at call time
+
+
 def _classy_module():
     """The classy Kosmulator has loaded (sys.modules), else an installed one, else None."""
     mod = sys.modules.get("classy")
@@ -201,6 +204,7 @@ def _rd_class_core(
     YHe_mode,
     tau_n,
     build: str = "",
+    m_ncdm: float = 0.0,
 ) -> float:
     """
     Cached CLASS.rs_drag() evaluator.
@@ -218,6 +222,8 @@ def _rd_class_core(
         "Omega_k":   float(Omega_k),
         "output":    "",  # background-only is enough for rs_drag()
     }
+    if m_ncdm:                         # one massive neutrino (constants.NEUTRINOS, item 27)
+        pars.update({"N_ncdm": 1, "m_ncdm": float(m_ncdm)})
 
     if str(YHe_mode).upper() == "BBN":
         pars["YHe"] = "BBN"
@@ -264,11 +270,16 @@ def compute_rd_class(p: dict):
     else:
         Om  = float(p["Omega_m"])
         Ob  = Obh2 / (h * h)
-        Onu = float(p.get("Omega_nu", 0.0))
+        Onu = float(p.get("Omega_nu", _K.omega_nu() / (h * h)))
         Oc  = max(Om - Ob - Onu, 0.0)
         ocdmh2 = Oc * h * h
 
-    N_ur = float(p.get("N_ur", p.get("N_eff", _N_EFF)))
+    # Neutrinos as in the CMB calls (constants.NEUTRINOS): one 0.06 eV state plus massless
+    # ones, N_eff = NU_N_EFF in total; a sampled N_eff (BBN groups) sets the total
+    nu = _K.class_neutrino_params()
+    m_ncdm = float(nu.get("m_ncdm", 0.0))
+    n_eff_total = float(p.get("N_eff", _K.NU_N_EFF))
+    N_ur = float(p.get("N_ur", n_eff_total - (_K.NU_NEFF_PER_MASSIVE if m_ncdm else 0.0)))
     Tcmb = float(p.get("T_CMB", _T_CMB))
     Ok   = float(p.get("Omega_k", 0.0))
     tau_n = float(p["tau_n"]) if "tau_n" in p else None
@@ -282,7 +293,7 @@ def compute_rd_class(p: dict):
     okq   = _q(Ok,     5e-4)
     taunq = _q(tau_n,  0.1) if tau_n is not None else None
 
-    return _rd_class_core(hq, obq, ocq, nurq, tcmbq, okq, "BBN", taunq, str(getattr(mod, "__file__", "")))
+    return _rd_class_core(hq, obq, ocq, nurq, tcmbq, okq, "BBN", taunq, str(getattr(mod, "__file__", "")), m_ncdm)
 
 
 # ------------------------------------------------------------------

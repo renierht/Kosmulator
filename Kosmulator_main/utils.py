@@ -2755,13 +2755,15 @@ def ensure_background_params(p: dict) -> dict:
       - 'H_0', 'Omega_m', 'Omega_b'         (BAO/geometry parametrisation)
 
     and fills in any missing counterparts:
-      - Omega_m    ← (Omega_bh^2 + Omega_dh^2) / h^2
+      - Omega_m    ← (Omega_bh^2 + Omega_dh^2 + omega_nu) / h^2
       - Omega_b    ← Omega_bh^2 / h^2
       - Omega_bh^2 ← Omega_b * h^2
-      - Omega_dh^2 ← (Omega_m - Omega_b) * h^2
-    where h = H_0 / 100.
+      - Omega_dh^2 ← (Omega_m - Omega_b) * h^2 - omega_nu
+    where h = H_0 / 100 and omega_nu = constants.omega_nu(): Omega_dh^2 is CLASS's omega_cdm
+    and the massive neutrino (constants.NEUTRINOS = "massive") is in Omega_m (item 27).
     """
     tm = dict(p)
+    w_nu = K.omega_nu()
 
     h = None
     if "H_0" in tm:
@@ -2780,7 +2782,7 @@ def ensure_background_params(p: dict) -> dict:
             if "Omega_m" in tm and "Omega_dh^2" not in tm:
                 Om = float(tm["Omega_m"])
                 Od = Om - Ob
-                tm["Omega_dh^2"] = Od * h * h
+                tm["Omega_dh^2"] = Od * h * h - w_nu
         except Exception:
             pass
 
@@ -2791,7 +2793,7 @@ def ensure_background_params(p: dict) -> dict:
             Odh2 = float(tm["Omega_dh^2"])
 
             if "Omega_m" not in tm:
-                tm["Omega_m"] = (Obh2 + Odh2) / (h * h)
+                tm["Omega_m"] = (Obh2 + Odh2 + w_nu) / (h * h)
 
             if "Omega_b" not in tm:
                 tm["Omega_b"] = Obh2 / (h * h)

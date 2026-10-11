@@ -386,6 +386,19 @@ def _free_class(cosmo) -> None:
         except Exception:
             pass
 
+def _class_standard(model_name: str, lensed: bool) -> dict:
+    """
+    CLASS input every CMB helper adds (constants, item 27): the neutrinos (one 0.06 eV
+    neutrino, N_eff = 3.044 by default) and, for lensed spectra of the models in
+    constants.CMB_NONLINEAR_MODELS, the non-linear correction (constants.CMB_NONLINEAR; off by default).
+    Add **_class_standard("<your model>", lensed) to your own helper's CLASS input.
+    """
+    out = dict(_K.class_neutrino_params())
+    if lensed:
+        out.update(_K.class_nonlinear_params(model_name))
+    return out
+
+
 # The CMB helpers below create a new CLASS instance per call, from the build that
 # Class_run loaded for the model being run (sys.modules["classy"], hence the local
 # "import classy"). A single instance used to be shared by all helpers: after the
@@ -462,7 +475,7 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
         "output_verbose": 0,
     }
 
-    cosmo_params = {**base_params, **class_params, **VERBOSE_OFF_SAFE}
+    cosmo_params = {**base_params, **class_params, **_class_standard("LCDM_v", not is_lowl), **VERBOSE_OFF_SAFE}
 
     try:
         cosmo.set(cosmo_params)
@@ -507,6 +520,7 @@ def f1CDM_v_CMB(p: dict, mode: str = "hil"):
         "tau_reio": float(p["tau_reio"]),
         "A_s": float(np.exp(p["ln10^10_As"]) * 1e-10),
         "n_fT": float(fT_value), 
+        **_class_standard("f1CDM_v", not is_lowl),
     }
 
     # 2. ADD VERBOSITY SILENCERS
@@ -600,7 +614,7 @@ def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
         "output_verbose": 0,
     }
 
-    cosmo_params = {**base_params, **class_params, **VERBOSE_OFF_SAFE}
+    cosmo_params = {**base_params, **class_params, **_class_standard("wowaCDM_v", not is_lowl), **VERBOSE_OFF_SAFE}
 
     try:
         cosmo.set(cosmo_params)
