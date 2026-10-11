@@ -545,7 +545,7 @@ WAIC_CMB_OFF_NOTE = ("WAIC n/a: the Planck likelihoods give one total log-likeli
 
 
 def group_waic(obs_entry, obs_types, data, samples, MODEL_func, CONFIG_model, obs_index,
-               model_name, S=1000, include_cmb=None):
+               model_name, S=None, include_cmb=None):
     """
     WAIC of one group from S posterior draws (seeded), and a note (or None).
 
@@ -564,6 +564,8 @@ def group_waic(obs_entry, obs_types, data, samples, MODEL_func, CONFIG_model, ob
     if cmb and not include_cmb:
         return float("nan"), WAIC_CMB_OFF_NOTE
 
+    if S is None:                                 # item 52: constants.WAIC_DRAWS(_CMB)
+        S = int(K.WAIC_DRAWS_CMB if cmb else K.WAIC_DRAWS)
     n_total = samples.shape[0]
     # seeded: the same draws, so the same WAIC, on every rerun
     idx = np.random.default_rng(K.WAIC_SUBSAMPLE_SEED).choice(n_total, size=min(S, n_total), replace=False)
@@ -582,21 +584,23 @@ def group_waic(obs_entry, obs_types, data, samples, MODEL_func, CONFIG_model, ob
     if cmb:
         from Kosmulator_main import Kosmulator_MCMC as KM   # the sampler's likelihood
         draws = samples[idx]
-        M = np.full((len(draws), len(cmb)), np.nan)
+        task = KM.CMBTermsTask(cmb, CONFIG_model, model_name, obs_index)
         t0, step = time.time(), max(1, len(draws) // 10)
-        logger.info("WAIC for %s %s: %d Planck likelihood(s) at %d draws (one CLASS run per draw)",
-                    model_name, "+".join(map(str, obs_entry)), len(cmb), len(draws))
-        for s, theta in enumerate(draws):
-            for j, (o, t) in enumerate(cmb):
-                try:
-                    M[s, j] = float(KM.model_likelihood(theta, data.get(o), t, CONFIG_model,
-                                                        MODEL_func, model_name, o, obs_index))
-                except Exception as e:                          # counted below as a left-out draw
-                    logger.debug("WAIC: %s failed at draw %d: %s", o, s, e)
-            if (s + 1) % step == 0 and s + 1 < len(draws):
-                dt = time.time() - t0
-                logger.info("WAIC Planck terms: %d of %d draws, %.0f s (about %.0f s left)",
-                            s + 1, len(draws), dt, dt / (s + 1) * (len(draws) - s - 1))
+        pooled = U._POST_POOL is not None
+        logger.info("WAIC for %s %s: %d Planck likelihood(s) at %d draws (one CLASS run per draw%s)",
+                    model_name, "+".join(map(str, obs_entry)), len(cmb), len(draws),
+                    ", through the worker pool" if pooled else "")
+        if pooled:                                      # item 52: the sampling pool, kept open
+            M = np.array(U.post_map(task, list(draws)), dtype=float).reshape(len(draws), len(cmb))
+            logger.info("WAIC Planck terms: %d draws in %.0f s", len(draws), time.time() - t0)
+        else:
+            M = np.full((len(draws), len(cmb)), np.nan)
+            for s, theta in enumerate(draws):
+                M[s] = task(theta)
+                if (s + 1) % step == 0 and s + 1 < len(draws):
+                    dt = time.time() - t0
+                    logger.info("WAIC Planck terms: %d of %d draws, %.0f s (about %.0f s left)",
+                                s + 1, len(draws), dt, dt / (s + 1) * (len(draws) - s - 1))
         cols.append(M)
 
     if not cols:

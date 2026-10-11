@@ -1519,6 +1519,19 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
             # Posterior draws for the shaded 68% bands
             band_draws = _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS)
 
+            # CMB groups: one lensed CLASS run per draw. Compute them ahead through the
+            # sampling pool (in this process without one) so the band loop reads them (item 52).
+            _cmb_names = [str(t) for t in obs_list_raw if str(t).startswith("CMB_")]
+            if _cmb_names and band_draws:
+                from Kosmulator_main import Statistical_packages as _SP
+                _modes = sorted({"lowl" if "lowl" in t else "hil" for t in _cmb_names})
+                _SP.clear_cls_prefetch()                    # the previous group's spectra
+                _t0 = __import__("time").time()
+                _n = _SP.prefetch_cls(list(band_draws) + [params_med, params_lo, params_hi], model_name, _modes)
+                if _n:
+                    print(f"[CMB] {model_name} {obs_key}: {_n} CLASS runs for the 68% bands "
+                          f"({__import__('time').time() - _t0:.0f} s)")
+
             parts = partition_by_compatibility([t for t in obs_list_raw])
 
             PRIOR_ONLY = ("BBN_PryMordial", "BBN_prior")

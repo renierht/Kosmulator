@@ -98,6 +98,9 @@ TCMB2 = _T_CMB_uK ** 2               # (µK)^2
 
 # Simple per-process cache for theory Cℓs
 _CMB_THEORY_CACHE: Dict[str, Any] = {"key": None, "cls": None}
+#: C_l computed ahead through the worker pool for the best-fit plots (item 52), keyed by
+#: (model, mode, parameters); read by _compute_cls_cached for models with a CMB helper
+_CLS_PREFETCH: Dict[tuple, Any] = {}
 
 # Lensed spectra of the last CMB_SPECTRA_CACHE_SIZE points (get_cmb_spectra), keyed on
 # the model and the parameters other than Planck nuisance parameters
@@ -169,6 +172,8 @@ def _compute_cls_cached(
 
     if _CMB_THEORY_CACHE.get("key") == key:
         return _CMB_THEORY_CACHE.get("cls")
+    if _CLS_PREFETCH and (model_name, m, numeric_items) in _CLS_PREFETCH:
+        return _CLS_PREFETCH[(model_name, m, numeric_items)]   # helpers ignore Lmax (item 52)
 
     cl: Optional[Dict[str, np.ndarray]] = None
 
@@ -407,6 +412,47 @@ def planck_nuisance_prior_chi2(pd: Dict[str, float]) -> float:
         c, mu, sig = _K.PLANCK_SZ_PRIOR
         chi2 += ((float(pd["ksz_norm"]) + c * float(pd["A_sz"]) - mu) / sig) ** 2
     return chi2
+
+
+class _ClsTask:
+    """Picklable C_l of one point for the worker pool (item 52)."""
+
+    def __init__(self, model_name: str, mode: str):
+        self.model_name, self.mode = model_name, mode
+
+    def __call__(self, pd):
+        CR.ensure_class_ready(self.model_name)
+        return _compute_cls_cached(dict(pd), None, mode=self.mode, model_name=self.model_name)
+
+
+def prefetch_cls(param_dicts, model_name: str, modes) -> int:
+    """
+    Compute the C_l of these points through the worker pool (utils.post_map; in this
+    process without one) and keep them for _compute_cls_cached: the CMB band draws of
+    the best-fit plots (item 52). Only for models with a CMB helper. Returns the number
+    of points computed; clear_cls_prefetch() frees them.
+    """
+    if getattr(UDM, f"{model_name}_CMB", None) is None or not param_dicts:
+        return 0
+    from Kosmulator_main import utils as _U
+    n = 0
+    for mode in modes:
+        m = (mode or "").lower()
+        keyed = []
+        for p in param_dicts:
+            q = _U.ensure_background_params(dict(p))
+            items = tuple(sorted((k, float(v)) for k, v in q.items() if isinstance(v, (int, float))))
+            if (model_name, m, items) not in _CLS_PREFETCH:
+                keyed.append(((model_name, m, items), p))
+        res = _U.post_map(_ClsTask(model_name, m), [p for _, p in keyed])
+        for (k, _), cl in zip(keyed, res):
+            _CLS_PREFETCH[k] = cl
+            n += 1
+    return n
+
+
+def clear_cls_prefetch() -> None:
+    _CLS_PREFETCH.clear()
 
 
 def _spectra_key(pd: Dict[str, float], model_name: str) -> tuple:

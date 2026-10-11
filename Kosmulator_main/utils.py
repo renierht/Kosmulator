@@ -541,6 +541,34 @@ def mpi_node_ranks(comm) -> int:
         return 1
 
 
+# ── Worker pool after sampling (item 52) ───────────────────────────────────────
+# The statistics and plots run in the main process after sampling. Their CLASS
+# runs (CMB band draws, CMB WAIC draws) go through the sampling pool when one was
+# built: run_mcmc_for_all_models registers it here and MCMC_setup.main closes it
+# after the plots. Without a pool, post_map is the ordinary map.
+_POST_POOL = None
+
+
+def set_post_pool(pool) -> None:
+    """Register (or with None, forget) the pool that post_map uses."""
+    global _POST_POOL
+    _POST_POOL = pool
+
+
+def post_map(fn, items) -> list:
+    """map(fn, items) through the registered pool if there is one (fn and the items must
+    pickle), otherwise in this process. Results keep the order of the items."""
+    items = list(items)
+    pool = _POST_POOL
+    if pool is not None and len(items) > 1:
+        try:
+            return list(pool.map(fn, items))
+        except Exception as e:                       # e.g. a pool that was already closed
+            logging.getLogger(__name__).warning(
+                "Worker pool not usable after sampling (%s); running %d tasks here.", e, len(items))
+    return [fn(x) for x in items]
+
+
 def mpi_abort_on_error(comm) -> bool:
     """
     Under MPI with more than one rank, an exception that nothing catches on any rank

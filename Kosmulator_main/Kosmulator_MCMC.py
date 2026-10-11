@@ -781,6 +781,32 @@ def _counting_pool(pool, vectorize: bool):
     return pool if vectorize else _CountingMap(pool)
 
 
+class CMBTermsTask:
+    """
+    Picklable: the log-likelihood of each Planck likelihood of a group at one theta, as
+    the sampler computes it (model_likelihood), for WAIC through the worker pool (items
+    52, 53). A term that cannot be computed is nan.
+    """
+
+    def __init__(self, cmb, CONFIG_model, model_name, obs_index):
+        self.cmb = [(str(o), str(t)) for o, t in cmb]
+        self.cfg, self.model_name, self.obs_index = CONFIG_model, model_name, obs_index
+
+    def __call__(self, theta):
+        import User_defined_modules as UDM
+        from Kosmulator_main import Class_run as _CR
+        _CR.ensure_class_ready(self.model_name)   # a worker may hold another model's build
+        mf = UDM.Get_model_function(self.model_name)
+        out = []
+        for o, t in self.cmb:
+            try:
+                out.append(float(model_likelihood(np.asarray(theta, float), None, t, self.cfg, mf,
+                                                  self.model_name, o, self.obs_index)))
+            except Exception:
+                out.append(float("nan"))
+        return out
+
+
 # ── Pool workers: data sent once per group, not with every walker evaluation ────
 # The likelihood arguments (data, CONFIG, ...) are written to a file once per
 # observation group; each pool task carries only theta and the file's path, and a

@@ -42,6 +42,7 @@ from Kosmulator_main.utils import (
     mpi_node_ranks,
     mpi_abort_on_error,
     mpi_wait_all,
+    set_post_pool,
     MPI_END_POLL_MAX_S,
     prepare_output,
     load_or_run_chain,
@@ -519,10 +520,13 @@ def main(
     # ------------------------------------------------------------------
     # 12) Post-processing
     # ------------------------------------------------------------------
-    if rank == 0:
-        MP.generate_plots(samples, CONFIG, PLOT_SETTINGS, data, reference_model)
-        elapsed = format_elapsed_time(time.time() - t0)
-        print_completion_banner(elapsed)
+    try:
+        if rank == 0:
+            MP.generate_plots(samples, CONFIG, PLOT_SETTINGS, data, reference_model)
+            elapsed = format_elapsed_time(time.time() - t0)
+            print_completion_banner(elapsed)
+    finally:
+        close_open_pools()
 
     return samples
 
@@ -891,15 +895,29 @@ def run_mcmc_for_all_models(
 
         All_Samples[model_name] = Samples
 
-    # Tidy up any workers we created
-    for p in getattr(locals().get("pool_cache", {}), "values", lambda: [])():
-        if p is not None:
-            try:
-                if hasattr(p, "close"):
-                    p.close()
-                if hasattr(p, "join"):
-                    p.join()
-            except Exception:
-                pass
+    # Keep the workers for the statistics and plots (item 52): their CLASS runs (CMB
+    # band draws, CMB WAIC draws) go through the pool; main() closes it afterwards
+    pools = [p for p in getattr(locals().get("pool_cache", {}), "values", lambda: [])() if p is not None]
+    _OPEN_POOLS.extend(pools)
+    if rank == 0 and pools:
+        set_post_pool(pools[0])
 
     return All_Samples
+
+
+#: Pools kept open after sampling for the statistics and plots (item 52)
+_OPEN_POOLS: list = []
+
+
+def close_open_pools() -> None:
+    """Close the pools kept for the statistics and plots (item 52)."""
+    set_post_pool(None)
+    while _OPEN_POOLS:
+        p = _OPEN_POOLS.pop()
+        try:
+            if hasattr(p, "close"):
+                p.close()
+            if hasattr(p, "join"):
+                p.join()
+        except Exception:
+            pass

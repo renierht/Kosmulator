@@ -631,6 +631,12 @@ PREFIT_MAXFEV_CMB: int = 300
 # with this seed, so a rerun of the statistics gives the same WAIC
 WAIC_SUBSAMPLE_SEED: int = 20260108
 
+#: Posterior draws for WAIC (item 52): late-time data (cheap; Monte Carlo spread of WAIC
+#: about 0.34 with 1000 draws, 0.16 with 4000, for CC + Pantheon) and groups with Planck data
+#: (one CLASS run per draw, through the worker pool when there is one).
+WAIC_DRAWS: int = 4000
+WAIC_DRAWS_CMB: int = 1000
+
 #: WAIC of groups with Planck data (item 53). The Planck likelihoods give one total
 #: log-likelihood per point, not one per data point, so each enters WAIC as one term,
 #: which costs one lensed CLASS run per WAIC draw (1000 draws). False: WAIC is n/a, with
