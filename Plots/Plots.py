@@ -8,6 +8,7 @@ Stat tables:
 from __future__ import annotations
 
 import io
+import logging
 import os
 import sys
 import numpy as np
@@ -1281,7 +1282,19 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     folder = os.path.join(root, model_name, "corner_plots")
     os.makedirs(folder, exist_ok=True)
     out_path = os.path.join(folder, f"corner_{save_file_name}.png")
-    fig.savefig(out_path, dpi=int(PLOT_SETTINGS.get("dpi", 300)), bbox_inches="tight")
+    # About 4 inches per parameter: at 200 dpi a 27-parameter plot (Planck baseline) would be
+    # 21 600 pixels wide, about 1.9 GB of memory to draw. Lower the dpi so the longer side
+    # stays near corner_max_pixels (8000); plots up to 10 parameters keep "dpi" (item 33b).
+    dpi = int(PLOT_SETTINGS.get("dpi", 300))
+    max_px = int(PLOT_SETTINGS.get("corner_max_pixels", 8000) or 0)
+    side_in = float(max(fig.get_size_inches()))
+    if max_px > 0 and side_in * dpi > max_px:
+        dpi_new = max(40, int(max_px / side_in))
+        logging.getLogger(__name__).info(
+            "Corner plot %s: %.0f x %.0f in, saved at %d dpi instead of %d (corner_max_pixels = %d)",
+            save_file_name, *fig.get_size_inches(), dpi_new, dpi, max_px)
+        dpi = dpi_new
+    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
     # Return for later printing

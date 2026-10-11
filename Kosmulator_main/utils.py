@@ -902,6 +902,9 @@ def build_plot_settings(
         "latex_enabled": latex_enabled,
         "plot_table": plot_table,
         "dpi": 200,
+        # Corner plots with many parameters get a lower dpi so their longer side stays near
+        # this many pixels (item 33b); 0 keeps "dpi" whatever the size
+        "corner_max_pixels": 8000,
         # Table layout knobs (corner top band)
         "corner_top": 0.88,
         "table_vpad": 0.008,
