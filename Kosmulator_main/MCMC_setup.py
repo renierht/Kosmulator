@@ -40,6 +40,7 @@ from Kosmulator_main.utils import (
     get_parallel_flag,
     set_main_threads,
     mpi_node_ranks,
+    mpi_abort_on_error,
     mpi_wait_all,
     MPI_END_POLL_MAX_S,
     prepare_output,
@@ -242,6 +243,8 @@ def main(
     # 3) MPI init
     # ------------------------------------------------------------------
     comm, rank = init_mpi()
+    # An error on any rank ends the whole MPI job instead of leaving the others waiting (item 50)
+    mpi_abort_on_error(comm)
     # MPI ranks on rank 0's machine (they sleep while rank 0 works alone, item 49): rank 0's
     # threads for its own CLASS work (item 45). Counted here, while every rank is present.
     K.MPI_NODE_RANKS = mpi_node_ranks(comm) if bool(getattr(args, "use_mpi", False)) else 1

@@ -541,6 +541,38 @@ def mpi_node_ranks(comm) -> int:
         return 1
 
 
+def mpi_abort_on_error(comm) -> bool:
+    """
+    Under MPI with more than one rank, an exception that nothing catches on any rank
+    ends the whole job: its traceback is printed, then MPI_Abort. Without this the other
+    ranks wait for the failed one forever: workers for a pool that rank 0 never builds
+    (e.g. the run lock or a config error stops rank 0) or rank 0 for a worker's result
+    (item 50). The same as running under `python -m mpi4py`. A normal exit (sys.exit(0))
+    is unaffected. Returns True if the hook was installed.
+    """
+    try:
+        if comm is None or comm.Get_size() <= 1:
+            return False
+    except Exception:
+        return False
+    previous = sys.excepthook
+
+    def _abort_hook(exc_type, exc, tb):
+        try:
+            previous(exc_type, exc, tb)               # the traceback, as usual
+            sys.stdout.flush()
+            sys.stderr.flush()
+        finally:
+            try:
+                print(f"MPI rank {comm.Get_rank()}: unhandled {exc_type.__name__}; "
+                      "ending all ranks (MPI_Abort)", file=sys.stderr, flush=True)
+            finally:
+                comm.Abort(1)
+
+    sys.excepthook = _abort_hook
+    return True
+
+
 def mpi_wait_all(comm, max_dt: float = MPI_POLL_MAX_S, timeout: Optional[float] = None) -> bool:
     """Barrier on `comm` that sleeps between tests. MPICH ch3 waits in MPI_Barrier and
     MPI_Finalize by spinning; a rank that waits here for the others uses no CPU.
