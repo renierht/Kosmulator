@@ -1,6 +1,8 @@
 # Kosmulator_main/constants.py
 from __future__ import annotations
 
+import os
+
 from typing import Dict, List, Set, Tuple
 
 """
@@ -29,11 +31,10 @@ N_EFF_DEFAULT: float = 3.046
 
 #: Radiation in the late-time E(z) of the built-in models (LCDM, w0waCDM,
 #: f1CDM, NonLinear_IDE_2): Omega_r h^2 = omega_gamma (1 + 0.22711 N_ur), with
-#: photons at T_CMB_DEFAULT and N_ur massless neutrino species. Omega_DE is
-#: reduced by Omega_r so the model stays flat. N_UR_LATE = N_EFF_DEFAULT treats
-#: all neutrinos as massless, as the CLASS r_d call does; DESI/Planck put one
-#: 0.06 eV neutrino in Omega_m, which corresponds to N_UR_LATE = 2.0328.
-#: A sampled or fixed 'Omega_r' in the parameters overrides this.
+#: photons at T_CMB_DEFAULT and N_ur = N_UR_LATE massless neutrino species (set by
+#: the neutrinos below: 2.0308 with one massive neutrino, which is then in Omega_m).
+#: Omega_DE is reduced by Omega_r so the model stays flat. A sampled or fixed
+#: 'Omega_r' in the parameters overrides this.
 LATE_TIME_RADIATION: bool = True
 
 #: Neutrinos in every CLASS call (CMB spectra, r_d) and in the late-time E(z) (items 13, 27).
@@ -42,9 +43,12 @@ LATE_TIME_RADIATION: bool = True
 #: late times) plus massless species, N_eff = NU_N_EFF = 3.044 in total (CLASS v3.3's default;
 #: Planck 2018 used 3.046). "massless": all NU_N_EFF massless
 #: (Kosmulator before item 27). BBN keeps N_EFF_DEFAULT (its grids).
-NEUTRINOS: str = "massive"
-NU_MASS_EV: float = 0.06
-NU_N_EFF: float = 3.044
+#: Set per run in Kosmulator.py (neutrinos, nu_mass_eV, nu_N_eff) through set_neutrinos(); the
+#: values below are the defaults, or those of the run that started this process (KOSM_* variables).
+NEUTRINO_MODES: Tuple[str, ...] = ("massive", "massless")
+NEUTRINOS: str = os.environ.get("KOSM_NEUTRINOS", "massive")
+NU_MASS_EV: float = float(os.environ.get("KOSM_NU_MASS_EV", "0.06"))
+NU_N_EFF: float = float(os.environ.get("KOSM_NU_N_EFF", "3.044"))
 #: N_eff of one massive eigenstate while relativistic, for CLASS's T_ncdm = 0.71611
 #: ((0.71611 / (4/11)^(1/3))^4); with it N_ur = 3.044 - 1.0132 = 2.0308.
 NU_NEFF_PER_MASSIVE: float = 1.0132016
@@ -52,6 +56,34 @@ NU_NEFF_PER_MASSIVE: float = 1.0132016
 NU_EV_PER_OMEGA: float = 93.14
 
 N_UR_LATE: float = (NU_N_EFF - NU_NEFF_PER_MASSIVE) if NEUTRINOS == "massive" else NU_N_EFF
+
+
+def set_neutrinos(mode: str = "massive", mass_ev: float = 0.06, n_eff: float = 3.044) -> None:
+    """
+    Neutrinos of this run (Kosmulator.py: neutrinos, nu_mass_eV, nu_N_eff). Sets them in
+    this process and in KOSM_NEUTRINOS, KOSM_NU_MASS_EV and KOSM_NU_N_EFF, which pool workers
+    started afterwards inherit (they import this module afresh; MPI ranks call this
+    themselves). Call it before any pool is built.
+    """
+    global NEUTRINOS, NU_MASS_EV, NU_N_EFF, N_UR_LATE
+    m = str(mode).strip().lower()
+    if m not in NEUTRINO_MODES:
+        raise ValueError(f"neutrinos must be one of {NEUTRINO_MODES}, not {mode!r}")
+    mass, neff = float(mass_ev), float(n_eff)
+    if m == "massive" and not mass > 0.0:
+        raise ValueError(f"nu_mass_eV must be > 0 with neutrinos = 'massive' (got {mass_ev!r})")
+    if neff <= (NU_NEFF_PER_MASSIVE if m == "massive" else 0.0):
+        raise ValueError(f"nu_N_eff = {n_eff!r} is too small for neutrinos = {m!r}")
+    NEUTRINOS, NU_MASS_EV, NU_N_EFF = m, mass, neff
+    N_UR_LATE = (NU_N_EFF - NU_NEFF_PER_MASSIVE) if NEUTRINOS == "massive" else NU_N_EFF
+    os.environ["KOSM_NEUTRINOS"] = NEUTRINOS
+    os.environ["KOSM_NU_MASS_EV"] = repr(NU_MASS_EV)
+    os.environ["KOSM_NU_N_EFF"] = repr(NU_N_EFF)
+
+
+def neutrino_signature() -> Tuple[str, float, float]:
+    """The neutrino settings, for cache keys of CLASS results."""
+    return (NEUTRINOS, NU_MASS_EV if NEUTRINOS == "massive" else 0.0, NU_N_EFF)
 
 
 def omega_nu() -> float:

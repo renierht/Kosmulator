@@ -168,6 +168,9 @@ def main(
     sample_H0_uncalibrated_SNe: bool = False,
     cmb_nuisance: str = "baseline",
     waic_include_cmb: bool = False,
+    neutrinos: str = "massive",
+    nu_mass_eV: float = 0.06,
+    nu_N_eff: float = 3.044,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -206,6 +209,9 @@ def main(
     K.CMB_NUISANCE = _mode
     # WAIC of groups with Planck data: one term per Planck likelihood, or n/a (item 53)
     K.WAIC_INCLUDE_CMB = bool(waic_include_cmb)
+    # Neutrinos in every CLASS call and in the late-time E(z) (items 27, 13). Before any pool
+    # exists: spawned workers inherit them through the KOSM_* variables set here.
+    K.set_neutrinos(neutrinos, nu_mass_eV, nu_N_eff)
     if _mode == "lite":
         # figures and tables name the likelihood that was used
         for _t in ("CMB_hil", "CMB_hil_TT"):
@@ -515,7 +521,8 @@ def main(
             "models": list(model_names), "observations": [list(g) for g in observations],
             "nwalkers": nwalkers, "nsteps": nsteps, "burn": burn, "convergence": convergence,
             "cmb_nuisance": K.CMB_NUISANCE, "sample_H0_uncalibrated_SNe": bool(sample_H0_uncalibrated_SNe),
-            "waic_include_cmb": bool(K.WAIC_INCLUDE_CMB), "neutrinos": getattr(K, "NEUTRINOS", None),
+            "waic_include_cmb": bool(K.WAIC_INCLUDE_CMB), "neutrinos": K.NEUTRINOS,
+            "nu_mass_eV": K.NU_MASS_EV, "nu_N_eff": K.NU_N_EFF,
             "num_cores": int(getattr(args, "num_cores", 1)), "use_mpi": bool(getattr(args, "use_mpi", False)),
         })
 
@@ -683,6 +690,11 @@ def run_mcmc_for_all_models(
     main_threads = set_main_threads(n_main)
     if rank == 0:
         log.info("Threads for CLASS and BLAS in the main process: %s", main_threads)
+        if K.NEUTRINOS == "massive":
+            log.info("Neutrinos: one massive of %g eV plus massless ones, N_eff = %g in total",
+                     K.NU_MASS_EV, K.NU_N_EFF)
+        else:
+            log.info("Neutrinos: all massless, N_eff = %g", K.NU_N_EFF)
 
     # Build the model list from either dict or list
     model_list = list(models.keys()) if isinstance(models, dict) else list(models)

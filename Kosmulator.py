@@ -146,6 +146,13 @@ cmb_nuisance: str = "baseline"
 # (default): WAIC is reported as n/a, with a note, for groups with Planck data. True: it is
 # computed, if you are willing to wait.
 waic_include_cmb: bool = False
+# Neutrinos in every CLASS call (CMB spectra, r_d) and in the late-time expansion. "massive"
+# (default): one massive neutrino of nu_mass_eV plus massless ones, nu_N_eff in total, as in
+# Planck 2018 (0.06 eV, N_eff 3.046) and DESI DR2 (sum 0.06 eV, N_eff 3.044). "massless": all
+# nu_N_eff massless (Kosmulator before October 2026). BBN keeps its own N_eff (prior_limits).
+neutrinos: str = "massive"
+nu_mass_eV: float = 0.06
+nu_N_eff: float = 3.044
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -254,6 +261,9 @@ def main() -> None:
         sample_H0_uncalibrated_SNe=sample_H0_uncalibrated_SNe,
         cmb_nuisance=cmb_nuisance,
         waic_include_cmb=waic_include_cmb,
+        neutrinos=neutrinos,
+        nu_mass_eV=nu_mass_eV,
+        nu_N_eff=nu_N_eff,
     )
 
 

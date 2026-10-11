@@ -158,6 +158,8 @@ def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
     if not models or not observations:
         raise SystemExit(f"--peek: no chain files yet under {root} (has sampling started?)")
 
+    if st.get("neutrinos"):           # the run's neutrinos (r_d column of the corner table)
+        K.set_neutrinos(st["neutrinos"], st.get("nu_mass_eV", K.NU_MASS_EV), st.get("nu_N_eff", K.NU_N_EFF))
     K.CMB_NUISANCE = str(st.get("cmb_nuisance", "baseline")).lower()
     if K.CMB_NUISANCE == "lite":
         for _t in ("CMB_hil", "CMB_hil_TT"):

@@ -168,12 +168,14 @@ def _compute_cls_cached(
             sorted((k, v) for k, v in pd.items() if isinstance(v, (int, float)))
         )
 
-    key = (model_name, ell_max, m, numeric_items)
+    from Kosmulator_main import constants as _Knu      # neutrinos are part of the key
+    nu_sig = _Knu.neutrino_signature()
+    key = (model_name, ell_max, m, numeric_items, nu_sig)
 
     if _CMB_THEORY_CACHE.get("key") == key:
         return _CMB_THEORY_CACHE.get("cls")
-    if _CLS_PREFETCH and (model_name, m, numeric_items) in _CLS_PREFETCH:
-        return _CLS_PREFETCH[(model_name, m, numeric_items)]   # helpers ignore Lmax (item 52)
+    if _CLS_PREFETCH and (model_name, m, numeric_items, nu_sig) in _CLS_PREFETCH:
+        return _CLS_PREFETCH[(model_name, m, numeric_items, nu_sig)]   # helpers ignore Lmax (item 52)
 
     cl: Optional[Dict[str, np.ndarray]] = None
 
@@ -434,7 +436,8 @@ def prefetch_cls(param_dicts, model_name: str, modes) -> int:
     """
     if getattr(UDM, f"{model_name}_CMB", None) is None or not param_dicts:
         return 0
-    from Kosmulator_main import utils as _U
+    from Kosmulator_main import utils as _U, constants as _Knu
+    nu_sig = _Knu.neutrino_signature()
     n = 0
     for mode in modes:
         m = (mode or "").lower()
@@ -442,8 +445,8 @@ def prefetch_cls(param_dicts, model_name: str, modes) -> int:
         for p in param_dicts:
             q = _U.ensure_background_params(dict(p))
             items = tuple(sorted((k, float(v)) for k, v in q.items() if isinstance(v, (int, float))))
-            if (model_name, m, items) not in _CLS_PREFETCH:
-                keyed.append(((model_name, m, items), p))
+            if (model_name, m, items, nu_sig) not in _CLS_PREFETCH:
+                keyed.append(((model_name, m, items, nu_sig), p))
         res = _U.post_map(_ClsTask(model_name, m), [p for _, p in keyed])
         for (k, _), cl in zip(keyed, res):
             _CLS_PREFETCH[k] = cl
@@ -456,7 +459,7 @@ def clear_cls_prefetch() -> None:
 
 
 def _spectra_key(pd: Dict[str, float], model_name: str) -> tuple:
-    """Cache key: the model and every numeric parameter except Planck nuisances."""
+    """Cache key: the model, the neutrinos and every numeric parameter except Planck nuisances."""
     from Kosmulator_main import constants as _K
     skip = set(getattr(_K, "PLANCK_NUISANCE_NAMES", ())) | set(PLANCK_NUISANCE_DEFAULTS)
     items = []
@@ -467,7 +470,7 @@ def _spectra_key(pd: Dict[str, float], model_name: str) -> tuple:
             items.append((k, float(v)))
         except (TypeError, ValueError):
             continue
-    return (model_name, tuple(sorted(items)))
+    return (model_name, _K.neutrino_signature(), tuple(sorted(items)))
 
 
 def get_cmb_spectra(pd: Dict[str, float], model_name: str) -> Optional[Dict[str, np.ndarray]]:
