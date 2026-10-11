@@ -224,6 +224,22 @@ FS8_AP_CORRECTION: bool = False
 #: (M_abs sampled for PantheonP; H0 acting as the offset of distance moduli).
 SN_MARGINALISE_OFFSET: bool = True
 
+#: Datasets that share measurements (item 35): in one group they count the same data twice,
+#: which makes the constraints too tight. Kosmulator warns at start-up and notes it in the
+#: statistics; it does not stop the run.
+DATA_OVERLAPS: Tuple[Tuple[frozenset, str], ...] = (
+    (frozenset({"OHD", "CC"}), "OHD.dat repeats 31 of the cosmic-chronometer H(z) points of CC.dat "
+                               "(its other 20 rows are BAO/clustering H(z)); use CC or OHD, not both"),
+    (frozenset({"BAO", "DESI_DR1"}), "BAO is the 10 anisotropic DESI DR1 points, which DESI_DR1 also contains"),
+    (frozenset({"DESI_DR1", "DESI_DR2"}), "DESI DR2 includes the DR1 data"),
+    (frozenset({"CMB_hil", "CMB_hil_TT"}), "the Planck TT,TE,EE likelihood contains the TT spectra of the TT one"),
+)
+#: Supernova compilations: any two of them share supernovae
+SN_COMPILATIONS: Tuple[str, ...] = ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS", "DESY5", "Union3")
+#: BBN data: the D/H systems (two predictions of the same data) and the DESI DR2 BBN prior on
+#: Omega_b h^2, which is derived from primordial deuterium (and helium) measurements
+BBN_DATASETS: Tuple[str, ...] = ("BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial")
+
 #: Official JLA likelihood (Betoule et al. 2014, arXiv:1401.4064), tag "JLA".
 #: Light-curve nuisance parameters sampled with JLA: (low, high, start). Priors
 #: and starting values follow Cobaya's sn.jla. The absolute magnitudes M_B and

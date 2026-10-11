@@ -701,6 +701,8 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 raise ValueError(
                     f"Observation {obs_name} not found in CONFIG for model {model_name}."
                 )
+            for _msg in U.data_overlaps(obs_entry):          # item 35: same data counted twice
+                notes.append(f"double counting: {_msg}")
 
             chi_squared_total = 0.0
             num_data_points_total = 0

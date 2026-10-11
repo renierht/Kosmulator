@@ -2973,6 +2973,39 @@ _FS8_TOKEN_EMITTED: bool = False
 _F_TOKEN_EMITTED: bool = False
 
 
+def data_overlaps(group) -> List[str]:
+    """Reasons why datasets of this group count the same measurements twice (item 35)."""
+    tags = {str(t) for t in (group or [])}
+    out = [msg for pair, msg in K.DATA_OVERLAPS if pair <= tags]
+    bbn = [t for t in K.BBN_DATASETS if t in tags]
+    if len(bbn) > 1:
+        out.append(", ".join(bbn[:-1]) + " and " + bbn[-1] + " use the same primordial deuterium "
+                   "measurements (the BBN prior on Omega_b h^2 is derived from them); use one of them")
+    sne = [t for t in K.SN_COMPILATIONS if t in tags]
+    if len(sne) > 1:
+        names = ", ".join(sne[:-1]) + " and " + sne[-1]
+        out.append(f"{names} are supernova compilations that share supernovae; use one of them")
+    return out
+
+
+def warn_data_overlaps(CONFIG, models) -> int:
+    """Start-up warning for every group that counts the same data twice (item 35). Returns how many."""
+    log_cfg = logging.getLogger("MCMC_setup")
+    model_list = list(models.keys()) if isinstance(models, dict) else list(models)
+    seen, n = set(), 0
+    for m in model_list:
+        for g in CONFIG[m].get("observations", []):
+            key = "+".join(sorted(map(str, g)))
+            if key in seen:
+                continue
+            seen.add(key)
+            for msg in data_overlaps(g):
+                log_cfg.warning("DOUBLE COUNTING in group %s: %s. The constraints from this group are too "
+                                "tight and its chi^2, AIC and BIC are not comparable with other groups.", key, msg)
+                n += 1
+    return n
+
+
 def issue_observation_warnings(CONFIG, models, *, token_mode: bool = True) -> None:
     """
     Print one-time warnings for solo datasets (SNe, f, f_sigma_8).

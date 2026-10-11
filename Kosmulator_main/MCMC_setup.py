@@ -295,6 +295,8 @@ def main(
                 logger=log,
             )
             issue_observation_warnings(CONFIG, models, token_mode=True)
+        from Kosmulator_main.utils import warn_data_overlaps
+        warn_data_overlaps(CONFIG, models)                        # item 35: same data counted twice
         announce_growth_and_lensing(CONFIG, list(model_names))
     else:
         models = None
