@@ -584,7 +584,35 @@ int background_functions(
       that densities are all expressed in units of \f$ [3c^2/8\pi G] \f$, ie
       \f$ \rho_{class} = [8 \pi G \rho_{physical} / 3 c^2]\f$ */
   //pvecback[pba->index_bg_H] = sqrt(rho_tot-pba->K/a/a);
-  pvecback[pba->index_bg_H] = pba->H0*sqrt(rho_tot/(pow(pba->H0,2)) + pba->Omega0_lambda*log(rho_tot/(pow(pba->H0,2)))*pba->n_fT + (pba->Omega0_lambda*pow(log(rho_tot/pow(pba->H0, 2)),2) + 2.0*pba->Omega0_lambda*log(rho_tot/pow(pba->H0,2))/(rho_tot/pow(pba->H0, 2)))* pow(pba->n_fT,2)/2);
+  /* f1CDM (power-law f(T), Linder 2010, arXiv:1005.3039): E^2 = X_m + Omega_F E^(2n), where
+     X_m = (rho_tot - rho_lambda)/H0^2 holds matter, radiation and every other species and
+     Omega_F = Omega0_lambda (the Lambda slot, closed by the budget so that E(a=1) = 1).
+     Solved exactly by Newton's method in E^2, as Kosmulator's Python E(z) does. It was a
+     second-order expansion in n whose n^2 term had Omega_F instead of Omega_F^2: H off by
+     1.4e-4 at n = 0.1 and 1.2e-2 at n = 0.45 (OUTSTANDING item 1). */
+  {
+    double X_m = rho_tot / pow(pba->H0,2);
+    double O_F = 0.;
+    double E2, f_E, df_E, step;
+    int it;
+    if (pba->has_lambda == _TRUE_) {
+      O_F = pba->Omega0_lambda;
+      X_m -= O_F;
+    }
+    E2 = X_m + O_F;                                   /* LCDM value as the start */
+    for (it = 0; it < 100; it++) {
+      f_E = E2 - X_m - O_F * pow(E2, pba->n_fT);
+      df_E = 1. - pba->n_fT * O_F * pow(E2, pba->n_fT - 1.);
+      class_test(df_E <= 0., pba->error_message,
+                 "f1CDM: no solution of E^2 = X_m + Omega_F E^(2n) (n_fT = %g, a = %g)", pba->n_fT, a);
+      step = f_E / df_E;
+      E2 -= step;
+      if (fabs(step) <= 1e-15 * E2) break;
+    }
+    class_test(!(E2 > 0.) || it == 100, pba->error_message,
+               "f1CDM: E^2 did not converge (n_fT = %g, a = %g)", pba->n_fT, a);
+    pvecback[pba->index_bg_H] = pba->H0 * sqrt(E2);
+  }
 
 
   /** - compute derivative of H with respect to conformal time */
@@ -593,7 +621,11 @@ int background_functions(
   H_temp = pvecback[pba->index_bg_H];
   H2_temp = H_temp * H_temp;
 
-  alpha_ft = (pba->Omega0_lambda * pow(6.0 * pow(pba->H0, 2), 1 - pba->n_fT)) / (1 - 2 * pba->n_fT);
+  /* f(T) = alpha (-T)^n with T = -6 H^2: the Friedmann equation H^2 = rho/3 - f/6 - 2 H^2 f_T gives
+     alpha (2n - 1) (6 H0^2)^n / 6 = Omega_F H0^2, so alpha has (2n - 1) in the denominator (Linder
+     2010, Eq. 14). It had (1 - 2n): H' then had 1 + n Omega_F E^(2n-2) in its denominator instead of
+     1 - n Omega_F E^(2n-2), 13% off at n = 0.1 (OUTSTANDING item 32). */
+  alpha_ft = (pba->Omega0_lambda * pow(6.0 * pow(pba->H0, 2), 1 - pba->n_fT)) / (2 * pba->n_fT - 1);
   F_prime_0 = -alpha_ft * pba->n_fT * pow(6.0 * H2_temp, pba->n_fT - 1);
   F_doubleprime_0 = alpha_ft * pba->n_fT * (pba->n_fT - 1) * pow(6.0 * H2_temp, pba->n_fT - 2);
 
