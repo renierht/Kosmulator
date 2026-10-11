@@ -37,9 +37,10 @@ N_EFF_DEFAULT: float = 3.046
 LATE_TIME_RADIATION: bool = True
 
 #: Neutrinos in every CLASS call (CMB spectra, r_d) and in the late-time E(z) (items 13, 27).
-#: "massive": the Planck 2018 / DESI baseline, one massive eigenstate of NU_MASS_EV = 0.06 eV
-#: (in Omega_m at late times) plus massless species, N_eff = NU_N_EFF = 3.044 in total (DESI DR2,
-#: arXiv:2503.14738; CLASS's default; Planck 2018 used 3.046). "massless": all NU_N_EFF massless
+#: "massive": as Planck 2018 base LCDM (arXiv:1807.06209, Sect. 2.1: one massive eigenstate of
+#: 0.06 eV and two massless ones), one massive eigenstate of NU_MASS_EV = 0.06 eV (in Omega_m at
+#: late times) plus massless species, N_eff = NU_N_EFF = 3.044 in total (CLASS v3.3's default;
+#: Planck 2018 used 3.046). "massless": all NU_N_EFF massless
 #: (Kosmulator before item 27). BBN keeps N_EFF_DEFAULT (its grids).
 NEUTRINOS: str = "massive"
 NU_MASS_EV: float = 0.06
@@ -65,8 +66,9 @@ def class_neutrino_params() -> Dict[str, float]:
     return {"N_ur": NU_N_EFF}
 
 
-#: Non-linear matter power in the lensed CMB spectra (item 27): "hmcode" (Planck 2018 baseline;
-#: CLASS's HMCODE_VERSION 2020 by default), "halofit", or None (linear, as before item 27; the
+#: Non-linear matter power in the lensed CMB spectra (item 27): "hmcode" (Planck 2018 used HMcode,
+#: Mead et al. 2015, 2016, in CAMB: arXiv:1807.06209, Sect. 2.1; CLASS offers HMCODE_VERSION "2015"
+#: or "2020"), "halofit", or None (linear, as before item 27; the
 #: default until Renier decides). HMcode and halofit are calibrated on LCDM simulations, so only
 #: CMB_NONLINEAR_MODELS use them; other models stay linear. Cost per lensed CLASS run in the cloud
 #: (2 cores, one 0.06 eV neutrino): linear 3.7 s, halofit 3.9 s, HMcode 6.1 s. Planck lite at a
