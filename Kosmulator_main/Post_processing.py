@@ -146,6 +146,13 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
         if log_like is not None:
             ll_arr = np.asarray(log_like).ravel()
             finite = np.isfinite(ll_arr) & np.all(np.isfinite(obs_samples), axis=1)
+            if not finite.any():
+                # np.nanargmax below stopped the run here (item 39); go on as for a chain
+                # without saved log-likelihoods: medians as the best-fit start, no DIC
+                logger.warning("%s: no saved sample has a finite log-likelihood (%d samples); the "
+                               "best fit starts from the medians and DIC is not computed", obs, ll_arr.size)
+                log_like = None
+        if log_like is not None:
             valid_ll = ll_arr[finite]
             valid_samples = obs_samples[finite]
             dev_samples = -2.0 * valid_ll
