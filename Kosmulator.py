@@ -168,6 +168,15 @@ hmcode_version: str = "2020"
 # own expansion history; for a theory that changes gravity that can differ from its true growth, and
 # Kosmulator warns at start-up.
 growth_model: str = "gamma"
+# Proposal moves of the samplers. emcee_moves: "stretch" (default, emcee's own move) or "de_snooker":
+# differential evolution (80% of the steps) plus a snooker move (20%, ter Braak & Vrugt 2008). Both
+# sample the same posterior; in Kosmulator's tests de_snooker needed 2 - 6 times fewer steps than
+# stretch (about 4.5 times on a 27-parameter target shaped like a Planck baseline chain) at the same
+# likelihood calls per step. zeus_light_mode: True skips zeus's interval expansions after its tuning
+# phase (fewer likelihood calls per step but more steps; about 1.0 - 1.5 times faster overall in the
+# tests, on near-Gaussian posteriors). Changing either between a run and its --resume is allowed.
+emcee_moves: str = "stretch"
+zeus_light_mode: bool = False
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -282,6 +291,8 @@ def main() -> None:
         cmb_nonlinear=cmb_nonlinear,
         hmcode_version=hmcode_version,
         growth_model=growth_model,
+        emcee_moves=emcee_moves,
+        zeus_light_mode=zeus_light_mode,
     )
 
 

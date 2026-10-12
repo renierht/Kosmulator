@@ -174,6 +174,8 @@ def main(
     cmb_nonlinear=None,
     hmcode_version: str = "2020",
     growth_model: str = "gamma",
+    emcee_moves: str = "stretch",
+    zeus_light_mode: bool = False,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -220,6 +222,8 @@ def main(
     # before the config (with "geff" gamma is not sampled)
     K.set_cmb_nonlinear(cmb_nonlinear, hmcode_version)
     K.set_growth_model(growth_model)
+    # Proposal moves of the samplers (item 55): emcee stretch or DE + snooker, zeus light mode
+    K.set_sampler_moves(emcee_moves, zeus_light_mode)
     if _mode == "lite":
         # figures and tables name the likelihood that was used
         for _t in ("CMB_hil", "CMB_hil_TT"):
@@ -543,6 +547,7 @@ def main(
             "nu_mass_eV": K.NU_MASS_EV, "nu_N_eff": K.NU_N_EFF, "growth_model": K.GROWTH_MODEL,
             "cmb_nonlinear": K.CMB_NONLINEAR, "hmcode_version": K.HMCODE_VERSION,
             "num_cores": int(getattr(args, "num_cores", 1)), "use_mpi": bool(getattr(args, "use_mpi", False)),
+            "emcee_moves": K.EMCEE_MOVES, "zeus_light_mode": bool(K.ZEUS_LIGHT_MODE),
         })
 
     samples = run_mcmc_for_all_models(

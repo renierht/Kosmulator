@@ -29,6 +29,7 @@ from Kosmulator_main import Statistical_packages as SP
 import Kosmulator_main.constants as K
 from Plots.Plot_functions import compute_rd as _compute_rd
 from Kosmulator_main import rd_helpers as RD
+from Kosmulator_main import sampler_moves as SM
 
 logger = logging.getLogger(__name__)
 
@@ -1139,6 +1140,7 @@ def _run_mcmc_impl(
                  "(zeus's differential move is unreliable in one dimension)", model_name, _resolved_key)
         engine = "emcee"
     use_zeus = (engine == "zeus" and zeus is not None)
+    log.info("[%s | %s] moves: %s", model_name, _resolved_key, SM.describe("zeus" if use_zeus else "emcee"))
     
     if use_zeus:
         zeus_chain = chain_path.replace(".h5", "_zeus.h5")
@@ -1339,6 +1341,7 @@ def _run_mcmc_impl(
             args=zeus_args,
             pool=_counting_pool(pool_for_zeus, zeus_vectorize),
             vectorize=zeus_vectorize,
+            light_mode=bool(K.ZEUS_LIGHT_MODE),
         )
         try:
             sampler.run_mcmc(pos0, steps_to_run, callbacks=callbacks)
@@ -1496,6 +1499,7 @@ def _run_mcmc_impl(
                     pool=_counting_pool(emcee_pool, emcee_vectorize),
                     backend=backend,
                     vectorize=emcee_vectorize,
+                    moves=SM.emcee_moves(),
                 )
 
                 if autoCorr:
@@ -1593,6 +1597,7 @@ def _run_mcmc_impl(
             pool=_counting_pool(emcee_pool, emcee_vectorize),
             backend=backend,
             vectorize=emcee_vectorize,
+            moves=SM.emcee_moves(),
         )
 
         if autoCorr:

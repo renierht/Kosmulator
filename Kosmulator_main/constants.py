@@ -182,6 +182,28 @@ def set_growth_model(mode="gamma") -> None:
     os.environ["KOSM_GROWTH_MODEL"] = m
 
 
+# Proposal moves (Kosmulator.py: emcee_moves, zeus_light_mode; Kosmulator_main/sampler_moves.py).
+# emcee: "stretch" (emcee's default) or "de_snooker" (differential evolution 0.8 + snooker 0.2,
+# ter Braak & Vrugt 2008). zeus: its DifferentialMove; light mode skips the expansions after tuning.
+# Only the process that runs the sampler uses these (rank 0 under MPI, which also calls
+# MCMC_setup.main), so pool workers need no KOSM_* variable.
+EMCEE_MOVES: str = "stretch"
+EMCEE_MOVES_OPTIONS: Tuple[str, ...] = ("stretch", "de_snooker")
+DE_SNOOKER_WEIGHTS: Tuple[float, float] = (0.8, 0.2)
+ZEUS_LIGHT_MODE: bool = False
+
+
+def set_sampler_moves(emcee_moves="stretch", zeus_light_mode=False) -> None:
+    """Moves of this run (Kosmulator.py emcee_moves, zeus_light_mode), validated."""
+    global EMCEE_MOVES, ZEUS_LIGHT_MODE
+    m = str(emcee_moves).strip().lower()
+    if m not in EMCEE_MOVES_OPTIONS:
+        raise ValueError(f"emcee_moves must be one of {EMCEE_MOVES_OPTIONS}, not {emcee_moves!r}")
+    if not isinstance(zeus_light_mode, bool):
+        raise ValueError(f"zeus_light_mode must be True or False, not {zeus_light_mode!r}")
+    EMCEE_MOVES, ZEUS_LIGHT_MODE = m, bool(zeus_light_mode)
+
+
 def class_signature() -> Tuple:
     """Settings that change CLASS results (neutrinos, non-linear correction), for cache keys."""
     return neutrino_signature() + (CMB_NONLINEAR, HMCODE_VERSION if CMB_NONLINEAR == "hmcode" else "")
