@@ -182,12 +182,23 @@ def act_lens_package_data(lens_only: bool) -> dict:
     corrections, whose derivative matrices take 1.4 GB in memory (12 s to read)."""
     import warnings
     import act_dr6_lenslike as alike
-    with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        return alike.load_data(
-            K.ACT_LENS_VARIANT, ddir=act_lens_dir(), lens_only=bool(lens_only), like_corrections=not lens_only,
-            nsims_act=K.ACT_LENS_NSIMS[0], nsims_planck=K.ACT_LENS_NSIMS[1],
-            trim_lmax=ACT_LENS_TRIM_LMAX, version=K.ACT_LENS_VERSION)
+    ddir = act_lens_dir()
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return alike.load_data(
+                K.ACT_LENS_VARIANT, ddir=ddir, lens_only=bool(lens_only), like_corrections=not lens_only,
+                nsims_act=K.ACT_LENS_NSIMS[0], nsims_planck=K.ACT_LENS_NSIMS[1],
+                trim_lmax=ACT_LENS_TRIM_LMAX, version=K.ACT_LENS_VERSION)
+    except OSError as e:
+        if lens_only:
+            raise
+        raise FileNotFoundError(
+            f"CMB_lensing_ACTPlanck with primary CMB in the group needs ACT's correction matrices in "
+            f"{os.path.join(ddir, 'like_corrs')} (N1*.txt and *.npy, 2.8 GB; not in git, they are above "
+            "GitHub's 100 MB file limit). Unpack ACT_dr6_likelihood_v1.2.tgz from https://lambda.gsfc.nasa.gov/"
+            f"data/suborbital/ACT/ACT_dr6/likelihood/data/ into {ddir} (see "
+            f"Observations/{K.ACT_LENS_DIR}/README.md). ({e})") from e
 
 
 def _act_lens_compact(d: dict) -> Dict[str, np.ndarray]:
