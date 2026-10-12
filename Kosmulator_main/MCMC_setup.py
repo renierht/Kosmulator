@@ -176,6 +176,7 @@ def main(
     growth_model: str = "gamma",
     emcee_moves: str = "stretch",
     zeus_light_mode: bool = False,
+    rd_background: str = "model",
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -224,6 +225,9 @@ def main(
     K.set_growth_model(growth_model)
     # Proposal moves of the samplers (item 55): emcee stretch or DE + snooker, zeus light mode
     K.set_sampler_moves(emcee_moves, zeus_light_mode)
+    # r_d of calibrated BAO/DESI groups: the model's own E(z) (rd_Class) or flat LCDM (item 12).
+    # Before any pool: spawned workers read KOSM_RD_BACKGROUND.
+    K.set_rd_background(rd_background)
     if _mode == "lite":
         # figures and tables name the likelihood that was used
         for _t in ("CMB_hil", "CMB_hil_TT"):
@@ -501,11 +505,35 @@ def main(
                     "so only %d workers are busy and %d wait at each half-step.",
                     n_workers, nw, nw // 2, n_workers - nw // 2)
 
+        # Item 12: r_d with the model's own E(z) (rd_Class, Kosmulator_main/rd_class.py) for
+        # BAO/DESI groups calibrated by BBN or Planck, for models other than LCDM. Compiled once
+        # and cached (Class/.cache/rd_Class); loaded here, before any worker pool exists, so the
+        # workers only read the cached build.
+        _bao = {"BAO", "DESI_DR1", "DESI_DR2"}
+        _rdc_models = set()
+        if K.RD_BACKGROUND == "model":
+            _early = set(K.CMB_PRIMARY_TAGS)
+            rdc_groups = [f"{m}: {'+'.join(g)}" for m in model_names if m not in K.RD_LCDM_MODELS
+                          for g in CONFIG[m].get("observations", [])
+                          if set(g) & _bao and (any(str(o).startswith("BBN") for o in g) or set(g) & _early)]
+            if rdc_groups:
+                try:
+                    from Kosmulator_main import rd_class as RDC
+                    RDC.ensure_ready(announce=True)
+                    _rdc_models = {m for m in model_names if m not in K.RD_LCDM_MODELS}
+                    log.info("r_d from CLASS with each model's own E(z) (rd_Class) for: %s",
+                             "; ".join(rdc_groups))
+                except Exception as e:
+                    log.warning("rd_Class could not be built or loaded (%s): r_d from CLASS's flat-LCDM "
+                                "background for every model instead (rd_background = \"lcdm\")", e)
+                    K.set_rd_background("lcdm")
+
         # Item 15: BAO/DESI calibrated by BBN (no Planck data, so no CLASS build of
         # Kosmulator's is loaded) take r_d from CLASS if `import classy` works, otherwise
         # from the EH98 fit. The run goes on either way; say so before it starts.
         _bao = {"BAO", "DESI_DR1", "DESI_DR2"}
-        rd_groups = [f"{m}: {'+'.join(g)}" for m in model_names for g in CONFIG[m].get("observations", [])
+        rd_groups = [f"{m}: {'+'.join(g)}" for m in model_names if m not in _rdc_models
+                     for g in CONFIG[m].get("observations", [])
                      if set(g) & _bao and any(str(o).startswith("BBN") for o in g)
                      and not set(g) & set(K.CMB_TAGS)]
         _rd_problem = RDH.classy_import_problem() if rd_groups else None
@@ -534,11 +562,15 @@ def main(
         # Chains already in the folder are reused (or resumed) unless --overwrite: refuse when
         # they were made with other likelihood settings, warn when that is unknown.
         from Kosmulator_main.peek import write_run_settings, check_run_settings
-        check_run_settings((getattr(args, "output_suffix", "") or "").strip(), {
+        _check = {
             "neutrinos": K.NEUTRINOS, "nu_mass_eV": K.NU_MASS_EV, "nu_N_eff": K.NU_N_EFF,
             "growth_model": K.GROWTH_MODEL, "cmb_nonlinear": K.CMB_NONLINEAR, "hmcode_version": K.HMCODE_VERSION,
             "cmb_nuisance": K.CMB_NUISANCE, "sample_H0_uncalibrated_SNe": bool(sample_H0_uncalibrated_SNe),
-        }, overwrite=bool(getattr(args, "overwrite", False)))
+        }
+        if any(m not in K.RD_LCDM_MODELS for m in model_names):   # r_d is the same for LCDM models
+            _check["rd_background"] = K.RD_BACKGROUND
+        check_run_settings((getattr(args, "output_suffix", "") or "").strip(), _check,
+                           overwrite=bool(getattr(args, "overwrite", False)))
         write_run_settings((getattr(args, "output_suffix", "") or "").strip(), {
             "models": list(model_names), "observations": [list(g) for g in observations],
             "nwalkers": nwalkers, "nsteps": nsteps, "burn": burn, "convergence": convergence,
@@ -548,6 +580,7 @@ def main(
             "cmb_nonlinear": K.CMB_NONLINEAR, "hmcode_version": K.HMCODE_VERSION,
             "num_cores": int(getattr(args, "num_cores", 1)), "use_mpi": bool(getattr(args, "use_mpi", False)),
             "emcee_moves": K.EMCEE_MOVES, "zeus_light_mode": bool(K.ZEUS_LIGHT_MODE),
+            "rd_background": K.RD_BACKGROUND,
         })
 
     samples = run_mcmc_for_all_models(

@@ -177,6 +177,11 @@ growth_model: str = "gamma"
 # tests, on near-Gaussian posteriors). Changing either between a run and its --resume is allowed.
 emcee_moves: str = "stretch"
 zeus_light_mode: bool = False
+# r_d of BAO/DESI groups calibrated by BBN or Planck. "model" (default): CLASS with the model's own
+# E(z) in place of the cosmological constant (rd_Class: compiled once, then cached), for every model
+# other than LCDM; this matters when the model's dark sector is not negligible before recombination
+# (e.g. w0wa with w0 + wa near 0). "lcdm": CLASS's flat-LCDM r_d for every model (as before).
+rd_background: str = "model"
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -293,6 +298,7 @@ def main() -> None:
         growth_model=growth_model,
         emcee_moves=emcee_moves,
         zeus_light_mode=zeus_light_mode,
+        rd_background=rd_background,
     )
 
 

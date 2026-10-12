@@ -72,7 +72,7 @@ def write_run_settings(suffix: str, settings: Dict[str, Any]) -> Optional[str]:
 
 #: Run settings that change the likelihood: chains made with other values must not be reused
 LIKELIHOOD_SETTINGS = ("neutrinos", "nu_mass_eV", "nu_N_eff", "growth_model", "cmb_nonlinear",
-                       "hmcode_version", "cmb_nuisance", "sample_H0_uncalibrated_SNe")
+                       "hmcode_version", "cmb_nuisance", "sample_H0_uncalibrated_SNe", "rd_background")
 
 
 def check_run_settings(suffix: str, settings: Dict[str, Any], overwrite: bool = False) -> None:
@@ -101,6 +101,9 @@ def check_run_settings(suffix: str, settings: Dict[str, Any], overwrite: bool = 
         log.warning("Could not read %s (%s); the run settings of its chains are not checked", path, e)
         return
     diff = []
+    old = dict(old)
+    if "rd_background" not in old:
+        old["rd_background"] = "lcdm"     # runs before item 12: flat-LCDM r_d for every model
     for k in LIKELIHOOD_SETTINGS:
         if k not in old or k not in settings:
             continue

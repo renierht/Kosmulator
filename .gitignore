@@ -95,3 +95,6 @@ htmlcov/
 # =========================
 .Rhistory
 
+
+# rd_Class (item 12): made from Class/LCDM_v at run time, compiled once into Class/.cache
+Class/rd_Class/

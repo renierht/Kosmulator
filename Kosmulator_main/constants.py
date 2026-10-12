@@ -204,6 +204,26 @@ def set_sampler_moves(emcee_moves="stretch", zeus_light_mode=False) -> None:
     EMCEE_MOVES, ZEUS_LIGHT_MODE = m, bool(zeus_light_mode)
 
 
+# r_d of groups with an early-time calibrator (BBN or Planck) for BAO/DESI (Kosmulator.py
+# rd_background; Kosmulator_main/rd_class.py). "model" (default): rd_Class, CLASS with the
+# model's own E(z) in place of the cosmological constant, for every model not in
+# RD_LCDM_MODELS. "lcdm": CLASS's flat-LCDM r_d for every model (Kosmulator before October
+# 2026). KOSM_RD_BACKGROUND carries the choice to spawned pool workers.
+RD_BACKGROUND: str = os.environ.get("KOSM_RD_BACKGROUND", "model")
+RD_BACKGROUND_MODES: Tuple[str, ...] = ("model", "lcdm")
+RD_LCDM_MODELS: Tuple[str, ...] = ("LCDM", "LCDM_v", "LCDM_nv")
+
+
+def set_rd_background(mode="model") -> None:
+    """r_d background of this run (Kosmulator.py rd_background); also KOSM_RD_BACKGROUND."""
+    global RD_BACKGROUND
+    m = str(mode).strip().lower()
+    if m not in RD_BACKGROUND_MODES:
+        raise ValueError(f"rd_background must be one of {RD_BACKGROUND_MODES}, not {mode!r}")
+    RD_BACKGROUND = m
+    os.environ["KOSM_RD_BACKGROUND"] = m
+
+
 def class_signature() -> Tuple:
     """Settings that change CLASS results (neutrinos, non-linear correction), for cache keys."""
     return neutrino_signature() + (CMB_NONLINEAR, HMCODE_VERSION if CMB_NONLINEAR == "hmcode" else "")

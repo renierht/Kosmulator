@@ -1169,6 +1169,7 @@ def extract_observation_data(
     data: Mapping[str, Mapping[str, Any]],
     obs_type: str,
     params_median: Optional[Mapping[str, float]] = None,
+    model_name: Optional[str] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
     """Return (z, y, yerr, meta) for a given observation type.
 
@@ -1318,7 +1319,7 @@ def extract_observation_data(
                 if params_median is not None and "r_d" in params_median:
                     rs = float(params_median["r_d"])
                 elif params_median is not None:
-                    rs = float(rd_for_report(params_median)[0])   # CLASS first, as in the likelihood
+                    rs = float(rd_for_report(params_median, model_name)[0])   # as in the likelihood
                 else:
                     rs = R_D_SINGLETON
             except Exception:

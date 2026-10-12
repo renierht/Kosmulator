@@ -251,11 +251,31 @@ def _q(x, step):
     return step * round(float(x) / step)
 
 
-def compute_rd_class(p: dict):
+def _rd_class_model(p: dict, model_name):
+    """
+    r_d from rd_Class with the model's own E(z) (Kosmulator_main/rd_class.py), or None when
+    the flat-LCDM CLASS value applies: rd_background "lcdm", an LCDM model (identical r_d),
+    no model name, or rd_Class unavailable or failing for this point (counted and warned).
+    """
+    if not model_name or _K.RD_BACKGROUND != "model" or model_name in _K.RD_LCDM_MODELS:
+        return None
+    try:
+        from Kosmulator_main import rd_class as _RC
+        return float(_RC.rd_model(str(model_name), dict(p)))
+    except Exception as e:
+        _note_fallback(f"rd_Class failed for {model_name}, flat-LCDM CLASS r_d used", str(e))
+        return None
+
+
+def compute_rd_class(p: dict, model_name=None):
     """
     Compute r_d via CLASS.rs_drag(), with conservative parameter quantisation.
-    Returns None if CLASS is unavailable.
+    With a model name (and rd_background "model", the default), a model other than LCDM gets
+    r_d from rd_Class with its own E(z). Returns None if CLASS is unavailable.
     """
+    rd_m = _rd_class_model(p, model_name)
+    if rd_m is not None:
+        return rd_m
     mod = _classy_module()
     if mod is None:
         return None
@@ -299,16 +319,17 @@ def compute_rd_class(p: dict):
 # ------------------------------------------------------------------
 # Policy helpers
 # ------------------------------------------------------------------
-def _try_compute_rd(param_dict: dict):
+def _try_compute_rd(param_dict: dict, model_name=None):
     """
-    Central helper: try CLASS rs_drag() first; fall back to EH98 compute_rd().
+    Central helper: try CLASS rs_drag() first (rd_Class with the model's E(z) when
+    model_name is given, see compute_rd_class); fall back to EH98 compute_rd().
     Returns r_d [Mpc] or None if both fail.
     """
     global _RD_BACKEND_LOGGED
 
     # 1) CLASS first
     try:
-        rd = compute_rd_class(param_dict)
+        rd = compute_rd_class(param_dict, model_name)
         if rd is not None:
             if not _RD_BACKEND_LOGGED:
                 logger.debug(
@@ -402,14 +423,14 @@ def _try_resolve_rd(param_dict, Type):
         return None
 
 
-def _compute_r_d_from_bbn_and_background(p: dict) -> float:
+def _compute_r_d_from_bbn_and_background(p: dict, model_name=None) -> float:
     """
     Centralised r_d [Mpc] for calibrated runs.
 
-    Try CLASS rs_drag via _try_compute_rd; fall back to EH98 compute_rd().
+    Try CLASS rs_drag via _try_compute_rd (rd_Class for the model); fall back to EH98.
     """
     try:
-        rd = _try_compute_rd(p)
+        rd = _try_compute_rd(p, model_name)
         if rd is not None:
             return float(rd)
     except Exception:
@@ -418,7 +439,7 @@ def _compute_r_d_from_bbn_and_background(p: dict) -> float:
     return float(compute_rd(p))
 
 
-def rd_for_report(p: Mapping[str, float]):
+def rd_for_report(p: Mapping[str, float], model_name=None):
     """
     r_d [Mpc] for tables, plots and diagnostics, resolved the same way as the
     likelihood: a sampled r_d first, then CLASS rs_drag(), and EH98 only if
@@ -442,7 +463,7 @@ def rd_for_report(p: Mapping[str, float]):
 
     rd = None
     try:
-        rd = compute_rd_class(dict(p))
+        rd = compute_rd_class(dict(p), model_name)
         if rd is None:
             _note_fallback("CLASS not available for a reported r_d, EH98 used (~2% above CLASS)")
     except Exception as e:
@@ -454,17 +475,20 @@ def rd_for_report(p: Mapping[str, float]):
 
 def _maybe_calibrate_rd(theta_map: dict, CONFIG: dict, obs_index: int) -> None:
     """
-    If this observation set includes BBN and r_d is absent, compute it from
-    (Omega_bh^2, Omega_m, H_0[, N_eff, T_CMB]) and inject into theta_map.
+    If this observation set includes BBN or primary Planck data and r_d is absent, compute
+    it from (Omega_bh^2, Omega_m, H_0[, N_eff, T_CMB]) and the model's E(z) (rd_Class, for
+    a model other than LCDM) and inject it into theta_map.
 
     Used by Kosmulator_MCMC at the θ→param stage so BAO/DESI runs that
-    include BBN can have r_d pre-calibrated.
+    include BBN or Planck can have r_d pre-calibrated. (Planck groups used to get the
+    flat-LCDM r_d inside the BAO likelihood, without the model.)
     """
     try:
         if "r_d" in theta_map:
             return
         obs_set = CONFIG.get("observations", [])[obs_index]
-        has_bbn = any(str(o).startswith(("BBN",)) for o in obs_set)
+        has_bbn = any(str(o).startswith(("BBN",)) for o in obs_set) or \
+            any(str(o) in _K.CMB_PRIMARY_TAGS for o in obs_set)
         # Only BAO/DESI use r_d: skip the CLASS call (~50 ms) for groups such
         # as CC + BBN or SNe + BBN, where it was computed and never used.
         has_bao = any(str(o) in ("BAO", "DESI", "DESI_DR1", "DESI_DR2") for o in obs_set)
@@ -474,7 +498,7 @@ def _maybe_calibrate_rd(theta_map: dict, CONFIG: dict, obs_index: int) -> None:
         if not all(k in theta_map for k in needed):
             # Silent no-op; downstream will raise if BAO/DESI needs r_d
             return
-        theta_map["r_d"] = _compute_r_d_from_bbn_and_background(theta_map)
+        theta_map["r_d"] = _compute_r_d_from_bbn_and_background(theta_map, CONFIG.get("model_name"))
     except Exception:
         # Fail-safe: do nothing; BAO/DESI branch will error clearly if r_d missing
         pass

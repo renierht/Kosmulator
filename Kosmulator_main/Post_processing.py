@@ -874,6 +874,15 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             # Re-evaluate once at the polished point: the data chi^2 (without the Planck
             # nuisance priors used in the polish) and the exact N data points
             chi_squared_total, num_data_points_total = _compute_chi2_total(param_dict)
+            # item 12: r_d of this group from rd_Class (the model's own E(z)), or its fallback
+            _rdc_fail = sum(v for k, v in RD.rd_fallback_counts().items() if k.startswith("rd_Class failed"))
+            if _rdc_fail:
+                notes.append(f"r_d: rd_Class failed at {_rdc_fail} point(s) of the statistics, flat-LCDM CLASS "
+                             "r_d used there")
+            elif (K.RD_BACKGROUND == "model" and model_name not in K.RD_LCDM_MODELS
+                  and any(o in ("BAO", "DESI_DR1", "DESI_DR2") for o in obs_entry)
+                  and any(str(o).startswith("BBN") or o in K.CMB_PRIMARY_TAGS for o in obs_entry)):
+                notes.append("r_d from CLASS with the model's own E(z) (rd_Class, rd_background = \"model\")")
             _eh98 = sum(v for k, v in RD.rd_fallback_counts().items() if "EH98 used" in k)
             if _eh98:
                 notes.append(f"r_d from the EH98 fit, not CLASS ({RD.classy_import_problem() or 'CLASS failed'}): "

@@ -1138,7 +1138,10 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
             jdh = names.index("Omega_dh^2")
             odh = np.asarray(obs_samples[:, jdh], dtype=float)
             h   = np.maximum(H0, 1e-12) / 100.0
-            Om  = (obh + odh) / (h * h)
+            # Omega_dh^2 is CLASS's omega_cdm: the massive neutrino is in Omega_m as well
+            # (utils.ensure_background_params, item 27)
+            from Kosmulator_main import constants as _Kc
+            Om  = (obh + odh + _Kc.omega_nu()) / (h * h)
         else:
             derived_rd_col.append("—")
             continue
@@ -1155,8 +1158,13 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         obhs = obh[sel]
         Oms  = Om[sel]
 
-        rd_src = [rd_for_report({"H_0": float(h0), "Omega_m": float(om), "Omega_bh^2": float(ob)})
-                  for h0, om, ob in zip(H0s, Oms, obhs)]
+        # Full draws (the model's own parameters too): r_d from rd_Class for models other than
+        # LCDM, as in the likelihood (item 12)
+        _draws = np.asarray(obs_samples, dtype=float)[sel]
+        rd_src = [rd_for_report({**{n: float(v) for n, v in zip(names, row)},
+                                 "H_0": float(h0), "Omega_m": float(om), "Omega_bh^2": float(ob)},
+                                model_name)
+                  for row, h0, om, ob in zip(_draws, H0s, Oms, obhs)]
         rds = np.array([r for r, _ in rd_src], dtype=float)
         n_eh98 = sum(1 for _, s in rd_src if s != "CLASS")
         if n_eh98:
@@ -1508,7 +1516,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
             # (Optional) diagnostics
             try:
                 if any(tag in obs_key for tag in ("BAO", "DESI", "DESI_DR1", "DESI_DR2")):
-                    rd_med, rd_src = rd_for_report(params_med)
+                    rd_med, rd_src = rd_for_report(params_med, model_name)
                     print(f"[diag] {model_name} {obs_key}: r_d at median parameters = {rd_med:.2f} Mpc ({rd_src})")
             except Exception:
                 pass
@@ -1588,7 +1596,8 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
 
                 # Cache all observation data in this column and collect per-column min-x
                 for obs_type in part:
-                    res = extract_observation_data(data, obs_type, params_median=params_med)
+                    res = extract_observation_data(data, obs_type, params_median=params_med,
+                                                   model_name=model_name)
 
                     # Back-compat: normalize to (x, y, yerr, meta)
                     if isinstance(res, tuple) and len(res) == 3:
