@@ -274,6 +274,8 @@ DATA_OVERLAPS: Tuple[Tuple[frozenset, str], ...] = (
     (frozenset({"OHD", "CC"}), "OHD.dat repeats 31 of the cosmic-chronometer H(z) points of CC.dat "
                                "(its other 20 rows are BAO/clustering H(z)); use CC or OHD, not both"),
     (frozenset({"BAO", "DESI_DR1"}), "BAO is the 10 anisotropic DESI DR1 points, which DESI_DR1 also contains"),
+    (frozenset({"f", "f_sigma_8"}), "f.dat and f_sigma_8.dat have measurements from the same galaxy surveys "
+                                    "(SDSS, VIPERS, 2dFGRS, GAMA, WiggleZ, VVDS; see the f.dat header); use one"),
     (frozenset({"DESI_DR1", "DESI_DR2"}), "DESI DR2 includes the DR1 data"),
     (frozenset({"CMB_hil", "CMB_hil_TT"}), "the Planck TT,TE,EE likelihood contains the TT spectra of the TT one"),
     # Ground-based CMB and the Planck + ACT (+ SPT) combinations (item 57)
