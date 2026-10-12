@@ -153,7 +153,8 @@ def _compute_cls_cached(
     m = (mode or "").lower()
     ell_max_default = 31 if m.startswith("low") else 2509
     ell_max = int(Lmax) if (Lmax is not None) else ell_max_default
-    ell_max = max(8, min(int(ell_max), 4096))
+    from Kosmulator_main import constants as _Kl   # live value: MCMC_setup sets it per run (item 57)
+    ell_max = max(8, min(int(ell_max), max(4096, int(_Kl.CMB_CLASS_LMAX))))   # ACT needs 8501
 
     # Try to infer model name from the CLASS runtime if not supplied
     model_name = model_name or getattr(CR, "_current_class_model", "LCDM_v")
@@ -416,6 +417,23 @@ def planck_nuisance_prior_chi2(pd: Dict[str, float]) -> float:
     return chi2
 
 
+def cmb_prior_chi2(pd: Dict[str, float], group) -> float:
+    """
+    -2 ln(prior) of a group's CMB parameters present in pd, up to a constant: the Gaussian
+    priors of constants.cmb_gaussian_priors(group) (Planck and ground-based nuisances, tau
+    for ACT or SPT without low-l EE) and the SZ prior. Same terms as log_prior_all.
+    """
+    from Kosmulator_main import constants as _K
+    chi2 = 0.0
+    for name, (mu, sig) in _K.cmb_gaussian_priors(tuple(group or ())).items():
+        if name in pd:
+            chi2 += ((float(pd[name]) - mu) / sig) ** 2
+    if "ksz_norm" in pd and "A_sz" in pd:
+        c, mu, sig = _K.PLANCK_SZ_PRIOR
+        chi2 += ((float(pd["ksz_norm"]) + c * float(pd["A_sz"]) - mu) / sig) ** 2
+    return chi2
+
+
 class _ClsTask:
     """Picklable C_l of one point for the worker pool (item 52)."""
 
@@ -461,7 +479,8 @@ def clear_cls_prefetch() -> None:
 def _spectra_key(pd: Dict[str, float], model_name: str) -> tuple:
     """Cache key: the model, the CLASS settings (neutrinos, non-linear) and every numeric parameter except Planck nuisances."""
     from Kosmulator_main import constants as _K
-    skip = set(getattr(_K, "PLANCK_NUISANCE_NAMES", ())) | set(PLANCK_NUISANCE_DEFAULTS)
+    skip = set(getattr(_K, "PLANCK_NUISANCE_NAMES", ())) | set(PLANCK_NUISANCE_DEFAULTS) \
+        | set(getattr(_K, "GROUND_NUISANCE_SAMPLED", ()))       # ACT/SPT nuisances (item 57)
     items = []
     for k, v in pd.items():
         if k in skip:
@@ -491,7 +510,8 @@ def get_cmb_spectra(pd: Dict[str, float], model_name: str) -> Optional[Dict[str,
     if getattr(UDM, f"{model_name}_CMB", None) is not None:
         cl = _get_cls_from_model(pd, model_name, mode="cmb")
     else:
-        cl = _compute_cls_cached(pd, Lmax=CMB_CLASS_LMAX, mode="cmb", model_name=model_name)
+        from Kosmulator_main import constants as _Kl
+        cl = _compute_cls_cached(pd, Lmax=_Kl.CMB_CLASS_LMAX, mode="cmb", model_name=model_name)
     if cl is not None and not isinstance(cl, dict):
         cl = None
     _CMB_SPECTRA[key] = cl

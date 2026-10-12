@@ -122,6 +122,10 @@ def model_likelihood(
     param_dict = _theta_params(theta, CONFIG, obs_index)
 
     # Dedicated CMB branches
+    if obs in K.GROUND_CMB_TAGS:
+        # ACT DR6, SPT-3G D1 (candl) and the Planck + ACT (+ SPT) combinations (item 57)
+        from Kosmulator_main import ground_cmb as GC
+        return GC.loglike(obs, param_dict, model_name)
     if obs == "CMB_hil":
         return SP.cmb_hil_loglike(param_dict, model_name)
     if obs == "CMB_hil_TT":
@@ -251,6 +255,20 @@ def model_likelihood(
     return -0.5 * chi2
 
 
+_GAUSS_CACHE: Dict[tuple, Dict[str, Tuple[float, float]]] = {}
+
+
+def _group_gaussian_priors(CONFIG: Dict[str, Any], obs_index: int) -> Dict[str, Tuple[float, float]]:
+    """constants.cmb_gaussian_priors of the group, cached per group."""
+    try:
+        grp = tuple(map(str, CONFIG["observations"][obs_index]))
+    except Exception:
+        grp = ()
+    if grp not in _GAUSS_CACHE:
+        _GAUSS_CACHE[grp] = K.cmb_gaussian_priors(grp)
+    return _GAUSS_CACHE[grp]
+
+
 def log_prior_all(theta_batch: np.ndarray, CONFIG: Dict[str, Any], obs_index: int) -> np.ndarray:
     """Vectorised top-hat priors with optional restrictions + coupled background checks."""
     nwalkers, ndim = theta_batch.shape
@@ -266,9 +284,12 @@ def log_prior_all(theta_batch: np.ndarray, CONFIG: Dict[str, Any], obs_index: in
 
     # 1b) Gaussian priors of the Planck nuisance parameters (calibrations, dust
     #     amplitudes) and the SZ prior on ksz_norm + 1.6 A_sz, as in Planck's baseline
-    #     and Cobaya (constants.PLANCK_GAUSSIAN_PRIORS, PLANCK_SZ_PRIOR)
+    #     and Cobaya (constants.PLANCK_GAUSSIAN_PRIORS, PLANCK_SZ_PRIOR); the ACT and SPT
+    #     nuisance priors and, for ACT or SPT without low-l EE, a tau prior (item 57:
+    #     constants.cmb_gaussian_priors of this group)
+    gauss = _group_gaussian_priors(CONFIG, obs_index)
     for i, p in enumerate(params):
-        g = K.PLANCK_GAUSSIAN_PRIORS.get(p)
+        g = gauss.get(p)
         if g is not None:
             lp += -0.5 * ((theta_batch[:, i] - g[0]) / g[1]) ** 2
     if ("ksz_norm" in params) and ("A_sz" in params):

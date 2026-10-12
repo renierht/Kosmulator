@@ -112,6 +112,12 @@ observations: List[List[str]] = [
     #['CMB_hil'],
     #['CMB_lensing', 'CMB_lowl'],
     #['CMB_hil_TT'],
+    # Ground-based CMB (candl; ACT DR6, SPT-3G D1) and the combinations used in the literature:
+    #['CMB_SPA'],            # CMB-SPA: Planck (cut) + ACT DR6 + SPT-3G D1 + Planck low-l TT and SRoll2 EE
+    #['CMB_PACT'],           # P-ACT: the same without SPT
+    #['CMB_ACT'],            # ACT DR6 alone (tau prior 0.0566 +- 0.0058 unless low-l EE is in the group)
+    #['CMB_SPT'],            # SPT-3G D1 alone (tau prior 0.051 +- 0.006 unless low-l EE is in the group)
+    #['CMB_SPA', 'DESI_DR2'],
     #["CC", "DESI_DR1"],
     #["JLA","DESY5","Union3"],
     #["DESI_DR1", "f_sigma_8", "CC"],

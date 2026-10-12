@@ -225,8 +225,9 @@ def set_rd_background(mode="model") -> None:
 
 
 def class_signature() -> Tuple:
-    """Settings that change CLASS results (neutrinos, non-linear correction), for cache keys."""
-    return neutrino_signature() + (CMB_NONLINEAR, HMCODE_VERSION if CMB_NONLINEAR == "hmcode" else "")
+    """Settings that change CLASS results (neutrinos, non-linear correction, l_max), for cache keys."""
+    return neutrino_signature() + (CMB_NONLINEAR, HMCODE_VERSION if CMB_NONLINEAR == "hmcode" else "",
+                                   CMB_CLASS_LMAX)
 
 #: h used for Omega_r when a group does not sample H_0 (e.g. f, f_sigma_8 alone)
 H0_RADIATION_FALLBACK: float = 67.4
@@ -275,7 +276,19 @@ DATA_OVERLAPS: Tuple[Tuple[frozenset, str], ...] = (
     (frozenset({"BAO", "DESI_DR1"}), "BAO is the 10 anisotropic DESI DR1 points, which DESI_DR1 also contains"),
     (frozenset({"DESI_DR1", "DESI_DR2"}), "DESI DR2 includes the DR1 data"),
     (frozenset({"CMB_hil", "CMB_hil_TT"}), "the Planck TT,TE,EE likelihood contains the TT spectra of the TT one"),
+    # Ground-based CMB and the Planck + ACT (+ SPT) combinations (item 57)
+    (frozenset({"CMB_lowl", "CMB_lowl_sroll2"}), "SimAll and SRoll2 are two analyses of the same Planck low-l EE data"),
+    (frozenset({"CMB_ACT", "CMB_hil"}), "ACT DR6 and full Planck overlap in sky and multipoles: ACT recommends "
+                                        "Planck cut at l = 1000 (TT) and 600 (TE, EE), i.e. CMB_planck_ACTcut or CMB_PACT"),
+    (frozenset({"CMB_ACT", "CMB_hil_TT"}), "ACT DR6 and full Planck TT overlap in sky and multipoles: use CMB_planck_ACTcut "
+                                           "or CMB_PACT"),
+    (frozenset({"CMB_planck_ACTcut", "CMB_hil"}), "both are Planck high-l TT,TE,EE (the cut one is a subset)"),
+    (frozenset({"CMB_planck_ACTcut", "CMB_hil_TT"}), "both contain Planck high-l TT"),
 )
+#: The Planck + ACT (+ SPT) combinations contain these tags; with any of them in the same
+#: group the data are counted twice (utils.data_overlaps)
+CMB_BUNDLE_CONFLICTS: Tuple[str, ...] = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lowl_sroll2",
+                                         "CMB_planck_ACTcut", "CMB_ACT", "CMB_SPT", "CMB_PACT", "CMB_SPA")
 #: Supernova compilations: any two of them share supernovae
 SN_COMPILATIONS: Tuple[str, ...] = ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS", "DESY5", "Union3")
 #: BBN data: the D/H systems (two predictions of the same data) and the DESI DR2 BBN prior on
@@ -487,6 +500,12 @@ OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
     "PantheonP_SH0ES": (r"Pantheon$^{+}$+SH0ES","Pantheon+SH0ES"),
 
     # CMB datasets
+    "CMB_ACT":         (r"ACT DR6 TTTEEE",              "ACT DR6 TTTEEE"),
+    "CMB_SPT":         (r"SPT-3G D1 TTTEEE",            "SPT-3G D1 TTTEEE"),
+    "CMB_planck_ACTcut": (r"Planck TTTEEE (ACT cut)",   "Planck TTTEEE (ACT cut)"),
+    "CMB_lowl_sroll2": (r"Planck low-$\ell$ EE (SRoll2)", "Planck low-ℓ EE (SRoll2)"),
+    "CMB_PACT":        (r"P-ACT",                       "P-ACT"),
+    "CMB_SPA":         (r"CMB-SPA",                     "CMB-SPA"),
     "CMB_lowl":        (r"Planck low-$\ell$ EE",       "Planck low-ℓ EE"),
     "CMB_lowl_TT":     (r"Planck low-$\ell$ TT",       "Planck low-ℓ TT"),
     "CMB_hil":         (r"Planck high-$\ell$ TTTEEE",  "Planck high-ℓ TTTEEE"),
@@ -631,7 +650,17 @@ def set_engine_overrides(
 # CMB_SPECTRA_CACHE_SIZE points are kept per process.
 # ======================================================================
 
-CMB_CLASS_LMAX: int = 3000
+CMB_CLASS_LMAX: int = int(os.environ.get("KOSM_CMB_CLASS_LMAX", "3000"))
+CMB_CLASS_LMAX_PLANCK: int = 3000   # enough for Planck (plik to l = 2508, lensing to 2048)
+
+
+def set_cmb_class_lmax(lmax: int) -> None:
+    """l_max of the run's lensed CLASS spectra (one run per point for every CMB likelihood of a
+    group): 3000 for Planck, more when ACT (8501) or SPT (4095) is in the run (item 57);
+    KOSM_CMB_CLASS_LMAX carries it to spawned pool workers."""
+    global CMB_CLASS_LMAX
+    CMB_CLASS_LMAX = int(lmax)
+    os.environ["KOSM_CMB_CLASS_LMAX"] = str(CMB_CLASS_LMAX)
 CMB_SPECTRA_CACHE_SIZE: int = 64
 
 # ======================================================================
@@ -733,8 +762,107 @@ PLANCK_LOWL_FILES: Dict[str, str] = {
 }
 
 # Planck tags (primary CMB: everything but lensing)
-CMB_TAGS: Tuple[str, ...] = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lensing")
-CMB_PRIMARY_TAGS: Tuple[str, ...] = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT")
+# Ground-based CMB through candl and the Planck + ACT (+ SPT) combinations (item 57;
+# Kosmulator_main/ground_cmb.py):
+#   CMB_ACT            ACT DR6 TT/TE/EE, foreground-marginalised (ACT-lite), l = 600 - 8500
+#                      (Louis et al. 2025, arXiv:2503.14452), candl_data.ACT_DR6_TTTEEE
+#   CMB_SPT            SPT-3G D1 T&E, foreground-marginalised (SPT-lite), l = 400 - 4000
+#                      (Camphuis et al. 2025, arXiv:2506.20707), spt_candl_data.SPT3G_D1_TnE_lite
+#   CMB_planck_ACTcut  Planck 2018 plik_lite TT,TE,EE without l > 1000 (TT) and l > 600 (TE, EE),
+#                      ACT DR6's "PlanckActCut"
+#   CMB_lowl_sroll2    Planck low-l EE from the SRoll2 maps (Pagano et al. 2020, arXiv:1908.09856)
+#   CMB_PACT           P-ACT: CMB_lowl_TT + CMB_lowl_sroll2 + CMB_planck_ACTcut + CMB_ACT
+#   CMB_SPA            CMB-SPA: CMB_PACT + CMB_SPT, as the SPT collaboration's SPA-lite set-up
+GROUND_CMB_TAGS: Tuple[str, ...] = ("CMB_ACT", "CMB_SPT", "CMB_planck_ACTcut", "CMB_lowl_sroll2",
+                                    "CMB_PACT", "CMB_SPA")
+CMB_BUNDLES: Dict[str, Tuple[str, ...]] = {
+    "CMB_PACT": ("CMB_lowl_TT", "CMB_lowl_sroll2", "CMB_planck_ACTcut", "CMB_ACT"),
+    "CMB_SPA": ("CMB_lowl_TT", "CMB_lowl_sroll2", "CMB_planck_ACTcut", "CMB_ACT", "CMB_SPT"),
+}
+#: l_max each likelihood needs from CLASS (candl: its theory range; Planck: CMB_CLASS_LMAX_PLANCK)
+CMB_TAG_LMAX: Dict[str, int] = {"CMB_ACT": 8501, "CMB_SPT": 4095}
+#: Planck high-l cut of ACT DR6's P-ACT (TT, TE, EE): bins above it are dropped
+PLANCK_ACT_CUT_LMAX: Tuple[int, int, int] = (1000, 600, 600)
+#: Nuisance parameters of the ground-based likelihoods: (reference value, prior box, Gaussian
+#: (mean, sigma) or None). A_act: ACT's overall calibration, prior from the dipole
+#: calibration (candl's internal prior and P-ACT's cal_dip_prior); tied to A_planck (one
+#: parameter) when Planck data are in the group, as in P-ACT and SPA. P_act: ACT's
+#: polarisation efficiency, flat 0.9 - 1.1. Tcal, Ecal: SPT-lite's temperature and E-mode
+#: calibrations (Gaussian 1 +- 0.0036 and flat 0.8 - 1.2, as in spt_candl_data's SPA-lite).
+GROUND_NUISANCE_SAMPLED: Dict[str, Tuple[float, Tuple[float, float], Tuple[float, float] | None]] = {
+    "A_act": (1.0, (0.985, 1.015), (1.0, 0.003)),
+    "P_act": (1.0, (0.9, 1.1), None),
+    "Tcal": (1.0, (0.982, 1.018), (1.0, 0.0036)),
+    "Ecal": (1.0, (0.8, 1.2), None),
+}
+GROUND_NUISANCE_PARAMS: Dict[str, Tuple[str, ...]] = {
+    "CMB_ACT": ("A_act", "P_act"), "CMB_SPT": ("Tcal", "Ecal"),
+    "CMB_planck_ACTcut": ("A_planck",), "CMB_lowl_sroll2": ("A_planck",),
+    "CMB_PACT": ("A_planck", "P_act"), "CMB_SPA": ("A_planck", "P_act", "Tcal", "Ecal"),
+}
+#: tau prior for a group with ACT or SPT and no low-l EE likelihood: the one candl applies by
+#: default (SPT-lite: from the Planck PR4 maps, as in Camphuis et al. 2025; ACT-lite: ACT DR6)
+CMB_TAU_PRIORS: Dict[str, Tuple[float, float]] = {"CMB_SPT": (0.051, 0.006), "CMB_ACT": (0.0566, 0.0058)}
+#: Likelihoods that constrain tau through low-l EE
+CMB_LOWL_EE_TAGS: Tuple[str, ...] = ("CMB_lowl", "CMB_lowl_sroll2", "CMB_PACT", "CMB_SPA")
+#: Data points: ACT-lite 135 and SPT-lite 196 band powers, SRoll2 l = 2 - 29
+GROUND_N_DATA: Dict[str, int] = {"CMB_ACT": 135, "CMB_SPT": 196, "CMB_lowl_sroll2": 28}
+#: SRoll2 low-l EE probability table (Cobaya's planck_native_data release v1, planck_sroll2_lowE.zip)
+SROLL2_TABLE_FILE: str = "sroll2_prob_table.txt"
+
+CMB_TAGS: Tuple[str, ...] = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lensing") + GROUND_CMB_TAGS
+CMB_PRIMARY_TAGS: Tuple[str, ...] = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT") + GROUND_CMB_TAGS
+
+
+def cmb_components(tag: str) -> Tuple[str, ...]:
+    """The likelihoods behind a CMB tag: a combination's parts, else the tag itself."""
+    return CMB_BUNDLES.get(tag, (tag,))
+
+
+def cmb_group_components(group) -> Set[str]:
+    """Every CMB likelihood a group evaluates (combinations expanded)."""
+    out: Set[str] = set()
+    for o in group or ():
+        out |= set(cmb_components(str(o)))
+    return out
+
+
+def cmb_lmax_for_groups(groups) -> int:
+    """l_max of the CLASS spectra a run needs (CMB_CLASS_LMAX_PLANCK unless ACT or SPT is in it)."""
+    lmax = CMB_CLASS_LMAX_PLANCK
+    for g in groups or ():
+        for c in cmb_group_components(g):
+            lmax = max(lmax, CMB_TAG_LMAX.get(c, 0))
+    return lmax
+
+
+def cmb_tau_prior(group) -> Tuple[float, float] | None:
+    """tau prior of a group with ACT or SPT but no low-l EE likelihood (CMB_TAU_PRIORS), else None."""
+    comps = cmb_group_components(group)
+    if comps & set(CMB_LOWL_EE_TAGS) or any(str(o) in CMB_LOWL_EE_TAGS for o in group or ()):
+        return None
+    for tag in ("CMB_SPT", "CMB_ACT"):
+        if tag in comps:
+            return CMB_TAU_PRIORS[tag]
+    return None
+
+
+def cmb_gaussian_priors(group) -> Dict[str, Tuple[float, float]]:
+    """
+    Gaussian priors on the CMB parameters of a group: Planck's nuisance priors, the ground-based
+    nuisance priors, A_planck with ACT's calibration prior (1 +- 0.003) when it stands for ACT's
+    A_act too (P-ACT, SPA), and tau when ACT or SPT has no low-l EE likelihood with it.
+    """
+    out: Dict[str, Tuple[float, float]] = dict(PLANCK_GAUSSIAN_PRIORS)
+    out.update({n: v[2] for n, v in GROUND_NUISANCE_SAMPLED.items() if v[2] is not None})
+    comps = cmb_group_components(group)
+    if "CMB_ACT" in comps and comps & {"CMB_planck_ACTcut", "CMB_lowl_sroll2", "CMB_lowl_TT", "CMB_lowl",
+                                       "CMB_hil", "CMB_hil_TT", "CMB_lensing"}:
+        out["A_planck"] = GROUND_NUISANCE_SAMPLED["A_act"][2]
+    tp = cmb_tau_prior(group)
+    if tp is not None:
+        out["tau_reio"] = tp
+    return out
 
 
 def planck_clik_file(tag: str) -> str:
@@ -753,6 +881,8 @@ def planck_sampled_nuisances(tag: str) -> Set[str]:
         return {"A_planck"} if lite else set(PLANCK_TT_ONLY_NUISANCE)
     if tag in ("CMB_lowl", "CMB_lowl_TT", "CMB_lensing"):
         return {"A_planck"}
+    if "A_planck" in GROUND_NUISANCE_PARAMS.get(tag, ()):
+        return {"A_planck"}              # Planck parts of the ground-based combinations (item 57)
     return set()
 
 

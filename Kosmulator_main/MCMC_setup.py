@@ -228,6 +228,9 @@ def main(
     # r_d of calibrated BAO/DESI groups: the model's own E(z) (rd_Class) or flat LCDM (item 12).
     # Before any pool: spawned workers read KOSM_RD_BACKGROUND.
     K.set_rd_background(rd_background)
+    # l_max of the lensed CLASS spectra: 3000 for Planck, 8501 with ACT, 4095 with SPT (item 57).
+    # One value for the run (every CMB group of it), before any pool: workers read KOSM_CMB_CLASS_LMAX.
+    K.set_cmb_class_lmax(K.cmb_lmax_for_groups(observations))
     if _mode == "lite":
         # figures and tables name the likelihood that was used
         for _t in ("CMB_hil", "CMB_hil_TT"):
@@ -646,7 +649,7 @@ def run_mcmc_for_all_models(
     need_hil     = any("CMB_hil"     in grp for grp in observations)
     need_hilTT   = any("CMB_hil_TT"  in grp for grp in observations)
     need_lowl    = any("CMB_lowl"    in grp for grp in observations)
-    need_lowlTT  = any("CMB_lowl_TT" in grp for grp in observations)
+    need_lowlTT  = any("CMB_lowl_TT" in K.cmb_group_components(grp) for grp in observations)   # P-ACT, SPA too
     need_lensing = any("CMB_lensing" in grp for grp in observations)
 
     # Define ALL paths first (plik or plik_lite: constants.CMB_NUISANCE)
@@ -672,6 +675,28 @@ def run_mcmc_for_all_models(
             K.OBSERVATIONS_BASE,
             "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing",
         )
+
+    if rank == 0:
+        _ground = sorted({o for g in observations for o in g if o in K.GROUND_CMB_TAGS})
+        if _ground:
+            # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57): load them here, so a
+            # missing package stops the run now rather than in a worker
+            from Kosmulator_main import ground_cmb as GC
+            GC.check_available(_ground)
+            for t in _ground:
+                log.info("%s: %s (%d data points)", t, " + ".join(K.cmb_components(t)), GC.n_data(t))
+            log.info("CLASS spectra to l = %d for every CMB group of this run (ACT needs 8501, SPT 4095, "
+                     "Planck 3000): a CMB point costs more than with Planck alone", K.CMB_CLASS_LMAX)
+            for grp in observations:
+                tp = K.cmb_tau_prior(grp)
+                if tp:
+                    log.info("Group %s has no low-l EE likelihood: tau prior %.4f +- %.4f (the one of "
+                             "%s's own likelihood)", grp, tp[0], tp[1],
+                             "SPT-lite" if "CMB_SPT" in K.cmb_group_components(grp) else "ACT-lite")
+            if not K.CMB_NONLINEAR:
+                log.warning("cmb_nonlinear = None with %s: ACT and SPT reach l = 8500 and 4000, where "
+                            "non-linear lensing matters (ACT DR6 and SPT-3G D1 used HMcode 2020); set "
+                            "cmb_nonlinear = \"hmcode\" in Kosmulator.py", ", ".join(_ground))
 
     # Planck likelihood code (clik, or clipy when clik is missing; see Class_run)
     if need_hil or need_hilTT or need_lowl or need_lowlTT or need_lensing:

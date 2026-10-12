@@ -551,7 +551,7 @@ def compute_waic(log_lik_matrix):
 
 
 #: Note of a group with Planck data when constants.WAIC_INCLUDE_CMB is False (item 53)
-WAIC_CMB_OFF_NOTE = ("WAIC n/a: the Planck likelihoods give one total log-likelihood, not one per "
+WAIC_CMB_OFF_NOTE = ("WAIC n/a: the CMB likelihoods (Planck, ACT, SPT) give one total log-likelihood, not one per "
                      "data point; waic_include_cmb = True in Kosmulator.py counts each as one term "
                      "(one CLASS run per WAIC draw)")
 
@@ -826,6 +826,11 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                                 notes.append(note)
                             chi_total += float(-2.0 * logL)
                             n_points += n_bins
+                        elif obs in K.GROUND_CMB_TAGS:
+                            # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57)
+                            from Kosmulator_main import ground_cmb as GC
+                            chi_total += float(-2.0 * GC.loglike(obs, p_eval, model_name))
+                            n_points += GC.n_data(obs)
                         else:
                             raise ValueError(f"Unsupported CMB observation: {obs}")
                     else:
@@ -868,7 +873,9 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 n_polish=(1 if has_cmb_group else None),
                 restrictions=CONFIG[model_name].get("restrictions") or {},
                 coupled_restrictions=CONFIG[model_name].get("coupled_restrictions") or [],
-                penalty_fn=(SP.planck_nuisance_prior_chi2 if has_cmb_group else None),
+                # the group's CMB priors (Planck and ground-based nuisances; tau for ACT or SPT
+                # without low-l EE), as log_prior_all applies them
+                penalty_fn=((lambda _p, _g=tuple(obs_entry): SP.cmb_prior_chi2(_p, _g)) if has_cmb_group else None),
             )
 
             # Re-evaluate once at the polished point: the data chi^2 (without the Planck

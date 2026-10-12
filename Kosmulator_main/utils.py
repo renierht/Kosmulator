@@ -109,6 +109,12 @@ _OBS_ORDER = [
     "CMB_lensing",
     "CMB_lowl",
     "CMB_lowl_TT",
+    "CMB_lowl_sroll2",
+    "CMB_planck_ACTcut",
+    "CMB_ACT",
+    "CMB_SPT",
+    "CMB_PACT",
+    "CMB_SPA",
     "DESI_DR1",
     "DESI_DR2",
     "f",
@@ -2985,6 +2991,13 @@ def data_overlaps(group) -> List[str]:
     if len(sne) > 1:
         names = ", ".join(sne[:-1]) + " and " + sne[-1]
         out.append(f"{names} are supernova compilations that share supernovae; use one of them")
+    # A Planck + ACT (+ SPT) combination with any of its parts (or Planck data) again (item 57)
+    for b in K.CMB_BUNDLES:
+        if b in tags:
+            dup = [t for t in K.CMB_BUNDLE_CONFLICTS if t in tags and t != b]
+            if dup:
+                out.append(f"{b} already contains {', '.join(K.cmb_components(b))}; "
+                           f"{', '.join(dup)} in the same group repeat(s) its data")
     return out
 
 

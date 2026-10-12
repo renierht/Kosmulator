@@ -777,6 +777,11 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 # We store RAW here; likelihood will decide whether to swap to CMBMARGED
                 observation_data[obs] = _lensing_file_nonmarg
 
+            elif obs in K.GROUND_CMB_TAGS:
+                # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57): ground_cmb loads
+                # its data itself (candl packages, plik_lite folder, SRoll2 table)
+                observation_data[obs] = {"ground_cmb": obs, "parts": list(K.cmb_components(obs))}
+
             # ------------------
             # BAO / DESI, all in the DESI VI format (Calc_DESI_chi):
             #   DESI_DR1  all 12 DESI DR1 measurements, full covariance (arXiv:2404.03002)
@@ -1108,6 +1113,7 @@ def create_config(
         'CMB_lowl':   'CMB',
         'CMB_lowl_TT':'CMB',
         'CMB_lensing':'CMB',
+        **{t: 'CMB' for t in K.GROUND_CMB_TAGS},
     }
 
     # ----------------------------------------------------------------------
@@ -1124,6 +1130,13 @@ def create_config(
         for o in flat_obs:
             names |= K.planck_sampled_nuisances(o)
         _inject_planck_nuisance_defaults(reference_values, prior_limits, sorted(names))
+        # ACT and SPT nuisance parameters (item 57): Kosmulator's defaults unless set in Kosmulator.py
+        for o in flat_obs:
+            for n in K.GROUND_NUISANCE_PARAMS.get(o, ()):
+                if n in K.GROUND_NUISANCE_SAMPLED:
+                    ref, box, _g = K.GROUND_NUISANCE_SAMPLED[n]
+                    prior_limits.setdefault(n, box)
+                    reference_values.setdefault(n, ref)
 
     # Official JLA: default priors and starting values for alpha_JLA, beta_JLA
     # (as Cobaya's sn.jla) unless the user set them in Kosmulator.py.
@@ -1580,6 +1593,9 @@ def Add_required_parameters(
             "ln10^10_As", "n_s", "tau_reio",
             "A_planck",
         ],
+        # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57)
+        **{t: ["H_0", "Omega_bh^2", "Omega_dh^2", "ln10^10_As", "n_s", "tau_reio",
+               *K.GROUND_NUISANCE_PARAMS[t]] for t in K.GROUND_CMB_TAGS},
     }
 
     # CMB datasets that trigger per-group reparametrisation
@@ -1600,6 +1616,12 @@ def Add_required_parameters(
                     if req not in grp_params:
                         grp_params.append(req)
                         added.append(req)
+
+            # ACT's calibration is Planck's when both are in the group (P-ACT, SPA; item 57)
+            if "A_act" in grp_params and "A_planck" in grp_params:
+                grp_params.remove("A_act")
+                if "A_act" in added:
+                    added.remove("A_act")
 
             if added:
                 logger.warning(
