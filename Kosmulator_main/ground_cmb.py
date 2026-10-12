@@ -222,10 +222,10 @@ def act_lens_package_data(lens_only: bool) -> dict:
         if lens_only:
             raise
         raise FileNotFoundError(
-            f"CMB_lensing_ACTPlanck with primary CMB in the group needs ACT's correction matrices in "
-            f"{os.path.join(ddir, 'like_corrs')} (N1*.txt and *.npy, 2.8 GB; not in git, they are above "
-            "GitHub's 100 MB file limit). Unpack ACT_dr6_likelihood_v1.2.tgz from https://lambda.gsfc.nasa.gov/"
-            f"data/suborbital/ACT/ACT_dr6/likelihood/data/ into {ddir} (see "
+            f"CMB_lensing_ACTPlanck with primary CMB in the group needs {act_lens_shipped_file()} (in git) "
+            f"or ACT's correction matrices in {os.path.join(ddir, 'like_corrs')} (N1*.txt and *.npy, 2.8 GB; "
+            "not in git, they are above GitHub's 100 MB file limit; ACT_dr6_likelihood_v1.2.tgz from "
+            f"https://lambda.gsfc.nasa.gov/data/suborbital/ACT/ACT_dr6/likelihood/data/, see "
             f"Observations/{K.ACT_LENS_DIR}/README.md). ({e})") from e
 
 
@@ -280,6 +280,66 @@ def _act_lens_cache_files() -> list:
             os.path.join(tempfile.gettempdir(), "kosmulator_act_dr6_lenslike", name)]
 
 
+def act_lens_shipped_file() -> str:
+    """The compact corrected likelihood shipped in git (Observations/<ACT_LENS_DIR>/), so that a
+    clone runs CMB_lensing_ACTPlanck with primary CMB without the 2.8 GB of correction matrices;
+    written by write_act_lens_shipped from those matrices."""
+    return os.path.join(K.OBSERVATIONS_BASE, K.ACT_LENS_DIR,
+                        f"{K.ACT_LENS_VARIANT}_corrections_{K.ACT_LENS_VERSION}.npz")
+
+
+def _act_lens_meta() -> Dict[str, np.ndarray]:
+    """The settings the compact form depends on, stored with the shipped file and checked on reading."""
+    return {"meta_format": np.array(_ACT_LENS_COMPACT_FORMAT), "meta_variant": np.array(K.ACT_LENS_VARIANT),
+            "meta_version": np.array(K.ACT_LENS_VERSION), "meta_nsims": np.array(tuple(K.ACT_LENS_NSIMS)),
+            "meta_trim_lmax": np.array(ACT_LENS_TRIM_LMAX)}
+
+
+def _read_act_lens_shipped() -> Optional[Dict[str, np.ndarray]]:
+    """The shipped compact form, or None when it is missing or was made with other settings."""
+    path = act_lens_shipped_file()
+    if not os.path.isfile(path):
+        return None
+    try:
+        with np.load(path) as z:
+            c = {k: z[k] for k in z.files}
+    except Exception as e:
+        logger.warning("CMB_lensing_ACTPlanck: %s unreadable (%s)", path, e)
+        return None
+    want = _act_lens_meta()
+    if any(k not in c or not np.array_equal(c[k], v) for k, v in want.items()):
+        logger.warning("CMB_lensing_ACTPlanck: %s was made with other settings (%s); not used", path,
+                       {k[5:]: c[k].tolist() for k in want if k in c})
+        return None
+    try:
+        import act_dr6_lenslike as alike
+        built, have = str(c.get("meta_package", "?")), str(getattr(alike, "__version__", "?"))
+        if built != have:
+            logger.warning("CMB_lensing_ACTPlanck: %s was made with act_dr6_lenslike %s, %s is installed (same "
+                           "data release; rebuild with ground_cmb.write_act_lens_shipped() if ACT changed "
+                           "load_data)", os.path.basename(path), built, have)
+    except ImportError:
+        pass
+    return {k: v for k, v in c.items() if not k.startswith("meta_")}
+
+
+def write_act_lens_shipped(path: Optional[str] = None) -> str:
+    """
+    Build the compact corrected likelihood from ACT's correction matrices (2.8 GB in
+    Observations/<ACT_LENS_DIR>/<version>/like_corrs) and write it, with the settings and the
+    act_dr6_lenslike version, to act_lens_shipped_file() (or path). For maintainers, after a new
+    ACT release or a change of _act_lens_compact (raise _ACT_LENS_COMPACT_FORMAT):
+        python -c "from Kosmulator_main import ground_cmb as G; print(G.write_act_lens_shipped())"
+    """
+    import act_dr6_lenslike as alike
+    c = _act_lens_compact(act_lens_package_data(False))
+    c.update(_act_lens_meta())
+    c["meta_package"] = np.array(str(getattr(alike, "__version__", "?")))
+    path = path or act_lens_shipped_file()
+    _write_npz(path, c)
+    return path
+
+
 def _write_npz(path: str, arrays: Dict[str, np.ndarray]) -> None:
     """Write arrays to path through a temporary file in the same folder (complete or absent)."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -298,8 +358,10 @@ def _write_npz(path: str, arrays: Dict[str, np.ndarray]) -> None:
 
 def act_lens_data(lens_only: bool) -> Dict[str, np.ndarray]:
     """The compact likelihood of constants.ACT_LENS_VARIANT, once per process and mode. With the
-    corrections (primary CMB in the group) it is read from the cache file, which the first
-    process writes (start-up, MCMC_setup), so spawned workers do not each read the 2.8 GB."""
+    corrections (primary CMB in the group): the cache file of this data folder, else the file
+    shipped in git (act_lens_shipped_file), else built from the 2.8 GB of correction matrices and
+    cached (the first process does it at start-up, MCMC_setup, so spawned workers only read a
+    3 MB file)."""
     lens_only = bool(lens_only)
     if lens_only not in _ACT_LENS:
         if lens_only:
@@ -314,6 +376,8 @@ def act_lens_data(lens_only: bool) -> Dict[str, np.ndarray]:
                             c = {k: z[k] for k in z.files}
                     except Exception as e:
                         logger.warning("CMB_lensing_ACTPlanck: cache %s unreadable (%s)", path, e)
+            if c is None:
+                c = _read_act_lens_shipped()            # in git: a clone needs no 2.8 GB
             if c is None:
                 logger.info("CMB_lensing_ACTPlanck: reading the ACT DR6 + Planck PR4 correction matrices "
                             "(2.8 GB, once) for the cache %s", paths[0])
