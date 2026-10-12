@@ -7,8 +7,11 @@ the band powers of every CMB likelihood of the group (Planck high- and low-l, AC
 SPT-3G D1, ACT DR6 + Planck PR4, SPT-3G MUSE and Planck 2018 lensing), the median model, its
 68% band from posterior draws, and below it the residuals in units of each band power's error.
 The binned model values are the likelihoods' own (ground_cmb.band_powers: windows,
-calibrations, lensing corrections), so (data - model)/error is what each likelihood sees,
-up to the correlations between band powers.
+calibrations, lensing corrections). The residuals are (data - model)/error for the Gaussian
+likelihoods (the correlations between band powers are not shown), the signed square root of
+each multipole's chi^2 for the tabulated low-l EE (SimAll, SRoll2), and against the error on
+the model's side for Planck's low-l TT band powers. Residuals beyond the panel are drawn at
+its edge.
 
 Saved as best_fits/<group>/cmb_spectra.png next to bestfit.png.
 """
@@ -75,10 +78,11 @@ def cmb_spectra_figure(model_name: str, obs_key: str, group: Sequence[str], para
     drawn. get_cls(p): the lensed CLASS spectra of point p (dimensionless C_l from l = 0,
     keys tt, te, ee, bb, pp), the run's single CLASS run per point.
     """
-    from Kosmulator_main import ground_cmb as GC
     cl = get_cls(params_med)
     if not isinstance(cl, dict):
+        print(f"[CMB spectra] {model_name} {obs_key}: no CLASS spectra at the median; figure not drawn")
         return None
+    from Kosmulator_main import ground_cmb as GC
     entries = []
     for tag in _components(group):
         try:
@@ -112,6 +116,15 @@ def cmb_spectra_figure(model_name: str, obs_key: str, group: Sequence[str], para
 
     label = model_label or model_name
     fig = plt.figure(figsize=(10.0, 3.6 * len(specs)))
+    try:
+        _panels(fig, specs, entries, med, band, ell_tt, ell_pp, label)
+    except Exception:
+        plt.close(fig)                       # the caller only reports the error
+        raise
+    return fig
+
+
+def _panels(fig, specs, entries, med, band, ell_tt, ell_pp, label) -> None:
     outer = fig.add_gridspec(nrows=len(specs), ncols=1, hspace=0.32, top=1.0 - 0.05 / len(specs))
     off = 0
     legend: Dict[str, object] = {}
@@ -137,8 +150,9 @@ def cmb_spectra_figure(model_name: str, obs_key: str, group: Sequence[str], para
             ax.errorbar(e["ell"], e["y"], yerr=yerr, fmt="o", ms=2.6, lw=0.8, color=col, ecolor=col,
                         capsize=0, alpha=0.9, zorder=3, label=e["label"])
             with np.errstate(divide="ignore", invalid="ignore"):
-                r = (np.asarray(e["y"]) - np.asarray(e["model"])) / np.asarray(e["err"])
-            axr.plot(e["ell"], r, "o", ms=2.4, color=col, alpha=0.9)
+                r = np.asarray(e["resid"], float) if "resid" in e else \
+                    (np.asarray(e["y"]) - np.asarray(e["model"])) / np.asarray(e["err"])
+            axr.plot(e["ell"], np.clip(r, -4.8, 4.8), "o", ms=2.4, color=col, alpha=0.9)
             xs.append(np.asarray(e["ell"], float))
         allx = np.concatenate(xs)
         ax.set_xscale("log")
@@ -161,4 +175,3 @@ def cmb_spectra_figure(model_name: str, obs_key: str, group: Sequence[str], para
     # One legend for the figure: the same experiments and model in every panel
     fig.legend(list(legend.values()), list(legend.keys()), loc="lower center", bbox_to_anchor=(0.5, 1.0),
                ncol=min(4, len(legend)), fontsize=8.5, frameon=False)
-    return fig

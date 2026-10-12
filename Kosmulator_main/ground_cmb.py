@@ -742,6 +742,9 @@ def _plik_band_powers(pl: PlikLiteCut, dl: Dict[str, np.ndarray], A: float, labe
 
 
 def _lowl_band_powers(spec: str, cl: Dict[str, np.ndarray], label: str) -> List[dict]:
+    """Planck's low-l band powers with their asymmetric errors (Observations/CMB_TT.dat); the
+    residual uses the error on the model's side. The Commander likelihood is not Gaussian in
+    D_l, so these residuals show the fit, not the likelihood's terms."""
     path = K.DEFAULT_CMB_FILES[spec]
     if not os.path.exists(path):
         return []
@@ -751,18 +754,72 @@ def _lowl_band_powers(spec: str, cl: Dict[str, np.ndarray], label: str) -> List[
     lo, hi = (t[:, 2], t[:, 3]) if t.shape[1] > 3 else (t[:, 2], t[:, 2])
     c = np.asarray(cl[spec.lower()], float)
     model = ell * (ell + 1) / (2 * np.pi) * c[ell.astype(int)] * (K.T_CMB_DEFAULT * 1e6) ** 2
-    return [{"spec": spec, "label": label, "ell": ell, "y": t[:, 1], "err": 0.5 * (lo + hi),
-             "err_lohi": np.vstack([lo, hi]), "model": model}]
+    y = t[:, 1]
+    return [{"spec": spec, "label": label, "ell": ell, "y": y, "err": 0.5 * (lo + hi),
+             "err_lohi": np.vstack([lo, hi]), "model": model,
+             "resid": (y - model) / np.where(model > y, hi, lo)}]
+
+
+def _simall_table() -> np.ndarray:
+    """SimAll's low-l EE table (the CMB_lowl clik folder's probEE: ln P on 3000 steps of 1e-4
+    muK^2 in D_l^EE, l = 2 - 29), as (steps, multipoles) like TableEE.prob."""
+    if "simall" not in _NATIVE:
+        d = os.path.join(K.OBSERVATIONS_BASE, K.PLANCK_LOWL_FILES["CMB_lowl"], "clik", "lkl_0")
+        mdb = {}
+        for line in open(os.path.join(d, "_mdb")):
+            parts = line.split()
+            if len(parts) >= 3:
+                mdb[parts[0]] = parts[2]
+        nell, nsteps = int(mdb["nell"]), int(mdb["nstepsEE"])
+        if float(mdb["stepEE"]) != TableEE.STEP or int(mdb["lmin"]) != TableEE.LMIN:
+            raise ValueError(f"{d}: SimAll table with step {mdb['stepEE']}, l_min {mdb['lmin']}")
+        _NATIVE["simall"] = _read_fits_vector(os.path.join(d, "probEE")).reshape(nell, nsteps).T
+    return _NATIVE["simall"]
+
+
+def _table_band_powers(prob: np.ndarray, dl_ee: np.ndarray, A: float, label: str) -> List[dict]:
+    """
+    A low-l EE likelihood tabulated per multipole (SimAll, SRoll2: ln L = sum over l of ln P_l(D_l))
+    as band powers: the most probable D_l and its 68% interval from each l's table, and as
+    residual sign(y - model) sqrt(2 [ln P_l(y) - ln P_l(model)]), whose squares add up to the
+    likelihood's chi^2 above its maximum. The model is D_l / A_planck^2, as the likelihood reads it.
+    """
+    nl = prob.shape[1]
+    ell = np.arange(TableEE.LMIN, TableEE.LMIN + nl, dtype=float)
+    grid = (np.arange(prob.shape[0]) + 0.5) * TableEE.STEP          # step centres (the likelihood floors)
+    j = np.arange(nl)
+    ipk = np.argmax(prob, axis=0)
+    y = grid[ipk]
+    p = np.exp(prob - prob[ipk, j])
+    cdf = np.cumsum(p, axis=0)
+    cdf /= cdf[-1]
+    lo = np.array([np.interp(0.16, cdf[:, k], grid) for k in j])
+    hi = np.array([np.interp(0.84, cdf[:, k], grid) for k in j])
+    model = np.asarray(dl_ee, float)[TableEE.LMIN:TableEE.LMIN + nl] / float(A) ** 2
+    im = np.floor(model / TableEE.STEP).astype(int)
+    inside = (im >= 0) & (im < prob.shape[0])
+    lp_model = np.where(inside, prob[np.clip(im, 0, prob.shape[0] - 1), j], -np.inf)
+    with np.errstate(invalid="ignore"):
+        resid = np.sign(y - model) * np.sqrt(np.maximum(2.0 * (prob[ipk, j] - lp_model), 0.0))
+    return [{"spec": "EE", "label": label, "ell": ell, "y": y, "err": 0.5 * (hi - lo),
+             "err_lohi": np.vstack([np.maximum(y - lo, 0.0), np.maximum(hi - y, 0.0)]), "model": model,
+             "resid": resid}]
 
 
 def band_powers(tag: str, cl: Dict[str, np.ndarray], pd: Dict[str, float], group) -> List[dict]:
     """
     Data, errors and the binned model of one CMB likelihood at a point, for the best-fit
     plots (item 57): a list of {"spec": TT | TE | EE | PP, "label", "ell" (effective
-    multipoles), "y", "err", "model"}, in D_l [muK^2] or, for PP, 10^7 [L (L + 1)]^2
-    C_L^phiphi / (2 pi). Binned models are the likelihood's own (windows, calibrations,
-    lensing corrections); Planck high-l is shown with the plik_lite bins whichever plik
-    the group uses. A combination: use cmb_components(tag).
+    multipoles), "y", "err", "model", optionally "err_lohi" (asymmetric error bars) and
+    "resid" (the residual in sigma when it is not (y - model) / err)}, in D_l [muK^2] or, for
+    PP, 10^7 [L (L + 1)]^2 C_L^phiphi / (2 pi). Binned models are the likelihood's own
+    (windows, calibrations, lensing corrections). For the Gaussian likelihoods (candl,
+    plik_lite, ACT + Planck lensing, Planck 2018 lensing) the band powers with their
+    covariance give the likelihood's ln L; Planck high-l is shown in the plik_lite bins
+    whichever plik the group uses. SimAll and SRoll2: their tables per multipole (residuals
+    add up to their chi^2); SPT MUSE: Gaussian in a transformed variable, so (y - model) /
+    err is close to, not equal to, its terms; low-l TT: Planck's band powers. A
+    combination: use cmb_components(tag).
     """
     t2 = (K.T_CMB_DEFAULT * 1e6) ** 2
     A = float(pd.get("A_planck", 1.0))
@@ -773,8 +830,10 @@ def band_powers(tag: str, cl: Dict[str, np.ndarray], pd: Dict[str, float], group
         return _plik_band_powers(planck_act_cut(), _dl(cl), A, "Planck 2018 (cut for ACT)", ("TT", "TE", "EE"))
     if tag == "CMB_lowl_TT":
         return _lowl_band_powers("TT", cl, "Planck low-l TT")
-    if tag in ("CMB_lowl", "CMB_lowl_sroll2"):
-        return _lowl_band_powers("EE", cl, "Planck low-l EE" + (" (SRoll2)" if tag == "CMB_lowl_sroll2" else ""))
+    if tag == "CMB_lowl":
+        return _table_band_powers(_simall_table(), _dl(cl)["EE"], A, "Planck low-l EE (SimAll)")
+    if tag == "CMB_lowl_sroll2":
+        return _table_band_powers(sroll2().prob, _dl(cl)["EE"], A, "Planck low-l EE (SRoll2)")
     if tag in ("CMB_ACT", "CMB_SPT"):
         like = candl_like(tag)
         model = np.asarray(like.bin_model_specs(like.get_model_specs(_candl_pars(tag, like, _dl(cl), pd))), float)
