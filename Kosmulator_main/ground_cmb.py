@@ -32,7 +32,7 @@ import importlib
 import io
 import logging
 import os
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -97,6 +97,7 @@ class PlikLiteCut:
         self.n_data = int(self.idx.size)
         self.x = data[self.idx, 1]
         self.invcov = np.linalg.inv(cov[np.ix_(self.idx, self.idx)])
+        self.sigma = np.sqrt(np.diag(cov)[self.idx])          # for plots (item 57)
         self.lmax = int(max(self.blmax[u].max() for u in self.used if u.size))
 
     def loglike(self, dl: Dict[str, np.ndarray], A_planck: float = 1.0) -> float:
@@ -152,7 +153,7 @@ def sroll2() -> TableEE:
 # ---------------------------------------------------------------------------
 _ACT_LENS: Dict[bool, dict] = {}
 ACT_LENS_TRIM_LMAX = 2998          # act_dr6_lenslike uses theory spectra to this l
-_ACT_LENS_COMPACT_FORMAT = 1       # raise when _act_lens_compact changes (new cache file)
+_ACT_LENS_COMPACT_FORMAT = 2       # raise when _act_lens_compact changes (new cache file)
 _CMB_ORDER = ("tt", "ee", "bb", "te")   # order of dAL_dC's first axis in act_dr6_lenslike
 
 
@@ -212,6 +213,7 @@ def _act_lens_compact(d: dict) -> Dict[str, np.ndarray]:
     if d["include_planck"]:
         blocks.append(("_planck", np.asarray(d["binmat_planck"], float)))
     out = {"B": np.vstack([b for _, b in blocks]),
+           "n_act": np.array(int(blocks[0][1].shape[0])),        # the first n_act bins are ACT's
            "data": np.asarray(d["data_binned_clkk"], float),
            "cinv": np.asarray(d["cinv"], float),
            "corr": np.array(bool(d["likelihood_corrections"]))}
@@ -310,6 +312,13 @@ def act_lens_data(lens_only: bool) -> Dict[str, np.ndarray]:
 def act_lens_loglike(cl: Dict[str, np.ndarray], lens_only: bool) -> float:
     """ln L of ACT DR6 + Planck PR4 lensing for CLASS's dimensionless C_l (pp, and tt, te, ee, bb):
     act_dr6_lenslike.generic_lnlike in the compact form of _act_lens_compact."""
+    c = act_lens_data(lens_only)
+    delta = c["data"] - act_lens_theory(cl, lens_only)
+    return -0.5 * float(delta @ c["cinv"] @ delta)
+
+
+def act_lens_theory(cl: Dict[str, np.ndarray], lens_only: bool) -> np.ndarray:
+    """The binned C_L^kappa kappa the likelihood compares with the data (corrections included)."""
     import act_dr6_lenslike as alike
     pp = np.asarray(cl["pp"], float)
     if pp.size < ACT_LENS_TRIM_LMAX + 2:                # standardize keeps l = 0 - trim_lmax + 1
@@ -325,8 +334,7 @@ def act_lens_loglike(cl: Dict[str, np.ndarray], lens_only: bool) -> float:
         for sp in _CMB_ORDER:
             cs = alike.standardize(ell, np.asarray(cl[sp], float)[:pp.size] * t2, ACT_LENS_TRIM_LMAX)
             th = th + c[f"M_{sp}"] @ (cs - c[f"fid_{sp}"])
-    delta = c["data"] - th
-    return -0.5 * float(delta @ c["cinv"] @ delta)
+    return th
 
 
 class MusePhiPhi:
@@ -363,19 +371,26 @@ class MusePhiPhi:
         cov_t = np.linalg.inv(np.linalg.inv(cov_s) + np.eye(n) / 0.8 ** 2)
         self.chol = np.linalg.cholesky(cov_t)
         self.d_t = np.arctanh(data[sl] / self.s - 1.01)
+        self.d = data[sl]                                        # C_L^phiphi band powers (plots)
+        self.sigma = np.sqrt(np.diag(cov)[sl])                   # untransformed: for plots only
+        self.L_eff = self.W @ np.arange(1, self.W.shape[1] + 1) / self.W.sum(axis=1)
         self.n_data = int(n)
         self.lmax = int(np.nonzero(np.abs(self.W).sum(axis=0))[0][-1] + 1)   # 3073 in the March 2025 file
 
-    def loglike(self, pp: np.ndarray) -> float:
-        """pp: CLASS's dimensionless C_L^phiphi from L = 0."""
+    def theory(self, pp: np.ndarray) -> np.ndarray:
+        """The band powers of C_L^phiphi (CLASS's, from L = 0) through the windows."""
         pp = np.asarray(pp, float)
         if pp.size - 1 < self.lmax:
             raise ValueError(f"CMB_lensing_SPT needs C_L^phiphi to L = {self.lmax}, got {pp.size - 1}")
         x = np.zeros(self.W.shape[1])
         m = min(x.size, pp.size - 1)
         x[:m] = pp[1:m + 1]
+        return self.W @ x
+
+    def loglike(self, pp: np.ndarray) -> float:
+        """pp: CLASS's dimensionless C_L^phiphi from L = 0."""
         with np.errstate(invalid="ignore", divide="ignore"):
-            t = np.arctanh((self.W @ x) / self.s - 1.01)
+            t = np.arctanh(self.theory(pp) / self.s - 1.01)
         if not np.all(np.isfinite(t)):
             return -np.inf                       # outside the band-power prior (the package returns NaN)
         z = np.linalg.solve(self.chol, self.d_t - t)
@@ -462,6 +477,11 @@ def _dl(cl: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
 
 def _candl_loglike(tag: str, dl: Dict[str, np.ndarray], pd: Dict[str, float]) -> float:
     like = candl_like(tag)
+    return float(like.log_like(_candl_pars(tag, like, dl, pd)))
+
+
+def _candl_pars(tag: str, like, dl: Dict[str, np.ndarray], pd: Dict[str, float]) -> dict:
+    """candl's input for one point: the theory D_l over its multipole range and the nuisances."""
     lo, hi = int(like.ell_min), int(like.ell_max)
     if dl["TT"].size <= hi:
         raise ValueError(f"{tag} needs CLASS spectra to l = {hi}, got {dl['TT'].size - 1} "
@@ -475,7 +495,7 @@ def _candl_loglike(tag: str, dl: Dict[str, np.ndarray], pd: Dict[str, float]) ->
         pars["Tcal"] = float(pd.get("Tcal", 1.0))
         pars["Ecal"] = float(pd.get("Ecal", 1.0))
     pars["tau"] = float(pd.get("tau_reio", 0.054))     # candl keys; no prior on it here
-    return float(like.log_like(pars))
+    return pars
 
 
 def component_loglike(tag: str, cl: Dict[str, np.ndarray], pd: Dict[str, float], model_name: str) -> float:
@@ -539,3 +559,173 @@ def check_lensing(tag: str, lens_only: bool) -> None:
         spt_muse()
     else:
         raise KeyError(tag)
+
+
+# ---------------------------------------------------------------------------
+# Band powers for the best-fit plots (item 57)
+# ---------------------------------------------------------------------------
+#: Lensing panels show 10^7 [L (L + 1)]^2 C_L^phiphi / (2 pi), Planck's convention
+PP_PLOT_SCALE = 1e7
+
+
+def _read_fits_vector(path: str) -> np.ndarray:
+    """The data of a one-dimensional FITS image (clik's lensing folders), without astropy."""
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    hdr, pos, done = {}, 0, False
+    while not done:
+        block = raw[pos:pos + 2880].decode("ascii", "replace")
+        pos += 2880
+        for i in range(0, 2880, 80):
+            card = block[i:i + 80]
+            if card[:8].strip() == "END":
+                done = True
+                break
+            if card[8:10] == "= ":
+                hdr[card[:8].strip()] = card[10:].split("/")[0].strip()
+    n = int(hdr.get("NAXIS1", 0)) if int(hdr.get("NAXIS", 0)) else 0
+    dt = {8: ">u1", 16: ">i2", 32: ">i4", 64: ">i8", -32: ">f4", -64: ">f8"}[int(hdr["BITPIX"])]
+    return np.frombuffer(raw, dtype=dt, count=n, offset=pos).astype(float)
+
+
+def planck_lensing_theory(folder: str, cl: Dict[str, np.ndarray], A_planck: float = 1.0):
+    """
+    Planck 2018 lensing (a clik_lensing folder) for the plots: (effective L, data, errors,
+    binned theory), in [L (L + 1)]^2 C_L^phiphi / (2 pi). The binned theory is clik's (clipy
+    0.15's _clik_lensing written out): bins @ (C_L^phiphi [L (L + 1)]^2 / 2 pi) - cor0, plus
+    cors times the current spectra when the folder has them (N1 and normalisation).
+    """
+    d = os.path.join(folder, "clik_lensing")
+    mdb = {}
+    for line in open(os.path.join(d, "_mdb")):
+        parts = line.split()
+        if len(parts) >= 3:
+            mdb[parts[0]] = parts[2]
+    nb, lmax = int(mdb["nbins"]), int(mdb["lmax"])
+    rd = lambda name: _read_fits_vector(os.path.join(d, name))
+    pp_hat = rd("pp_hat")
+    bins = rd("bins").reshape(nb, -1)
+    siginv = rd("siginv").reshape(nb, nb)
+    cor0 = rd("cor0") if os.path.exists(os.path.join(d, "cor0")) else 0.0
+    hascl = rd("hascl").astype(int) if os.path.exists(os.path.join(d, "hascl")) else np.zeros(6, int)
+    L = np.arange(lmax + 1, dtype=float)
+    m2, m1 = (L * (L + 1)) ** 2 / (2 * np.pi), L * (L + 1) / (2 * np.pi)
+    pp = np.asarray(cl["pp"], float)[:lmax + 1]
+    th = bins @ (pp * m2) - cor0
+    if os.path.exists(os.path.join(d, "cors")):
+        t2 = (K.T_CMB_DEFAULT * 1e6) ** 2
+        cmb = [np.asarray(cl[x], float)[:lmax + 1] * t2 if x in cl else np.zeros(lmax + 1)
+               for x, h in zip(("tt", "ee", "bb", "te", "tb", "eb"), hascl) if h]
+        fid = rd("cl_fid")
+        fphi = pp if int(mdb.get("ren1", 1)) else fid[:lmax + 1]
+        fcmb = (np.concatenate(cmb) if cmb else np.zeros(0)) if int(mdb.get("renorm", 1)) else fid[lmax + 1:]
+        cors = rd("cors").reshape(nb, -1)
+        calib = 1.0 / float(A_planck) ** 2
+        th = th + cors @ np.concatenate([fphi * m2, fcmb * calib * np.tile(m1, len(cmb))])
+    w = bins.sum(axis=1)
+    L_eff = (bins @ L) / np.where(w != 0, w, 1.0)
+    return L_eff, pp_hat, np.sqrt(np.diag(np.linalg.inv(siginv))), th, siginv
+
+
+def _plik_lite_full() -> PlikLiteCut:
+    if "plite" not in _NATIVE:
+        _NATIVE["plite"] = PlikLiteCut(os.path.join(K.OBSERVATIONS_BASE, "plik_lite_v22_TTTEEE.clik"))
+    return _NATIVE["plite"]
+
+
+def _plik_band_powers(pl: PlikLiteCut, dl: Dict[str, np.ndarray], A: float, label: str, specs) -> List[dict]:
+    out = []
+    off = 0
+    for spec, keep in zip(("TT", "TE", "EE"), pl.used):
+        n = keep.size
+        if n and spec in specs:
+            lb = 0.5 * (pl.blmin[keep] + pl.blmax[keep])
+            f = lb * (lb + 1) / (2 * np.pi)                     # binned C_l -> D_l at the bin centre
+            th = np.array([np.dot(dl[spec][pl.blmin[i]:pl.blmax[i] + 1], pl.weights[pl.blmin[i]:pl.blmax[i] + 1])
+                           for i in keep]) / A ** 2
+            sl = slice(off, off + n)
+            out.append({"spec": spec, "label": label, "ell": lb, "y": pl.x[sl] * f, "err": pl.sigma[sl] * f,
+                        "model": th * f})
+        off += n
+    return out
+
+
+def _lowl_band_powers(spec: str, cl: Dict[str, np.ndarray], label: str) -> List[dict]:
+    path = K.DEFAULT_CMB_FILES[spec]
+    if not os.path.exists(path):
+        return []
+    t = np.loadtxt(path)
+    t = t[(t[:, 0] >= 2) & (t[:, 0] <= 29)]
+    ell = t[:, 0]
+    lo, hi = (t[:, 2], t[:, 3]) if t.shape[1] > 3 else (t[:, 2], t[:, 2])
+    c = np.asarray(cl[spec.lower()], float)
+    model = ell * (ell + 1) / (2 * np.pi) * c[ell.astype(int)] * (K.T_CMB_DEFAULT * 1e6) ** 2
+    return [{"spec": spec, "label": label, "ell": ell, "y": t[:, 1], "err": 0.5 * (lo + hi),
+             "err_lohi": np.vstack([lo, hi]), "model": model}]
+
+
+def band_powers(tag: str, cl: Dict[str, np.ndarray], pd: Dict[str, float], group) -> List[dict]:
+    """
+    Data, errors and the binned model of one CMB likelihood at a point, for the best-fit
+    plots (item 57): a list of {"spec": TT | TE | EE | PP, "label", "ell" (effective
+    multipoles), "y", "err", "model"}, in D_l [muK^2] or, for PP, 10^7 [L (L + 1)]^2
+    C_L^phiphi / (2 pi). Binned models are the likelihood's own (windows, calibrations,
+    lensing corrections); Planck high-l is shown with the plik_lite bins whichever plik
+    the group uses. A combination: use cmb_components(tag).
+    """
+    t2 = (K.T_CMB_DEFAULT * 1e6) ** 2
+    A = float(pd.get("A_planck", 1.0))
+    if tag in ("CMB_hil", "CMB_hil_TT"):
+        return _plik_band_powers(_plik_lite_full(), _dl(cl), A, "Planck 2018 high-l (plik_lite bins)",
+                                 ("TT",) if tag == "CMB_hil_TT" else ("TT", "TE", "EE"))
+    if tag == "CMB_planck_ACTcut":
+        return _plik_band_powers(planck_act_cut(), _dl(cl), A, "Planck 2018 (cut for ACT)", ("TT", "TE", "EE"))
+    if tag == "CMB_lowl_TT":
+        return _lowl_band_powers("TT", cl, "Planck low-l TT")
+    if tag in ("CMB_lowl", "CMB_lowl_sroll2"):
+        return _lowl_band_powers("EE", cl, "Planck low-l EE" + (" (SRoll2)" if tag == "CMB_lowl_sroll2" else ""))
+    if tag in ("CMB_ACT", "CMB_SPT"):
+        like = candl_like(tag)
+        model = np.asarray(like.bin_model_specs(like.get_model_specs(_candl_pars(tag, like, _dl(cl), pd))), float)
+        data = np.asarray(like.data_bandpowers, float)
+        err = np.sqrt(np.diag(np.asarray(like.covariance, float)))
+        ell = np.asarray(like.effective_ells, float)
+        name = "ACT DR6" if tag == "CMB_ACT" else "SPT-3G D1"
+        out = []
+        for i, sp in enumerate(like.spec_order):
+            sl = slice(int(like.bins_start_ix[i]), int(like.bins_stop_ix[i]))
+            out.append({"spec": sp.split()[0], "label": name, "ell": ell[sl], "y": data[sl], "err": err[sl],
+                        "model": model[sl]})
+        return out
+    lens_only = not K.group_has_primary_cmb(group)
+    if tag == "CMB_lensing_ACTPlanck":
+        c = act_lens_data(lens_only)
+        th = act_lens_theory(cl, lens_only)
+        B = np.asarray(c["B"], float)
+        L_eff = B @ np.arange(B.shape[1]) / B.sum(axis=1)
+        err = np.sqrt(np.diag(np.linalg.inv(np.asarray(c["cinv"], float))))
+        f = PP_PLOT_SCALE * 2 / np.pi                            # C^kk -> [L(L+1)]^2 C^phiphi / 2 pi
+        n_act = int(c["n_act"])
+        return [{"spec": "PP", "label": lab, "ell": L_eff[sl], "y": c["data"][sl] * f, "err": err[sl] * f,
+                 "model": th[sl] * f}
+                for lab, sl in (("ACT DR6 lensing", slice(0, n_act)), ("Planck PR4 lensing", slice(n_act, None)))
+                if L_eff[sl].size]
+    if tag == "CMB_lensing_SPT":
+        # The MUSE band powers are of C_L^phiphi in wide bins over which [L (L + 1)]^2 C_L^phiphi
+        # changes much less than C_L^phiphi: converted with the model's ratio of the two binned
+        # (W [L (L + 1)]^2 C_L / 2 pi over W C_L), not at the effective L, so the binned model sits on
+        # the curve. (data - model) / error is unchanged.
+        m = spt_muse()
+        pp = np.asarray(cl["pp"], float)
+        Lw = np.arange(pp.size, dtype=float)
+        th = m.theory(pp)
+        f = PP_PLOT_SCALE * m.theory((Lw * (Lw + 1)) ** 2 / (2 * np.pi) * pp) / th
+        return [{"spec": "PP", "label": "SPT-3G MUSE lensing", "ell": m.L_eff, "y": m.d * f, "err": m.sigma * f,
+                 "model": th * f}]
+    if tag == "CMB_lensing":
+        name = ("smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing" if lens_only
+                else "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8.clik_lensing")
+        L, d, e, th, _ = planck_lensing_theory(os.path.join(K.OBSERVATIONS_BASE, name), cl, A)
+        return [{"spec": "PP", "label": "Planck 2018 lensing", "ell": L, "y": d * PP_PLOT_SCALE,
+                 "err": e * PP_PLOT_SCALE, "model": th * PP_PLOT_SCALE}]
+    return []

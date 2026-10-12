@@ -1531,18 +1531,40 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
             # Posterior draws for the shaded 68% bands
             band_draws = _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS)
 
+            # ACT, SPT, their combinations with Planck and CMB lensing are drawn in their own
+            # figure (cmb_spectra.png, item 57: each likelihood's own band powers); the
+            # best-fit figure keeps the other data of the group
+            from Plots import CMB_spectra as _CS
+            _fig_tags = [t for t in obs_list_raw if t in _CS.FIGURE_TAGS]
+            obs_list_raw = [t for t in obs_list_raw if t not in _CS.FIGURE_TAGS]
+
             # CMB groups: one lensed CLASS run per draw. Compute them ahead through the
             # sampling pool (in this process without one) so the band loop reads them (item 52).
             _cmb_names = [str(t) for t in obs_list_raw if str(t).startswith("CMB_")]
-            if _cmb_names and band_draws:
+            if (_cmb_names or _fig_tags) and band_draws:
                 from Kosmulator_main import Statistical_packages as _SP
-                _modes = sorted({"lowl" if "lowl" in t else "hil" for t in _cmb_names})
+                _modes = sorted({"lowl" if t in ("CMB_lowl", "CMB_lowl_TT") else "hil" for t in _cmb_names}
+                                | ({"hil"} if _fig_tags else set()))
                 _SP.clear_cls_prefetch()                    # the previous group's spectra
                 _t0 = __import__("time").time()
                 _n = _SP.prefetch_cls(list(band_draws) + [params_med, params_lo, params_hi], model_name, _modes)
                 if _n:
                     print(f"[CMB] {model_name} {obs_key}: {_n} CLASS runs for the 68% bands "
                           f"({__import__('time').time() - _t0:.0f} s)")
+
+            if _fig_tags:
+                try:
+                    from Kosmulator_main import Statistical_packages as _SPc, constants as _Kc
+                    _fig = _CS.cmb_spectra_figure(
+                        model_name, obs_key, list(_fig_tags) + [t for t in obs_list_raw if str(t).startswith("CMB_")],
+                        params_med, band_draws, PLOT_SETTINGS,
+                        lambda p: _SPc._compute_cls_cached(p, _Kc.CMB_CLASS_LMAX, mode="hil", model_name=model_name),
+                        model_label=model_disp)
+                    if _fig is not None:
+                        save_figure(_fig, model_name, obs_key, "cmb_spectra", PLOT_SETTINGS)
+                        plt.close(_fig)
+                except Exception as _e:
+                    print(f"[CMB spectra] {model_name} {obs_key}: figure not drawn ({_e})")
 
             parts = partition_by_compatibility([t for t in obs_list_raw])
 

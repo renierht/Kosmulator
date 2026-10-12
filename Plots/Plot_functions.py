@@ -1214,9 +1214,9 @@ def extract_observation_data(
 
     # --- CMB HANDLING ---
     if obs_type.startswith("CMB_"):
-        # Map tag to file key
-        mode = "TT"
-        if "lowl" in obs_type: mode = "EE"
+        # Map tag to file key: low-l EE (SimAll) for CMB_lowl, TT otherwise (low-l TT for
+        # Commander's CMB_lowl_TT, which used to show the EE data)
+        mode = "EE" if obs_type in ("CMB_lowl", "CMB_lowl_sroll2") else "TT"
         
         # Define bounds (Adjust these based on your specific requirements)
         if "lowl" in obs_type:
@@ -1601,7 +1601,7 @@ def model_curve_for_type(
         spec_key = "tt"
         if ("TE" in obs_type) or ("_TE" in obs_type):
             spec_key = "te"
-        if ("EE" in obs_type) or ("_EE" in obs_type) or ("lowl" in obs_type):
+        if ("EE" in obs_type) or ("_EE" in obs_type) or (obs_type in ("CMB_lowl", "CMB_lowl_sroll2")):
             spec_key = "ee"
 
         # Compute up to what we need for the dense curve
@@ -1681,8 +1681,7 @@ def evaluator_for_points(
         # 2. Compute Cls
         cls = SP._compute_cls_cached(param_dict, l_max_request, mode=mode)
         
-        spec_key = "tt"
-        if "lowl" in obs_type: spec_key = "ee"
+        spec_key = "ee" if obs_type in ("CMB_lowl", "CMB_lowl_sroll2") else "tt"
         
         # 3. Check actual size of returned theory
         cls_array = cls[spec_key]
