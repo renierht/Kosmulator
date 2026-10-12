@@ -1586,7 +1586,7 @@ def load_or_run_chain(
 # One rule for both engines, checked every `check_every` steps on the chain
 # after burn-in (n_post steps x n_walkers):
 #
-#   1. n_post >= CONV_TAU_FACTOR x tau_max       (50 autocorrelation times)
+#   1. n_post >= CONV_TAU_FACTOR x tau_max       (100 autocorrelation times)
 #   2. ESS = n_post x n_walkers / tau_max >= CONV_ESS_MIN
 #   3. tau_max changed by less than `convergence` (relative) since the previous check
 #   4. split-Rhat of every parameter < CONV_RHAT_MAX

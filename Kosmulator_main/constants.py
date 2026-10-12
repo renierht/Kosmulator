@@ -418,9 +418,13 @@ CC_SYS_COV = None
 #: Checked every --autocorr-check-every steps on the chain after burn-in. tau_max
 #: is the largest integrated autocorrelation time over the sampled parameters,
 #: estimated with zeus's default method (utils.autocorr_time_mk).
-#: Chain after burn-in must be at least this many tau_max long (emcee and zeus
-#: documentation: tau estimates are reliable beyond ~50 tau).
-CONV_TAU_FACTOR = 50.0
+#: Chain after burn-in must be at least this many tau_max long. The tau estimate itself is
+#: reliable beyond ~50 tau (emcee and zeus documentation); emcee's own stopping example uses
+#: 100 tau. 100 since item 59: in a seed study of w0wa with CC + DESI_DR2 + Pantheon+ it
+#: refused the one false stop seen (at 4 000 steps, tau underestimated before the chain had
+#: reached the low-Omega_m ridge); over the 128 runs of the item 55 benchmark it costs about
+#: 5% more steps on average (33 runs longer, at most 2.2 times).
+CONV_TAU_FACTOR = 100.0
 #: Effective sample size of the slowest parameter, N_post x walkers / tau_max
 #: (2000 gives a Monte Carlo error of ~2% of sigma on a posterior mean).
 CONV_ESS_MIN = 2000.0
