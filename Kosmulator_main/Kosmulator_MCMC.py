@@ -492,20 +492,21 @@ def _ball_logpost_one(theta, data, Type, CONFIG, MODEL_func, model_name, obs, ob
         return -np.inf, np.nan
 
 
-def _ball_logpost(pos, pool, near, data, Type, CONFIG, MODEL_func, model_name, obs, obs_index):
+def _ball_logpost(pos, pool, near, data, Type, CONFIG, MODEL_func, model_name, obs, obs_index, fn=None):
     """
     Log-posterior of the walkers of the initial ball (item 60) and, through the pool, their
     log-likelihood (else None). With a worker pool (local or MPI) each walker is a pool task,
     as in the sampler's steps; before, the main process evaluated them one after the other
     while the pool waited (a plik group's 108 walkers: 108 serial CLASS + plik calls).
-    Without a pool: batch_post in this process. `near`: the chain file, next to which the
-    pool's argument file is written.
+    Without a pool: batch_post in this process. `fn`: the pool callable of the group (one
+    argument file per group, made here when not given, next to the chain file `near`).
     """
     pos = np.atleast_2d(np.asarray(pos, dtype=float))
     if pool is None:
         return np.atleast_1d(np.asarray(
             batch_post(pos, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index), dtype=float)), None
-    fn = _pool_logprob(_ball_logpost_one, (data, Type, CONFIG, MODEL_func, model_name, obs, obs_index), near)
+    if fn is None:
+        fn = _pool_logprob(_ball_logpost_one, (data, Type, CONFIG, MODEL_func, model_name, obs, obs_index), near)
     res = np.asarray(list(pool.map(fn, list(pos))), dtype=float).reshape(len(pos), 2)
     return res[:, 0].copy(), res[:, 1].copy()
 
@@ -1138,6 +1139,7 @@ def _run_mcmc_impl(
     pos0     = None
     sol_diag = None
     ball_values: Dict[bytes, Tuple[float, float]] = {}   # item 60: walker -> (log_post, log_like)
+    ball_state: Dict[str, Any] = {}                      # item 60: the ball's pool callable ("fn")
     if do_ic:
         bounds = [prior_map[p] for p in param_names]
         # The pre-fit only centres the initial ball; the burn-in does the rest. A CMB
@@ -1177,8 +1179,12 @@ def _run_mcmc_impl(
             or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set()) for o in (obs or [])))) else None
 
         def _ball(p):
+            if ball_pool is not None and "fn" not in ball_state:
+                # one argument file for the ball, its regenerations and emcee's pool tasks
+                ball_state["fn"] = _pool_logprob(
+                    _ball_logpost_one, (data, Type, CONFIG, MODEL_func, model_name, obs, obs_index), chain_path)
             lp, ll = _ball_logpost(p, ball_pool, chain_path, data, Type, CONFIG, MODEL_func,
-                                   model_name, obs, obs_index)
+                                   model_name, obs, obs_index, fn=ball_state.get("fn"))
             if ll is not None:                 # kept so that emcee need not evaluate the ball again
                 for row, a, b in zip(np.atleast_2d(p), lp, ll):
                     ball_values[np.asarray(row, dtype=float).tobytes()] = (float(a), float(b))
@@ -1524,8 +1530,12 @@ def _run_mcmc_impl(
         emcee_fn = emcee_prob_vectorized if emcee_vectorize else emcee_prob
         emcee_args = (data, Type, CONFIG, MODEL_func, model_name, obs, obs_index)
         if emcee_pool is not None:
-            # Pool: the arguments travel once per group (file), each task only theta
-            emcee_fn = _pool_logprob(emcee_prob, emcee_args, chain_path)
+            # Pool: the arguments travel once per group (file), each task only theta; the
+            # initial ball's file when it went through the pool (same arguments, item 60)
+            if "fn" in ball_state and ball_state["fn"].path in _SHARED_FILES:
+                emcee_fn = _PoolLogProb(emcee_prob, ball_state["fn"].path)
+            else:
+                emcee_fn = _pool_logprob(emcee_prob, emcee_args, chain_path)
             emcee_args = ()
         _limit_main_blas(emcee_pool is not None, "emcee", emcee_vectorize, f"{model_name} | {_resolved_key}")
 
@@ -1672,6 +1682,9 @@ def _run_mcmc_impl(
             if all(v is not None and np.isfinite(v[0]) for v in vals):
                 start_state = emcee.State(np.array(pos0, dtype=float), log_prob=np.array([v[0] for v in vals]),
                                           blobs=np.array([v[1] for v in vals]))
+                # emcee would have counted these through _CountingMap (item 47)
+                _FAILED_POINTS["evaluated"] += len(vals)
+                _FAILED_POINTS["failed"] += sum(1 for v in vals if v[0] <= K.LOGLIKE_FAILED_BELOW)
 
         start = time.time()
         print(f"\nInitialising ensemble of {nwalker} walkers...")
