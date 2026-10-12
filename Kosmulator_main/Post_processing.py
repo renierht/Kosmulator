@@ -425,6 +425,9 @@ def find_polished_mle(
     coupled_restrictions: list | None = None,
     penalty_fn=None,
     n_polish: int | None = None,
+    fast_params: list[str] | None = None,
+    scales: dict[str, float] | None = None,
+    nested_maxfev: int | None = None,
 ) -> tuple[dict[str, float], float]:
     """
     Find the Maximum Likelihood Estimate (MLE) by polishing a starting point with
@@ -439,6 +442,10 @@ def find_polished_mle(
     returned includes it.
     n_polish: polish only the n_polish starts with the lowest objective (each start
     is evaluated once first); None polishes every distinct start.
+    fast_params, scales: with two or more fast parameters (nuisances that do not change
+    the CLASS spectra) the polish is nested (item 38, _nested_polish): Nelder-Mead over
+    the other parameters, at most nested_maxfev of its points, each with the fast ones
+    optimised by L-BFGS-B. scales: posterior sd per parameter (the search's unit).
     """
     p_names = list(params_dict_median.keys())
     x0 = np.array([params_dict_median[p] for p in p_names], dtype=float)
@@ -491,6 +498,21 @@ def find_polished_mle(
             best_p = {p: float(starts[order[0]][i]) for i, p in enumerate(p_names)}
         starts = [starts[i] for i in order[:n_polish]]
 
+    fast_idx = [i for i, p in enumerate(p_names) if p in set(fast_params or ())]
+    if len(fast_idx) >= 2:
+        slow_idx = [i for i in range(len(p_names)) if i not in fast_idx]
+        sc = np.array([float((scales or {}).get(p, 0.0)) for p in p_names])
+        sc = np.where(np.isfinite(sc) & (sc > 0), sc, np.maximum(np.abs(x0) * 1e-2, 1e-6))
+        bnds = [tuple(prior_bounds[p]) if prior_bounds and p in prior_bounds else (-np.inf, np.inf)
+                for p in p_names]
+        for start in starts:
+            val, x = _nested_polish(objective, np.asarray(start, float), slow_idx, fast_idx, sc, bnds,
+                                    int(nested_maxfev if nested_maxfev is not None else max_evals))
+            if np.isfinite(val) and val < best_chi2:
+                best_chi2 = float(val)
+                best_p = {p: float(x[idx]) for idx, p in enumerate(p_names)}
+        return best_p, best_chi2
+
     for start in starts:
         res = minimize(
             objective, 
@@ -513,6 +535,74 @@ def find_polished_mle(
 
     return best_p, best_chi2
 
+def _polish_nested_maxfev_cmb() -> int:
+    """Outer-point cap of the nested CMB polish: constants.POLISH_NESTED_MAXFEV_CMB, or
+    KOSM_POLISH_NESTED_MAXFEV_CMB; never more than KOSM_POLISH_MAXFEV_CMB when that is set."""
+    n = int(K.POLISH_NESTED_MAXFEV_CMB)
+    raw = os.environ.get("KOSM_POLISH_NESTED_MAXFEV_CMB", "").strip()
+    if raw:
+        try:
+            n = max(0, int(float(raw)))
+        except ValueError:
+            logger.warning("KOSM_POLISH_NESTED_MAXFEV_CMB=%r is not a number; using %d", raw, n)
+    if os.environ.get("KOSM_POLISH_MAXFEV_CMB", "").strip():
+        n = min(n, _polish_maxfev_cmb())
+    return n
+
+
+def _nested_polish(f, x0, slow_idx, fast_idx, scale, bounds, outer_maxfev, inner_maxiter=200):
+    """
+    Profile-likelihood polish for groups with many nuisance parameters (item 38).
+
+    Outer: Nelder-Mead over the parameters that change the CLASS spectra ("slow", e.g. the six
+    LCDM ones), in units of their posterior sd, starting simplex 1 sd, at most outer_maxfev
+    points. Inner, at each outer point: L-BFGS-B over the nuisance parameters ("fast": their
+    calls reuse the point's spectra from the cache, about 20 ms against 4 s for CLASS), within
+    the prior box, warm-started from the previous inner optimum. The outer function is the
+    profile chi^2(slow) = min over fast of chi^2(slow, fast); its minimum is the joint minimum,
+    so the result is the same best fit a joint search would reach, found with about a CLASS
+    run per outer point instead of a joint Nelder-Mead in 27 dimensions that stops far from it
+    (t10: 2796.5 after 300 calls).
+    Returns (objective, x) at the best point visited.
+    """
+    from scipy.optimize import minimize as _min
+    x0 = np.asarray(x0, float)
+    slow_idx, fast_idx = np.asarray(slow_idx, int), np.asarray(fast_idx, int)
+    ss, sf = scale[slow_idx], scale[fast_idx]
+    st = {"xf": x0[fast_idx].copy(), "best": (f(x0), x0.copy())}
+
+    def profile(us):
+        x = x0.copy()
+        x[slow_idx] = x0[slow_idx] + us * ss
+        if any(not (bounds[i][0] <= x[i] <= bounds[i][1]) for i in slow_idx):
+            return 1e12
+        ref = st["xf"].copy()
+
+        def g(u):
+            x[fast_idx] = ref + u * sf
+            return f(x)
+        bnds = [((bounds[i][0] - ref[k]) / sf[k], (bounds[i][1] - ref[k]) / sf[k]) for k, i in enumerate(fast_idx)]
+        r = _min(g, np.zeros(len(fast_idx)), method="L-BFGS-B", bounds=bnds,
+                 options={"maxiter": inner_maxiter, "ftol": 1e-12, "gtol": 1e-6, "eps": 1e-3, "maxcor": 30})
+        val = float(r.fun)
+        if np.isfinite(val) and val < 1e11:
+            st["xf"] = ref + r.x * sf
+            if val < st["best"][0]:
+                xb = x.copy()
+                xb[fast_idx] = st["xf"]
+                st["best"] = (val, xb)
+        return val
+
+    ns = len(slow_idx)
+    if ns == 0:
+        profile(np.zeros(0))
+        return st["best"]
+    init = np.vstack([np.zeros(ns)] + [np.eye(ns)[k] for k in range(ns)])
+    _min(profile, np.zeros(ns), method="Nelder-Mead",
+         options={"maxfev": max(1, int(outer_maxfev)), "xatol": 1e-3, "fatol": 1e-2, "initial_simplex": init})
+    return st["best"]
+
+
 def _polish_maxfev_cmb() -> int:
     """Nelder-Mead call cap for groups with Planck data: constants.POLISH_MAXFEV_CMB,
     or the environment variable KOSM_POLISH_MAXFEV_CMB when it holds a number."""
@@ -523,6 +613,22 @@ def _polish_maxfev_cmb() -> int:
         except ValueError:
             logger.warning("KOSM_POLISH_MAXFEV_CMB=%r is not a number; using %d", raw, K.POLISH_MAXFEV_CMB)
     return int(K.POLISH_MAXFEV_CMB)
+
+
+def _fast_cmb_params(names) -> list:
+    """Sampled CMB nuisance parameters (Planck, ACT, SPT): they do not change the CLASS spectra."""
+    fast = set(K.PLANCK_NUISANCE_NAMES) | set(getattr(K, "GROUND_NUISANCE_SAMPLED", {}))
+    return [p for p in (names or []) if p in fast]
+
+
+def _posterior_sd(samples, names) -> dict:
+    """Posterior sd of each sampled parameter (finite rows of the chain), or {}."""
+    try:
+        S = np.asarray(samples, dtype=float)
+        S = S[np.all(np.isfinite(S), axis=1)]
+        return {p: float(np.std(S[:, i])) for i, p in enumerate(names)} if S.size else {}
+    except Exception:
+        return {}
 
 
 def compute_lppd(log_lik_matrix):
@@ -876,6 +982,11 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 # the group's CMB priors (Planck and ground-based nuisances; tau for ACT or SPT
                 # without low-l EE), as log_prior_all applies them
                 penalty_fn=((lambda _p, _g=tuple(obs_entry): SP.cmb_prior_chi2(_p, _g)) if has_cmb_group else None),
+                # item 38: nested polish over the Planck / ACT / SPT nuisances (fast) when there are
+                # two or more of them (plik baseline: 21), scaled by the posterior sd
+                fast_params=(_fast_cmb_params(cand_param_names) if has_cmb_group else None),
+                scales=_posterior_sd(obs_samples_for_waic, cand_param_names),
+                nested_maxfev=_polish_nested_maxfev_cmb(),
             )
 
             # Re-evaluate once at the polished point: the data chi^2 (without the Planck

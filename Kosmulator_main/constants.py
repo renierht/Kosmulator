@@ -917,6 +917,12 @@ def planck_n_data(tag: str, lensing_mode: str = "raw") -> int:
 # On the step 8 lite chain (7 parameters) chi^2 stopped changing after about 200 calls.
 # Environment variable KOSM_POLISH_MAXFEV_CMB overrides it.
 POLISH_MAXFEV_CMB: int = 300
+# Groups with two or more CMB nuisance parameters (plik baseline: 21; P-ACT, SPA: 2 - 4) are
+# polished nested (item 38): Nelder-Mead over the parameters that change the spectra, at most
+# this many of its points, each with the nuisances optimised by L-BFGS-B on cached spectra.
+# t10 (27 parameters, cloud): chi^2 + priors 2774.87 after 60 points (data chi^2 2773.04) against
+# 2791.43 (2786.06) for the joint Nelder-Mead's 300 calls; still falling by about 0.01 per point at 60.
+POLISH_NESTED_MAXFEV_CMB: int = 100
 
 #: Calls of the Nelder-Mead pre-fit that centres the initial walker ball, for groups
 #: with Planck data (item 34; other groups 2000). KOSM_OPT_MAXFUN overrides.
