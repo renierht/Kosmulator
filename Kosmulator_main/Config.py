@@ -783,8 +783,9 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 observation_data[obs] = {"ground_cmb": obs, "parts": list(K.cmb_components(obs))}
 
             elif obs in K.EXT_LENSING_TAGS:
-                # ACT DR6 + Planck PR4 lensing (item 61): ground_cmb loads act_dr6_lenslike's data
-                observation_data[obs] = {"lensing": obs, "variant": K.ACT_LENS_VARIANT}
+                # ACT DR6 + Planck PR4 and SPT-3G MUSE lensing (item 61): ground_cmb loads the data
+                observation_data[obs] = {"lensing": obs, "variant": (K.ACT_LENS_VARIANT if obs == "CMB_lensing_ACTPlanck"
+                                                                     else "MUSE phi phi")}
 
             # ------------------
             # BAO / DESI, all in the DESI VI format (Calc_DESI_chi):

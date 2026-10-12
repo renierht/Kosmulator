@@ -119,6 +119,7 @@ observations: List[List[str]] = [
     #['CMB_SPT'],            # SPT-3G D1 alone (tau prior 0.051 +- 0.006 unless low-l EE is in the group)
     #['CMB_SPA', 'DESI_DR2'],
     #['CMB_PACT', 'CMB_lensing_ACTPlanck', 'DESI_DR2'],   # with ACT DR6 + Planck PR4 lensing (P-ACT-LB's)
+    #['CMB_SPA', 'CMB_lensing_ACTPlanck', 'CMB_lensing_SPT'],   # with ACT + Planck and SPT-3G MUSE lensing
     #['CMB_lensing_ACTPlanck', 'DESI_DR2', 'BBN_DH'],    # lensing without primary CMB; BBN sets r_d
     #["CC", "DESI_DR1"],
     #["JLA","DESY5","Union3"],

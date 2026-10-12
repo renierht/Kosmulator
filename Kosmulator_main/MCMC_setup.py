@@ -700,22 +700,26 @@ def run_mcmc_for_all_models(
                             "cmb_nonlinear = \"hmcode\" in Kosmulator.py", ", ".join(_ground))
         _lens = sorted({o for g in observations for o in g if o in K.EXT_LENSING_TAGS})
         if _lens:
-            # ACT DR6 + Planck PR4 lensing (item 61): load the data now, per group's mode (the
-            # corrected one writes its cache here, before any pool)
+            # ACT DR6 + Planck PR4 and SPT-3G MUSE lensing (item 61): load the data now (ACT + Planck
+            # per group's mode; the corrected one writes its cache here, before any pool)
             from Kosmulator_main import ground_cmb as GC
             for grp in observations:
                 for t in grp:
-                    if t in K.EXT_LENSING_TAGS:
+                    if t == "CMB_lensing_ACTPlanck":
                         lens_only = not K.group_has_primary_cmb(grp)
                         GC.check_lensing(t, lens_only)
                         log.info("%s in %s: %s, %d band powers, %s", t, grp, K.ACT_LENS_VARIANT, GC.n_data(t),
                                  "CMB-marginalised covariance (no primary CMB in the group)" if lens_only else
                                  "likelihood corrections from the group's own CMB spectra")
+                    elif t in K.EXT_LENSING_TAGS:
+                        GC.check_lensing(t, False)
+                        log.info("%s in %s: MUSE phi phi, %d band powers to L = %d (CLASS spectra to l = %d)",
+                                 t, grp, GC.n_data(t), GC.spt_muse().lmax, K.CMB_CLASS_LMAX)
             if not K.CMB_NONLINEAR:
                 log.warning("cmb_nonlinear = None with %s: the lensing power spectrum depends on non-linear "
                             "growth at the multipoles these data use (at the Planck 2018 best fit, linear "
-                            "instead of HMcode raises chi^2 by 2.4 - 3.6 for ACT + Planck); set "
-                            "cmb_nonlinear = \"hmcode\" in Kosmulator.py", ", ".join(_lens))
+                            "instead of HMcode raises chi^2 by 2.4 - 3.6 for ACT + Planck and 19 for SPT "
+                            "MUSE); set cmb_nonlinear = \"hmcode\" in Kosmulator.py", ", ".join(_lens))
 
     # Planck likelihood code (clik, or clipy when clik is missing; see Class_run)
     if need_hil or need_hilTT or need_lowl or need_lowlTT or need_lensing:

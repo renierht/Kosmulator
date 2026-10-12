@@ -520,6 +520,7 @@ OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
     "CMB_hil_TT":      (r"Planck high-$\ell$ TT",      "Planck high-ℓ TT"),
     "CMB_lensing":     (r"Planck lensing",             "Planck lensing"),
     "CMB_lensing_ACTPlanck": (r"ACT DR6 + Planck PR4 lensing", "ACT DR6 + Planck PR4 lensing"),
+    "CMB_lensing_SPT": (r"SPT-3G MUSE lensing",         "SPT-3G MUSE lensing"),
 
     # Growth-rate data
     "f_sigma_8":       (r"$f_{\sigma_8}$",             "fσ₈"),
@@ -833,7 +834,8 @@ CMB_BUNDLES: Dict[str, Tuple[str, ...]] = {
     "CMB_SPA": ("CMB_lowl_TT", "CMB_lowl_sroll2", "CMB_planck_ACTcut", "CMB_ACT", "CMB_SPT"),
 }
 #: l_max each likelihood needs from CLASS (candl: its theory range; Planck: CMB_CLASS_LMAX_PLANCK)
-CMB_TAG_LMAX: Dict[str, int] = {"CMB_ACT": 8501, "CMB_SPT": 4095}
+CMB_TAG_LMAX: Dict[str, int] = {"CMB_ACT": 8501, "CMB_SPT": 4095,
+                                  "CMB_lensing_SPT": 3100}     # MUSE phi phi windows reach L = 3073
 #: Planck high-l cut of ACT DR6's P-ACT (TT, TE, EE): bins above it are dropped
 PLANCK_ACT_CUT_LMAX: Tuple[int, int, int] = (1000, 600, 600)
 #: Nuisance parameters of the ground-based likelihoods: (reference value, prior box, Gaussian
@@ -877,12 +879,22 @@ SROLL2_TABLE_FILE: str = "sroll2_prob_table.txt"
 #                          (or act_dr6_lenslike.get_data(), the package's own folder). The corrections are
 #                          binned once into a 2.9 MB cache (Observations/<ACT_LENS_DIR>/.cache/), so pool
 #                          workers do not each hold the package's 1.4 GB of derivative matrices.
-EXT_LENSING_TAGS: Tuple[str, ...] = ("CMB_lensing_ACTPlanck",)
+#   CMB_lensing_SPT        SPT-3G 2019 - 2020 lensing power spectrum from MUSE, phi phi only (16 band powers,
+#                          L = 20 - 3073; delensed EE and systematics marginalised; Ge et al. 2025,
+#                          arXiv:2411.06000), a numpy port of muse3glike 1.0.0 (ground_cmb.MusePhiPhi).
+#                          With CMB_lensing_ACTPlanck it is an independent likelihood, as in Camphuis et al.
+#                          2025 (arXiv:2506.20707) and most CMB-SPA papers; that neglects the SPT x ACT and
+#                          SPT x Planck lensing cross-covariances, which only the joint ACT + SPT likelihood
+#                          models (Qu et al. 2025, arXiv:2504.20038). Data: Observations/<SPT_MUSE_DIR>/
+#                          <SPT_MUSE_FILE> (from muse_3g_like_march_2025.zip), or an installed muse3glike.
+EXT_LENSING_TAGS: Tuple[str, ...] = ("CMB_lensing_ACTPlanck", "CMB_lensing_SPT")
 ACT_LENS_VARIANT: str = "actplanck_baseline"
 ACT_LENS_VERSION: str = "v1.2"
 ACT_LENS_DIR: str = "act_dr6_lenslike"
 #: simulations behind the covariances, for the Hartlap factor (as Cobaya's ACTDR6LensLike)
 ACT_LENS_NSIMS: Tuple[int, int] = (792, 400)
+SPT_MUSE_DIR: str = "spt3g_muse_lensing"
+SPT_MUSE_FILE: str = "90_150_220.h5"
 
 CMB_TAGS: Tuple[str, ...] = (("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lensing") + GROUND_CMB_TAGS
                              + EXT_LENSING_TAGS)

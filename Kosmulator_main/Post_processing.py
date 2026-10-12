@@ -948,7 +948,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                             chi_total += float(-2.0 * GC.loglike(obs, p_eval, model_name))
                             n_points += GC.n_data(obs)
                         elif obs in K.EXT_LENSING_TAGS:
-                            # ACT DR6 + Planck PR4 lensing (item 61)
+                            # ACT DR6 + Planck PR4 and SPT-3G MUSE lensing (item 61)
                             from Kosmulator_main import ground_cmb as GC
                             chi_total += float(-2.0 * GC.lensing_loglike(
                                 obs, p_eval, model_name, lens_only=not K.group_has_primary_cmb(obs_entry)))

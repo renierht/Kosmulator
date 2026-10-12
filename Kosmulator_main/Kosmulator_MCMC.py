@@ -127,8 +127,8 @@ def model_likelihood(
         from Kosmulator_main import ground_cmb as GC
         return GC.loglike(obs, param_dict, model_name)
     if obs in K.EXT_LENSING_TAGS:
-        # ACT DR6 + Planck PR4 lensing (item 61): with primary CMB in the group the likelihood
-        # corrections, alone the CMB-marginalised covariance
+        # ACT DR6 + Planck PR4 and SPT-3G MUSE lensing (item 61). ACT + Planck: with primary CMB
+        # in the group the likelihood corrections, alone the CMB-marginalised covariance
         from Kosmulator_main import ground_cmb as GC
         groups = CONFIG.get("observations", [])
         group = groups[obs_index] if obs_index < len(groups) else [obs]

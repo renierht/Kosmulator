@@ -22,6 +22,8 @@ ACT and 4095 for SPT by MCMC_setup), as the Planck likelihoods do.
   act_dr6_lenslike (constants.ACT_LENS_VARIANT), on the same CLASS run: C_L^kk from C_L^phiphi,
   and the lensed TT, TE, EE, BB for the likelihood corrections when the group has primary CMB
   (binned once into a small cached form, _act_lens_compact).
+- CMB_lensing_SPT (item 61): SPT-3G MUSE phi phi band powers (MusePhiPhi, a numpy port of
+  muse3glike) on the same CLASS run's C_L^phiphi.
 """
 from __future__ import annotations
 
@@ -316,9 +318,88 @@ def act_lens_loglike(cl: Dict[str, np.ndarray], lens_only: bool) -> float:
     return -0.5 * float(delta @ c["cinv"] @ delta)
 
 
+class MusePhiPhi:
+    """
+    SPT-3G 2019 - 2020 lensing power spectrum from MUSE (Ge et al. 2025, arXiv:2411.06000), the
+    phi phi band powers only: a numpy port of muse3glike 1.0.0 (March 2025)
+    spt3g_2yr_delensed_ee_optimal_pp_muse(components=["ϕϕ"]), which marginalises the delensed EE
+    band powers and the systematics parameters (the phi phi block of the covariance). As in the
+    package: Gaussian in arctanh(theory / scale - 1.01), the covariance inverse plus 1/0.8^2 on
+    the diagonal (the package's volume term for its uniform prior on the band powers, "between 0
+    and 2 times the Planck theory" in its README; exactly, finite for 0.01 < theory / scale < 2.01),
+    theory outside that range rejected. The MUSE band powers need no correction from the CMB spectra.
+    """
+
+    def __init__(self, path: str):
+        import re
+        import h5py
+        with h5py.File(path, "r") as f:
+            axis = f["axis"].asstr()[()]
+            m = re.search(r"ϕϕ\s*=\s*(\d+):(\d+)", axis)
+            if m is None:
+                raise ValueError(f"{path}: no phi phi block in the axis {axis!r}")
+            sl = slice(int(m.group(1)) - 1, int(m.group(2)))          # Julia 1-based, inclusive
+            s_full = np.asarray(f["scale"][:], float)
+            cov = np.asarray(f["covariance"][:], float)
+            data = np.asarray(f["data"][:], float)
+            self.W = np.asarray(f["BPWF"]["ϕϕ"][:], float).T           # (bins, L), column j is L = j + 1
+            ell = np.asarray(f["BPWF"]["ℓ"][:])
+        if not np.array_equal(ell, np.arange(1, self.W.shape[1] + 1)):
+            raise ValueError(f"{path}: band-power window multipoles are not 1 - {self.W.shape[1]}")
+        self.s = s_full[sl]
+        n = self.s.size
+        cov_s = ((cov / s_full).T / s_full)[sl, sl]                     # covariance of data / scale
+        cov_t = np.linalg.inv(np.linalg.inv(cov_s) + np.eye(n) / 0.8 ** 2)
+        self.chol = np.linalg.cholesky(cov_t)
+        self.d_t = np.arctanh(data[sl] / self.s - 1.01)
+        self.n_data = int(n)
+        self.lmax = int(np.nonzero(np.abs(self.W).sum(axis=0))[0][-1] + 1)   # 3073 in the March 2025 file
+
+    def loglike(self, pp: np.ndarray) -> float:
+        """pp: CLASS's dimensionless C_L^phiphi from L = 0."""
+        pp = np.asarray(pp, float)
+        if pp.size - 1 < self.lmax:
+            raise ValueError(f"CMB_lensing_SPT needs C_L^phiphi to L = {self.lmax}, got {pp.size - 1}")
+        x = np.zeros(self.W.shape[1])
+        m = min(x.size, pp.size - 1)
+        x[:m] = pp[1:m + 1]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            t = np.arctanh((self.W @ x) / self.s - 1.01)
+        if not np.all(np.isfinite(t)):
+            return -np.inf                       # outside the band-power prior (the package returns NaN)
+        z = np.linalg.solve(self.chol, self.d_t - t)
+        return -0.5 * float(z @ z)
+
+
+def spt_muse_file() -> str:
+    """The SPT-3G MUSE likelihood file: Observations/<SPT_MUSE_DIR>/<SPT_MUSE_FILE>, else the dat
+    folder of an installed muse3glike (found without importing it: it would use jax if present)."""
+    cands = [os.path.join(K.OBSERVATIONS_BASE, K.SPT_MUSE_DIR, K.SPT_MUSE_FILE)]
+    try:
+        import importlib.util
+        spec = importlib.util.find_spec("muse3glike")
+        if spec is not None and spec.submodule_search_locations:
+            cands.append(os.path.join(list(spec.submodule_search_locations)[0], "dat", K.SPT_MUSE_FILE))
+    except Exception:
+        pass
+    for p in cands:
+        if os.path.isfile(p):
+            return p
+    raise FileNotFoundError(
+        f"SPT-3G MUSE lensing data not found ({cands[0]}). It is the file src/muse3glike/dat/{K.SPT_MUSE_FILE} "
+        "of muse_3g_like_march_2025.zip (https://pole.uchicago.edu/public/data/ge25/)")
+
+
+def spt_muse() -> MusePhiPhi:
+    if "spt_muse" not in _NATIVE:
+        _NATIVE["spt_muse"] = MusePhiPhi(spt_muse_file())
+    return _NATIVE["spt_muse"]
+
+
 def lensing_loglike(tag: str, pd: Dict[str, float], model_name: str, lens_only: bool,
                     floor: float = -1e10) -> float:
-    """ln L of a lensing tag of item 61 on the point's single CLASS run."""
+    """ln L of a lensing tag of item 61 on the point's single CLASS run (lens_only: ACT + Planck
+    only; the SPT MUSE band powers have no correction from the CMB spectra)."""
     from Kosmulator_main import Class_run as CR, Statistical_packages as SP
     if tag not in K.EXT_LENSING_TAGS:
         raise KeyError(tag)
@@ -330,7 +411,10 @@ def lensing_loglike(tag: str, pd: Dict[str, float], model_name: str, lens_only: 
     if cl is None or not isinstance(cl, dict):
         return float(floor)
     try:
-        v = act_lens_loglike(cl, lens_only)
+        if tag == "CMB_lensing_ACTPlanck":
+            v = act_lens_loglike(cl, lens_only)
+        else:
+            v = spt_muse().loglike(cl["pp"])
     except (ImportError, FileNotFoundError, ValueError):
         raise
     except Exception as e:
@@ -343,6 +427,8 @@ def n_data(tag: str) -> int:
     """Data points of a ground-based tag (a combination: the sum of its parts) or a lensing tag."""
     if tag == "CMB_lensing_ACTPlanck":
         return int(act_lens_data(True)["data"].size)        # the same band powers in both modes
+    if tag == "CMB_lensing_SPT":
+        return spt_muse().n_data
     if tag in K.CMB_BUNDLES:
         return sum(n_data(c) for c in K.cmb_components(tag))
     if tag == "CMB_planck_ACTcut":
@@ -438,5 +524,7 @@ def check_lensing(tag: str, lens_only: bool) -> None:
     """Load a lensing tag's data at start-up (a missing package or file fails here, not in a worker)."""
     if tag == "CMB_lensing_ACTPlanck":
         act_lens_data(lens_only)
+    elif tag == "CMB_lensing_SPT":
+        spt_muse()
     else:
         raise KeyError(tag)
