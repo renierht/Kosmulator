@@ -207,8 +207,9 @@ def main(
         mode=getattr(args, "engine_mode", "mixed"),
     )
 
-    # Planck high-l likelihood: plik with Planck's nuisance parameters, or plik_lite.
-    # Set before the config is built (the sampled nuisances and the files depend on it).
+    # Planck high-l likelihood: plik with Planck's nuisance parameters (baseline 21, extended 30,
+    # full 47), or plik_lite. Set before the config is built (the sampled nuisances and the
+    # files depend on it).
     _mode = str(cmb_nuisance).strip().lower()
     if _mode not in K.CMB_NUISANCE_MODES:
         raise ValueError(f"cmb_nuisance must be one of {K.CMB_NUISANCE_MODES}, not {cmb_nuisance!r}")
@@ -720,8 +721,19 @@ def run_mcmc_for_all_models(
         if rank == 0:
             log.info("Planck likelihood code: %s (%s)", CR.CLIK_BACKEND, getattr(CR.clik, "__file__", ""))
             if need_hil or need_hilTT:
-                log.info("Planck high-l likelihood: %s (cmb_nuisance = %s)",
-                         "plik_lite" if K.CMB_NUISANCE == "lite" else "plik", K.CMB_NUISANCE)
+                log.info("Planck high-l likelihood: %s (cmb_nuisance = %s; %d nuisance parameters sampled for "
+                         "TT,TE,EE, %d for TT)", "plik_lite" if K.CMB_NUISANCE == "lite" else "plik", K.CMB_NUISANCE,
+                         len(K.planck_sampled_nuisances("CMB_hil")), len(K.planck_sampled_nuisances("CMB_hil_TT")))
+                if K.CMB_NUISANCE == "extended":
+                    log.warning("cmb_nuisance = \"extended\": the three polarisation efficiencies and the six EE dust "
+                                "amplitudes that Planck's baseline fixes are sampled with their stated Gaussian priors "
+                                "(a robustness check of the baseline, not Planck's own analysis).")
+                elif K.CMB_NUISANCE == "full":
+                    log.warning("cmb_nuisance = \"full\": all 47 plik inputs are sampled. 17 of them (A_pol, cib_index, "
+                                "the dust indices, the correlated-noise and subpixel template amplitudes) have no published "
+                                "uncertainty; their flat boxes are Kosmulator's choice (constants.PLANCK_NUISANCE_FULL_EXTRA). "
+                                "Planck never published this analysis, so there is no reference result; expect slow "
+                                "convergence and prior-dominated nuisances.")
             # Planck's "TT" includes the low-l TT likelihood (Commander)
             for grp in observations:
                 if ("CMB_hil" in grp or "CMB_hil_TT" in grp) and "CMB_lowl_TT" not in grp:
@@ -939,11 +951,11 @@ def run_mcmc_for_all_models(
                 config_model=CONFIG[model_name],
                 obs_index=i,
             )  # e.g. "CC+PantheonP_SH0ES" or "CC+PantheonP"
-            # plik_lite chains go to their own folder, so a lite run never loads or
-            # resumes a plik chain of the same group (and the reverse)
+            # plik_lite, extended and full chains go to their own folders (_plik_lite, ...), so a
+            # run never loads or resumes a chain of the same group made with another Planck set
             out_key = key.replace("+", "_")
-            if K.CMB_NUISANCE == "lite" and any(o in ("CMB_hil", "CMB_hil_TT") for o in obs_set):
-                out_key += "_plik_lite"
+            if K.CMB_NUISANCE != "baseline" and any(o in ("CMB_hil", "CMB_hil_TT") for o in obs_set):
+                out_key += f"_plik_{K.CMB_NUISANCE}"
             output_dir = prepare_output(
                 model_name,
                 out_key,

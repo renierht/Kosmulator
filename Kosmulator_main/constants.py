@@ -721,17 +721,57 @@ PLANCK_NUISANCE_FIXED: Dict[str, float] = {
 # SZ prior on the sampled amplitudes: ksz_norm + PLANCK_SZ_PRIOR[0] * A_sz ~ N(mean, sigma)
 PLANCK_SZ_PRIOR: Tuple[float, float, float] = (1.6, 9.5, 3.0)
 
-# Gaussian priors applied in log_prior_all (name -> (mean, sigma))
+# Larger sets of sampled plik nuisances (Kosmulator.py cmb_nuisance; item 58).
+# "extended": the baseline 21 plus the 9 fixed parameters whose uncertainty Planck states
+# (the comments of Cobaya 3.6.2 planck_2018_highl_plik/params_calib_pol.yaml and params_EE.yaml,
+# "EE now recommended to be left to the central values of the stated priors"), sampled with
+# those Gaussian priors; dust amplitudes kept >= 0.
+def _g0(mu: float, sigma: float):
+    ref, (lo, hi), g = _g(mu, sigma)
+    return (ref, (max(0.0, lo), hi), g)
+
+PLANCK_NUISANCE_EXTENDED: Dict[str, Tuple[float, Tuple[float, float], Tuple[float, float] | None]] = {
+    "calib_100P": _g(1.021, 0.01), "calib_143P": _g(0.966, 0.01), "calib_217P": _g(1.040, 0.01),
+    "galf_EE_A_100": _g0(0.055, 0.014), "galf_EE_A_100_143": _g0(0.040, 0.010),
+    "galf_EE_A_100_217": _g0(0.094, 0.023), "galf_EE_A_143": _g0(0.086, 0.022),
+    "galf_EE_A_143_217": _g0(0.21, 0.051), "galf_EE_A_217": _g0(0.70, 0.18),
+}
+
+# "full": every one of the 47 inputs of plik TT,TE,EE (20 of plik TT). The other 17 have no
+# published uncertainty, Planck never sampled them, and some are nearly degenerate with others
+# (A_pol with the three polarisation efficiencies): these flat boxes are Kosmulator's choice
+# around Planck's fixed values (template amplitudes 0 - 2, spectral indices +- 1, the CIB index
+# as Kosmulator's old box), not Planck's. Expect slow convergence and prior-dominated nuisances.
+PLANCK_NUISANCE_FULL_EXTRA: Dict[str, Tuple[float, Tuple[float, float], Tuple[float, float] | None]] = {
+    "A_pol": (1.0, (0.9, 1.1), None),
+    "cib_index": (-1.3, (-2.0, -0.5), None),
+    "galf_EE_index": (-2.4, (-3.4, -1.4), None),
+    "galf_TE_index": (-2.4, (-3.4, -1.4), None),
+    **{n: (1.0, (0.0, 2.0), None) for n in (
+        "A_cnoise_e2e_100_100_EE", "A_cnoise_e2e_143_143_EE", "A_cnoise_e2e_217_217_EE",
+        "A_sbpx_100_100_TT", "A_sbpx_143_143_TT", "A_sbpx_143_217_TT", "A_sbpx_217_217_TT",
+        "A_sbpx_100_100_EE", "A_sbpx_100_143_EE", "A_sbpx_100_217_EE",
+        "A_sbpx_143_143_EE", "A_sbpx_143_217_EE", "A_sbpx_217_217_EE")},
+}
+# The parameters of plik TT among them
+PLANCK_TT_FULL_EXTRA: Set[str] = {"cib_index", "A_sbpx_100_100_TT", "A_sbpx_143_143_TT",
+                                  "A_sbpx_143_217_TT", "A_sbpx_217_217_TT"}
+
+# Every plik nuisance that can be sampled: name -> (reference value, prior box, Gaussian or None)
+PLANCK_NUISANCE_ALL: Dict[str, Tuple[float, Tuple[float, float], Tuple[float, float] | None]] = {
+    **PLANCK_NUISANCE_SAMPLED, **PLANCK_NUISANCE_EXTENDED, **PLANCK_NUISANCE_FULL_EXTRA}
+
+# Gaussian priors applied in log_prior_all (name -> (mean, sigma)); only to parameters a group samples
 PLANCK_GAUSSIAN_PRIORS: Dict[str, Tuple[float, float]] = {
-    n: v[2] for n, v in PLANCK_NUISANCE_SAMPLED.items() if v[2] is not None
+    n: v[2] for n, v in PLANCK_NUISANCE_ALL.items() if v[2] is not None
 }
 
 # All plik nuisance names (sampled and fixed); they do not change the theory spectra
 PLANCK_NUISANCE_NAMES: Set[str] = set(PLANCK_NUISANCE_SAMPLED) | set(PLANCK_NUISANCE_FIXED)
 
-# Reference value and prior box of every sampled nuisance (the format Config injects)
+# Reference value and prior box of every nuisance that can be sampled (the format Config injects)
 PLANCK_NUISANCE_DEFAULTS: Dict[str, Tuple[float, Tuple[float, float]]] = {
-    n: (v[0], v[1]) for n, v in PLANCK_NUISANCE_SAMPLED.items()
+    n: (v[0], v[1]) for n, v in PLANCK_NUISANCE_ALL.items()
 }
 
 # Sampled nuisances of plik TT (15) and plik TTTEEE (21)
@@ -747,15 +787,19 @@ PLANCK_TTTEEE_NUISANCE: Set[str] = set(PLANCK_NUISANCE_SAMPLED)
 
 # High-l nuisance treatment, set from Kosmulator.py (cmb_nuisance):
 #   "baseline": plik, with the nuisance parameters above (21 for TTTEEE, 15 for TT);
-#   "lite":     plik_lite, Planck's foreground-marginalised likelihood, A_planck only.
+#   "lite":     plik_lite, Planck's foreground-marginalised likelihood, A_planck only;
+#   "extended": plik, baseline + PLANCK_NUISANCE_EXTENDED (30 for TTTEEE, 15 for TT);
+#   "full":     plik, all 47 inputs of TTTEEE (20 of TT) sampled (PLANCK_NUISANCE_FULL_EXTRA).
 CMB_NUISANCE: str = "baseline"
-CMB_NUISANCE_MODES: Tuple[str, ...] = ("baseline", "lite")
+CMB_NUISANCE_MODES: Tuple[str, ...] = ("baseline", "lite", "extended", "full")
 
 # Planck 2018 likelihood folders (in Observations/) per Kosmulator tag
 PLANCK_CLIK_FILES: Dict[str, Dict[str, str]] = {
     "baseline": {"CMB_hil": "plik_rd12_HM_v22b_TTTEEE.clik", "CMB_hil_TT": "plik_rd12_HM_v22_TT.clik"},
     "lite":     {"CMB_hil": "plik_lite_v22_TTTEEE.clik", "CMB_hil_TT": "plik_lite_v22_TT.clik"},
 }
+PLANCK_CLIK_FILES["extended"] = dict(PLANCK_CLIK_FILES["baseline"])
+PLANCK_CLIK_FILES["full"] = dict(PLANCK_CLIK_FILES["baseline"])
 PLANCK_LOWL_FILES: Dict[str, str] = {
     "CMB_lowl": "simall_100x143_offlike5_EE_Aplanck_B.clik",      # low-l EE (SimAll, "lowE")
     "CMB_lowl_TT": "commander_dx12_v3_2_29.clik",                 # low-l TT (Commander, "lowl")
@@ -873,12 +917,22 @@ def planck_clik_file(tag: str) -> str:
 
 
 def planck_sampled_nuisances(tag: str) -> Set[str]:
-    """Planck nuisance parameters sampled for one Kosmulator CMB tag (A_planck is shared)."""
+    """Planck nuisance parameters sampled for one Kosmulator CMB tag under the current
+    CMB_NUISANCE (A_planck is shared)."""
     lite = (CMB_NUISANCE == "lite")
     if tag == "CMB_hil":
-        return {"A_planck"} if lite else set(PLANCK_TTTEEE_NUISANCE)
+        if lite:
+            return {"A_planck"}
+        out = set(PLANCK_TTTEEE_NUISANCE)
+        if CMB_NUISANCE in ("extended", "full"):
+            out |= set(PLANCK_NUISANCE_EXTENDED)
+        if CMB_NUISANCE == "full":
+            out |= set(PLANCK_NUISANCE_FULL_EXTRA)
+        return out
     if tag == "CMB_hil_TT":
-        return {"A_planck"} if lite else set(PLANCK_TT_ONLY_NUISANCE)
+        if lite:
+            return {"A_planck"}
+        return set(PLANCK_TT_ONLY_NUISANCE) | (set(PLANCK_TT_FULL_EXTRA) if CMB_NUISANCE == "full" else set())
     if tag in ("CMB_lowl", "CMB_lowl_TT", "CMB_lensing"):
         return {"A_planck"}
     if "A_planck" in GROUND_NUISANCE_PARAMS.get(tag, ()):
@@ -900,6 +954,16 @@ PLANCK_N_DATA: Dict[str, int] = {
     "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8.clik_lensing": 9,
     "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing": 9,
 }
+
+
+def planck_fixed_now() -> Dict[str, float]:
+    """plik nuisance values held fixed under the current CMB_NUISANCE (Planck's baseline values;
+    "extended" samples 9 of them, "full" all)."""
+    if CMB_NUISANCE == "full":
+        return {}
+    if CMB_NUISANCE == "extended":
+        return {n: v for n, v in PLANCK_NUISANCE_FIXED.items() if n not in PLANCK_NUISANCE_EXTENDED}
+    return dict(PLANCK_NUISANCE_FIXED)
 
 
 def planck_n_data(tag: str, lensing_mode: str = "raw") -> int:

@@ -142,7 +142,7 @@ def _remove_stale_copies(max_age_h: float = STALE_COPY_AGE_H) -> int:
 def _settings_from_folders(suffix: str) -> Dict[str, Any]:
     """Models, groups and Planck set of a run without run_settings.json, from its folders."""
     root = _chain_root(suffix)
-    models, groups, lite = [], {}, False
+    models, groups, mode = [], {}, "baseline"
     for mdir in sorted(glob.glob(os.path.join(root, "*"))):
         if not os.path.isdir(mdir):
             continue
@@ -157,13 +157,15 @@ def _settings_from_folders(suffix: str) -> Dict[str, Any]:
                 groups.setdefault(model, [])
                 if tokens not in groups[model]:
                     groups[model].append(tokens)
-                lite = lite or os.path.basename(gdir).endswith("_plik_lite")
+                for _m in ("lite", "extended", "full"):
+                    if os.path.basename(gdir).endswith(f"_plik_{_m}"):
+                        mode = _m
     obs = []
     for m in models:
         for g in groups[m]:
             if g not in obs:
                 obs.append(g)
-    return {"models": models, "observations": obs, "cmb_nuisance": "lite" if lite else "baseline"}
+    return {"models": models, "observations": obs, "cmb_nuisance": mode}
 
 
 def _copy_and_read(src: str, tmpdir: str, engine: str):
@@ -270,8 +272,8 @@ def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
                 cands = []
                 for eng, pat in (("zeus", f"{key}_zeus.h5"), ("emcee", f"{key}.h5")):
                     cands += [(f, eng) for f in glob.glob(os.path.join(root, model, "*", pat))]
-                if K.CMB_NUISANCE == "lite":
-                    cands = [x for x in cands if os.path.dirname(x[0]).endswith("_plik_lite")] or cands
+                if K.CMB_NUISANCE != "baseline":
+                    cands = [x for x in cands if os.path.dirname(x[0]).endswith(f"_plik_{K.CMB_NUISANCE}")] or cands
                 if not cands:
                     print(f"  {model} {key}: no chain yet")
                     continue

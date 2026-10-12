@@ -144,7 +144,11 @@ sample_H0_uncalibrated_SNe: bool = False
 # Planck high-l likelihood (CMB_hil, CMB_hil_TT). "baseline": plik, with Planck's nuisance
 # parameters sampled (21 for TTTEEE, 15 for TT) under Planck's priors. "lite": plik_lite,
 # Planck's foreground-marginalised likelihood with A_planck only (6 + 1 parameters for LCDM,
-# much faster to converge; its chains go to folders ending in _plik_lite).
+# much faster to converge). "extended": baseline plus the polarisation efficiencies and EE
+# dust amplitudes Planck fixes, sampled with their stated priors (30 for TTTEEE). "full": all
+# 47 inputs of plik TTTEEE (20 of TT); 17 of them have no published uncertainty and get flat
+# boxes chosen by Kosmulator, so they are prior-dominated and convergence is slow. Chains of
+# the other settings go to folders ending in _plik_lite, _plik_extended or _plik_full.
 cmb_nuisance: str = "baseline"
 # WAIC for groups with Planck data. The Planck likelihoods give one total log-likelihood,
 # not one per data point, so WAIC can only count each of them as one term, and that costs
