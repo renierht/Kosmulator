@@ -482,6 +482,34 @@ def batch_post(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index
 
     return out[0] if nwalkers == 1 else out
 
+def _ball_logpost_one(theta, data, Type, CONFIG, MODEL_func, model_name, obs, obs_index):
+    """(log-posterior, log-likelihood) of one walker of the initial ball (pool task, item 60):
+    emcee_prob's values, (-inf, nan) when the likelihood raises (as batch_post treats it)."""
+    try:
+        lp, ll = emcee_prob(theta, data, Type, CONFIG, MODEL_func, model_name, obs, obs_index)
+        return float(lp), float(ll)
+    except Exception:
+        return -np.inf, np.nan
+
+
+def _ball_logpost(pos, pool, near, data, Type, CONFIG, MODEL_func, model_name, obs, obs_index):
+    """
+    Log-posterior of the walkers of the initial ball (item 60) and, through the pool, their
+    log-likelihood (else None). With a worker pool (local or MPI) each walker is a pool task,
+    as in the sampler's steps; before, the main process evaluated them one after the other
+    while the pool waited (a plik group's 108 walkers: 108 serial CLASS + plik calls).
+    Without a pool: batch_post in this process. `near`: the chain file, next to which the
+    pool's argument file is written.
+    """
+    pos = np.atleast_2d(np.asarray(pos, dtype=float))
+    if pool is None:
+        return np.atleast_1d(np.asarray(
+            batch_post(pos, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index), dtype=float)), None
+    fn = _pool_logprob(_ball_logpost_one, (data, Type, CONFIG, MODEL_func, model_name, obs, obs_index), near)
+    res = np.asarray(list(pool.map(fn, list(pos))), dtype=float).reshape(len(pos), 2)
+    return res[:, 0].copy(), res[:, 1].copy()
+
+
 def _zeus_logpost_vectorized(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index):
     """Zeus log-posterior for vectorised models."""
     val = batch_post(theta, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index)
@@ -731,10 +759,13 @@ def regenerate_invalid_walkers(
     model_name: str,
     obs_index: int,
     scale: Optional[np.ndarray] = None,
+    evaluate: Optional[Callable[[np.ndarray], np.ndarray]] = None,
 ) -> np.ndarray:
     """
     Re-generate any invalid (non-finite posterior) walkers with shrinking radius,
     starting from the initial-ball width `scale` (0.1 of the prior range if None).
+    `evaluate`: log-posterior of a set of walkers (default batch_post in this process;
+    the worker pool for CMB and BBN groups, item 60).
     """
     bad = np.where(~np.isfinite(post0))[0]
     if not bad.size:
@@ -751,9 +782,13 @@ def regenerate_invalid_walkers(
         cand = _reflect_into(cand, lows, highs)
 
         pos0[bad] = cand
-        post0 = batch_post(
-            pos0, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index
-        )
+        if evaluate is None:
+            post0 = batch_post(
+                pos0, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index
+            )
+        else:
+            post0 = np.array(post0, dtype=float)
+            post0[bad] = evaluate(pos0[bad])        # only the regenerated walkers
         bad = np.where(~np.isfinite(post0))[0]
 
         jitter *= regen_shrink
@@ -1102,6 +1137,7 @@ def _run_mcmc_impl(
     )
     pos0     = None
     sol_diag = None
+    ball_values: Dict[bytes, Tuple[float, float]] = {}   # item 60: walker -> (log_post, log_like)
     if do_ic:
         bounds = [prior_map[p] for p in param_names]
         # The pre-fit only centres the initial ball; the burn-in does the rest. A CMB
@@ -1133,10 +1169,22 @@ def _run_mcmc_impl(
             sigma_frac=float(PLOT_SETTINGS.get("init_sigma_frac", 0.5)),
         )
 
-        # Evaluate posterior at initial positions and regenerate if needed
-        post0 = batch_post(
-            pos0, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index
-        )
+        # Evaluate posterior at initial positions and regenerate if needed. Groups whose
+        # likelihood is expensive per point (CMB, BBN, the official JLA) use the worker pool
+        # for this too when there is one (item 60); the others stay in this process.
+        ball_pool = pool if (pool is not None and (
+            has_cmb or has_bbn
+            or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set()) for o in (obs or [])))) else None
+
+        def _ball(p):
+            lp, ll = _ball_logpost(p, ball_pool, chain_path, data, Type, CONFIG, MODEL_func,
+                                   model_name, obs, obs_index)
+            if ll is not None:                 # kept so that emcee need not evaluate the ball again
+                for row, a, b in zip(np.atleast_2d(p), lp, ll):
+                    ball_values[np.asarray(row, dtype=float).tobytes()] = (float(a), float(b))
+            return lp
+
+        post0 = _ball(pos0)
         pos0 = regenerate_invalid_walkers(
             pos0,
             post0,
@@ -1154,6 +1202,7 @@ def _run_mcmc_impl(
             model_name,
             obs_index,
             scale=init_std,
+            evaluate=_ball,
         )
 
     # ── Zeus branch ────────────────────────────────────────────────────────────
@@ -1615,6 +1664,15 @@ def _run_mcmc_impl(
             pos0  = ic + 0.05 * span * rng.normal(size=(nwalker, ndim))
             pos0  = np.clip(pos0, lows, highs)
 
+        # Item 60: the ball was evaluated through the pool with emcee's own log-probability,
+        # so emcee starts from those values instead of evaluating every walker again
+        start_state = pos0
+        if ball_values and emcee_pool is not None and not emcee_vectorize:
+            vals = [ball_values.get(np.asarray(r, dtype=float).tobytes()) for r in np.atleast_2d(pos0)]
+            if all(v is not None and np.isfinite(v[0]) for v in vals):
+                start_state = emcee.State(np.array(pos0, dtype=float), log_prob=np.array([v[0] for v in vals]),
+                                          blobs=np.array([v[1] for v in vals]))
+
         start = time.time()
         print(f"\nInitialising ensemble of {nwalker} walkers...")
         sampler = emcee.EnsembleSampler(
@@ -1631,7 +1689,7 @@ def _run_mcmc_impl(
         if autoCorr:
             obs_for_plot = [_resolved_key]
             res = utils.emcee_autocorr_stopping(
-                pos0,
+                start_state,
                 sampler,
                 nsteps,
                 model_name,
@@ -1655,7 +1713,7 @@ def _run_mcmc_impl(
             blobs = sampler.get_blobs(discard = burn, flat = True)
         else:
             # Manual loop to allow step printing (Pool-safe)
-            for state in sampler.sample(pos0, iterations=nsteps, progress=True):
+            for state in sampler.sample(start_state, iterations=nsteps, progress=True):
                 it = sampler.iteration
                 if (
                     print_enabled
