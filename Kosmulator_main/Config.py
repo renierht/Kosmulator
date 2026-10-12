@@ -1362,6 +1362,23 @@ def create_config(
                         obs_grp, h0_fix, mod,
                     )
 
+            # CMB lensing without primary CMB (item 62, Kosmulator.py lensing_only_priors):
+            # tau_reio enters none of the group's likelihoods (no lensed spectra are used), so it
+            # is fixed at its reference value; n_s gets a Gaussian prior (constants.
+            # cmb_gaussian_priors), as in the literature's lensing-only analyses
+            if K.LENSING_ONLY_PRIORS and K.group_is_lensing_only(obs_grp) and "tau_reio" in grp_params:
+                grp_params.remove("tau_reio")
+                tau_fix = float(reference_values.get("tau_reio", K.TAU_REIO_FALLBACK))
+                fixed_params_by_group.setdefault(gi, {})["tau_reio"] = tau_fix
+                if logger:
+                    mu, sig = K.LENSING_ONLY_NS_PRIOR
+                    logger.warning(
+                        "CMB lensing without primary CMB %s: tau_reio fixed at %.4f (it enters no "
+                        "likelihood of the group) and n_s ~ N(%.2f, %.2f) (lensing_only_priors; "
+                        "Madhavacheril et al. 2024) (model %s)",
+                        obs_grp, tau_fix, mu, sig, mod,
+                    )
+
             # fσ8 singleton: fix gamma to GR-like value to avoid degeneracy (growth_model
             # "gamma" only; "geff" has no gamma)
             if len(obs_grp) == 1 and obs_grp[0] == "f_sigma_8" and K.GROWTH_MODEL == "gamma":

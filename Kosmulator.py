@@ -195,6 +195,12 @@ zeus_light_mode: bool = False
 # other than LCDM; this matters when the model's dark sector is not negligible before recombination
 # (e.g. w0wa with w0 + wa near 0). "lcdm": CLASS's flat-LCDM r_d for every model (as before).
 rd_background: str = "model"
+# Groups whose CMB data are lensing only (CMB_lensing, CMB_lensing_ACTPlanck, CMB_lensing_SPT without
+# primary CMB). True (default): n_s gets a Gaussian prior N(0.96, 0.02) and tau_reio, which enters none
+# of these likelihoods, is fixed at its reference value, as in lensing-only analyses (Madhavacheril
+# et al. 2024, arXiv:2304.05203). Add a BBN tag (e.g. BBN_DH) for Omega_b h^2; it also calibrates r_d.
+# False: n_s and tau_reio sampled within their top-hat priors (as before October 2026).
+lensing_only_priors: bool = True
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -312,6 +318,7 @@ def main() -> None:
         emcee_moves=emcee_moves,
         zeus_light_mode=zeus_light_mode,
         rd_background=rd_background,
+        lensing_only_priors=lensing_only_priors,
     )
 
 

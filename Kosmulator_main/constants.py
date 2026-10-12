@@ -895,6 +895,27 @@ ACT_LENS_DIR: str = "act_dr6_lenslike"
 ACT_LENS_NSIMS: Tuple[int, int] = (792, 400)
 SPT_MUSE_DIR: str = "spt3g_muse_lensing"
 SPT_MUSE_FILE: str = "90_150_220.h5"
+#: Every CMB lensing tag (Planck 2018 and those above)
+LENSING_TAGS: Tuple[str, ...] = ("CMB_lensing",) + EXT_LENSING_TAGS
+
+# Lensing without primary CMB (item 62; Kosmulator.py lensing_only_priors, default True). The lensing
+# power spectrum alone constrains about sigma_8 Omega_m^0.25 and leaves n_s free; analyses of lensing
+# without primary CMB put a prior on it, n_s ~ N(0.96, 0.02) (Madhavacheril et al. 2024,
+# arXiv:2304.05203, Table 1, "Lensing + BAO"). tau_reio enters none of these likelihoods (no primary
+# CMB, so no lensed spectra are used), so it is fixed at its reference value instead of sampled (that
+# table has no tau either). Omega_b h^2: add a BBN tag (e.g. BBN_DH), which also calibrates r_d, as
+# in that paper. KOSM_LENSING_ONLY_PRIORS carries the switch to spawned pool workers.
+LENSING_ONLY_NS_PRIOR: Tuple[float, float] = (0.96, 0.02)
+#: tau_reio of such a group when Kosmulator.py's reference_values has none (Planck 2018 TT,TE,EE+lowE)
+TAU_REIO_FALLBACK: float = 0.0544
+LENSING_ONLY_PRIORS: bool = os.environ.get("KOSM_LENSING_ONLY_PRIORS", "1") != "0"
+
+
+def set_lensing_only_priors(on: bool = True) -> None:
+    """Item 62 switch of this run (Kosmulator.py lensing_only_priors); also KOSM_LENSING_ONLY_PRIORS."""
+    global LENSING_ONLY_PRIORS
+    LENSING_ONLY_PRIORS = bool(on)
+    os.environ["KOSM_LENSING_ONLY_PRIORS"] = "1" if LENSING_ONLY_PRIORS else "0"
 
 CMB_TAGS: Tuple[str, ...] = (("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lensing") + GROUND_CMB_TAGS
                              + EXT_LENSING_TAGS)
@@ -915,8 +936,17 @@ def cmb_group_components(group) -> Set[str]:
 
 
 def group_has_primary_cmb(group) -> bool:
-    """True if a group has a primary-CMB likelihood (temperature or polarisation), not only lensing."""
+    """True if a group has a primary-CMB likelihood (temperature or polarisation), not only lensing.
+    Low-l data alone count, as in Kosmulator's rule for Planck lensing (raw with any primary CMB,
+    CMB-marginalised without; Kosmulator_MCMC.model_likelihood), kept for ACT + Planck lensing
+    (Renier, 12 Oct)."""
     return bool(cmb_group_components(group) & set(CMB_PRIMARY_TAGS))
+
+
+def group_is_lensing_only(group) -> bool:
+    """True if a group's CMB data are lensing only (a lensing tag and no primary CMB; item 62)."""
+    comps = cmb_group_components(group)
+    return bool(comps & set(LENSING_TAGS)) and not (comps & set(CMB_PRIMARY_TAGS))
 
 
 def cmb_lmax_for_groups(groups) -> int:
@@ -943,7 +973,8 @@ def cmb_gaussian_priors(group) -> Dict[str, Tuple[float, float]]:
     """
     Gaussian priors on the CMB parameters of a group: Planck's nuisance priors, the ground-based
     nuisance priors, A_planck with ACT's calibration prior (1 +- 0.003) when it stands for ACT's
-    A_act too (P-ACT, SPA), and tau when ACT or SPT has no low-l EE likelihood with it.
+    A_act too (P-ACT, SPA), tau when ACT or SPT has no low-l EE likelihood with it, and n_s for
+    lensing without primary CMB (item 62, LENSING_ONLY_PRIORS).
     """
     out: Dict[str, Tuple[float, float]] = dict(PLANCK_GAUSSIAN_PRIORS)
     out.update({n: v[2] for n, v in GROUND_NUISANCE_SAMPLED.items() if v[2] is not None})
@@ -954,6 +985,8 @@ def cmb_gaussian_priors(group) -> Dict[str, Tuple[float, float]]:
     tp = cmb_tau_prior(group)
     if tp is not None:
         out["tau_reio"] = tp
+    if LENSING_ONLY_PRIORS and group_is_lensing_only(group):
+        out["n_s"] = LENSING_ONLY_NS_PRIOR          # item 62
     return out
 
 

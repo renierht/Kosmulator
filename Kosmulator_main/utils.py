@@ -88,6 +88,7 @@ INIT_COLLAPSE_KEYS = (
     "f solo",
     "Observation f alone is not ideal",
     "Auto-calibrating r_d",
+    "CMB lensing without primary CMB",
     "[Config] Normalised group ",
     "Bumping nwalker from",
     "JLA run solo",

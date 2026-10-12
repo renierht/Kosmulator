@@ -177,6 +177,7 @@ def main(
     emcee_moves: str = "stretch",
     zeus_light_mode: bool = False,
     rd_background: str = "model",
+    lensing_only_priors: bool = True,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -229,6 +230,9 @@ def main(
     # r_d of calibrated BAO/DESI groups: the model's own E(z) (rd_Class) or flat LCDM (item 12).
     # Before any pool: spawned workers read KOSM_RD_BACKGROUND.
     K.set_rd_background(rd_background)
+    # Lensing without primary CMB (item 62): n_s prior and tau fixed. Before the config (tau is
+    # then not sampled) and before any pool (workers read KOSM_LENSING_ONLY_PRIORS).
+    K.set_lensing_only_priors(lensing_only_priors)
     # l_max of the lensed CLASS spectra: 3000 for Planck, 8501 with ACT, 4095 with SPT (item 57).
     # One value for the run (every CMB group of it), before any pool: workers read KOSM_CMB_CLASS_LMAX.
     K.set_cmb_class_lmax(K.cmb_lmax_for_groups(observations))
@@ -573,6 +577,8 @@ def main(
         }
         if any(m not in K.RD_LCDM_MODELS for m in model_names):   # r_d is the same for LCDM models
             _check["rd_background"] = K.RD_BACKGROUND
+        if any(K.group_is_lensing_only(g) for g in observations):    # item 62
+            _check["lensing_only_priors"] = bool(K.LENSING_ONLY_PRIORS)
         check_run_settings((getattr(args, "output_suffix", "") or "").strip(), _check,
                            overwrite=bool(getattr(args, "overwrite", False)))
         write_run_settings((getattr(args, "output_suffix", "") or "").strip(), {
@@ -584,7 +590,7 @@ def main(
             "cmb_nonlinear": K.CMB_NONLINEAR, "hmcode_version": K.HMCODE_VERSION,
             "num_cores": int(getattr(args, "num_cores", 1)), "use_mpi": bool(getattr(args, "use_mpi", False)),
             "emcee_moves": K.EMCEE_MOVES, "zeus_light_mode": bool(K.ZEUS_LIGHT_MODE),
-            "rd_background": K.RD_BACKGROUND,
+            "rd_background": K.RD_BACKGROUND, "lensing_only_priors": bool(K.LENSING_ONLY_PRIORS),
         })
 
     samples = run_mcmc_for_all_models(
@@ -720,6 +726,11 @@ def run_mcmc_for_all_models(
                             "growth at the multipoles these data use (at the Planck 2018 best fit, linear "
                             "instead of HMcode raises chi^2 by 2.4 - 3.6 for ACT + Planck and 19 for SPT "
                             "MUSE); set cmb_nonlinear = \"hmcode\" in Kosmulator.py", ", ".join(_lens))
+        _lens_only = [list(g) for g in observations if K.group_is_lensing_only(g)]
+        if _lens_only and not K.LENSING_ONLY_PRIORS:
+            log.warning("lensing_only_priors = False: %s sample n_s and tau_reio within their top-hat priors; "
+                        "lensing alone leaves n_s nearly free, and tau_reio enters none of these likelihoods "
+                        "(item 62)", _lens_only)
 
     # Planck likelihood code (clik, or clipy when clik is missing; see Class_run)
     if need_hil or need_hilTT or need_lowl or need_lowlTT or need_lensing:
