@@ -98,3 +98,6 @@ htmlcov/
 
 # rd_Class (item 12): made from Class/LCDM_v at run time, compiled once into Class/.cache
 Class/rd_Class/
+
+# ACT DR6 lensing data (item 61): 2.8 GB from LAMBDA (ACT_dr6_likelihood_v1.2.tgz), and its cache
+Observations/act_dr6_lenslike/

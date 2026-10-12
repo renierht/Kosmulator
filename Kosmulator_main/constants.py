@@ -284,6 +284,10 @@ DATA_OVERLAPS: Tuple[Tuple[frozenset, str], ...] = (
                                            "or CMB_PACT"),
     (frozenset({"CMB_planck_ACTcut", "CMB_hil"}), "both are Planck high-l TT,TE,EE (the cut one is a subset)"),
     (frozenset({"CMB_planck_ACTcut", "CMB_hil_TT"}), "both contain Planck high-l TT"),
+    # CMB lensing (item 61)
+    (frozenset({"CMB_lensing", "CMB_lensing_ACTPlanck"}), "Planck 2018 (PR3) lensing and the Planck PR4 part of "
+                                                          "CMB_lensing_ACTPlanck are two reconstructions from the same "
+                                                          "Planck data; use one"),
 )
 #: The Planck + ACT (+ SPT) combinations contain these tags; with any of them in the same
 #: group the data are counted twice (utils.data_overlaps)
@@ -515,6 +519,7 @@ OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
     "CMB_hil":         (r"Planck high-$\ell$ TTTEEE",  "Planck high-ℓ TTTEEE"),
     "CMB_hil_TT":      (r"Planck high-$\ell$ TT",      "Planck high-ℓ TT"),
     "CMB_lensing":     (r"Planck lensing",             "Planck lensing"),
+    "CMB_lensing_ACTPlanck": (r"ACT DR6 + Planck PR4 lensing", "ACT DR6 + Planck PR4 lensing"),
 
     # Growth-rate data
     "f_sigma_8":       (r"$f_{\sigma_8}$",             "fσ₈"),
@@ -858,7 +863,29 @@ GROUND_N_DATA: Dict[str, int] = {"CMB_ACT": 135, "CMB_SPT": 196, "CMB_lowl_sroll
 #: SRoll2 low-l EE probability table (Cobaya's planck_native_data release v1, planck_sroll2_lowE.zip)
 SROLL2_TABLE_FILE: str = "sroll2_prob_table.txt"
 
-CMB_TAGS: Tuple[str, ...] = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lensing") + GROUND_CMB_TAGS
+# CMB lensing beyond Planck 2018 (item 61; Kosmulator_main/ground_cmb.py):
+#   CMB_lensing_ACTPlanck  ACT DR6 + Planck PR4 (NPIPE) lensing power spectrum as one likelihood with
+#                          their joint covariance (act_dr6_lenslike, variant ACT_LENS_VARIANT; ACT
+#                          L = 40 - 763 and Planck PR4 L = 8 - 400 in the baseline; Madhavacheril et al.
+#                          2024, arXiv:2304.05203; Qu et al. 2024, arXiv:2304.05202; Carron et al. 2022,
+#                          arXiv:2206.07773). The lensing of ACT's P-ACT-LB and of the DESI DR2 CMB
+#                          combinations, and the most used choice with P-ACT in 2025 - 2026. With primary
+#                          CMB in the group the likelihood corrections (normalisation and N1, linear in the
+#                          CMB spectra) are applied; alone, the CMB-marginalised covariance is used.
+#                          Data: ACT_dr6_likelihood_<ACT_LENS_VERSION>.tgz from LAMBDA, unpacked so that
+#                          Observations/<ACT_LENS_DIR>/<ACT_LENS_VERSION>/clkk_bandpowers_act.txt exists
+#                          (or act_dr6_lenslike.get_data(), the package's own folder). The corrections are
+#                          binned once into a 2.9 MB cache (Observations/<ACT_LENS_DIR>/.cache/), so pool
+#                          workers do not each hold the package's 1.4 GB of derivative matrices.
+EXT_LENSING_TAGS: Tuple[str, ...] = ("CMB_lensing_ACTPlanck",)
+ACT_LENS_VARIANT: str = "actplanck_baseline"
+ACT_LENS_VERSION: str = "v1.2"
+ACT_LENS_DIR: str = "act_dr6_lenslike"
+#: simulations behind the covariances, for the Hartlap factor (as Cobaya's ACTDR6LensLike)
+ACT_LENS_NSIMS: Tuple[int, int] = (792, 400)
+
+CMB_TAGS: Tuple[str, ...] = (("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lensing") + GROUND_CMB_TAGS
+                             + EXT_LENSING_TAGS)
 CMB_PRIMARY_TAGS: Tuple[str, ...] = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT") + GROUND_CMB_TAGS
 
 
@@ -873,6 +900,11 @@ def cmb_group_components(group) -> Set[str]:
     for o in group or ():
         out |= set(cmb_components(str(o)))
     return out
+
+
+def group_has_primary_cmb(group) -> bool:
+    """True if a group has a primary-CMB likelihood (temperature or polarisation), not only lensing."""
+    return bool(cmb_group_components(group) & set(CMB_PRIMARY_TAGS))
 
 
 def cmb_lmax_for_groups(groups) -> int:

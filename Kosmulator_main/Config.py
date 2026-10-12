@@ -782,6 +782,10 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 # its data itself (candl packages, plik_lite folder, SRoll2 table)
                 observation_data[obs] = {"ground_cmb": obs, "parts": list(K.cmb_components(obs))}
 
+            elif obs in K.EXT_LENSING_TAGS:
+                # ACT DR6 + Planck PR4 lensing (item 61): ground_cmb loads act_dr6_lenslike's data
+                observation_data[obs] = {"lensing": obs, "variant": K.ACT_LENS_VARIANT}
+
             # ------------------
             # BAO / DESI, all in the DESI VI format (Calc_DESI_chi):
             #   DESI_DR1  all 12 DESI DR1 measurements, full covariance (arXiv:2404.03002)
@@ -1114,6 +1118,7 @@ def create_config(
         'CMB_lowl_TT':'CMB',
         'CMB_lensing':'CMB',
         **{t: 'CMB' for t in K.GROUND_CMB_TAGS},
+        **{t: 'CMB' for t in K.EXT_LENSING_TAGS},
     }
 
     # ----------------------------------------------------------------------
@@ -1596,6 +1601,8 @@ def Add_required_parameters(
         # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57)
         **{t: ["H_0", "Omega_bh^2", "Omega_dh^2", "ln10^10_As", "n_s", "tau_reio",
                *K.GROUND_NUISANCE_PARAMS[t]] for t in K.GROUND_CMB_TAGS},
+        # lensing of item 61: no nuisance parameters
+        **{t: ["H_0", "Omega_bh^2", "Omega_dh^2", "ln10^10_As", "n_s", "tau_reio"] for t in K.EXT_LENSING_TAGS},
     }
 
     # CMB datasets that trigger per-group reparametrisation

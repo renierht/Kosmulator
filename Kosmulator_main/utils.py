@@ -107,6 +107,7 @@ _OBS_ORDER = [
     "CMB_hil",
     "CMB_hil_TT",
     "CMB_lensing",
+    "CMB_lensing_ACTPlanck",
     "CMB_lowl",
     "CMB_lowl_TT",
     "CMB_lowl_sroll2",

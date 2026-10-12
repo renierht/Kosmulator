@@ -126,6 +126,13 @@ def model_likelihood(
         # ACT DR6, SPT-3G D1 (candl) and the Planck + ACT (+ SPT) combinations (item 57)
         from Kosmulator_main import ground_cmb as GC
         return GC.loglike(obs, param_dict, model_name)
+    if obs in K.EXT_LENSING_TAGS:
+        # ACT DR6 + Planck PR4 lensing (item 61): with primary CMB in the group the likelihood
+        # corrections, alone the CMB-marginalised covariance
+        from Kosmulator_main import ground_cmb as GC
+        groups = CONFIG.get("observations", [])
+        group = groups[obs_index] if obs_index < len(groups) else [obs]
+        return GC.lensing_loglike(obs, param_dict, model_name, lens_only=not K.group_has_primary_cmb(group))
     if obs == "CMB_hil":
         return SP.cmb_hil_loglike(param_dict, model_name)
     if obs == "CMB_hil_TT":

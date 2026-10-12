@@ -50,6 +50,17 @@ from Kosmulator_main import Statistical_packages as SP
 logger = logging.getLogger("Kosmulator.Post_processing")
 
 
+def bao_rd_calibrated(obs_entry) -> bool:
+    """
+    True if BAO/DESI in this group take r_d from the cosmology (BBN or primary CMB in the group),
+    the rule Config uses to drop r_d from the sampled parameters. CMB lensing alone does not
+    calibrate r_d: the sampler uses the sampled r_d there, and so must the statistics (item 61;
+    before, any tag containing "CMB" made the statistics compute r_d instead).
+    """
+    toks = [str(x) for x in obs_entry]
+    return any(t.startswith("BBN") or t in K.CMB_PRIMARY_TAGS or "THETA" in t for t in toks)
+
+
 def _scalarize(x: Any) -> float:
     """
     Robustly convert a scalar / array / sequence into a single float.
@@ -856,8 +867,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                         n_points += len(m_b_corr)
 
                     elif obs in ("BAO", "DESI_DR1", "DESI_DR2"):
-                        calibrated = any(("BBN" in x) or ("CMB" in x) or ("THETA" in x) for x in obs_entry)
-                        type_tag = obs + ("+BBN" if calibrated else "")
+                        type_tag = obs + ("+BBN" if bao_rd_calibrated(obs_entry) else "")
                         chi_total += float(Calc_DESI_chi(obs_data, MODEL_func, dict(p_eval), type_tag))
                         n_points += len(obs_data["redshift"])
 
@@ -936,6 +946,12 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                             # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57)
                             from Kosmulator_main import ground_cmb as GC
                             chi_total += float(-2.0 * GC.loglike(obs, p_eval, model_name))
+                            n_points += GC.n_data(obs)
+                        elif obs in K.EXT_LENSING_TAGS:
+                            # ACT DR6 + Planck PR4 lensing (item 61)
+                            from Kosmulator_main import ground_cmb as GC
+                            chi_total += float(-2.0 * GC.lensing_loglike(
+                                obs, p_eval, model_name, lens_only=not K.group_has_primary_cmb(obs_entry)))
                             n_points += GC.n_data(obs)
                         else:
                             raise ValueError(f"Unsupported CMB observation: {obs}")

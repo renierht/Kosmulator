@@ -228,7 +228,9 @@ def _has_bbn(obs_list):
     return any(str(o).startswith("BBN") for o in obs_list)
         
 def _has_cmb(obs_list):
-    return any(str(o).startswith("CMB") for o in obs_list)
+    """Primary CMB in the group (it calibrates r_d; CMB lensing alone does not, item 61)."""
+    from Kosmulator_main.constants import CMB_PRIMARY_TAGS
+    return any(str(o) in CMB_PRIMARY_TAGS for o in obs_list)
 
 def _S_pm_from_sample(sample: np.ndarray, names: list, CONFIG: dict):
     import numpy as np
@@ -246,10 +248,10 @@ def _S_pm_from_sample(sample: np.ndarray, names: list, CONFIG: dict):
     return PP._format_pm(p50, p50 - p16, p84 - p50), float(p50)
     
 def _is_uncalibrated(obs_list):
-    """BAO/DESI without calibrators (no BBN/CMB) → uncalibrated r_d."""
+    """BAO/DESI without calibrators (no BBN or primary CMB) → uncalibrated r_d."""
     tags = [str(o) for o in obs_list]
     has_bao = any(("BAO" in t) or ("DESI" in t) for t in tags)
-    has_cal = any(t.startswith("BBN") or t.startswith("CMB") for t in tags)
+    has_cal = _has_bbn(tags) or _has_cmb(tags)
     return has_bao and (not has_cal)
     
 def _medval(d, k):
@@ -1451,12 +1453,14 @@ def _posterior_band(draws, curve_fn):
 
 def _rd_badge_policy(model_cfg: dict, obs_tokens) -> str:
     """
-    'calibrated' (BBN or CMB in the group), 'free' (r_d sampled in this group) or
+    'calibrated' (BBN or primary CMB in the group), 'free' (r_d sampled in this group) or
     'fixed' (BAO alone, or BAO with data that fix neither H0 nor r_d), read from
-    the group's sampled parameters as Config set them up.
+    the group's sampled parameters as Config set them up. CMB lensing alone does not
+    calibrate r_d (Config samples it), so it is not counted here (item 61).
     """
+    from Kosmulator_main.constants import CMB_PRIMARY_TAGS
     toks = [str(t) for t in obs_tokens]
-    if any(t.startswith(("BBN", "CMB")) for t in toks):
+    if any(t.startswith("BBN") or t in CMB_PRIMARY_TAGS for t in toks):
         return "calibrated"
     pars = _group_parameters(model_cfg, toks)
     if pars is not None:

@@ -1094,7 +1094,9 @@ def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None, 
     # -------- Part 1: r_d token (BAO/DESI) --------
     has_bao_desi = any(("bao" in L) or ("desi" in L) for L in lower)
     has_cc       = any(L == "cc" for L in lower)
-    has_cal      = any(L.startswith("bbn") or L.startswith("cmb") for L in lower)
+    # calibrators as in Config: BBN or primary CMB (CMB lensing alone leaves r_d sampled, item 61)
+    from Kosmulator_main.constants import CMB_PRIMARY_TAGS
+    has_cal      = any(L.startswith("bbn") for L in lower) or any(t in CMB_PRIMARY_TAGS for t in tags)
 
     # The group's sampled parameters decide when they are known: r_d sampled ->
     # free; not sampled and no calibrator -> fixed (singleton BAO, and BAO with

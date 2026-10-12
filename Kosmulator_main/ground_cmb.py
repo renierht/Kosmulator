@@ -18,6 +18,10 @@ ACT and 4095 for SPT by MCMC_setup), as the Planck likelihoods do.
 - CMB_lowl_sroll2: the SRoll2 low-l EE likelihood as a probability table in C_l^EE,
   l = 2 - 29 (Pagano et al. 2020, arXiv:1908.09856; Cobaya's planck_2018_lowl.EE_sroll2).
 - CMB_PACT and CMB_SPA evaluate their parts in turn on the same spectra.
+- CMB_lensing_ACTPlanck (item 61): ACT DR6 + Planck PR4 lensing power spectrum through
+  act_dr6_lenslike (constants.ACT_LENS_VARIANT), on the same CLASS run: C_L^kk from C_L^phiphi,
+  and the lensed TT, TE, EE, BB for the likelihood corrections when the group has primary CMB
+  (binned once into a small cached form, _act_lens_compact).
 """
 from __future__ import annotations
 
@@ -141,8 +145,204 @@ def sroll2() -> TableEE:
     return _NATIVE["sroll2"]
 
 
+# ---------------------------------------------------------------------------
+# CMB lensing beyond Planck 2018 (item 61)
+# ---------------------------------------------------------------------------
+_ACT_LENS: Dict[bool, dict] = {}
+ACT_LENS_TRIM_LMAX = 2998          # act_dr6_lenslike uses theory spectra to this l
+_ACT_LENS_COMPACT_FORMAT = 1       # raise when _act_lens_compact changes (new cache file)
+_CMB_ORDER = ("tt", "ee", "bb", "te")   # order of dAL_dC's first axis in act_dr6_lenslike
+
+
+def act_lens_dir() -> str:
+    """Folder with the ACT DR6 lensing data: Observations/<ACT_LENS_DIR>/<version>/, else the
+    act_dr6_lenslike package's own data folder (filled by act_dr6_lenslike.get_data())."""
+    try:
+        import act_dr6_lenslike as alike
+    except ImportError as e:
+        raise ImportError(f"CMB_lensing_ACTPlanck needs act_dr6_lenslike ({e}); install with: "
+                          "pip install act_dr6_lenslike") from e
+    cands = [os.path.join(K.OBSERVATIONS_BASE, K.ACT_LENS_DIR, K.ACT_LENS_VERSION),
+             os.path.join(os.path.dirname(os.path.abspath(alike.__file__)), "data", K.ACT_LENS_VERSION)]
+    for d in cands:
+        if os.path.isfile(os.path.join(d, "clkk_bandpowers_act.txt")):
+            return d
+    raise FileNotFoundError(
+        "ACT DR6 lensing data not found. Download https://lambda.gsfc.nasa.gov/data/suborbital/ACT/ACT_dr6/"
+        f"likelihood/data/ACT_dr6_likelihood_{K.ACT_LENS_VERSION}.tgz and unpack it so that "
+        f"{cands[0]}/clkk_bandpowers_act.txt exists, or run: python -c \"import act_dr6_lenslike as a; a.get_data()\"")
+
+
+def act_lens_package_data(lens_only: bool) -> dict:
+    """act_dr6_lenslike.load_data for constants.ACT_LENS_VARIANT, as the package's own Cobaya
+    likelihood calls it: lens_only (no primary CMB in the group) gives the CMB-marginalised
+    covariance without corrections; otherwise the plain covariance with the normalisation and N1
+    corrections, whose derivative matrices take 1.4 GB in memory (12 s to read)."""
+    import warnings
+    import act_dr6_lenslike as alike
+    with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return alike.load_data(
+            K.ACT_LENS_VARIANT, ddir=act_lens_dir(), lens_only=bool(lens_only), like_corrections=not lens_only,
+            nsims_act=K.ACT_LENS_NSIMS[0], nsims_planck=K.ACT_LENS_NSIMS[1],
+            trim_lmax=ACT_LENS_TRIM_LMAX, version=K.ACT_LENS_VERSION)
+
+
+def _act_lens_compact(d: dict) -> Dict[str, np.ndarray]:
+    """The binned theory of act_dr6_lenslike.generic_lnlike (default corrections) as a few
+    (bins x L) matrices. get_corrected_clkk is linear in the spectra, so the band powers are
+        B C^kk + B dN1_kk (C^kk - fid_kk) + sum_s [B dN1_s - 2 B diag(w) dAL_dC_s] (C^s - fid_s),
+    with w = fid_kk / fAL for L >= 2 (fid_kk below), s = TT, EE, BB, TE and B the ACT (and Planck)
+    binning matrix with that block's dN1, dAL_dC and fAL. 2.9 MB instead of 1.4 GB per process;
+    the kit compares it with generic_lnlike."""
+    blocks = [("", np.asarray(d["binmat_act"], float))]
+    if d["include_planck"]:
+        blocks.append(("_planck", np.asarray(d["binmat_planck"], float)))
+    out = {"B": np.vstack([b for _, b in blocks]),
+           "data": np.asarray(d["data_binned_clkk"], float),
+           "cinv": np.asarray(d["cinv"], float),
+           "corr": np.array(bool(d["likelihood_corrections"]))}
+    if d["likelihood_corrections"]:
+        fid_kk = np.asarray(d["fiducial_cl_kk"], float)
+        ls = np.arange(fid_kk.size)
+        out["fid_kk"] = fid_kk
+        out["N1_kk"] = np.vstack([b @ d[f"dN1_kk{s}"] for s, b in blocks])
+        for i, sp in enumerate(_CMB_ORDER):
+            rows = []
+            for s, b in blocks:
+                w = fid_kk.copy()
+                w[ls >= 2] = fid_kk[ls >= 2] / np.asarray(d[f"fAL{s}"], float)[:fid_kk.size][ls >= 2]
+                rows.append(b @ d[f"dN1_{sp}{s}"] - 2.0 * (b * w[np.newaxis, :]) @ d[f"dAL_dC{s}"][i])
+            out[f"M_{sp}"] = np.vstack(rows)
+            out[f"fid_{sp}"] = np.asarray(d[f"fiducial_cl_{sp}"], float)
+    return out
+
+
+def _act_lens_cache_files() -> list:
+    """Cache of the compact corrected likelihood: Observations/<ACT_LENS_DIR>/.cache/, else (when
+    that cannot be written) the system's temporary folder; named by the variant, the settings,
+    the package version and the size and time of every data file."""
+    import tempfile
+    import hashlib
+    import act_dr6_lenslike as alike
+    ddir = act_lens_dir()
+    h = hashlib.sha1(repr((_ACT_LENS_COMPACT_FORMAT, getattr(alike, "__version__", "?"), K.ACT_LENS_VARIANT,
+                           K.ACT_LENS_VERSION, tuple(K.ACT_LENS_NSIMS), ACT_LENS_TRIM_LMAX)).encode())
+    for root, dirs, files in os.walk(ddir):
+        dirs.sort()
+        for f in sorted(files):
+            st = os.stat(os.path.join(root, f))
+            h.update(f"{os.path.relpath(os.path.join(root, f), ddir)}:{st.st_size}:{st.st_mtime_ns};".encode())
+    name = f"{K.ACT_LENS_VARIANT}_corr_{h.hexdigest()[:16]}.npz"
+    return [os.path.join(K.OBSERVATIONS_BASE, K.ACT_LENS_DIR, ".cache", name),
+            os.path.join(tempfile.gettempdir(), "kosmulator_act_dr6_lenslike", name)]
+
+
+def _write_npz(path: str, arrays: Dict[str, np.ndarray]) -> None:
+    """Write arrays to path through a temporary file in the same folder (complete or absent)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    try:
+        with open(tmp, "wb") as fh:
+            np.savez(fh, **arrays)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def act_lens_data(lens_only: bool) -> Dict[str, np.ndarray]:
+    """The compact likelihood of constants.ACT_LENS_VARIANT, once per process and mode. With the
+    corrections (primary CMB in the group) it is read from the cache file, which the first
+    process writes (start-up, MCMC_setup), so spawned workers do not each read the 2.8 GB."""
+    lens_only = bool(lens_only)
+    if lens_only not in _ACT_LENS:
+        if lens_only:
+            _ACT_LENS[True] = _act_lens_compact(act_lens_package_data(True))
+        else:
+            paths = _act_lens_cache_files()
+            c = None
+            for path in paths:
+                if c is None and os.path.isfile(path):
+                    try:
+                        with np.load(path) as z:
+                            c = {k: z[k] for k in z.files}
+                    except Exception as e:
+                        logger.warning("CMB_lensing_ACTPlanck: cache %s unreadable (%s)", path, e)
+            if c is None:
+                logger.info("CMB_lensing_ACTPlanck: reading the ACT DR6 + Planck PR4 correction matrices "
+                            "(2.8 GB, once) for the cache %s", paths[0])
+                full = act_lens_package_data(False)
+                c = _act_lens_compact(full)
+                del full
+                import gc
+                gc.collect()
+                errors = []
+                for path in paths:
+                    try:
+                        _write_npz(path, c)
+                        break
+                    except OSError as e:
+                        errors.append(f"{path}: {e}")
+                else:
+                    logger.warning("CMB_lensing_ACTPlanck: could not write the cache (%s); every pool worker "
+                                   "will read the 2.8 GB itself and hold 1.4 GB", "; ".join(errors))
+            _ACT_LENS[False] = c
+    return _ACT_LENS[lens_only]
+
+
+def act_lens_loglike(cl: Dict[str, np.ndarray], lens_only: bool) -> float:
+    """ln L of ACT DR6 + Planck PR4 lensing for CLASS's dimensionless C_l (pp, and tt, te, ee, bb):
+    act_dr6_lenslike.generic_lnlike in the compact form of _act_lens_compact."""
+    import act_dr6_lenslike as alike
+    pp = np.asarray(cl["pp"], float)
+    if pp.size < ACT_LENS_TRIM_LMAX + 2:                # standardize keeps l = 0 - trim_lmax + 1
+        raise ValueError(f"CMB_lensing_ACTPlanck needs CLASS spectra to l = {ACT_LENS_TRIM_LMAX + 1}, "
+                         f"got {pp.size - 1}")
+    ell = np.arange(pp.size, dtype=float)
+    c = act_lens_data(lens_only)
+    kk = alike.standardize(ell, alike.pp_to_kk(pp, ell), ACT_LENS_TRIM_LMAX)   # [L (L + 1)]^2 C_L^phiphi / 4
+    th = c["B"] @ kk
+    if bool(c["corr"]):
+        t2 = (K.T_CMB_DEFAULT * 1e6) ** 2                                       # dimensionless -> muK^2
+        th = th + c["N1_kk"] @ (kk - c["fid_kk"])
+        for sp in _CMB_ORDER:
+            cs = alike.standardize(ell, np.asarray(cl[sp], float)[:pp.size] * t2, ACT_LENS_TRIM_LMAX)
+            th = th + c[f"M_{sp}"] @ (cs - c[f"fid_{sp}"])
+    delta = c["data"] - th
+    return -0.5 * float(delta @ c["cinv"] @ delta)
+
+
+def lensing_loglike(tag: str, pd: Dict[str, float], model_name: str, lens_only: bool,
+                    floor: float = -1e10) -> float:
+    """ln L of a lensing tag of item 61 on the point's single CLASS run."""
+    from Kosmulator_main import Class_run as CR, Statistical_packages as SP
+    if tag not in K.EXT_LENSING_TAGS:
+        raise KeyError(tag)
+    try:
+        CR.ensure_class_ready(model_name)
+    except Exception as e:
+        logger.warning("ensure_class_ready(%s) failed (%s); proceeding anyway", model_name, e)
+    cl = SP.get_cmb_spectra(pd, model_name)
+    if cl is None or not isinstance(cl, dict):
+        return float(floor)
+    try:
+        v = act_lens_loglike(cl, lens_only)
+    except (ImportError, FileNotFoundError, ValueError):
+        raise
+    except Exception as e:
+        logger.error("%s: likelihood failed: %s", tag, e)
+        return float(floor)
+    return float(v) if np.isfinite(v) else float(floor)
+
+
 def n_data(tag: str) -> int:
-    """Data points of a ground-based tag (a combination: the sum of its parts)."""
+    """Data points of a ground-based tag (a combination: the sum of its parts) or a lensing tag."""
+    if tag == "CMB_lensing_ACTPlanck":
+        return int(act_lens_data(True)["data"].size)        # the same band powers in both modes
     if tag in K.CMB_BUNDLES:
         return sum(n_data(c) for c in K.cmb_components(tag))
     if tag == "CMB_planck_ACTcut":
@@ -232,3 +432,11 @@ def check_available(tags) -> None:
             planck_act_cut()
         elif c == "CMB_lowl_sroll2":
             sroll2()
+
+
+def check_lensing(tag: str, lens_only: bool) -> None:
+    """Load a lensing tag's data at start-up (a missing package or file fails here, not in a worker)."""
+    if tag == "CMB_lensing_ACTPlanck":
+        act_lens_data(lens_only)
+    else:
+        raise KeyError(tag)
