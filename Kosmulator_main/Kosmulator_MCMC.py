@@ -842,6 +842,21 @@ class _CountingMap:
         return res
 
 
+def _saved_steps(chain_path: str) -> Optional[int]:
+    """Steps saved in an emcee chain file: 0 for a file without steps (or without emcee's group),
+    None when it cannot be read (missing, locked by another process, not HDF5). Only a confirmed 0
+    lets a run start the chain afresh in the file; None keeps the earlier behaviour."""
+    if not os.path.exists(chain_path):
+        return None
+    try:
+        with h5py.File(chain_path, "r") as f:
+            if "mcmc" not in f:
+                return 0
+            return int(f["mcmc"].attrs.get("iteration", 0))
+    except Exception:
+        return None
+
+
 def _counting_pool(pool, vectorize: bool):
     """The pool to give the sampler: a counting map unless the sampler is vectorised
     (then it calls the log-probability itself and ignores the pool)."""
@@ -1135,6 +1150,7 @@ def _run_mcmc_impl(
         and os.path.exists(chain_path)
         and not overwrite
         and any(str(t).startswith("CMB") for t in Type)
+        and _saved_steps(chain_path) != 0       # an empty chain file starts afresh, with a ball
     )
     pos0     = None
     sol_diag = None
@@ -1551,6 +1567,12 @@ def _run_mcmc_impl(
                 except FileNotFoundError:
                     pass
             backend = emcee.backends.HDFBackend(chain_path)
+            if os.path.exists(chain_path) and _saved_steps(chain_path) == 0:
+                # A chain file with no saved step (a run stopped before its first step, e.g.
+                # during the initial ball): nothing to resume or load, so the chain starts
+                # afresh in it. Before, get_chain raised AttributeError on such a file.
+                log.warning("%s has no saved steps; starting the chain.", chain_path)
+                backend.reset(nwalker, ndim)
 
         # ------------------------------------------------------------
         # Debug / print controls (from CLI → CONFIG["debug"])
@@ -1563,7 +1585,8 @@ def _run_mcmc_impl(
         # ------------------------------------------------------------
         # Resume if requested and chain exists
         # ------------------------------------------------------------
-        if saveChains and resumeChains and os.path.exists(chain_path) and not overwrite:
+        if (saveChains and resumeChains and os.path.exists(chain_path) and not overwrite
+                and _saved_steps(chain_path) != 0):
             backend = emcee.backends.HDFBackend(chain_path)
             current = backend.iteration
             print(

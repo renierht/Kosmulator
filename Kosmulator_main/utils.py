@@ -1409,7 +1409,7 @@ def load_or_run_chain(
         and is_emcee_run          # instead of "not vectorised"
         and not overwrite
         and not resumeChains
-        and (not os.path.exists(chain_path))
+        and (not os.path.exists(chain_path) or Kosmulator_MCMC._saved_steps(chain_path) == 0)
         and os.path.exists(zeus_chain)
     ):
         print(
@@ -1436,7 +1436,9 @@ def load_or_run_chain(
     # A) Existing chain, not overwriting (emcee only)
     # For vectorised/Zeus runs we *always* delegate loading/resume to
     # Kosmulator_MCMC.run_mcmc, which knows about "<name>_zeus.h5".
-    if is_emcee_run and os.path.exists(chain_path) and not overwrite:
+    # (a chain file with no saved step is not loaded or resumed: run_mcmc starts it afresh)
+    if (is_emcee_run and os.path.exists(chain_path) and not overwrite
+            and Kosmulator_MCMC._saved_steps(chain_path) != 0):
         _cite_engine("emcee")
         # A0) Already converged (autocorr) → fast-path load
         with h5py.File(chain_path, "r") as h5f:
@@ -1522,6 +1524,7 @@ def load_or_run_chain(
         and not overwrite
         and not resumeChains
         and os.path.exists(chain_path)    # EMCEE file exists
+        and Kosmulator_MCMC._saved_steps(chain_path) != 0  # not an empty file
         and (not os.path.exists(zeus_chain))   # <-- added guard
     ):
         print(
