@@ -1024,9 +1024,11 @@ def run_mcmc(*args, **kwargs):
         nf, ne = _FAILED_POINTS["failed"], _FAILED_POINTS["evaluated"]
         if nf:
             log.warning(
-                "[%s | %s] %d of %d points evaluated during sampling (%.2f%%) could not be "
-                "computed (CLASS or likelihood error: log-posterior <= %.0e) and were rejected; "
-                "the reasons are in the warnings above (pool workers: in their output).",
+                "[%s | %s] %d of %d points evaluated during sampling (initial ball included; %.2f%%) "
+                "could not be computed (CLASS or the model's CMB helper refused them, or a likelihood "
+                "failed: log-posterior <= %.0e) and were rejected. CLASS's refusals are logged one by "
+                "one only at DEBUG level; other errors are in the messages above (pool workers: in "
+                "their output).",
                 kwargs.get("model_name", "?"), label, nf, ne, 100.0 * nf / max(ne, 1),
                 K.LOGLIKE_FAILED_BELOW,
             )

@@ -540,7 +540,9 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
         return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
 
     except classy.CosmoComputationError as e:
-        logger.error("CLASS CosmoComputationError: %s | cosmo_params=%s", e, cosmo_params)
+        # CLASS cannot compute this point: Kosmulator rejects it and counts it in the run's
+        # summary, so it is logged only at DEBUG level
+        logger.debug("CLASS CosmoComputationError: %s | cosmo_params=%s", e, cosmo_params)
         return None
     except Exception as e:
         logger.exception("Unexpected error in LCDM_v_CMB: %s | cosmo_params=%s", e, cosmo_params)
@@ -676,7 +678,9 @@ def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
 
         return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
     except classy.CosmoComputationError as e:
-        logger.error("CLASS CosmoComputationError: %s | cosmo_params=%s", e, cosmo_params)
+        # CLASS cannot compute this point: Kosmulator rejects it and counts it in the run's
+        # summary, so it is logged only at DEBUG level
+        logger.debug("CLASS CosmoComputationError: %s | cosmo_params=%s", e, cosmo_params)
         return None
     except Exception as e:
         logger.exception("Unexpected error in wowaCDM_v_CMB: %s | cosmo_params=%s", e, cosmo_params)

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from numbers import Number
-from typing import Callable, Dict, Any, Optional
+from typing import Callable, Dict, Any, Optional, Tuple
 import inspect
 import sys
 from pathlib import Path
@@ -277,7 +277,10 @@ def _compute_cls_cached(
                 _classy_cache_sp = cosmo
 
         except Exception as e:
-            logger.error("CLASS failed (lensing=%s, L=%s): %s", not m.startswith("low"), ell_max, e)
+            # CLASS refusing a point (CosmoComputationError) is a rejection, counted in the
+            # run's summary; anything else is reported
+            (logger.debug if type(e).__name__ == "CosmoComputationError" else logger.error)(
+                "CLASS failed (lensing=%s, L=%s): %s", not m.startswith("low"), ell_max, e)
             cl = None
 
     _CMB_THEORY_CACHE["key"] = key
@@ -840,7 +843,9 @@ def cmb_lensing_loglike(pd: Dict[str, float], model_name: str) -> float:
     # 3. Compute theory Cℓ up to at least φφ(Lpp_req)
     # ------------------------------------------------------------------
     cl = get_cmb_spectra(pd, model_name)
-    if (cl is None) or ("pp" not in cl):
+    if cl is None:
+        return -1e10          # CLASS could not compute the point: rejected and counted, no message
+    if "pp" not in cl:
         logger.warning("cmb_lensing_loglike: theory Cl computation failed; returning sentinel")
         return -1e10
 
@@ -959,6 +964,30 @@ def cmb_lensing_loglike(pd: Dict[str, float], model_name: str) -> float:
 # Planck low-ℓ EE likelihood
 # -----------------------------------------------------------------------------
 
+_SIMALL_RANGE: Dict[str, Any] = {}
+
+
+def _simall_range() -> Optional[Tuple[int, int, float, int]]:
+    """(l_min, l_max, step, number of steps) of the CMB_lowl SimAll table's D_l^EE grid in muK^2, read
+    from the clik folder's metadata (3000 steps of 1e-4, i.e. 0 - 0.3 muK^2); None if unreadable."""
+    if "r" not in _SIMALL_RANGE:
+        try:
+            import os
+            from Kosmulator_main import constants as _K
+            d = os.path.join(_K.OBSERVATIONS_BASE, _K.PLANCK_LOWL_FILES["CMB_lowl"], "clik", "lkl_0")
+            mdb = {}
+            with open(os.path.join(d, "_mdb")) as fh:
+                for line in fh:
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        mdb[parts[0]] = parts[2]
+            _SIMALL_RANGE["r"] = (int(mdb["lmin"]), int(mdb["lmax"]), float(mdb["stepEE"]),
+                                  int(mdb["nstepsEE"]))
+        except Exception:
+            _SIMALL_RANGE["r"] = None
+    return _SIMALL_RANGE["r"]
+
+
 def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
     """
     Planck low-ℓ EE likelihood (SimAll).
@@ -1009,6 +1038,21 @@ def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
 
     cl_ee = np.ascontiguousarray(ee * TCMB2, dtype=np.float64)
     v = np.ascontiguousarray(np.concatenate([cl_ee, nuis]), dtype=np.float64)
+
+    # SimAll tabulates ln P per multipole on a grid of D_l^EE / A_planck^2 (0 - 0.3 muK^2); a
+    # spectrum beyond it (tau_reio >~ 0.15 at Planck's A_s e^-2tau, already Delta ln L ~ -40 below the
+    # peak in SimAll) is rejected here without a message, as Kosmulator's SRoll2 table does
+    # (ground_cmb.TableEE). clik would refuse it with error -1233 and clipy with an IndexError.
+    rng = _simall_range()
+    if rng is not None:
+        lmin, lmax, step, nsteps = rng
+        a_pl = float(nuis[nuis_names.index("A_planck")]) if "A_planck" in nuis_names else 1.0
+        ell = np.arange(lmin, lmax + 1, dtype=float)
+        dl = cl_ee[lmin:lmax + 1] * ell * (ell + 1.0) / (2.0 * np.pi) / a_pl ** 2
+        idx = np.floor(dl / step)                       # the table's own look-up
+        if np.all(np.isfinite(dl)) and (np.any(idx >= nsteps) or np.any(idx < 0)):
+            logger.debug("cmb_lowl_loglike: D_l^EE outside the SimAll table (max %.3f muK^2)", float(np.max(dl)))
+            return -np.inf
     #logger.warning("cl_ee: type=%s dtype=%s shape=%s", type(cl_ee), getattr(cl_ee, "dtype", None), getattr(cl_ee, "shape", None))
     #logger.warning("nuis:  type=%s dtype=%s shape=%s", type(nuis), getattr(nuis, "dtype", None), getattr(nuis, "shape", None))
     #logger.warning("v:     type=%s dtype=%s shape=%s", type(v), getattr(v, "dtype", None), getattr(v, "shape", None))
