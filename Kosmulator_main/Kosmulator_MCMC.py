@@ -1344,7 +1344,7 @@ def _run_mcmc_impl(
             rules=utils.convergence_rules(PLOT_SETTINGS, convergence),
             check_every=iters_per_cb,
             earliest_stop=burn + buffer_after_burn,
-            consecutive=int(PLOT_SETTINGS.get("tau_consecutive", 2)),
+            consecutive=int(PLOT_SETTINGS.get("tau_consecutive", K.CONV_CONSECUTIVE)),
             param_names=list(param_names),
         )
         plot_path = os.path.join(

@@ -816,10 +816,12 @@ def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_
                  label=r"split-$\hat{R}-1$ (largest over the parameters)")
     ax2.axhline(r["rhat_max"] - 1.0, color="C2", ls="--", lw=1.0, alpha=0.8,
                 label=rf"$\hat{{R}}-1$ limit {r['rhat_max'] - 1.0:g}")
+    need = int(getattr(monitor, "consecutive", 1) or 1)
     if ok.any():
         ymin = ax2.get_ylim()[0]
         ax2.plot(it[ok], np.full(ok.sum(), ymin * 1.5), "|", color="C2", ms=10, mew=2,
-                 label="all conditions met")
+                 label=("all conditions met at this check" if need <= 1 else
+                        f"all conditions met at this check\n(the run stops after {need} in a row)"))
     ax2.set_xlabel("Step")
     ax2.set_ylabel("Relative change")
 
@@ -835,8 +837,20 @@ def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_
     leg = dict(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0, framealpha=0.9)
     ax1.legend(fontsize=8, title=r"needs $\tau_{\max}$ below both limits", title_fontsize=8, **leg)
     ax2.legend(fontsize=8, title="needs both below their limits", title_fontsize=8, **leg)
-    status = "converged" if monitor.stopped_at is not None else (
-        "all conditions met" if ok.size and ok[-1] else "not converged yet")
+    # The title says what the stopping rule (ConvergenceMonitor.update) needs, not only the last check
+    streak = int(getattr(monitor, "streak", 0) or 0)
+    ended = getattr(monitor, "ended_at", None)
+    if monitor.stopped_at is not None or (ok.size and ok[-1] and streak >= need
+                                           and float(it[-1]) >= float(monitor.earliest_stop)):
+        status = "converged"                 # stopped, or met the rule at the run's last check
+    elif ended is not None:
+        status = f"not converged in {int(ended)} steps"
+    elif ok.size and ok[-1] and streak < need:
+        status = f"conditions met at {streak} of {need} checks in a row"
+    elif ok.size and ok[-1]:
+        status = f"conditions met; the run may stop from step {int(monitor.earliest_stop)}"
+    else:
+        status = "not converged yet"
     title = f"Convergence: {model_name}, {group} ({status})"
     if plt.rcParams.get("text.usetex", False):
         from Plots.latex_labels import tex_escape_text

@@ -181,10 +181,11 @@ def parse_cli_args():
     )
     parser.add_argument(
         "--tau-consecutive", "--consecutive-required",
-        dest="consecutive_required", type=int, default=2,
+        dest="consecutive_required", type=int, default=K.CONV_CONSECUTIVE,
         help=(
             "Convergence rule (zeus and emcee): number of consecutive checks at which "
-            "all its conditions must hold before the run stops. Default 2."
+            "all its conditions must hold before the run stops. Default 1 "
+            "(constants.CONV_CONSECUTIVE); 2 or more for a stricter stop."
         ),
     )
     parser.add_argument(
@@ -1612,7 +1613,7 @@ def load_or_run_chain(
 # tau_max is the largest integrated autocorrelation time over the sampled
 # parameters, estimated with zeus's default method (autocorr_time_mk). The run
 # may stop at the first check at or after burn + autocorr_buffer_after_burn
-# (default 0) where all four hold for `tau_consecutive` (default 2) checks in a row. The saved chain's
+# (default 0) where all four hold for `tau_consecutive` (default 1, constants.CONV_CONSECUTIVE) checks in a row. The saved chain's
 # "converged" attribute records whether the rule was met.
 
 def _acf_1d(x: np.ndarray) -> Optional[np.ndarray]:
@@ -1744,6 +1745,7 @@ class ConvergenceMonitor:
         self.walkers = None
         self.streak = 0
         self.stopped_at: Optional[int] = None
+        self.ended_at: Optional[int] = None          # set by final()
         self.last: Optional[Dict[str, Any]] = None
 
     def _evaluate_burnin(self, it: int, chain) -> None:
@@ -1760,7 +1762,7 @@ class ConvergenceMonitor:
                      ("rhat_max", st["rhat_max"])):
             self.pre[k].append(v)
 
-    def _evaluate(self, it: int, chain) -> Optional[Dict[str, Any]]:
+    def _evaluate(self, it: int, chain, full_interval: bool = False) -> Optional[Dict[str, Any]]:
         it = int(it)
         n_post = it - self.burn
         if n_post <= 0:
@@ -1770,6 +1772,11 @@ class ConvergenceMonitor:
             return None
         post = np.asarray(chain[self.burn:it], dtype=float)
         prev = self.hist["tau_max"][-1] if self.hist["tau_max"] else None
+        if full_interval:
+            # the end of a run between two checks: tau's stability is judged against a check at
+            # least one interval earlier, as at a regular check (not one a few steps back)
+            prev = next((t for i_, t in zip(reversed(self.hist["it"]), reversed(self.hist["tau_max"]))
+                         if it - int(i_) >= self.check_every), None)
         st = convergence_status(post, self.rules, prev, self.param_names)
         st["it"] = it
         self.walkers = st["walkers"]
@@ -1791,14 +1798,17 @@ class ConvergenceMonitor:
         return False
 
     def final(self, it: int, chain) -> Dict[str, Any]:
-        """Status at the end of the run; 'converged' is True if the rule stopped the run or holds now."""
+        """Status at the end of the run; 'converged' is True if the rule stopped the run or holds now
+        (also after the earliest stop, as during the run)."""
+        self.ended_at = int(it)
         if self.last is None or self.last.get("it") != int(it):
-            st = self._evaluate(it, chain)
+            st = self._evaluate(it, chain, full_interval=True)
             if st is not None:
                 self.streak = self.streak + 1 if st["ok"] else 0
         st = dict(self.last or {})
         st["converged"] = bool(self.stopped_at is not None
-                               or (st.get("ok", False) and self.streak >= self.consecutive))
+                               or (st.get("ok", False) and self.streak >= self.consecutive
+                                   and int(it) >= self.earliest_stop))
         st["stopped_at"] = self.stopped_at
         return st
 
@@ -1890,7 +1900,7 @@ def emcee_autocorr_stopping(
         rules=convergence_rules(PLOT_SETTINGS, convergence),
         check_every=check_every,
         earliest_stop=int(global_burn) + buffer_after_burn,
-        consecutive=int(PLOT_SETTINGS.get("tau_consecutive", 2)),
+        consecutive=int(PLOT_SETTINGS.get("tau_consecutive", K.CONV_CONSECUTIVE)),
         param_names=param_names,
     )
     sampler.kosm_converged = False

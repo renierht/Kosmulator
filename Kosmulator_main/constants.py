@@ -440,6 +440,16 @@ CONV_RHAT_MAX = 1.01
 #: Relative change of tau_max between two checks below which tau counts as
 #: stable; Kosmulator.py's `convergence` sets it for a run.
 CONV_TAU_RTOL = 0.05
+#: Number of checks in a row at which all the conditions above must hold before a run
+#: stops (--tau-consecutive overrides it; 2 or more for a stricter stop). 1 since 13 Oct
+#: (Renier): 2 replaced the fixed minimum run length in 8bfcc8c, before the length rule
+#: became 100 tau (item 59). Successive checks share ~97% of the samples, so a second
+#: check mostly waits for split-Rhat to cross 1.01 again: t11 (Planck lite, DE + snooker)
+#: met the rule at step 4200 and stopped at 4900, with the same posterior (means within
+#: 0.05 sd of t9's stretch chain at both steps). Replayed on the 75 item 55 / 59 benchmark
+#: chains where both apply: 6% fewer steps on average (at most a third), the same quantile
+#: errors (median 0.028 against 0.025 of the 68% half-width, largest 0.09 for both).
+CONV_CONSECUTIVE = 1
 
 
 # ======================================================================
