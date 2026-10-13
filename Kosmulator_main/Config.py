@@ -779,7 +779,7 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
 
             elif obs in K.GROUND_CMB_TAGS:
                 # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57): ground_cmb loads
-                # its data itself (candl packages, plik_lite folder, SRoll2 table)
+                # its data itself (Observations/candl, plik_lite folder, SRoll2 table)
                 observation_data[obs] = {"ground_cmb": obs, "parts": list(K.cmb_components(obs))}
 
             elif obs in K.EXT_LENSING_TAGS:

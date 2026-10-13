@@ -111,6 +111,14 @@ For the Planck CMB likelihoods without compiling CLIK, install clipy as well:
 ```bash
 pip install "clipy-like>=0.15"
 ```
+For ACT DR6 and SPT-3G D1 (`CMB_ACT`, `CMB_SPT`, `CMB_PACT`, `CMB_SPA`), install the candl code; the ACT data are in `Observations/candl`:
+```bash
+pip install "candl-like>=2.0.3"
+```
+The SPT-3G data are public but carry no licence that lets Kosmulator host them. Download them once (md5-checked) and cite them when you use them (`Observations/candl/README.md`):
+```bash
+python -m Kosmulator_main.get_spt_data
+```
 Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced installation section at the end for additional information. With clipy installed, the CLIK build (step 5 there) can be skipped.
 
 ---

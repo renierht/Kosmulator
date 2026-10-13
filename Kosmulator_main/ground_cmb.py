@@ -7,8 +7,11 @@ Every likelihood of a group takes its spectra from the point's single lensed CLA
 ACT and 4095 for SPT by MCMC_setup), as the Planck likelihoods do.
 
 - ACT DR6 and SPT-3G D1: candl (Balkenhol et al. 2024, arXiv:2401.13433) with the
-  foreground-marginalised ("lite") data sets, candl_data.ACT_DR6_TTTEEE and
-  spt_candl_data.SPT3G_D1_TnE_lite. candl's internal priors are removed; Kosmulator applies
+  foreground-marginalised ("lite") data sets of candl_data (ACT_DR6_TTTEEE, in the repository)
+  and spt_candl_data (SPT3G_D1_TnE_lite, downloaded once with Kosmulator_main/get_spt_data.py),
+  unchanged copies in Observations/candl, so that only candl itself is installed (the data
+  packages are used when the copies are missing). candl's internal
+  priors are removed; Kosmulator applies
   the same priors itself (constants.cmb_gaussian_priors), so that a combination does not
   apply a tau prior twice or one next to low-l EE data.
 - CMB_planck_ACTcut: Planck 2018 plik_lite (the 613 band powers in Observations/
@@ -40,25 +43,49 @@ from Kosmulator_main import constants as K
 
 logger = logging.getLogger("Kosmulator.ground_cmb")
 
+#: The two candl data sets in Observations/candl (unchanged copies, see its README), so only the
+#: candl code is needed (pip install candl-like): ACT DR6 is in the repository; SPT-3G D1 is
+#: downloaded once with python -m Kosmulator_main.get_spt_data (spt_candl_data has no licence
+#: file, so Kosmulator does not host it). The data packages are a fallback.
 _CANDL_DATA = {
-    "CMB_ACT": ("candl_data", "ACT_DR6_TTTEEE", "pip install candl-like candl_data"),
-    "CMB_SPT": ("spt_candl_data", "SPT3G_D1_TnE_lite",
-                "git clone https://github.com/SouthPoleTelescope/spt_candl_data; cd spt_candl_data; pip install ."),
+    "CMB_ACT": ("ACT_DR6_CMB_only_v0/ACT_DR6_CMB_only.yaml", "candl_data", "ACT_DR6_TTTEEE"),
+    "CMB_SPT": ("SPT3G_D1_TnE_lite/SPT3G_D1_TnE_lite.yaml", "spt_candl_data", "SPT3G_D1_TnE_lite"),
 }
+CANDL_DIR = "candl"                     # under constants.OBSERVATIONS_BASE
 _LIKES: Dict[str, object] = {}          # per process
+
+
+def candl_data_file(tag: str) -> str:
+    """The candl data set (yaml) of a tag: Observations/candl first, else the data package's copy."""
+    rel, mod_name, attr = _CANDL_DATA[tag]
+    path = os.path.join(K.OBSERVATIONS_BASE, CANDL_DIR, rel)
+    if os.path.exists(path):
+        return path
+    try:
+        return str(getattr(importlib.import_module(mod_name), attr))
+    except ImportError as e:
+        if tag == "CMB_SPT":
+            raise FileNotFoundError(
+                f"CMB_SPT needs the SPT-3G D1 data in {os.path.dirname(path)}. Kosmulator does not host them "
+                "(spt_candl_data has no licence file); download them once (21 MB, md5-checked) with:\n"
+                "    python -m Kosmulator_main.get_spt_data\n"
+                "and cite them (Observations/candl/README.md)") from e
+        raise FileNotFoundError(f"{tag}: {path} is missing (and {mod_name} is not installed); the data are "
+                                "part of Kosmulator's repository, see Observations/candl/README.md") from e
 
 
 def candl_like(tag: str):
     """The candl likelihood of a tag, loaded once per process, without its internal priors."""
     if tag not in _LIKES:
-        mod_name, attr, how = _CANDL_DATA[tag]
         try:
-            import candl
-            mod = importlib.import_module(mod_name)
+            with contextlib.redirect_stdout(io.StringIO()):    # candl prints a notice when candl_data
+                import candl                                   # is not installed: not needed here
         except ImportError as e:
-            raise ImportError(f"{tag} needs candl and {mod_name} ({e}); install with: {how}") from e
+            raise ImportError(f"{tag} needs candl ({e}); install with: pip install candl-like "
+                              "(the data are in Observations/candl)") from e
+        path = candl_data_file(tag)
         with contextlib.redirect_stdout(io.StringIO()):
-            like = candl.Like(getattr(mod, attr))
+            like = candl.Like(path)
         like.priors = []
         _LIKES[tag] = like
     return _LIKES[tag]

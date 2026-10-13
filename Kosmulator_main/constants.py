@@ -821,9 +821,10 @@ PLANCK_LOWL_FILES: Dict[str, str] = {
 # Ground-based CMB through candl and the Planck + ACT (+ SPT) combinations (item 57;
 # Kosmulator_main/ground_cmb.py):
 #   CMB_ACT            ACT DR6 TT/TE/EE, foreground-marginalised (ACT-lite), l = 600 - 8500
-#                      (Louis et al. 2025, arXiv:2503.14452), candl_data.ACT_DR6_TTTEEE
+#                      (Louis et al. 2025, arXiv:2503.14452), candl_data's ACT_DR6_TTTEEE
 #   CMB_SPT            SPT-3G D1 T&E, foreground-marginalised (SPT-lite), l = 400 - 4000
-#                      (Camphuis et al. 2025, arXiv:2506.20707), spt_candl_data.SPT3G_D1_TnE_lite
+#                      (Camphuis et al. 2025, arXiv:2506.20707), spt_candl_data's SPT3G_D1_TnE_lite
+#                      (both data sets in Observations/candl; only the candl code is installed)
 #   CMB_planck_ACTcut  Planck 2018 plik_lite TT,TE,EE without l > 1000 (TT) and l > 600 (TE, EE),
 #                      ACT DR6's "PlanckActCut"
 #   CMB_lowl_sroll2    Planck low-l EE from the SRoll2 maps (Pagano et al. 2020, arXiv:1908.09856)
