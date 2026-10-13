@@ -1043,6 +1043,9 @@ def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
     # spectrum beyond it (tau_reio >~ 0.15 at Planck's A_s e^-2tau, already Delta ln L ~ -40 below the
     # peak in SimAll) is rejected here without a message, as Kosmulator's SRoll2 table does
     # (ground_cmb.TableEE). clik would refuse it with error -1233 and clipy with an IndexError.
+    # clik's own test (src/simall/clik_simall.c) is position > nstepsEE, so it still evaluates
+    # position == nstepsEE (D_l = 0.3 - 0.3001 muK^2) by reading the next multipole's first table
+    # entry (past the table for l = 29); that bin is rejected here too, as clipy does.
     rng = _simall_range()
     if rng is not None:
         lmin, lmax, step, nsteps = rng
