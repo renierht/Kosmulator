@@ -10,8 +10,9 @@ Planck baseline).
 
 "de_snooker": differential evolution (80% of the steps; emcee's DEMove, ter Braak 2006,
 doi:10.1007/s11222-006-8769-1) mixed with a snooker move (20%) written as in ter Braak &
-Vrugt (2008), doi:10.1007/s11222-008-9104-9. Both are exact Metropolis-Hastings moves, so
-any mixture of them samples the posterior. DE alone is not offered: on curved posteriors
+Vrugt (2008), doi:10.1007/s11222-008-9104-9, with its distances measured in units of the
+other walkers' spread of each parameter (13 Oct). Both are exact Metropolis-Hastings moves,
+so any mixture of them samples the posterior. DE alone is not offered: on curved posteriors
 with prior walls its walkers can get stuck for long stretches; the snooker steps free them.
 
 emcee's own DESnookerMove (3.1.6) is not used: it projects with u = delta / sqrt(|delta|)
@@ -43,14 +44,24 @@ except Exception:   # emcee missing: Kosmulator stops elsewhere with a clear mes
 
 class SnookerMove(RedBlueMove):  # type: ignore[misc,valid-type]
     """
-    Snooker move of ter Braak & Vrugt (2008) for emcee's red-blue scheme.
+    Snooker move of ter Braak & Vrugt (2008) for emcee's red-blue scheme, in scaled units.
 
     For walker x: pick z, z1, z2 from the three other quarters of the ensemble (they stay
-    fixed while x's quarter moves, as in emcee's DESnookerMove); u = (x - z) / |x - z|;
-    proposal x' = x + gamma [u . (z1 - z2)] u with gamma ~ U(1.2, 2.2); accept with
-    min(1, p(x') |x' - z|^(d-1) / (p(x) |x - z|^(d-1))). The swap z1 <-> z2 is equally
-    likely, so the step along the line is symmetric, and the |.|^(d-1) factor is the
-    Jacobian of moving along a line through z.
+    fixed while x's quarter moves, as in emcee's DESnookerMove). Distances use the metric
+    M = diag(1 / sd^2), sd the spread of each parameter over those three quarters; with
+    u = (x - z) / |x - z|_M the proposal is x' = x + gamma <u, z1 - z2>_M u, gamma ~ U(1.2, 2.2),
+    i.e. x' = x + s (x - z) with s = gamma <x - z, z1 - z2>_M / |x - z|_M^2, accepted with
+    min(1, p(x') |1 + s|^(d-1) / p(x)). The swap z1 <-> z2 is equally likely, so the step
+    along the line is symmetric, and |1 + s|^(d-1) = (|x' - z| / |x - z|)^(d-1) is the
+    Jacobian of moving along a line through z. M is fixed while x's quarter moves, so the
+    move stays exact; it is the paper's move in coordinates divided by sd.
+
+    Why scaled: in raw units the line through x and z follows the parameter with the largest
+    numbers (H_0 in km/s/Mpc, sd ~ 0.6, against sd ~ 0.007 for tau_reio). When two walkers
+    have almost the same H_0 the line points along a small parameter and the step, set by an
+    H_0 difference, throws it far out: with the Planck-lite posterior 3.6% of snooker
+    proposals put tau_reio beyond the SimAll table (t11, 13 Oct) and 10% more than 10 sd away.
+    Scaled, none did; acceptance 0.245 -> 0.278 and tau_max 29.4 -> 28.2 on that posterior.
     """
 
     def __init__(self, gamma_range: Tuple[float, float] = (1.2, 2.2), **kwargs):
@@ -64,18 +75,21 @@ class SnookerMove(RedBlueMove):  # type: ignore[misc,valid-type]
         q = np.array(s, dtype=float, copy=True)
         factors = np.zeros(n, dtype=np.float64)
         lo, hi = self.gamma_range
+        # metric from the other three quarters (fixed during this move); a parameter that does
+        # not vary among them is left out of the distances
+        sd = np.std(np.concatenate([np.asarray(cc, dtype=float) for cc in c], axis=0), axis=0)
+        metric = np.where(sd > 0.0, 1.0 / np.where(sd > 0.0, sd, 1.0) ** 2, 0.0)
         for i in range(n):
             w = np.array([c[j][random.randint(sizes[j])] for j in range(3)])
             random.shuffle(w)
             z, z1, z2 = w
             delta = s[i] - z
-            norm = np.linalg.norm(delta)
-            if not np.isfinite(norm) or norm == 0.0:
-                continue                      # x == z: stay (proposal = current point)
-            u = delta / norm
-            q[i] = s[i] + random.uniform(lo, hi) * np.dot(u, z1 - z2) * u
-            new = np.linalg.norm(q[i] - z)
-            factors[i] = (ndim - 1.0) * (np.log(new) - np.log(norm)) if new > 0.0 else -np.inf
+            den = float(np.sum(metric * delta * delta))
+            if not np.isfinite(den) or den <= 0.0:
+                continue                      # x == z (in the metric): stay (proposal = current point)
+            step = random.uniform(lo, hi) * float(np.sum(metric * delta * (z1 - z2))) / den
+            q[i] = s[i] + step * delta        # on the line through z and x
+            factors[i] = (ndim - 1.0) * np.log(abs(1.0 + step)) if step != -1.0 else -np.inf
         return q, factors
 
 
