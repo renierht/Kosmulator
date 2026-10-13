@@ -4,15 +4,17 @@ What to cite and acknowledge: every data set and code Kosmulator uses.
 - Observations/DATA_SOURCES.md (written from this file): for each observation tag, its files,
   where they come from, the licence status of the source, the papers to cite and any
   acknowledgement the data's licence asks for.
+- Observations/references.bib: the BibTeX of every reference (keys as in REFS below; the
+  markdown files give the key of each reference in brackets).
 - At the end of a run, Statistical_analysis_tables/<suffix>/citations.md lists what that run
   used: Kosmulator, every data set of its groups, and the codes (samplers, CLASS, likelihood
-  codes, BBN codes, GetDist).
+  codes, BBN codes, GetDist); citations.bib next to it holds their BibTeX.
 
 Every reference was checked against its arXiv page and the journal record (13 October 2026);
 the README's reference list is the same set.
 
-    python -m Kosmulator_main.citations --write-data-sources     # regenerate DATA_SOURCES.md
-    python -m Kosmulator_main.citations --check                  # is DATA_SOURCES.md up to date?
+    python -m Kosmulator_main.citations --write-data-sources     # regenerate DATA_SOURCES.md, references.bib
+    python -m Kosmulator_main.citations --check                  # are both up to date?
 """
 from __future__ import annotations
 
@@ -172,6 +174,112 @@ REFS: Dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
+# BibTeX of REFS (Observations/references.bib; the run's citations.bib), written from the strings
+# above: "authors (year), title, journal volume, pages, arXiv:id, doi:doi"
+# ---------------------------------------------------------------------------
+_BIB_JOURNALS: Dict[str, str] = {        # REFS abbreviation -> journal field (INSPIRE's abbreviations)
+    "PASP": "Publ. Astron. Soc. Pac.", "MNRAS": "Mon. Not. Roy. Astron. Soc.", "Stat. Comput.": "Stat. Comput.",
+    "JCAP": "JCAP", "ApJL": "Astrophys. J. Lett.", "ApJS": "Astrophys. J. Suppl.", "ApJ": "Astrophys. J.",
+    "A&A": "Astron. Astrophys.", "AJ": "Astron. J.", "Phys. Rev. D": "Phys. Rev. D",
+    "Eur. Phys. J. C": "Eur. Phys. J. C", "Math. Model. Geom.": "Math. Model. Geom.",
+    "Comput. Phys. Commun.": "Comput. Phys. Commun.", "Open J. Astrophys.": "Open J. Astrophys.",
+}
+_BIB_TITLES: Dict[str, str] = {          # titles with mathematics written in plain text in REFS
+    "hough20": r"Viability tests of $f(R)$-gravity models with Supernovae Type 1A data",
+    "louis25": r"The Atacama Cosmology Telescope: DR6 Power Spectra, Likelihoods and $\Lambda$CDM Parameters",
+    "balkenhol25": r"Compressed `CMB-lite' Likelihoods Using Automatic Differentiation",
+    "des24": r"The Dark Energy Survey: Cosmology Results with $\sim$1500 New High-redshift Type Ia Supernovae "
+             r"Using the Full 5 yr Data Set",
+    "avila22": r"Inferring $S_8(z)$ and $\gamma(z)$ with cosmic growth rate measurements using machine learning",
+    "skara20": r"Tension of the $E_G$ statistic and RSD data with Planck/$\Lambda$CDM and implications for "
+               r"weakening gravity",
+    "kazantzidis18": r"Evolution of the $f\sigma_8$ tension with the Planck15/$\Lambda$CDM determination and "
+                     r"implications for modified gravity theories",
+}
+_BIB_NAMES: Dict[str, str] = {"Schoeneberg": r'Sch{\"o}neberg', "Sanchez": r"S{\'a}nchez",
+                              "Troester": r'Tr{\"o}ster'}
+_BIB_FIXED: Dict[str, Dict[str, str]] = {   # entries whose REFS string has another form
+    "pdg_bbn": dict(author="Navas, S. and others", collaboration="Particle Data Group",
+                    title="Review of Particle Physics", journal="Phys. Rev. D", volume="110", pages="030001",
+                    year="2024", doi="10.1103/PhysRevD.110.030001",
+                    note="Section Big Bang Nucleosynthesis, by B. D. Fields, P. Molaro, S. Sarkar; and its 2025 "
+                         "update"),
+}
+
+
+def _bib_name(name: str) -> str:
+    """'D. W. Hogg' -> 'Hogg, D. W.'; 'C. J. F. ter Braak' -> 'ter Braak, C. J. F.'"""
+    parts = name.split()
+    i = 0
+    while i < len(parts) - 1 and parts[i].endswith("."):
+        i += 1
+    last = " ".join(_BIB_NAMES.get(p, p) for p in parts[i:])
+    first = " ".join(parts[:i])
+    return f"{last}, {first}" if first else last
+
+
+def bibtex_fields(key: str) -> Dict[str, str]:
+    """The BibTeX fields of REFS[key] (author, collaboration, title, journal, volume, pages, year,
+    eprint, doi)."""
+    if key in _BIB_FIXED:
+        return dict(_BIB_FIXED[key])
+    m = re.match(r"^(?P<auth>.+?) \((?P<year>\d{4})\), (?P<rest>.+)$", REFS[key])
+    if not m:
+        raise ValueError(f"REFS[{key!r}] does not have the form 'authors (year), title, ...'")
+    f: Dict[str, str] = {"year": m.group("year")}
+    rest = m.group("rest")
+    d = re.search(r", doi:(\S+)$", rest)
+    if d:
+        f["doi"], rest = d.group(1), rest[:d.start()]
+    a = re.search(r", arXiv:(\S+)$", rest)
+    if a:
+        f["eprint"], rest = a.group(1), rest[:a.start()]
+    names = "|".join(re.escape(j) for j in sorted(_BIB_JOURNALS, key=len, reverse=True))
+    j = re.search(r", (?P<j>" + names + r")(?: (?P<vol>\d+)(?: \((?P<jy>\d{4})\))?,? (?P<pages>[A-Z]?\d+))?$", rest)
+    if j:
+        f["journal"] = _BIB_JOURNALS[j.group("j")]
+        if j.group("vol"):
+            f["volume"], f["pages"] = j.group("vol"), j.group("pages")
+        rest = rest[:j.start()]
+    elif "eprint" in f:                  # a preprint: ADS's form, which every bibliography style prints
+        f["journal"], f["pages"] = "arXiv e-prints", "arXiv:" + f["eprint"]
+    f["title"] = _BIB_TITLES.get(key, rest)
+    authors = [x.strip() for x in m.group("auth").split(",")]
+    if authors[0].endswith(" Collaboration"):
+        f["collaboration"] = authors.pop(0)[: -len(" Collaboration")]
+    others = authors[-1].endswith(" et al.")
+    if others:
+        authors[-1] = authors[-1][: -len(" et al.")]
+    f["author"] = " and ".join([_bib_name(x) for x in authors] + (["others"] if others else []))
+    return f
+
+
+def bibtex_entry(key: str) -> str:
+    f = bibtex_fields(key)
+    order = ("author", "collaboration", "title", "journal", "volume", "pages", "year", "eprint", "doi", "note")
+    lines = [f"@article{{{key},"]
+    for k in order:
+        if k not in f:
+            continue
+        v = "{" + f[k] + "}" if k == "title" else f[k]     # double braces keep the title's capitals
+        lines.append(f"    {k} = {{{v}}},")
+        if k == "eprint":
+            lines.append("    archivePrefix = {arXiv},")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def bibtex(keys: Optional[Iterable[str]] = None, header: str = "") -> str:
+    """BibTeX of the given REFS keys (all if None), each once, in the given order."""
+    seen: List[str] = []
+    for k in (REFS if keys is None else keys):
+        if k not in seen:
+            seen.append(k)
+    head = [f"% {line}" if line else "%" for line in header.splitlines()] if header else []
+    return "\n".join(head + ([""] if head else []) + ["\n\n".join(bibtex_entry(k) for k in seen)]) + "\n"
+
+
+# ---------------------------------------------------------------------------
 # Licence statuses of the sources (checked 13 October 2026)
 # ---------------------------------------------------------------------------
 LICENCES: Dict[str, str] = {
@@ -211,8 +319,8 @@ DATA: List[Dict[str, object]] = [
          refs=(), rows_from="CC.dat", refs_if={"CC_SYS_COV": ("moresco20",)},
          note="Cite the paper of every row used (listed per run, and in CC.dat)."),
     dict(tags=("OHD",), name="H(z) compilation (31 chronometer + 20 BAO points)",
-         files=("OHD.dat",), licence="papers", source="compilation of Sharov & Vasiliev (2018); origin of the file "
-                                                       "not recorded",
+         files=("OHD.dat",), licence="papers", source="the compilation of Sharov & Vasiliev (2018), taken from "
+                                                       "that paper",
          refs=("sharov18",), note="Also cite the original papers of the points, listed in Sharov & Vasiliev (2018)."),
     dict(tags=("JLA",), name="SDSS-II/SNLS3 Joint Light-curve Analysis (740 SNe)",
          files=("JLA/",), licence="none_repo",
@@ -220,10 +328,11 @@ DATA: List[Dict[str, object]] = [
                 "page https://supernovae.in2p3.fr/sdss_snls_jla/ReadMe.html",
          refs=("betoule14",)),
     dict(tags=("JLA_legacy",), name="Old 359-SN distance moduli (kept to reproduce earlier runs)",
-         files=("JLA_legacy.dat",), licence="unknown", source="origin not documented",
-         refs=("hicken09", "neill09", "conley11"), note="References as previously listed; prefer JLA."),
+         files=("JLA_legacy.dat",), licence="papers", source="taken from the papers cited",
+         refs=("hicken09", "neill09", "conley11"), note="Prefer JLA."),
     dict(tags=("Pantheon",), name="Pantheon SNe Ia (1048)", files=("Pantheon.dat",), licence="none_repo",
-         source="Pantheon release (github.com/dscolnic/Pantheon); Kosmulator's copy: origin not recorded",
+         source="the Pantheon sample of Scolnic et al. (2018), taken from that paper's release "
+                "(github.com/dscolnic/Pantheon)",
          refs=("scolnic18",)),
     dict(tags=("PantheonP", "PantheonPS"), name="Pantheon+ (PantheonPS: with the SH0ES Cepheid calibration)",
          files=("PantheonP.dat", "PantheonP.cov"), licence="none_repo",
@@ -231,13 +340,13 @@ DATA: List[Dict[str, object]] = [
                 "covariance; Kosmulator's copy: format matches)",
          refs=("scolnic22", "brout22"), refs_by_tag={"PantheonPS": ("riess22",)}),
     dict(tags=("DESY5",), name="DES-SN5YR Hubble diagram", files=("DESY5.dat", "DESY5_covsys_000.txt"),
-         licence="none_repo", source="DES-SN5YR release, github.com/des-science/DES-SN5YR (DES-SN5YR_HD.csv and "
-                                     "covsys_000; Kosmulator's copy: format matches)",
+         licence="none_repo", source="DES-SN5YR, taken from the release of the papers cited, "
+                                     "github.com/des-science/DES-SN5YR (DES-SN5YR_HD.csv and covsys_000)",
          refs=("des24", "sanchez24")),
     dict(tags=("Union3",), name="Union3 / UNITY1.5 binned distance moduli", files=("Union3.txt",
                                                                                       "Union3_mag_covmat.txt"),
-         licence="mit_union3", source="Union3 release, github.com/rubind/union3_release; Kosmulator's copy: origin "
-                                      "not recorded", refs=("rubin25",)),
+         licence="mit_union3", source="Union3 of Rubin et al. (2025), taken from that paper's release, "
+                                      "github.com/rubind/union3_release", refs=("rubin25",)),
     dict(tags=("BAO",), name="DESI DR1 BAO, the 10 anisotropic points", files=("BAO.txt", "BAO_invcov.txt"),
          licence="cc_by_desi", source="values of DESI 2024 VI (Table 1), two decimals; see BAO.txt's header",
          refs=("desi24_VI", "desi_dr1"), ack=("desi",)),
@@ -246,8 +355,8 @@ DATA: List[Dict[str, object]] = [
                                       "bao_data (desi_2024_gaussian_bao_ALL_GCcomb); see DESI_DR1.txt's header",
          refs=("desi24_VI", "desi_dr1"), ack=("desi",)),
     dict(tags=("DESI_DR2",), name="DESI DR2 BAO", files=("DESI_DR2_synced.txt", "DESI_DR2_covtot.txt"),
-         licence="cc_by_desi_dr2", source="DESI DR2 BAO (values and covariance of DESI DR2 Results II); Kosmulator's "
-                                      "copy: origin not recorded",
+         licence="cc_by_desi_dr2", source="the values and covariance of DESI DR2 Results II (Abdul Karim et al. "
+                                      "2025), taken from that paper",
          refs=("desi25_dr2",), ack=("desi",),
          note="DESI_DR2.txt holds the same values with another error column and is not read."),
     dict(tags=("f",), name="Growth rate f(z)", files=("f.dat",), licence="papers",
@@ -465,7 +574,21 @@ def _refs_for_run(e: Dict[str, object], tag: str) -> List[str]:
 
 
 def _fmt_refs(keys: Iterable[str], indent: str = "  ") -> List[str]:
-    return [f"{indent}- {REFS[k]}" for k in keys]
+    return [f"{indent}- {REFS[k]} [`{k}`]" for k in keys]
+
+
+def run_reference_keys(observations: Sequence[Sequence[str]], engines: Iterable[str] = (),
+                       settings: Optional[dict] = None, class_ok: Optional[bool] = None,
+                       bbn_backends: Optional[Dict[str, str]] = None) -> List[str]:
+    """The REFS keys of one run (Kosmulator, its data, its codes), each once, in citations.md's order."""
+    keys = list(CODES["kosmulator"]["refs"])
+    for t in _components(t for g in observations for t in g):
+        e = entry_for(t)
+        if e is not None:
+            keys += _refs_for_run(e, t)
+    for c in codes_used(observations, engines, settings, class_ok, bbn_backends):
+        keys += list(CODES[c]["refs"])
+    return list(dict.fromkeys(keys))
 
 
 def run_citations_markdown(models: Sequence[str], observations: Sequence[Sequence[str]], suffix: str = "",
@@ -476,8 +599,8 @@ def run_citations_markdown(models: Sequence[str], observations: Sequence[Sequenc
     out = [f"# What to cite for this run{f' ({suffix})' if suffix else ''}", "",
            f"Written by Kosmulator on {time.strftime('%Y-%m-%d %H:%M')}. Models: {', '.join(map(str, models))}. "
            f"Groups: {'; '.join(' + '.join(map(str, g)) for g in observations)}.",
-           "Cite the papers below for what this run used. Sources and licence status of every data file: "
-           "Observations/DATA_SOURCES.md.", ""]
+           "Cite the papers below for what this run used. Their BibTeX (keys in brackets) is in citations.bib "
+           "next to this file. Sources and licence status of every data file: Observations/DATA_SOURCES.md.", ""]
     used = codes_used(observations, engines, settings, class_ok, bbn_backends)
     out += ["## Kosmulator", ""] + _fmt_refs(CODES["kosmulator"]["refs"]) + [""]
     out += ["## Data", ""]
@@ -512,8 +635,9 @@ def write_run_citations(suffix: str, models: Sequence[str], observations: Sequen
                         engines: Iterable[str] = (), settings: Optional[dict] = None,
                         class_ok: Optional[bool] = None, bbn_backends: Optional[Dict[str, str]] = None
                         ) -> Optional[str]:
-    """Write Statistical_analysis_tables/<suffix>/citations.md (the folder of the run's statistics,
-    PLOT_SETTINGS["output_suffix"] as Plots uses it); returns its path (None if it fails)."""
+    """Write Statistical_analysis_tables/<suffix>/citations.md and citations.bib (the folder of the
+    run's statistics, PLOT_SETTINGS["output_suffix"] as Plots uses it); returns the path of
+    citations.md (None if it fails)."""
     try:
         folder = os.path.join("Statistical_analysis_tables", suffix if suffix is not None else "default_run")
         os.makedirs(folder, exist_ok=True)
@@ -521,10 +645,21 @@ def write_run_citations(suffix: str, models: Sequence[str], observations: Sequen
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(run_citations_markdown(models, observations, suffix, engines, settings, class_ok,
                                             bbn_backends))
-        return path
     except Exception as e:                       # never stop a finished run over this file
         print(f"[citations] not written ({e})")
         return None
+    try:
+        keys = run_reference_keys(observations, engines, settings, class_ok, bbn_backends)
+        head = (f"What to cite for the Kosmulator run {suffix} (written {time.strftime('%Y-%m-%d %H:%M')}); "
+                "see citations.md.")
+        tags = _components(t for g in observations for t in g)
+        if any((entry_for(t) or {}).get("rows_from") == "CC.dat" for t in tags):
+            head += "\nNot in this file: the papers of the CC.dat rows used (listed in citations.md)."
+        with open(os.path.join(folder, "citations.bib"), "w", encoding="utf-8") as fh:
+            fh.write(bibtex(keys, header=head))
+    except Exception as e:
+        print(f"[citations] citations.bib not written ({e})")
+    return path
 
 
 # ---------------------------------------------------------------------------
@@ -533,8 +668,10 @@ def write_run_citations(suffix: str, models: Sequence[str], observations: Sequen
 def data_sources_markdown() -> str:
     out = ["# Data sources, licences and what to cite", "",
            "Written from `Kosmulator_main/citations.py` (`python -m Kosmulator_main.citations --write-data-sources`); "
-           "every reference was checked against its arXiv page and the journal record (13 October 2026). Each run "
-           "also writes `Statistical_analysis_tables/<suffix>/citations.md` with what that run used.", "",
+           "every reference was checked against its arXiv page and the journal record (13 October 2026). The BibTeX of "
+           "every reference is in `Observations/references.bib` (its key in brackets after each reference). Each run "
+           "also writes `Statistical_analysis_tables/<suffix>/citations.md` with what that run used, and its BibTeX "
+           "in `citations.bib`.", "",
            "Kosmulator includes every data set it supports, with its source and the papers to cite, as is common "
            "practice for published cosmological data. Several sources have no licence file; if a collaboration asks "
            "for its data to be removed, it will be (the SPT-3G files can be restored with "
@@ -575,23 +712,39 @@ def data_sources_path() -> str:
     return os.path.join(K.OBSERVATIONS_BASE, "DATA_SOURCES.md")
 
 
+def references_bib_path() -> str:
+    return os.path.join(K.OBSERVATIONS_BASE, "references.bib")
+
+
+def references_bib() -> str:
+    return bibtex(None, header="Every reference Kosmulator cites (data, codes, Kosmulator itself), written from\n"
+                               "Kosmulator_main/citations.py; keys as in Observations/DATA_SOURCES.md.")
+
+
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="What to cite: Observations/DATA_SOURCES.md from the registry.")
-    ap.add_argument("--write-data-sources", action="store_true", help="write Observations/DATA_SOURCES.md")
-    ap.add_argument("--check", action="store_true", help="exit 1 if DATA_SOURCES.md is not up to date")
+    ap = argparse.ArgumentParser(description="What to cite: Observations/DATA_SOURCES.md and references.bib "
+                                             "from the registry.")
+    ap.add_argument("--write-data-sources", action="store_true",
+                    help="write Observations/DATA_SOURCES.md and Observations/references.bib")
+    ap.add_argument("--check", action="store_true", help="exit 1 if either file is not up to date")
     a = ap.parse_args(argv)
     text = data_sources_markdown()
+    files = ((data_sources_path(), text), (references_bib_path(), references_bib()))
     if a.write_data_sources:
-        with open(data_sources_path(), "w", encoding="utf-8") as fh:
-            fh.write(text)
-        print("written:", data_sources_path())
+        for path, content in files:
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            print("written:", path)
     if a.check:
-        try:
-            same = open(data_sources_path(), encoding="utf-8").read() == text
-        except OSError:
-            same = False
-        print("DATA_SOURCES.md is", "up to date" if same else "out of date")
-        return 0 if same else 1
+        ok = True
+        for path, content in files:
+            try:
+                same = open(path, encoding="utf-8").read() == content
+            except OSError:
+                same = False
+            print(os.path.basename(path), "is", "up to date" if same else "out of date")
+            ok = ok and same
+        return 0 if ok else 1
     if not (a.write_data_sources or a.check):
         sys.stdout.write(text)
     return 0

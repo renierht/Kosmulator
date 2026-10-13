@@ -332,7 +332,8 @@ Kosmulator/
 **NB!** Remember to cite the observation’s **original papers** when using their data in Kosmulator.
 
 - `Observations/DATA_SOURCES.md` lists every data set Kosmulator includes: its files, where they come from, the licence status of the source, the papers to cite and the acknowledgements a data licence asks for (DESI's).
-- Every run writes `Statistical_analysis_tables/<output_suffix>/citations.md`: what to cite for exactly the data sets, samplers and codes that run used (its path is printed at the end of the run).
+- Every run writes `Statistical_analysis_tables/<output_suffix>/citations.md`: what to cite for exactly the data sets, samplers and codes that run used (its path is printed at the end of the run), with their BibTeX in `citations.bib` next to it.
+- `Observations/references.bib` holds the BibTeX of every reference in `DATA_SOURCES.md` (data sets, codes and Kosmulator; the key of each is given there in brackets, and in `citations.md`). The papers of the single CC.dat rows are listed in `DATA_SOURCES.md` but are not in the BibTeX file.
 
 ### Original MCMC code which developed into Kosmulator
 
@@ -415,7 +416,7 @@ Kosmulator/
    https://doi.org/10.1051/0004-6361/201423413 (arXiv:1401.4064)  
    Data files: CosmoMC/Cobaya distribution, https://github.com/CobayaSampler/sn_data
 
-#### JLA_legacy (old 359-SN file; origin not documented, references as previously listed)
+#### JLA_legacy (old 359-SN file, taken from the papers below)
 1. Hicken, M., Challis, P., Jha, S., et al. (2009).  
    *CfA3: 185 Type Ia Supernova Light Curves from the CfA*.  
    ApJ, 700, 331.  
