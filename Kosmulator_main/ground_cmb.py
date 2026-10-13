@@ -7,10 +7,10 @@ Every likelihood of a group takes its spectra from the point's single lensed CLA
 ACT and 4095 for SPT by MCMC_setup), as the Planck likelihoods do.
 
 - ACT DR6 and SPT-3G D1: candl (Balkenhol et al. 2024, arXiv:2401.13433) with the
-  foreground-marginalised ("lite") data sets of candl_data (ACT_DR6_TTTEEE, in the repository)
-  and spt_candl_data (SPT3G_D1_TnE_lite, downloaded once with Kosmulator_main/get_spt_data.py),
-  unchanged copies in Observations/candl, so that only candl itself is installed (the data
-  packages are used when the copies are missing). candl's internal
+  foreground-marginalised ("lite") data sets of candl_data (ACT_DR6_TTTEEE) and spt_candl_data
+  (SPT3G_D1_TnE_lite), unchanged copies in Observations/candl, so that only candl itself is
+  installed (the data packages are used when the copies are missing; get_spt_data.py restores
+  the SPT ones). candl's internal
   priors are removed; Kosmulator applies
   the same priors itself (constants.cmb_gaussian_priors), so that a combination does not
   apply a tau prior twice or one next to low-l EE data.
@@ -44,9 +44,8 @@ from Kosmulator_main import constants as K
 logger = logging.getLogger("Kosmulator.ground_cmb")
 
 #: The two candl data sets in Observations/candl (unchanged copies, see its README), so only the
-#: candl code is needed (pip install candl-like): ACT DR6 is in the repository; SPT-3G D1 is
-#: downloaded once with python -m Kosmulator_main.get_spt_data (spt_candl_data has no licence
-#: file, so Kosmulator does not host it). The data packages are a fallback.
+#: candl code is needed (pip install candl-like); python -m Kosmulator_main.get_spt_data restores
+#: the SPT ones if they are missing. The data packages are a fallback.
 _CANDL_DATA = {
     "CMB_ACT": ("ACT_DR6_CMB_only_v0/ACT_DR6_CMB_only.yaml", "candl_data", "ACT_DR6_TTTEEE"),
     "CMB_SPT": ("SPT3G_D1_TnE_lite/SPT3G_D1_TnE_lite.yaml", "spt_candl_data", "SPT3G_D1_TnE_lite"),
@@ -66,10 +65,11 @@ def candl_data_file(tag: str) -> str:
     except ImportError as e:
         if tag == "CMB_SPT":
             raise FileNotFoundError(
-                f"CMB_SPT needs the SPT-3G D1 data in {os.path.dirname(path)}. Kosmulator does not host them "
-                "(spt_candl_data has no licence file); download them once (21 MB, md5-checked) with:\n"
+                f"CMB_SPT needs the SPT-3G D1 data in {os.path.dirname(path)}, which are missing from this "
+                "copy of Kosmulator; restore them with git (git checkout -- Observations/candl) or download "
+                "them again (21 MB, md5-checked) with:\n"
                 "    python -m Kosmulator_main.get_spt_data\n"
-                "and cite them (Observations/candl/README.md)") from e
+                "(Observations/candl/README.md)") from e
         raise FileNotFoundError(f"{tag}: {path} is missing (and {mod_name} is not installed); the data are "
                                 "part of Kosmulator's repository, see Observations/candl/README.md") from e
 
@@ -503,9 +503,9 @@ def spt_muse_file() -> str:
         if os.path.isfile(p):
             return p
     raise FileNotFoundError(
-        f"CMB_lensing_SPT needs the SPT-3G MUSE file {cands[0]}. Kosmulator does not host it (the release "
-        "has no licence file): download muse_3g_like_march_2025.zip from "
-        "https://pole.uchicago.edu/public/data/ge25/ once, then run\n"
+        f"CMB_lensing_SPT needs the SPT-3G MUSE file {cands[0]}, which is missing from this copy of "
+        "Kosmulator; restore it with git (git checkout -- Observations/spt3g_muse_lensing) or download "
+        "muse_3g_like_march_2025.zip from https://pole.uchicago.edu/public/data/ge25/ and run\n"
         "    python -m Kosmulator_main.get_spt_data --no-lite --muse-zip /path/to/muse_3g_like_march_2025.zip\n"
         "and cite it (Observations/spt3g_muse_lensing/README.md)")
 

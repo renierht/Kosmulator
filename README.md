@@ -115,11 +115,7 @@ For ACT DR6 and SPT-3G D1 (`CMB_ACT`, `CMB_SPT`, `CMB_PACT`, `CMB_SPA`), install
 ```bash
 pip install "candl-like>=2.0.3"
 ```
-The SPT-3G data are public but carry no licence that lets Kosmulator host them. Download them once (md5-checked) and cite them when you use them (`Observations/candl/README.md`):
-```bash
-python -m Kosmulator_main.get_spt_data
-```
-For the SPT-3G MUSE lensing likelihood (`CMB_lensing_SPT`), download `muse_3g_like_march_2025.zip` from https://pole.uchicago.edu/public/data/ge25/ and add `--muse-zip /path/to/muse_3g_like_march_2025.zip` (`Observations/spt3g_muse_lensing/README.md`).
+The SPT-3G data are included as well. If they are ever missing or changed in your copy, `python -m Kosmulator_main.get_spt_data` downloads and checks them again (`Observations/candl/README.md`).
 Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced installation section at the end for additional information. With clipy installed, the CLIK build (step 5 there) can be skipped.
 
 ---

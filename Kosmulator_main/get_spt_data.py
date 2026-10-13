@@ -1,12 +1,13 @@
 """
-Download the SPT-3G data Kosmulator supports into Observations/ (one installation step).
+Restore (download and check) the SPT-3G data Kosmulator includes in Observations/.
 
-The SPT data are public, but spt_candl_data and muse3glike carry no licence file, so
-Kosmulator does not host them; this script fetches them from the SPT releases and checks
-every file against the md5 sums of the versions Kosmulator was tested with.
+The SPT-3G D1 lite data and the SPT-3G MUSE lensing file are part of Kosmulator's repository
+(public data with their sources and citations; the releases have no licence file). If they are
+missing or changed in your copy, this script fetches them from the SPT releases and checks every
+file against the md5 of the version Kosmulator was tested with.
 
     python -m Kosmulator_main.get_spt_data                     # SPT-3G D1 T&E lite (CMB_SPT, CMB_SPA)
-    python -m Kosmulator_main.get_spt_data --muse-zip PATH     # SPT-3G MUSE lensing (CMB_lensing_SPT)
+    python -m Kosmulator_main.get_spt_data --no-lite --muse-zip PATH   # SPT-3G MUSE lensing (CMB_lensing_SPT)
 
 - SPT-3G D1 T&E lite: the six files of spt_candl_data's SPT3G_D1_TnE_v0/lite and its reference
   test, from github.com/SouthPoleTelescope/spt_candl_data at commit SPT_CANDL_COMMIT, into
@@ -15,10 +16,7 @@ every file against the md5 sums of the versions Kosmulator was tested with.
   download from https://pole.uchicago.edu/public/data/ge25/ and pass with --muse-zip, into
   Observations/spt3g_muse_lensing/.
 
-Cite the papers when you use the data (also printed at the end): candl, Balkenhol et al. 2024
-(arXiv:2401.13433); SPT-3G D1 T&E, Camphuis et al. 2025 (arXiv:2506.20707) and Quan et al. 2026
-(SPTlite, https://pole.uchicago.edu/public/data/quan26/index.html); SPT-3G MUSE lensing, Ge et al.
-2025, Phys. Rev. D 111, 083534 (arXiv:2411.06000).
+What to cite is printed at the end (and listed in Observations/DATA_SOURCES.md).
 """
 from __future__ import annotations
 
@@ -60,9 +58,11 @@ MUSE_ZIP_MEMBER = "src/muse3glike/dat/" + K.SPT_MUSE_FILE
 MUSE_MD5 = "8839ad236d98022ba54d4de8a0ead995"
 
 CITATIONS = (
-    "candl: L. Balkenhol et al. 2024, arXiv:2401.13433",
-    "SPT-3G D1 T&E (CMB_SPT, CMB_SPA): E. Camphuis et al. 2025, arXiv:2506.20707; W. Quan et al. 2026 (SPTlite), "
-    "https://pole.uchicago.edu/public/data/quan26/index.html",
+    "candl: L. Balkenhol et al. 2024, A&A 686, A10, arXiv:2401.13433",
+    "SPT-3G D1 T&E (CMB_SPT, CMB_SPA): E. Camphuis et al. 2026, Phys. Rev. D 113, 083504, arXiv:2506.20707 "
+    "(SPT-lite: its Appendix F); L. Balkenhol 2025, Open J. Astrophys., doi:10.33232/001c.129886, "
+    "arXiv:2412.00826 (CMB-lite compression); W. Quan et al. 2026, arXiv:2603.20163 (D1 maps, as "
+    "spt_candl_data lists)",
     "SPT-3G MUSE lensing (CMB_lensing_SPT): F. Ge et al. 2025, Phys. Rev. D 111, 083534, arXiv:2411.06000",
 )
 

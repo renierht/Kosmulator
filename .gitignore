@@ -108,10 +108,3 @@ Observations/act_dr6_lenslike/v1.2/like_corrs/N1*.txt
 Observations/act_dr6_lenslike/v1.2/like_corrs/*.npy
 Observations/act_dr6_lenslike/.cache/
 !Observations/act_dr6_lenslike/actplanck_baseline_corrections_v1.2.npz
-
-# SPT-3G D1 T&E lite data (CMB_SPT, CMB_SPA): spt_candl_data has no licence file, so they are not
-# hosted here; python -m Kosmulator_main.get_spt_data downloads them (Observations/candl/README.md)
-Observations/candl/SPT3G_D1_TnE_lite/
-Observations/candl/tests/SPT3G_D1_TnE*
-# SPT-3G MUSE lensing file (CMB_lensing_SPT), no licence file either: get_spt_data --muse-zip
-Observations/spt3g_muse_lensing/90_150_220.h5

@@ -13,22 +13,17 @@ copies here; the packages are used only when a folder below is missing). No Coba
 | Folder | Source | In the repository | Used by |
 |---|---|---|---|
 | `ACT_DR6_CMB_only_v0/` | `candl_data/ACT_DR6_CMB_only_v0/` of [candl_data](https://github.com/Lbalkenhol/candl_data) 2.0.0 (commit `c4eb8fb`, 10 Oct 2025; `.DS_Store` left out). The data set `candl_data.ACT_DR6_TTTEEE`. | yes (MIT licence) | `CMB_ACT`, `CMB_PACT`, `CMB_SPA` |
-| `SPT3G_D1_TnE_lite/` | `spt_candl_data/SPT3G_D1_TnE_v0/lite/` of [spt_candl_data](https://github.com/SouthPoleTelescope/spt_candl_data) 3.0.1 (commit `f22611a`, 28 Sep 2026). The data set `spt_candl_data.SPT3G_D1_TnE_lite`. | **no**: download it (below) | `CMB_SPT`, `CMB_SPA` |
-| `tests/` | The packages' reference tests for these two data sets (`ACT_DR6_TTTEEE_test.*` from candl_data, in the repository; `SPT3G_D1_TnE_lite_test.yaml` and `SPT3G_D1_TnE_test_spec.txt` from spt_candl_data, downloaded with the SPT data). | ACT part | the verification kit (`GROUNDCMB`) |
+| `SPT3G_D1_TnE_lite/` | `spt_candl_data/SPT3G_D1_TnE_v0/lite/` of [spt_candl_data](https://github.com/SouthPoleTelescope/spt_candl_data) 3.0.1 (commit `f22611a`, 28 Sep 2026). The data set `spt_candl_data.SPT3G_D1_TnE_lite`. | yes (no licence file; see below) | `CMB_SPT`, `CMB_SPA` |
+| `tests/` | The packages' reference tests for these two data sets (`ACT_DR6_TTTEEE_test.*` from candl_data; `SPT3G_D1_TnE_lite_test.yaml` and `SPT3G_D1_TnE_test_spec.txt` from spt_candl_data). | yes | the verification kit (`GROUNDCMB`) |
 
-## SPT-3G D1: one download step
+## Restoring the SPT-3G D1 files
 
-spt_candl_data has no licence file, so Kosmulator does not host the SPT data. Download them once
-(8 files, 21 MB, each checked against the md5 of the version Kosmulator was tested with):
+If the SPT files are missing or changed in your copy, this downloads them again from
+github.com/SouthPoleTelescope/spt_candl_data (commit `f22611a`) and checks each against the md5 below:
 
 ```bash
 python -m Kosmulator_main.get_spt_data
 ```
-
-It fetches the files from github.com/SouthPoleTelescope/spt_candl_data at commit `f22611a` into
-`SPT3G_D1_TnE_lite/` and `tests/` here. By hand: copy `spt_candl_data/SPT3G_D1_TnE_v0/lite/` of that
-repository to `Observations/candl/SPT3G_D1_TnE_lite/`. Without them, a run with `CMB_SPT` or `CMB_SPA`
-stops at start-up with this instruction.
 
 ## Checksums
 
@@ -55,12 +50,18 @@ The yaml files read their data relative to their own folder, so the folders must
 - candl_data is under the MIT licence (`LICENCE_candl_data.txt`, its copyright notice kept as the licence
   asks).
 - spt_candl_data has no licence file (commit `f22611a`); its README asks users to cite the papers of the
-  likelihoods used and the candl paper.
+  likelihoods used and the candl paper. Kosmulator includes these public data with their source and
+  citations, as is common practice for published cosmological data; if the SPT collaboration asks
+  otherwise, they will be removed and `get_spt_data` becomes the way to obtain them.
 
 Cite, when these data are used:
 
-- candl: L. Balkenhol et al. 2024, arXiv:2401.13433.
-- ACT DR6: Naess et al. 2025, arXiv:2503.14451; Louis et al. 2025, arXiv:2503.14452; Calabrese et al.
-  2025, arXiv:2503.14454 (as listed in `ACT_DR6_CMB_only.yaml`).
-- SPT-3G D1 T&E: Camphuis et al. 2025, arXiv:2506.20707; Quan et al. 2026, SPTlite
-  (https://pole.uchicago.edu/public/data/quan26/index.html, as listed in spt_candl_data's README).
+- candl: L. Balkenhol et al. 2024, A&A 686, A10, arXiv:2401.13433.
+- ACT DR6: Naess et al. 2025, JCAP 11 (2025) 061, arXiv:2503.14451; Louis et al. 2025, JCAP 11 (2025) 062,
+  arXiv:2503.14452; Calabrese et al. 2025, JCAP 11 (2025) 063, arXiv:2503.14454 (as listed in
+  `ACT_DR6_CMB_only.yaml`).
+- SPT-3G D1 T&E: Camphuis et al. 2026, Phys. Rev. D 113, 083504, arXiv:2506.20707 (the SPT-lite likelihood
+  is its Appendix F); Balkenhol 2025, Open J. Astrophys., doi:10.33232/001c.129886, arXiv:2412.00826 (the
+  CMB-lite compression); Quan et al. 2026, arXiv:2603.20163 (the D1 maps, listed by spt_candl_data).
+
+Every data set Kosmulator includes, with what to cite: `Observations/DATA_SOURCES.md`.
