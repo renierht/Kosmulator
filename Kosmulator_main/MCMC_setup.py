@@ -613,15 +613,18 @@ def main(
     # ------------------------------------------------------------------
     try:
         if rank == 0:
-            MP.generate_plots(samples, CONFIG, PLOT_SETTINGS, data, reference_model)
             # What to cite for this run: Kosmulator, the data sets of its groups and the codes used
+            # (written before the plots, so a plotting error does not lose it)
             from Kosmulator_main import citations as CIT
             _cite = CIT.write_run_citations(
-                (getattr(args, "output_suffix", "") or "").strip(), list(model_names),
+                PLOT_SETTINGS.get("output_suffix", "default_run"), list(model_names),
                 [list(g) for g in observations],
                 engines=CIT.ENGINES_USED or set(getattr(K, "engine_for_model", {}).values()),
                 settings={"emcee_moves": K.EMCEE_MOVES, "cmb_nonlinear": K.CMB_NONLINEAR,
-                          "hmcode_version": K.HMCODE_VERSION})
+                          "hmcode_version": K.HMCODE_VERSION},
+                bbn_backends={o: d.get("bbn_model_effective") for o, d in (data or {}).items()
+                              if isinstance(d, dict) and d.get("bbn_model_effective")})
+            MP.generate_plots(samples, CONFIG, PLOT_SETTINGS, data, reference_model)
             if _cite:
                 print(f"\nWhat to cite for this run (data, codes, acknowledgements): {_cite}")
             elapsed = format_elapsed_time(time.time() - t0)

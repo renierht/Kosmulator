@@ -115,7 +115,7 @@ For ACT DR6 and SPT-3G D1 (`CMB_ACT`, `CMB_SPT`, `CMB_PACT`, `CMB_SPA`), install
 ```bash
 pip install "candl-like>=2.0.3"
 ```
-The SPT-3G data are included as well. If they are ever missing or changed in your copy, `python -m Kosmulator_main.get_spt_data` downloads and checks them again (`Observations/candl/README.md`).
+The SPT-3G data are included as well. If the SPT-3G D1 files are ever missing or changed in your copy, `python -m Kosmulator_main.get_spt_data` downloads and checks them again; for the MUSE lensing file add `--muse-zip` with the zip from https://pole.uchicago.edu/public/data/ge25/ (`Observations/candl/README.md`, `Observations/spt3g_muse_lensing/README.md`).
 Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced installation section at the end for additional information. With clipy installed, the CLIK build (step 5 there) can be skipped.
 
 ---
@@ -382,6 +382,8 @@ Kosmulator/
 2. **HMcode-2020** (`cmb_nonlinear = "hmcode"`)  
    Mead, A., Brieden, S., Tröster, T., & Heymans, C. (2021). *HMcode-2020: Improved modelling of non-linear cosmological power spectra with baryonic feedback*. MNRAS, 502, 1401 (arXiv:2009.01858).  
    https://doi.org/10.1093/mnras/stab082  
+   HMcode 2015 (`hmcode_version = "2015"`): Mead, A., Peacock, J., Heymans, C., Joudaki, S., & Heavens, A. (2015). *An accurate halo model for fitting non-linear cosmological power spectra and baryonic feedback models*. MNRAS, 454, 1958 (arXiv:1505.07833).  
+   https://doi.org/10.1093/mnras/stv2036  
    Halofit (`cmb_nonlinear = "halofit"`): Takahashi, R., et al. (2012). *Revising the Halofit Model for the Nonlinear Matter Power Spectrum*. ApJ, 761, 152 (arXiv:1208.2701).  
    https://doi.org/10.1088/0004-637X/761/2/152
 
@@ -399,7 +401,7 @@ Kosmulator/
    Lewis, A. (2025). *GetDist: a Python package for analysing Monte Carlo samples*. JCAP, 08, 025 (arXiv:1910.13970).  
    https://doi.org/10.1088/1475-7516/2025/08/025
 
-6. **r_d without CLASS** (BAO groups when CLASS is not loaded)  
+6. **r_d without CLASS** (BAO with BBN or primary CMB, when CLASS cannot be imported)  
    Eisenstein, D. J., & Hu, W. (1998). *Baryonic Features in the Matter Transfer Function*. ApJ, 496, 605 (arXiv:astro-ph/9709112).  
    https://doi.org/10.1086/305424
 	
@@ -539,18 +541,18 @@ Note: This is a compilation paper of all the individual data-point. Also cite th
 #### Growth of Structure (fσ₈)
 `Observations/f_sigma_8.dat` is Table VI of Skara & Perivolaropoulos (2020), an update of the Kazantzidis & Perivolaropoulos (2018) compilation; also cite the survey papers of the points.
 
-1. Skara, F., & Perivolaropoulos, L. (2020).  
-   *Tension of the E_G statistic and RSD data with Planck/ΛCDM and implications for weakening gravity*.  
-   Phys. Rev. D, 101(6), 063521 (arXiv:1911.10609).  
-   https://doi.org/10.1103/PhysRevD.101.063521
-
-2. Kazantzidis, L., & Perivolaropoulos, L. (2018).  
+1. Kazantzidis, L., & Perivolaropoulos, L. (2018).  
    *Evolution of the fσ8 tension with the Planck15/ΛCDM determination and implications for modified gravity theories*.  
    Phys. Rev. D, 97(10), 103503.  
    https://doi.org/10.1103/PhysRevD.97.103503
 
-#### Growth rate f(z) (`f`)
-`Observations/f.dat`: rows 1 - 3 from Perenon et al. (2019), rows 4 - 14 from Table 1 of Avila et al. (2022).
+2. Skara, F., & Perivolaropoulos, L. (2020).  
+   *Tension of the E_G statistic and RSD data with Planck/ΛCDM and implications for weakening gravity*.  
+   Phys. Rev. D, 101(6), 063521 (arXiv:1911.10609).  
+   https://doi.org/10.1103/PhysRevD.101.063521
+
+#### σ₈ Constraints
+Growth rate f(z) (`f`, `Observations/f.dat`): rows 1 - 3 from Perenon et al. (2019), rows 4 - 14 from Table 1 of Avila et al. (2022).
 
 1. Perenon, L., Bel, J., Maartens, R., et al. (2019).  
    *Optimising Growth of Structure Constraints on Modified Gravity*.  
@@ -616,10 +618,16 @@ AlterBBN the predicted D/H(ω_b) is a power law fitted to the PRyMordial table
    https://doi.org/10.1088/0004-637X/781/1/31
 
 2. Fields, B. D., Molaro, P., & Sarkar, S. (2025).  
-   *Big-Bang Nucleosynthesis*, in the Review of Particle Physics (Particle Data Group), 2025 update; PDG asks to cite S. Navas et al. (Particle Data Group), Phys. Rev. D 110, 030001 (2024) and 2025 update.  
-   https://doi.org/10.1103/PhysRevD.110.030001
+   *Big-Bang Nucleosynthesis*, in the Review of Particle Physics (Particle Data Group), 2025 update.  
+   https://pdg.lbl.gov  
+   PDG's own citation for the Review: S. Navas et al. (Particle Data Group), Phys. Rev. D 110, 030001 (2024) and 2025 update, https://doi.org/10.1103/PhysRevD.110.030001
 
-3. Burns, A.-K., Tait, T. M. P., & Valli, M. (2024).  
+3. The BBN prior (`BBN_PryMordial`, Ω_b h² = 0.02218 ± 0.00055): Schöneberg, N. (2024).  
+   *The 2024 BBN baryon abundance update*.  
+   JCAP, 06, 006 (arXiv:2401.15054).  
+   https://doi.org/10.1088/1475-7516/2024/06/006
+
+4. Burns, A.-K., Tait, T. M. P., & Valli, M. (2024).  
    *PRyMordial: the first three minutes, within and beyond the standard model*.  
    Eur. Phys. J. C, 84, 86 (arXiv:2307.07061).  
    https://doi.org/10.1140/epjc/s10052-024-12442-0

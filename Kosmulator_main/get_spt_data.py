@@ -138,6 +138,9 @@ def main(argv=None) -> int:
     ap.add_argument("--no-lite", action="store_true", help="skip the SPT-3G D1 T&E lite data (CMB_SPT, CMB_SPA)")
     ap.add_argument("--force", action="store_true", help="download again even when the files are there")
     a = ap.parse_args(argv)
+    if a.no_lite and not a.muse_zip:
+        print("Nothing to do: --no-lite without --muse-zip")
+        return 0
     if not a.no_lite:
         print("SPT-3G D1 T&E lite (spt_candl_data, commit %s) -> %s" % (SPT_CANDL_COMMIT[:7],
               os.path.join(K.OBSERVATIONS_BASE, "candl")))

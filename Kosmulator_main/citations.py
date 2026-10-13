@@ -57,6 +57,9 @@ REFS: Dict[str, str] = {
               "Approximation schemes, JCAP 07 (2011) 034, arXiv:1104.2933, doi:10.1088/1475-7516/2011/07/034",
     "eisenstein98": "D. J. Eisenstein, W. Hu (1998), Baryonic Features in the Matter Transfer Function, ApJ 496, 605, "
                     "arXiv:astro-ph/9709112, doi:10.1086/305424",
+    "mead15": "A. Mead, J. Peacock, C. Heymans, S. Joudaki, A. Heavens (2015), An accurate halo model for fitting "
+              "non-linear cosmological power spectra and baryonic feedback models, MNRAS 454, 1958, arXiv:1505.07833, "
+              "doi:10.1093/mnras/stv2036",
     "mead21": "A. Mead, S. Brieden, T. Troester, C. Heymans (2021), HMcode-2020: Improved modelling of non-linear "
               "cosmological power spectra with baryonic feedback, MNRAS 502, 1401, arXiv:2009.01858, "
               "doi:10.1093/mnras/stab082",
@@ -156,6 +159,8 @@ REFS: Dict[str, str] = {
                "Data Group), Phys. Rev. D 110, 030001 (2024) and 2025 update, doi:10.1103/PhysRevD.110.030001",
     "cooke14": "R. J. Cooke, M. Pettini, R. A. Jorgenson, M. T. Murphy, C. C. Steidel (2014), Precision measures of "
                "the primordial abundance of deuterium, ApJ 781, 31, arXiv:1308.3240, doi:10.1088/0004-637X/781/1/31",
+    "schoneberg24": "N. Schoeneberg (2024), The 2024 BBN baryon abundance update, JCAP 06 (2024) 006, "
+                    "arXiv:2401.15054, doi:10.1088/1475-7516/2024/06/006",
     "burns24": "A.-K. Burns, T. M. P. Tait, M. Valli (2024), PRyMordial: The First Three Minutes, Within and Beyond "
                "the Standard Model, Eur. Phys. J. C 84, 86, arXiv:2307.07061, doi:10.1140/epjc/s10052-024-12442-0",
     "arbey12": "A. Arbey (2012), AlterBBN: A program for calculating the BBN abundances of the elements in "
@@ -203,9 +208,8 @@ DATA: List[Dict[str, object]] = [
          files=("CC.dat", "CC_corr.txt"), licence="papers",
          source="Kosmulator's compilation; every row checked against its paper (source after '#' in CC.dat); "
                 "correlations of the Loubser (2025) DESI points in CC_corr.txt",
-         refs=("moresco20",), rows_from="CC.dat",
-         note="Cite the paper of every row used (listed per run, and in CC.dat). Moresco et al. (2020) for the "
-              "optional SPS-model systematic covariance."),
+         refs=(), rows_from="CC.dat", refs_if={"CC_SYS_COV": ("moresco20",)},
+         note="Cite the paper of every row used (listed per run, and in CC.dat)."),
     dict(tags=("OHD",), name="H(z) compilation (31 chronometer + 20 BAO points)",
          files=("OHD.dat",), licence="papers", source="compilation of Sharov & Vasiliev (2018); origin of the file "
                                                        "not recorded",
@@ -241,10 +245,11 @@ DATA: List[Dict[str, object]] = [
          licence="cc_by_desi", source="DESI 2024 likelihood release as distributed in github.com/CobayaSampler/"
                                       "bao_data (desi_2024_gaussian_bao_ALL_GCcomb); see DESI_DR1.txt's header",
          refs=("desi24_VI", "desi_dr1"), ack=("desi",)),
-    dict(tags=("DESI_DR2",), name="DESI DR2 BAO", files=("DESI_DR2.txt", "DESI_DR2_covtot.txt"),
+    dict(tags=("DESI_DR2",), name="DESI DR2 BAO", files=("DESI_DR2_synced.txt", "DESI_DR2_covtot.txt"),
          licence="cc_by_desi_dr2", source="DESI DR2 BAO (values and covariance of DESI DR2 Results II); Kosmulator's "
                                       "copy: origin not recorded",
-         refs=("desi25_dr2",), ack=("desi",)),
+         refs=("desi25_dr2",), ack=("desi",),
+         note="DESI_DR2.txt holds the same values with another error column and is not read."),
     dict(tags=("f",), name="Growth rate f(z)", files=("f.dat",), licence="papers",
          source="rows 1 - 3 Perenon et al. (2019), Table 1; rows 4 - 14 Avila et al. (2022), Table 1 (f.dat header)",
          refs=("perenon19", "avila22"), note="Also cite the survey papers of the points (listed in those tables)."),
@@ -253,13 +258,18 @@ DATA: List[Dict[str, object]] = [
          source="Skara & Perivolaropoulos (2020), Appendix B, Table VI, an update of Kazantzidis & Perivolaropoulos "
                 "(2018), Table II (f_sigma_8.dat header)",
          refs=("skara20", "kazantzidis18"), note="Also cite the survey papers of the points (listed in Table VI)."),
-    dict(tags=("BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial", "BBN_prior"),
-         name="Primordial deuterium D/H (12 quasar systems, PDG 2025) and BBN predictions",
-         files=("constants.BBN_DH_PDG_SYSTEMS", "BBN/ (grids made by Kosmulator)"), licence="papers",
-         source="PDG BBN review (2025 update); D/H(omega_b) from AlterBBN (BBN_DH_AlterBBN) or a power law fitted "
-                "to the PRyMordial table",
-         refs=("pdg_bbn", "cooke14", "burns24"), refs_by_tag={"BBN_DH_AlterBBN": ("arbey12", "arbey20")},
-         note="Also cite the papers of the 12 D/H systems (listed in the PDG review)."),
+    dict(tags=("BBN_DH", "BBN_DH_AlterBBN"),
+         name="Primordial deuterium D/H (the 12 quasar systems of the PDG 2025 review)",
+         files=("constants.BBN_DH_PDG_SYSTEMS", "BBN/ (AlterBBN grids made by Kosmulator)"), licence="papers",
+         source="PDG BBN review (2025 update); predicted D/H(omega_b) from a power law fitted to the PRyMordial "
+                "table (BBN_DH) or from AlterBBN (BBN_DH_AlterBBN)",
+         refs=("pdg_bbn", "cooke14"),
+         note="Also cite the papers of the 12 D/H systems (listed in the PDG review); the code that predicted D/H "
+              "is listed under Codes."),
+    dict(tags=("BBN_PryMordial", "BBN_prior"), name="BBN prior on Omega_b h^2 = 0.02218 +- 0.00055 (LCDM)",
+         files=("Kosmulator_main/Config.py",), licence="papers",
+         source="the value of Schoeneberg (2024) (PDG abundances, PRyMordial, conservative nuclear rates)",
+         refs=("schoneberg24", "burns24")),
     dict(tags=("CMB_hil", "CMB_hil_TT"), name="Planck 2018 high-l TT,TE,EE / TT (plik, plik_lite)",
          files=("plik_rd12_HM_v22b_TTTEEE.clik", "plik_rd12_HM_v22_TT.clik", "plik_lite_v22_TTTEEE.clik",
                 "plik_lite_v22_TT.clik"), licence="none_planck",
@@ -316,15 +326,17 @@ CODES: Dict[str, Dict[str, object]] = {
                        refs=("terbraak06", "terbraak08")),
     "zeus": dict(name="zeus (ensemble slice sampling)", refs=("karamanis21", "karamanis21b")),
     "class": dict(name="CLASS (CMB spectra; r_d)", refs=("lesgourgues11", "blas11")),
-    "eh98": dict(name="r_d from the Eisenstein & Hu (1998) fit (CLASS was not loaded)", refs=("eisenstein98",)),
+    "eh98": dict(name="r_d from the Eisenstein & Hu (1998) fit (CLASS could not be imported)", refs=("eisenstein98",)),
     "hmcode": dict(name="HMcode-2020 in CLASS (cmb_nonlinear = \"hmcode\")", refs=("mead21",)),
+    "hmcode2015": dict(name="HMcode 2015 in CLASS (cmb_nonlinear = \"hmcode\", hmcode_version = \"2015\")",
+                       refs=("mead15",)),
     "halofit": dict(name="Halofit in CLASS (cmb_nonlinear = \"halofit\")", refs=("takahashi12",)),
     "clik": dict(name="Planck likelihood code (clik or clipy, github.com/benabed/clipy)", refs=("planck18_V",)),
     "candl": dict(name="candl (ACT and SPT likelihoods)", refs=("balkenhol24",)),
     "act_dr6_lenslike": dict(name="act_dr6_lenslike (ACT DR6 + Planck PR4 lensing likelihood code)",
                              refs=("qu24", "madhavacheril24")),
     "alterbbn": dict(name="AlterBBN", refs=("arbey12", "arbey20")),
-    "prymordial": dict(name="PRyMordial (the D/H table behind the BBN power law and BBN_PryMordial)",
+    "prymordial": dict(name="PRyMordial (the D/H table behind BBN_DH's power law)",
                        refs=("burns24",)),
     "getdist": dict(name="GetDist (corner plots, marginal statistics)", refs=("lewis19",)),
 }
@@ -332,7 +344,9 @@ CODES: Dict[str, Dict[str, object]] = {
 #: The samplers that ran in this process (Kosmulator_MCMC records them), for the run's citations
 ENGINES_USED: set = set()
 
-_PLANCK_TAGS = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lensing", "CMB_planck_ACTcut")
+#: Tags whose likelihood runs through clik or clipy (CMB_planck_ACTcut and SRoll2 are Kosmulator's numpy code)
+_CLIK_TAGS = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lensing")
+_BAO_TAGS = ("BAO", "DESI_DR1", "DESI_DR2")
 
 
 def _components(tags: Iterable[str]) -> List[str]:
@@ -384,12 +398,21 @@ def cc_row_sources(path: Optional[str] = None) -> List[str]:
     return [who + (f", {i}" if i else "") for who, i in found.items()]
 
 
+def _rd_calibrated(group: Sequence[str]) -> bool:
+    """BAO/DESI in this group take r_d from the cosmology (Post_processing.bao_rd_calibrated's rule)."""
+    return any(str(t).startswith("BBN") or str(t) in K.CMB_PRIMARY_TAGS or "THETA" in str(t) for t in group)
+
+
 def codes_used(observations: Sequence[Sequence[str]], engines: Iterable[str] = (), settings: Optional[dict] = None,
-               class_loaded: Optional[bool] = None) -> List[str]:
-    """The codes a run with these groups used (engines: the samplers that ran; class_loaded: whether CLASS
-    computed r_d for BAO, by default whether classy is loaded in this process)."""
+               class_ok: Optional[bool] = None, bbn_backends: Optional[Dict[str, str]] = None) -> List[str]:
+    """
+    The codes a run with these groups used. engines: the samplers whose chains the run used; class_ok:
+    whether CLASS could compute r_d (default: rd_helpers.classy_import_problem() is None); bbn_backends:
+    {tag: bbn_model_effective} of the BBN tags (default: the configured AlterBBN grid).
+    """
     settings = dict(settings or {})
-    tags = set(_components(t for g in observations for t in g))
+    groups = [_components(g) for g in observations]
+    tags = set(t for g in groups for t in g)
     used = ["kosmulator"]
     engines = set(engines) or {"emcee"}
     if "emcee" in engines:
@@ -399,30 +422,46 @@ def codes_used(observations: Sequence[Sequence[str]], engines: Iterable[str] = (
     if "zeus" in engines:
         used.append("zeus")
     cmb = any(t.startswith("CMB_") for t in tags)
-    bao = bool(tags & {"BAO", "DESI_DR1", "DESI_DR2"})
-    if class_loaded is None:
-        class_loaded = "classy" in sys.modules
-    if bao and not (cmb or class_loaded):
+    bao_cal = any(_rd_calibrated(g) and any(t in _BAO_TAGS for t in g) for g in groups)
+    if bao_cal and class_ok is None:
+        try:
+            from Kosmulator_main import rd_helpers as _RD
+            class_ok = _RD.classy_import_problem() is None
+        except Exception:
+            class_ok = "classy" in sys.modules
+    if bao_cal and not class_ok:
         used.append("eh98")
-    if cmb or (bao and class_loaded):
+    if cmb or (bao_cal and class_ok):
         used.append("class")
-        nl = settings.get("cmb_nonlinear", getattr(K, "CMB_NONLINEAR", None)) if cmb else None
-        if nl == "hmcode" and str(settings.get("hmcode_version", getattr(K, "HMCODE_VERSION", "2020"))) == "2020":
-            used.append("hmcode")
+    if cmb:
+        nl = settings.get("cmb_nonlinear", getattr(K, "CMB_NONLINEAR", None))
+        if nl == "hmcode":
+            used.append("hmcode2015" if str(settings.get("hmcode_version", getattr(K, "HMCODE_VERSION", "2020")))
+                        == "2015" else "hmcode")
         elif nl == "halofit":
             used.append("halofit")
-    if tags & set(_PLANCK_TAGS):
+    if tags & set(_CLIK_TAGS):
         used.append("clik")
     if tags & {"CMB_ACT", "CMB_SPT"}:
         used.append("candl")
     if "CMB_lensing_ACTPlanck" in tags:
         used.append("act_dr6_lenslike")
+    eff = dict(bbn_backends or {})
     if "BBN_DH_AlterBBN" in tags:
-        used.append("alterbbn")
-    if tags & {"BBN_DH", "BBN_PryMordial"}:
+        used.append("alterbbn" if str(eff.get("BBN_DH_AlterBBN", "alterbbn_grid")).startswith("alterbbn")
+                    else "prymordial")
+    if "BBN_DH" in tags and "prymordial" not in used:
         used.append("prymordial")
     used.append("getdist")
     return used
+
+
+def _refs_for_run(e: Dict[str, object], tag: str) -> List[str]:
+    keys = refs_for_tag(tag)
+    for flag, ks in dict(e.get("refs_if", {})).items():
+        if getattr(K, flag, None):
+            keys += list(ks)
+    return keys
 
 
 def _fmt_refs(keys: Iterable[str], indent: str = "  ") -> List[str]:
@@ -431,7 +470,7 @@ def _fmt_refs(keys: Iterable[str], indent: str = "  ") -> List[str]:
 
 def run_citations_markdown(models: Sequence[str], observations: Sequence[Sequence[str]], suffix: str = "",
                            engines: Iterable[str] = (), settings: Optional[dict] = None,
-                           class_loaded: Optional[bool] = None) -> str:
+                           class_ok: Optional[bool] = None, bbn_backends: Optional[Dict[str, str]] = None) -> str:
     """What to cite and acknowledge for one run (markdown)."""
     tags = _components(t for g in observations for t in g)
     out = [f"# What to cite for this run{f' ({suffix})' if suffix else ''}", "",
@@ -439,7 +478,7 @@ def run_citations_markdown(models: Sequence[str], observations: Sequence[Sequenc
            f"Groups: {'; '.join(' + '.join(map(str, g)) for g in observations)}.",
            "Cite the papers below for what this run used. Sources and licence status of every data file: "
            "Observations/DATA_SOURCES.md.", ""]
-    used = codes_used(observations, engines, settings, class_loaded)
+    used = codes_used(observations, engines, settings, class_ok, bbn_backends)
     out += ["## Kosmulator", ""] + _fmt_refs(CODES["kosmulator"]["refs"]) + [""]
     out += ["## Data", ""]
     acks: List[str] = []
@@ -448,7 +487,7 @@ def run_citations_markdown(models: Sequence[str], observations: Sequence[Sequenc
         if e is None:
             out += [f"### {t}", "", "  - (no entry: see Observations/DATA_SOURCES.md)", ""]
             continue
-        out += [f"### {t}: {e['name']}", ""] + _fmt_refs(refs_for_tag(t))
+        out += [f"### {t}: {e['name']}", ""] + _fmt_refs(_refs_for_run(e, t))
         if e.get("rows_from") == "CC.dat":
             rows = cc_row_sources()
             if rows:
@@ -470,14 +509,18 @@ def run_citations_markdown(models: Sequence[str], observations: Sequence[Sequenc
 
 
 def write_run_citations(suffix: str, models: Sequence[str], observations: Sequence[Sequence[str]],
-                        engines: Iterable[str] = (), settings: Optional[dict] = None) -> Optional[str]:
-    """Write Statistical_analysis_tables/<suffix>/citations.md; returns its path (None if it fails)."""
+                        engines: Iterable[str] = (), settings: Optional[dict] = None,
+                        class_ok: Optional[bool] = None, bbn_backends: Optional[Dict[str, str]] = None
+                        ) -> Optional[str]:
+    """Write Statistical_analysis_tables/<suffix>/citations.md (the folder of the run's statistics,
+    PLOT_SETTINGS["output_suffix"] as Plots uses it); returns its path (None if it fails)."""
     try:
-        folder = os.path.join("Statistical_analysis_tables", suffix or "default_run")
+        folder = os.path.join("Statistical_analysis_tables", suffix if suffix is not None else "default_run")
         os.makedirs(folder, exist_ok=True)
         path = os.path.join(folder, "citations.md")
         with open(path, "w", encoding="utf-8") as fh:
-            fh.write(run_citations_markdown(models, observations, suffix, engines, settings))
+            fh.write(run_citations_markdown(models, observations, suffix, engines, settings, class_ok,
+                                            bbn_backends))
         return path
     except Exception as e:                       # never stop a finished run over this file
         print(f"[citations] not written ({e})")
@@ -508,6 +551,8 @@ def data_sources_markdown() -> str:
         out += [f"### {', '.join(e['tags'])}: {e['name']}", ""] + _fmt_refs(e["refs"], "")
         for t, ks in dict(e.get("refs_by_tag", {})).items():
             out += [f"- with `{t}` also:"] + _fmt_refs(ks, "  ")
+        for flag, ks in dict(e.get("refs_if", {})).items():
+            out += [f"- with the option `constants.{flag}` also:"] + _fmt_refs(ks, "  ")
         if e.get("rows_from") == "CC.dat":
             out += ["- the papers of the CC.dat rows used:"] + [f"  - {r}" for r in cc_row_sources()]
         if e.get("note"):

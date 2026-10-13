@@ -23,10 +23,11 @@ Kosmulator includes every data set it supports, with its source and the papers t
 | `Union3` | Union3 / UNITY1.5 binned distance moduli | `Union3.txt`, `Union3_mag_covmat.txt` | Union3 release, github.com/rubind/union3_release; Kosmulator's copy: origin not recorded | MIT (github.com/rubind/union3_release) |
 | `BAO` | DESI DR1 BAO, the 10 anisotropic points | `BAO.txt`, `BAO_invcov.txt` | values of DESI 2024 VI (Table 1), two decimals; see BAO.txt's header | CC BY 4.0 (DESI data licence, https://data.desi.lbl.gov/doc/acknowledgments/) |
 | `DESI_DR1` | DESI DR1 BAO, all 12 measurements | `DESI_DR1.txt`, `DESI_DR1_cov.txt` | DESI 2024 likelihood release as distributed in github.com/CobayaSampler/bao_data (desi_2024_gaussian_bao_ALL_GCcomb); see DESI_DR1.txt's header | CC BY 4.0 (DESI data licence, https://data.desi.lbl.gov/doc/acknowledgments/) |
-| `DESI_DR2` | DESI DR2 BAO | `DESI_DR2.txt`, `DESI_DR2_covtot.txt` | DESI DR2 BAO (values and covariance of DESI DR2 Results II); Kosmulator's copy: origin not recorded | values of DESI DR2 Results II; DESI's CC BY 4.0 data licence covers its public data releases (EDR, DR1) |
+| `DESI_DR2` | DESI DR2 BAO | `DESI_DR2_synced.txt`, `DESI_DR2_covtot.txt` | DESI DR2 BAO (values and covariance of DESI DR2 Results II); Kosmulator's copy: origin not recorded | values of DESI DR2 Results II; DESI's CC BY 4.0 data licence covers its public data releases (EDR, DR1) |
 | `f` | Growth rate f(z) | `f.dat` | rows 1 - 3 Perenon et al. (2019), Table 1; rows 4 - 14 Avila et al. (2022), Table 1 (f.dat header) | values compiled from the published papers |
 | `f_sigma_8` | f sigma_8(z) from redshift-space distortions (66 points) | `f_sigma_8.dat` | Skara & Perivolaropoulos (2020), Appendix B, Table VI, an update of Kazantzidis & Perivolaropoulos (2018), Table II (f_sigma_8.dat header) | values compiled from the published papers |
-| `BBN_DH`, `BBN_DH_AlterBBN`, `BBN_PryMordial`, `BBN_prior` | Primordial deuterium D/H (12 quasar systems, PDG 2025) and BBN predictions | `constants.BBN_DH_PDG_SYSTEMS`, `BBN/ (grids made by Kosmulator)` | PDG BBN review (2025 update); D/H(omega_b) from AlterBBN (BBN_DH_AlterBBN) or a power law fitted to the PRyMordial table | values compiled from the published papers |
+| `BBN_DH`, `BBN_DH_AlterBBN` | Primordial deuterium D/H (the 12 quasar systems of the PDG 2025 review) | `constants.BBN_DH_PDG_SYSTEMS`, `BBN/ (AlterBBN grids made by Kosmulator)` | PDG BBN review (2025 update); predicted D/H(omega_b) from a power law fitted to the PRyMordial table (BBN_DH) or from AlterBBN (BBN_DH_AlterBBN) | values compiled from the published papers |
+| `BBN_PryMordial`, `BBN_prior` | BBN prior on Omega_b h^2 = 0.02218 +- 0.00055 (LCDM) | `Kosmulator_main/Config.py` | the value of Schoeneberg (2024) (PDG abundances, PRyMordial, conservative nuclear rates) | values compiled from the published papers |
 | `CMB_hil`, `CMB_hil_TT` | Planck 2018 high-l TT,TE,EE / TT (plik, plik_lite) | `plik_rd12_HM_v22b_TTTEEE.clik`, `plik_rd12_HM_v22_TT.clik`, `plik_lite_v22_TTTEEE.clik`, `plik_lite_v22_TT.clik` | Planck Legacy Archive, COM_Likelihood_Data-baseline_R3.00 | no licence stated (ESA Planck Legacy Archive) |
 | `CMB_lowl`, `CMB_lowl_TT` | Planck 2018 low-l EE (SimAll) and TT (Commander) | `simall_100x143_offlike5_EE_Aplanck_B.clik`, `commander_dx12_v3_2_29.clik` | Planck Legacy Archive, COM_Likelihood_Data-baseline_R3.00 | no licence stated (ESA Planck Legacy Archive) |
 | `CMB_lensing` | Planck 2018 lensing (raw and CMB-marginalised) | `smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8.clik_lensing`, `smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing` | Planck Legacy Archive, COM_Likelihood_Data-baseline_R3.00 | no licence stated (ESA Planck Legacy Archive) |
@@ -43,7 +44,8 @@ Combinations: `CMB_PACT` = `CMB_lowl_TT` + `CMB_lowl_sroll2` + `CMB_planck_ACTcu
 
 ### CC: Cosmic chronometers H(z)
 
-- M. Moresco et al. (2020), Setting the Stage for Cosmic Chronometers. II. Impact of Stellar Population Synthesis Models Systematics and Full Covariance Matrix, ApJ 898, 82, arXiv:2003.07362, doi:10.3847/1538-4357/ab9eb0
+- with the option `constants.CC_SYS_COV` also:
+  - M. Moresco et al. (2020), Setting the Stage for Cosmic Chronometers. II. Impact of Stellar Population Synthesis Models Systematics and Full Covariance Matrix, ApJ 898, 82, arXiv:2003.07362, doi:10.3847/1538-4357/ab9eb0
 - the papers of the CC.dat rows used:
   - Zhang et al. 2014, arXiv:1207.4541
   - Jimenez et al. 2003, astro-ph/0302560
@@ -56,7 +58,7 @@ Combinations: `CMB_PACT` = `CMB_lowl_TT` + `CMB_lowl_sroll2` + `CMB_planck_ACTcu
   - Stern et al. 2010, arXiv:0907.3149
   - Loubser et al. 2025, arXiv:2506.03836
   - Moresco 2015, arXiv:1503.01116
-- Note: Cite the paper of every row used (listed per run, and in CC.dat). Moresco et al. (2020) for the optional SPS-model systematic covariance.
+- Note: Cite the paper of every row used (listed per run, and in CC.dat).
 
 ### OHD: H(z) compilation (31 chronometer + 20 BAO points)
 
@@ -109,6 +111,7 @@ Combinations: `CMB_PACT` = `CMB_lowl_TT` + `CMB_lowl_sroll2` + `CMB_planck_ACTcu
 ### DESI_DR2: DESI DR2 BAO
 
 - DESI Collaboration, M. Abdul Karim et al. (2025), DESI DR2 Results II: Measurements of Baryon Acoustic Oscillations and Cosmological Constraints, Phys. Rev. D 112, 083515, arXiv:2503.14738, doi:10.1103/tr6y-kpc6
+- Note: DESI_DR2.txt holds the same values with another error column and is not read.
 - Acknowledgement: DESI's data licence (CC BY 4.0, for its public data releases) asks publications that use DESI data to cite the paper of the data release used (DR1: DESI Collaboration 2026, AJ 171, 285) and to include DESI's acknowledgement text, given at https://data.desi.lbl.gov/doc/acknowledgments/ ; whoever redistributes the data says what was changed (Kosmulator's DESI files: see their headers).
 
 ### f: Growth rate f(z)
@@ -123,15 +126,16 @@ Combinations: `CMB_PACT` = `CMB_lowl_TT` + `CMB_lowl_sroll2` + `CMB_planck_ACTcu
 - L. Kazantzidis, L. Perivolaropoulos (2018), Evolution of the f sigma_8 tension with the Planck15/LCDM determination and implications for modified gravity theories, Phys. Rev. D 97, 103503, arXiv:1803.01337, doi:10.1103/PhysRevD.97.103503
 - Note: Also cite the survey papers of the points (listed in Table VI).
 
-### BBN_DH, BBN_DH_AlterBBN, BBN_PryMordial, BBN_prior: Primordial deuterium D/H (12 quasar systems, PDG 2025) and BBN predictions
+### BBN_DH, BBN_DH_AlterBBN: Primordial deuterium D/H (the 12 quasar systems of the PDG 2025 review)
 
 - B. D. Fields, P. Molaro, S. Sarkar, Big Bang Nucleosynthesis, review in S. Navas et al. (Particle Data Group), Phys. Rev. D 110, 030001 (2024) and 2025 update, doi:10.1103/PhysRevD.110.030001
 - R. J. Cooke, M. Pettini, R. A. Jorgenson, M. T. Murphy, C. C. Steidel (2014), Precision measures of the primordial abundance of deuterium, ApJ 781, 31, arXiv:1308.3240, doi:10.1088/0004-637X/781/1/31
+- Note: Also cite the papers of the 12 D/H systems (listed in the PDG review); the code that predicted D/H is listed under Codes.
+
+### BBN_PryMordial, BBN_prior: BBN prior on Omega_b h^2 = 0.02218 +- 0.00055 (LCDM)
+
+- N. Schoeneberg (2024), The 2024 BBN baryon abundance update, JCAP 06 (2024) 006, arXiv:2401.15054, doi:10.1088/1475-7516/2024/06/006
 - A.-K. Burns, T. M. P. Tait, M. Valli (2024), PRyMordial: The First Three Minutes, Within and Beyond the Standard Model, Eur. Phys. J. C 84, 86, arXiv:2307.07061, doi:10.1140/epjc/s10052-024-12442-0
-- with `BBN_DH_AlterBBN` also:
-  - A. Arbey (2012), AlterBBN: A program for calculating the BBN abundances of the elements in alternative cosmologies, Comput. Phys. Commun. 183, 1822, arXiv:1106.1363, doi:10.1016/j.cpc.2012.03.018
-  - A. Arbey, J. Auffinger, K. P. Hickerson, E. S. Jenssen (2020), AlterBBN v2: A public code for calculating Big-Bang nucleosynthesis constraints in alternative cosmologies, Comput. Phys. Commun. 248, 106982, arXiv:1806.11095, doi:10.1016/j.cpc.2019.106982
-- Note: Also cite the papers of the 12 D/H systems (listed in the PDG review).
 
 ### CMB_hil, CMB_hil_TT: Planck 2018 high-l TT,TE,EE / TT (plik, plik_lite)
 
@@ -209,13 +213,17 @@ Combinations: `CMB_PACT` = `CMB_lowl_TT` + `CMB_lowl_sroll2` + `CMB_planck_ACTcu
 - J. Lesgourgues (2011), The Cosmic Linear Anisotropy Solving System (CLASS) I: Overview, arXiv:1104.2932
 - D. Blas, J. Lesgourgues, T. Tram (2011), The Cosmic Linear Anisotropy Solving System (CLASS) II: Approximation schemes, JCAP 07 (2011) 034, arXiv:1104.2933, doi:10.1088/1475-7516/2011/07/034
 
-### r_d from the Eisenstein & Hu (1998) fit (CLASS was not loaded)
+### r_d from the Eisenstein & Hu (1998) fit (CLASS could not be imported)
 
 - D. J. Eisenstein, W. Hu (1998), Baryonic Features in the Matter Transfer Function, ApJ 496, 605, arXiv:astro-ph/9709112, doi:10.1086/305424
 
 ### HMcode-2020 in CLASS (cmb_nonlinear = "hmcode")
 
 - A. Mead, S. Brieden, T. Troester, C. Heymans (2021), HMcode-2020: Improved modelling of non-linear cosmological power spectra with baryonic feedback, MNRAS 502, 1401, arXiv:2009.01858, doi:10.1093/mnras/stab082
+
+### HMcode 2015 in CLASS (cmb_nonlinear = "hmcode", hmcode_version = "2015")
+
+- A. Mead, J. Peacock, C. Heymans, S. Joudaki, A. Heavens (2015), An accurate halo model for fitting non-linear cosmological power spectra and baryonic feedback models, MNRAS 454, 1958, arXiv:1505.07833, doi:10.1093/mnras/stv2036
 
 ### Halofit in CLASS (cmb_nonlinear = "halofit")
 
@@ -239,7 +247,7 @@ Combinations: `CMB_PACT` = `CMB_lowl_TT` + `CMB_lowl_sroll2` + `CMB_planck_ACTcu
 - A. Arbey (2012), AlterBBN: A program for calculating the BBN abundances of the elements in alternative cosmologies, Comput. Phys. Commun. 183, 1822, arXiv:1106.1363, doi:10.1016/j.cpc.2012.03.018
 - A. Arbey, J. Auffinger, K. P. Hickerson, E. S. Jenssen (2020), AlterBBN v2: A public code for calculating Big-Bang nucleosynthesis constraints in alternative cosmologies, Comput. Phys. Commun. 248, 106982, arXiv:1806.11095, doi:10.1016/j.cpc.2019.106982
 
-### PRyMordial (the D/H table behind the BBN power law and BBN_PryMordial)
+### PRyMordial (the D/H table behind BBN_DH's power law)
 
 - A.-K. Burns, T. M. P. Tait, M. Valli (2024), PRyMordial: The First Three Minutes, Within and Beyond the Standard Model, Eur. Phys. J. C 84, 86, arXiv:2307.07061, doi:10.1140/epjc/s10052-024-12442-0
 

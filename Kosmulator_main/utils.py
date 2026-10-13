@@ -1311,6 +1311,15 @@ def cleanup_pantheon_cov(data: Dict[str, Any], obs_tag: str = "PantheonP"):
 # 7) Chain load-or-run orchestration
 # ───────────────────────────────────────────────────────────────────────────────
 
+def _cite_engine(engine: str) -> None:
+    """Record the sampler whose chain the run uses, also when it is loaded (the run's citations.md)."""
+    try:
+        from Kosmulator_main import citations as _CIT
+        _CIT.ENGINES_USED.add(engine)
+    except Exception:
+        pass
+
+
 def load_or_run_chain(
     output_dir: str,
     chain_file: str,
@@ -1420,6 +1429,7 @@ def load_or_run_chain(
         flat = all_samples[burn:, :, :].reshape(-1, all_samples.shape[-1])
         if loglike is not None and loglike.shape[0] != flat.shape[0]:
             loglike = None
+        _cite_engine("zeus")
         return {"samples": flat, "loglike": loglike}
 
         
@@ -1427,6 +1437,7 @@ def load_or_run_chain(
     # For vectorised/Zeus runs we *always* delegate loading/resume to
     # Kosmulator_MCMC.run_mcmc, which knows about "<name>_zeus.h5".
     if is_emcee_run and os.path.exists(chain_path) and not overwrite:
+        _cite_engine("emcee")
         # A0) Already converged (autocorr) → fast-path load
         with h5py.File(chain_path, "r") as h5f:
             if h5f.attrs.get("converged", False):
@@ -1517,6 +1528,7 @@ def load_or_run_chain(
             "[INFO] Zeus requested but found existing EMCEE chain.\n"
             f"       Re-using samples from {chain_path}.\n"
         )
+        _cite_engine("emcee")
         return Kosmulator_MCMC.load_mcmc_results(
             output_path=output_dir,
             file_name=chain_file,
