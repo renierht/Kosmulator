@@ -819,6 +819,8 @@ def create_config(
     model_name: List[str] = None,
     pantheonp_mode: str = "PplusSH0ES",  # DEPRECATED: use PantheonP/PantheonPS tags instead
     logger=None,
+    free_w=None,
+    free_w_dm=None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Main entry point: construct per-model CONFIG and a shared `data` dict.
@@ -946,6 +948,34 @@ def create_config(
     # ----------------------------------------------------------------------
     # 2. Expand each model's core parameter list with obs-required params
     # ----------------------------------------------------------------------
+    from copy import deepcopy
+    import User_defined_modules as UDM
+    from Kosmulator_main.ide_background import SELECTORS
+    free_w = UDM.FREE_W if free_w is None else free_w
+    free_w_dm = UDM.FREE_W_DM if free_w_dm is None else free_w_dm
+    if not isinstance(free_w, bool) or not isinstance(free_w_dm, bool):
+        raise ValueError("free_w and free_w_dm must be booleans")
+    models = deepcopy(models)
+    fixed_by_model = {}
+    for name, model in models.items():
+        fixed = {}
+        if name in SELECTORS:
+            if not UDM.ALLOW_DOOM_FACTOR_INSTABILITIES and (
+                    free_w_dm or not free_w or SELECTORS[name] >= 9):
+                raise ValueError(
+                    f"{name}: the available interacting doom-factor prior requires "
+                    "Models 1--8 with free w and fixed w_dm=0. Warm DM and Models "
+                    "9/10 have no validated perturbative classification; fixed w=-1 "
+                    "has a singular interacting doom factor. Set "
+                    "ALLOW_DOOM_FACTOR_INSTABILITIES=True to run backgrounds without this prior."
+                )
+            for par, free, value in (("w", free_w, -1.), ("w_dm", free_w_dm, 0.)):
+                if free and par not in model["parameters"]:
+                    model["parameters"].append(par)
+                if not free:
+                    fixed[par] = value
+                    model["parameters"] = [p for p in model["parameters"] if p != par]
+        fixed_by_model[name] = fixed
     models_aug = Add_required_parameters(models, observation)
 
     config: Dict[str, Any] = {}
@@ -996,6 +1026,11 @@ def create_config(
         # Initial config snapshot (we will update parameters after policies)
         config[mod] = {
             "model_name":        mod,
+            "fixed_parameters":  fixed_by_model[mod],
+            "eos_policy": {"free_w": free_w, "free_w_dm": free_w_dm},
+            "stability_scope": ("not_applicable" if mod not in SELECTORS else
+                                "unclassified" if free_w_dm or not free_w or SELECTORS[mod] >= 9
+                                else "cold_dm_sufficient_criterion"),
             "observations":      observation,
             "observation_types": obs_types,
             "parameters":        param_sets,
@@ -1052,17 +1087,7 @@ def create_config(
             #  - Optional validation mode: derive r_d from the matching CLASS
             #    homogeneous background for every BAO/DESI group.
             #  - Otherwise preserve the legacy early-calibrator/fixed/free policy.
-            model_class_supported = mod in {
-                "LCDM_v",
-                "Linear_IDE_1",
-                "Linear_IDE_2",
-                "Linear_IDE_3",
-                "Linear_IDE_4",
-                "Linear_IDE_5",
-                "NonLinear_IDE_1",
-                "NonLinear_IDE_2",
-                "NonLinear_IDE_3",
-            }
+            model_class_supported = mod == "LCDM_v" or mod in SELECTORS
 
             derive_rd_model_class = (
                 bool(getattr(K, "DERIVE_RD_WITH_MODEL_CLASS", False))

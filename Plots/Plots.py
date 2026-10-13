@@ -443,6 +443,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
             # Use the same r_d resolver as the likelihood/curve pipeline.
             from Plots.Plot_functions import bao_scale_summary
             params, _, _ = fetch_best_fit_values(med)
+            params.update(CONFIG[model_name].get("fixed_parameters", {}))
             bao_type = next(tag for tag in obs_list if tag in ("BAO", "DESI_DR1", "DESI_DR2"))
             summary = bao_scale_summary(params, model_name, bao_type)
             if summary is not None:
@@ -962,6 +963,7 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
                 rds = np.array([
                     rd.compute_rd_model_class({
                         **dict(zip(names, map(float, obs_samples[j]))),
+                        **CONFIG.get("fixed_parameters", {}),
                         "__model_name__": model_name,
                     }) for j in chosen
                 ])
@@ -1179,6 +1181,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
             combined = All_best_fit_values[model_name][obs_key]
             params_med, params_hi, params_lo = fetch_best_fit_values(combined)
             for parameters in (params_med, params_hi, params_lo):
+                parameters.update(CONFIG[model_name].get("fixed_parameters", {}))
                 parameters["__model_name__"] = model_name
 
             # (Optional) diagnostics

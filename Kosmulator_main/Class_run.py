@@ -62,7 +62,7 @@ _clik_hilTT: Optional[clik.clik] = None
 _current_class_model: Optional[str] = None
 _current_class_hash: Optional[str] = None
 
-# All eight IDE cosmologies share one homogeneous-background CLASS tree.
+# All ten IDE cosmologies share one homogeneous-background CLASS tree.
 IDE_CLASS_MODELS = frozenset({
     "Linear_IDE_1",
     "Linear_IDE_2",
@@ -72,6 +72,8 @@ IDE_CLASS_MODELS = frozenset({
     "NonLinear_IDE_1",
     "NonLinear_IDE_2",
     "NonLinear_IDE_3",
+    "SignSwitch_IDE_1",
+    "SignSwitch_IDE_2",
 })
 IDE_CLASS_BACKEND = "IDE_background"
 
@@ -544,8 +546,10 @@ def ensure_class_ready(
                 e,
             )
 
-        # Try existing model-local build (pre-cache behaviour)
-    if not force:
+    # IDE binaries must have a matching source-hash cache entry. An unstamped
+    # local binary may predate new selectors/fields and must never be promoted
+    # under the current source hash. Keep legacy fallback for other backends.
+    if not force and backend_name != IDE_CLASS_BACKEND:
         try:
             local_so = find_classy_so(backend_name)
             load_classy_so(local_so, backend_name, sig_hash)

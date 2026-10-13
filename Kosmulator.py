@@ -130,6 +130,7 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.1, 0.5),       # Implied total matter bounds if sampled directly
     "H_0": (60.0, 90.0),          # Hubble constant bounds
     "M_abs": (-20.5, -18.0),       # Supernova absolute magnitude (M)
+    "w_dm": (-0.1, 0.1),          # Used only when UDM.FREE_W_DM=True
     "w": (-2.0, -0.33),           # Dark energy equation of state
 
     # Interacting Dark Energy Coupling Parameters
@@ -171,6 +172,7 @@ true_values: Dict[str, float] = {
     "Omega_m": 0.307,
     "H_0": 70.0,
     "M_abs": -19.35,
+    "w_dm": 0.0,
     "w": -1.01,
     "delta_dm": 0.0,
     "delta_de": 0.0,

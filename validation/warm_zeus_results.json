@@ -1,0 +1,20 @@
+[
+  {
+    "model": "SignSwitch_IDE_1",
+    "free_w": false,
+    "free_w_dm": false,
+    "iterations": 28,
+    "walkers": 16,
+    "retained_samples": 384,
+    "metadata_roundtrip": true
+  },
+  {
+    "model": "SignSwitch_IDE_2",
+    "free_w": true,
+    "free_w_dm": true,
+    "iterations": 28,
+    "walkers": 16,
+    "retained_samples": 384,
+    "metadata_roundtrip": true
+  }
+]

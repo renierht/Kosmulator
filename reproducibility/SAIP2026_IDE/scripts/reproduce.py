@@ -53,6 +53,8 @@ def chain_paths(config,root,regime):
     return paths
 
 def configure(kc,udm,K,config,regime):
+    udm.FREE_W = True
+    udm.FREE_W_DM = False
     kc.model_names=['LCDM_v','NonLinear_IDE_2'];kc.true_model=config['reference_model']
     kc.observations=config['observations'];kc.nwalkers=config['walkers'];kc.burn=config['burn']
     # Load-only steering value, not provenance of the original MCMC run.

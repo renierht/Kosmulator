@@ -102,8 +102,9 @@ struct background
 
   double Omega0_lambda;    /**< \f$ \Omega_{0_\Lambda} \f$: cosmological constant */
   double Omega0_fld;       /**< \f$ \Omega_{0 de} \f$: fluid */
-  int ide_model;            /**< Kosmulator IDE selector: 0=off, 1..8=IDE models */
-  double delta_ide;         /**< Single coupling used by IDE models 2--8 */
+  int ide_model;            /**< Kosmulator IDE selector: 0=off, 1..10=IDE models */
+  double w_dm_ide;          /**< Constant interacting DM equation of state */
+  double delta_ide;         /**< Single coupling used by IDE models 2--10 */
   double delta_dm_ide;      /**< Dark-matter coupling for Linear_IDE_1 */
   double delta_de_ide;      /**< Dark-energy coupling for Linear_IDE_1 */
   double Omega0_scf;       /**< \f$ \Omega_{0 scf} \f$: scalar field */

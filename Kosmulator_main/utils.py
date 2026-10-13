@@ -726,6 +726,7 @@ def detect_vectorisation(models, get_model_fn, config, data, sample_n: int = 10)
             names = config[mod]["parameters"][0]
             tv = config[mod]["true_values"][0]
             params = dict(zip(names, tv))
+            params.update(config[mod].get("fixed_parameters", {}))
 
             try:
                 t0 = _time.time()
@@ -929,6 +930,9 @@ def load_or_run_chain(
         burn = int(CONFIG_model.get("burn", 0))
         if burn < 0:
             raise ValueError("Burn-in must be non-negative")
+        if 'eos_policy' in CONFIG_model:
+            from Kosmulator_main import chain_policy
+            chain_policy.check(chain_path, CONFIG_model, int(other_kwargs.get('obs_index', 0)))
         backend = emcee.backends.HDFBackend(chain_path, read_only=True)
         if backend.iteration <= burn:
             raise ValueError("Existing chain has no samples after the requested burn-in")
@@ -946,6 +950,11 @@ def load_or_run_chain(
     chain_path = os.path.join(output_dir, chain_file)           # emcee
     zeus_chain = chain_path.replace(".h5", "_zeus.h5")          # Zeus
     
+    if not overwrite and 'eos_policy' in CONFIG_model:
+        from Kosmulator_main import chain_policy
+        for saved_path in (chain_path, zeus_chain):
+            if os.path.exists(saved_path):
+                chain_policy.check(saved_path, CONFIG_model, int(other_kwargs.get('obs_index', 0)))
     engine_mode = getattr(K, "engine_mode", "mixed")
     force_emcee = bool(getattr(K, "force_emcee", False))
 
@@ -1573,10 +1582,10 @@ class AppendProgressCallback:
         self.ncheck = int(ncheck)
         self._prev_local = 0
 
-    def __call__(self, iteration: int, chain: np.ndarray, log_prob: np.ndarray):
+    def __call__(self, iteration: int, chain: np.ndarray, log_prob: np.ndarray, *, force=False):
         if h5py is None:
             return False
-        if iteration % self.ncheck != 0:
+        if not force and iteration % self.ncheck != 0:
             return False
 
         local_n, nwalker, ndim = chain.shape

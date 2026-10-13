@@ -62,6 +62,7 @@ def model_likelihood(
 
     params = CONFIG["parameters"][obs_index]
     param_dict = {p: theta[i] for i, p in enumerate(params)}
+    param_dict.update(CONFIG.get("fixed_parameters", {}))
 
     # Derive background vars if using CMB params / 100theta_s
     param_dict = utils.ensure_background_params(param_dict)
@@ -755,6 +756,12 @@ def run_mcmc(
     nwalker     = CONFIG["nwalker"]
     ndim        = CONFIG["ndim"][obs_index]
 
+    from Kosmulator_main import chain_policy
+    if saveChains and not overwrite:
+        for saved_path in (chain_path, chain_path.replace('.h5', '_zeus.h5')):
+            if os.path.exists(saved_path):
+                chain_policy.check(saved_path, CONFIG, obs_index)
+
     # 2) Build negative log-posterior
     nlp = lambda th: neg_log_prob(
         th, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index
@@ -970,6 +977,8 @@ def run_mcmc(
             except Exception:
                 pass
 
+        if saveChains:
+            chain_policy.write(zeus_chain, CONFIG, obs_index)
         # Run Zeus
         start = time.time()
         logprob_fn = (
@@ -993,6 +1002,7 @@ def run_mcmc(
                         sampler.iteration,
                         sampler.get_chain(flat=False),
                         sampler.get_log_prob(),
+                        force=True,
                     )
             except Exception:
                 pass
@@ -1009,6 +1019,7 @@ def run_mcmc(
                         sampler.iteration,
                         sampler.get_chain(flat=False),
                         sampler.get_log_prob(),
+                        force=True,
                     )
             except Exception:
                 pass
@@ -1031,6 +1042,7 @@ def run_mcmc(
                 except FileNotFoundError:
                     pass
             backend = emcee.backends.HDFBackend(chain_path)
+            chain_policy.write(chain_path, CONFIG, obs_index)
 
         # ------------------------------------------------------------
         # Debug / print controls (from CLI → CONFIG["debug"])
@@ -1045,6 +1057,7 @@ def run_mcmc(
         # ------------------------------------------------------------
         if saveChains and resumeChains and os.path.exists(chain_path) and not overwrite:
             backend = emcee.backends.HDFBackend(chain_path)
+            chain_policy.write(chain_path, CONFIG, obs_index)
             current = backend.iteration
             print(
                 f"[RESUME] Found existing chain with {current} steps. Resuming to {nsteps}."

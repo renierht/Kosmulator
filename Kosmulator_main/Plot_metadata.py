@@ -16,12 +16,19 @@ def regime_flags(config):
 def model_label(model, config=None, flags=None, mathtext=False):
     if model == 'LCDM_v':
         return r'$\Lambda$CDM' if mathtext else 'LCDM'
+    config = config or {}
+    eos = config.get('eos_policy', {})
+    suffix = ''
+    if eos.get('free_w_dm', False):
+        suffix += ' (free w_dm)'
+    if eos.get('free_w') is False:
+        suffix += ' (w=-1)'
     if model != 'NonLinear_IDE_2':
-        return model
+        return model + suffix
     flags = flags if flags is not None else regime_flags(config or {})
     signature = tuple(bool(flags[name]) for name in SWITCHES)
     return {(True, True, True): 'iwCDM', (False, True, True): '+iwCDM',
-            (True, True, False): 'SiwCDM'}.get(signature, model)
+            (True, True, False): 'SiwCDM'}.get(signature, model) + suffix
 
 
 def observation_label(key, mathtext=False, extra_names=(), pretty_names=None):
@@ -61,7 +68,7 @@ def corner_ranges(config, index, model, samples):
             bounds['delta'][0] = max(0., bounds['delta'][0])
         if not flags[SWITCHES[2]] and 'w' in bounds:
             bounds['w'][1] = min(-1., bounds['w'][1])
-        if not flags[SWITCHES[1]] and 'w' in bounds:
+        if not flags[SWITCHES[1]] and 'w' in bounds and 'eos_policy' not in config:
             bounds['w'][0] = max(-1., bounds['w'][0])
     array = np.asarray(samples)
     if array.ndim != 2 or array.shape[1] != len(names) or not np.all(np.isfinite(array)):

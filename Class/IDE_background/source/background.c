@@ -378,428 +378,18 @@ int background_z_of_tau(
  * These are the analytical component-density solutions used by
  * Kosmulator IDE. No positive-energy prior is imposed here.
  */
-static int background_ide8_densities(
-                                     struct background *pba,
-                                     double a,
-                                     double *rho_cdm_ide,
-                                     double *rho_de_ide,
-                                     double *Q_over_H_ide
-                                     ) {
-
-  double w, delta, r0;
-  double rho_cdm0, rho_de0;
-  double common_base;
-  double common_exp;
-  double expansion_exp;
-  double dm_factor;
-
-  w = pba->w0_fld;
-  delta = pba->delta_ide;
-
-  rho_cdm0 = pba->Omega0_cdm*pba->H0*pba->H0;
-  rho_de0 = pba->Omega0_fld*pba->H0*pba->H0;
-
-  r0 = pba->Omega0_cdm/pba->Omega0_fld;
-
-  /* Mathematical domain of the analytical solution. */
-  class_test(w >= 0.,
-             pba->error_message,
-             "NonLinear_IDE_3 requires w < 0 (got w=%g)",
-             w);
-
-  class_test(delta <= w,
-             pba->error_message,
-             "NonLinear_IDE_3 requires delta > w (got delta=%g, w=%g)",
-             delta,w);
-
-  class_test(delta > -w*r0,
-             pba->error_message,
-             "NonLinear_IDE_3 requires delta <= -w*r0 (got delta=%g, limit=%g)",
-             delta,-w*r0);
-
-  common_base =
-    (
-      (w*r0 + delta)*pow(a,3.*w)
-      + w - delta
-    )
-    /(w*(1.+r0));
-
-  class_test((common_base <= 0.) || !isfinite(common_base),
-             pba->error_message,
-             "NonLinear_IDE_3 produced invalid power base=%g at a=%g",
-             common_base,a);
-
-  common_exp = delta/(w-delta);
-
-  expansion_exp =
-    -3.*(1. + w*w/(w-delta));
-
-  dm_factor =
-    (
-      (w*r0 + delta)*pow(a,3.*w)
-      - delta
-    )
-    /(w*r0);
-
-  *rho_cdm_ide =
-    rho_cdm0
-    * pow(a,expansion_exp)
-    * dm_factor
-    * pow(common_base,common_exp);
-
-  *rho_de_ide =
-    rho_de0
-    * pow(a,expansion_exp)
-    * pow(common_base,common_exp);
-
-  class_test(((*rho_cdm_ide + *rho_de_ide) == 0.),
-             pba->error_message,
-             "NonLinear_IDE_3 has rho_cdm + rho_de = 0 at a=%g",
-             a);
-
-  *Q_over_H_ide =
-    3.*delta
-    * (*rho_de_ide)
-    * (*rho_de_ide)
-    / ((*rho_cdm_ide) + (*rho_de_ide));
-
-  class_test(!isfinite(*rho_cdm_ide)
-             || !isfinite(*rho_de_ide)
-             || !isfinite(*Q_over_H_ide),
-             pba->error_message,
-             "NonLinear_IDE_3 produced non-finite densities at a=%g",
-             a);
-
-  return _SUCCESS_;
-}
-
-static int background_ide7_densities(
-                                     struct background *pba,
-                                     double a,
-                                     double *rho_cdm_ide,
-                                     double *rho_de_ide,
-                                     double *Q_over_H_ide
-                                     ) {
-
-  double w, delta, r0;
-  double rho_cdm0, rho_de0;
-  double common_base;
-  double common_exp;
-  double expansion_exp;
-  double de_factor;
-
-  w = pba->w0_fld;
-  delta = pba->delta_ide;
-
-  rho_cdm0 = pba->Omega0_cdm*pba->H0*pba->H0;
-  rho_de0 = pba->Omega0_fld*pba->H0*pba->H0;
-
-  r0 = pba->Omega0_cdm/pba->Omega0_fld;
-
-  /* Mathematical domain of the analytical solution. */
-  class_test(w >= 0.,
-             pba->error_message,
-             "NonLinear_IDE_2 requires w < 0 (got w=%g)",
-             w);
-
-  class_test(delta <= w,
-             pba->error_message,
-             "NonLinear_IDE_2 requires delta > w (got delta=%g, w=%g)",
-             delta,w);
-
-  class_test(delta > -w/r0,
-             pba->error_message,
-             "NonLinear_IDE_2 requires delta <= -w/r0 (got delta=%g, limit=%g)",
-             delta,-w/r0);
-
-  common_base =
-    (
-      (w + delta*r0)*pow(a,-3.*w)
-      + r0*(w-delta)
-    )
-    /(w*(1.+r0));
-
-  class_test((common_base <= 0.) || !isfinite(common_base),
-             pba->error_message,
-             "NonLinear_IDE_2 produced invalid power base=%g at a=%g",
-             common_base,a);
-
-  common_exp = delta/(w-delta);
-
-  expansion_exp =
-    -3.*(1.-w*delta/(w-delta));
-
-  de_factor =
-    (
-      (w + delta*r0)*pow(a,-3.*w)
-      - delta*r0
-    )/w;
-
-  *rho_cdm_ide =
-    rho_cdm0
-    * pow(a,expansion_exp)
-    * pow(common_base,common_exp);
-
-  *rho_de_ide =
-    rho_de0
-    * pow(a,expansion_exp)
-    * de_factor
-    * pow(common_base,common_exp);
-
-  class_test(((*rho_cdm_ide + *rho_de_ide) == 0.),
-             pba->error_message,
-             "NonLinear_IDE_2 has rho_cdm + rho_de = 0 at a=%g",
-             a);
-
-  *Q_over_H_ide =
-    3.*delta
-    * (*rho_cdm_ide)
-    * (*rho_cdm_ide)
-    / ((*rho_cdm_ide) + (*rho_de_ide));
-
-  class_test(!isfinite(*rho_cdm_ide)
-             || !isfinite(*rho_de_ide)
-             || !isfinite(*Q_over_H_ide),
-             pba->error_message,
-             "NonLinear_IDE_2 produced non-finite densities at a=%g",
-             a);
-
-  return _SUCCESS_;
-}
-
-static int background_ide6_densities(
-                                     struct background *pba,
-                                     double a,
-                                     double *rho_cdm_ide,
-                                     double *rho_de_ide,
-                                     double *Q_over_H_ide
-                                     ) {
-
-  double w, delta, r0;
-  double rho_cdm0, rho_de0;
-  double bracket, exponent;
-
-  w = pba->w0_fld;
-  delta = pba->delta_ide;
-
-  rho_cdm0 = pba->Omega0_cdm*pba->H0*pba->H0;
-  rho_de0 = pba->Omega0_fld*pba->H0*pba->H0;
-
-  class_test((w + delta) == 0.,
-             pba->error_message,
-             "NonLinear_IDE_1 is undefined for delta = -w");
-
-  r0 = pba->Omega0_cdm/pba->Omega0_fld;
-
-  bracket =
-    (1. + r0*pow(a,3.*(w+delta)))
-    /(1. + r0);
-
-  class_test((bracket <= 0.) || !isfinite(bracket),
-             pba->error_message,
-             "NonLinear_IDE_1 produced invalid bracket=%g at a=%g",
-             bracket,a);
-
-  exponent = -delta/(w+delta);
-
-  *rho_cdm_ide =
-    rho_cdm0
-    * pow(a,-3.*(1.-delta))
-    * pow(bracket,exponent);
-
-  *rho_de_ide =
-    rho_de0
-    * pow(a,-3.*(1.+w))
-    * pow(bracket,exponent);
-
-  class_test(((*rho_cdm_ide + *rho_de_ide) == 0.),
-             pba->error_message,
-             "NonLinear_IDE_1 has rho_cdm + rho_de = 0 at a=%g",
-             a);
-
-  *Q_over_H_ide =
-    3.*delta
-    * (*rho_cdm_ide)
-    * (*rho_de_ide)
-    / ((*rho_cdm_ide) + (*rho_de_ide));
-
-  class_test(!isfinite(*rho_cdm_ide)
-             || !isfinite(*rho_de_ide)
-             || !isfinite(*Q_over_H_ide),
-             pba->error_message,
-             "NonLinear_IDE_1 produced non-finite densities at a=%g",
-             a);
-
-  return _SUCCESS_;
-}
-
-static int background_ide123_densities(
-                                       struct background *pba,
-                                       double a,
-                                       double *rho_cdm_ide,
-                                       double *rho_de_ide,
-                                       double *Q_over_H_ide
-                                       ) {
-
-  double w;
-  double ddm, dde;
-  double Delta2, Delta;
-  double rho_cdm0, rho_de0;
-  double Bminus, Bplus;
-  double exp_plus, exp_minus;
-  double mode_plus, mode_minus;
-  double denom;
-
-  w = pba->w0_fld;
-
-  if (pba->ide_model == 1) {
-    ddm = pba->delta_dm_ide;
-    dde = pba->delta_de_ide;
-  }
-  else if (pba->ide_model == 2) {
-    ddm = pba->delta_ide;
-    dde = pba->delta_ide;
-  }
-  else if (pba->ide_model == 3) {
-    ddm = pba->delta_ide;
-    dde = -pba->delta_ide;
-  }
-  else {
-    class_stop(pba->error_message,
-               "background_ide123_densities called for ide_model=%d",
-               pba->ide_model);
-  }
-
-  rho_cdm0 = pba->Omega0_cdm*pba->H0*pba->H0;
-  rho_de0 = pba->Omega0_fld*pba->H0*pba->H0;
-
-  class_test(w == 0.,
-             pba->error_message,
-             "Linear_IDE_%d is undefined for w=0",
-             pba->ide_model);
-
-  Delta2 = pow(ddm + dde + w,2.) - 4.*dde*ddm;
-
-  class_test((Delta2 <= 0.) || !isfinite(Delta2),
-             pba->error_message,
-             "Linear_IDE_%d has non-real or degenerate determinant: Delta^2=%g",
-             pba->ide_model,Delta2);
-
-  Delta = sqrt(Delta2);
-  denom = 4.*w*Delta;
-
-  Bminus =
-    rho_de0*(ddm-dde+w-Delta)
-    + rho_cdm0*(ddm-dde-w-Delta);
-
-  Bplus =
-    rho_de0*(ddm-dde+w+Delta)
-    + rho_cdm0*(ddm-dde-w+Delta);
-
-  exp_plus = 1.5*(ddm-dde-w-2.+Delta);
-  exp_minus = 1.5*(ddm-dde-w-2.-Delta);
-
-  mode_plus = pow(a,exp_plus);
-  mode_minus = pow(a,exp_minus);
-
-  *rho_cdm_ide =
-    -(ddm-dde+w+Delta)/denom * Bminus * mode_plus
-    +(ddm-dde+w-Delta)/denom * Bplus * mode_minus;
-
-  *rho_de_ide =
-    +(ddm-dde-w+Delta)/denom * Bminus * mode_plus
-    -(ddm-dde-w-Delta)/denom * Bplus * mode_minus;
-
-  *Q_over_H_ide =
-    3.*(ddm*(*rho_cdm_ide) + dde*(*rho_de_ide));
-
-  class_test(!isfinite(*rho_cdm_ide)
-             || !isfinite(*rho_de_ide)
-             || !isfinite(*Q_over_H_ide),
-             pba->error_message,
-             "Linear_IDE_%d produced non-finite densities at a=%g",
-             pba->ide_model,a);
-
-  return _SUCCESS_;
-}
-
-static int background_ide45_densities(
-                                      struct background *pba,
-                                      double a,
-                                      double *rho_cdm_ide,
-                                      double *rho_de_ide,
-                                      double *Q_over_H_ide
-                                      ) {
-
-  double w, delta, denom;
-  double rho_cdm0, rho_de0;
-
-  w = pba->w0_fld;
-  delta = pba->delta_ide;
-  denom = delta + w;
-
-  rho_cdm0 = pba->Omega0_cdm*pba->H0*pba->H0;
-  rho_de0 = pba->Omega0_fld*pba->H0*pba->H0;
-
-  /* Both analytical solutions are undefined for delta = -w. */
-  class_test(denom == 0.,
-             pba->error_message,
-             "Linear_IDE_%d is undefined for delta = -w",
-             pba->ide_model);
-
-  if (pba->ide_model == 4) {
-
-    /*
-     * rho_dm = rho_dm0 a^[-3(1-delta)]
-     *
-     * rho_de = [rho_de0 + rho_dm0 delta/(delta+w)
-     *           (1-a^[3(delta+w)])] a^[-3(1+w)]
-     */
-    *rho_cdm_ide = rho_cdm0*pow(a,-3.*(1.-delta));
-
-    *rho_de_ide = (
-                       rho_de0
-                       + rho_cdm0*(delta/denom)
-                       *(1.-pow(a,3.*denom))
-                       )
-      *pow(a,-3.*(1.+w));
-
-    *Q_over_H_ide = 3.*delta*(*rho_cdm_ide);
-  }
-
-  else if (pba->ide_model == 5) {
-
-    /*
-     * rho_dm = [rho_dm0 + rho_de0 delta/(delta+w)
-     *           (1-a^[-3(delta+w)])] a^-3
-     *
-     * rho_de = rho_de0 a^[-3(delta+w+1)]
-     */
-    *rho_cdm_ide = (
-                       rho_cdm0
-                       + rho_de0*(delta/denom)
-                       *(1.-pow(a,-3.*denom))
-                       )
-      *pow(a,-3.);
-
-    *rho_de_ide = rho_de0*pow(a,-3.*(delta+w+1.));
-
-    *Q_over_H_ide = 3.*delta*(*rho_de_ide);
-  }
-
-  else {
-    class_stop(pba->error_message,
-               "background_ide45_densities called for ide_model=%d",
-               pba->ide_model);
-  }
-
-  class_test(!isfinite(*rho_cdm_ide)
-             || !isfinite(*rho_de_ide)
-             || !isfinite(*Q_over_H_ide),
-             pba->error_message,
-             "Linear_IDE_%d produced non-finite background densities at a=%g",
-             pba->ide_model,a);
-
+#include "ide_densities.h"
+
+static int background_ide_densities(struct background *pba, double a,
+                                   double *dm, double *de, double *qh) {
+  class_test(ide_density_values(pba->ide_model, a, pba->w0_fld,
+                               pba->w_dm_ide, pba->delta_ide,
+                               pba->delta_dm_ide, pba->delta_de_ide,
+                               pba->Omega0_cdm*pba->H0*pba->H0,
+                               pba->Omega0_fld*pba->H0*pba->H0,
+                               dm,de,qh), pba->error_message,
+             "Invalid IDE real branch or densities: model=%d a=%g w=%g w_dm=%g",
+             pba->ide_model,a,pba->w0_fld,pba->w_dm_ide);
   return _SUCCESS_;
 }
 
@@ -841,11 +431,6 @@ int background_functions(
   double dp_dloga;
 
   /* Kosmulator IDE homogeneous-background workspace */
-  int ide123_active;
-  int ide45_active;
-  int ide6_active;
-  int ide7_active;
-  int ide8_active;
   int ide_background_active;
   double rho_cdm_ide = 0.;
   double rho_de_ide = 0.;
@@ -862,73 +447,12 @@ int background_functions(
              pba->error_message,
              "a = %e instead of strictly positive",a);
 
-  ide123_active = ((pba->ide_model >= 1) && (pba->ide_model <= 3));
-  ide45_active = ((pba->ide_model == 4) || (pba->ide_model == 5));
-  ide6_active = (pba->ide_model == 6);
-  ide7_active = (pba->ide_model == 7);
-  ide8_active = (pba->ide_model == 8);
-  ide_background_active = (ide123_active || ide45_active || ide6_active || ide7_active || ide8_active);
-
-  /* Do not silently fall back to standard CLASS for unfinished IDE models. */
-  class_test((pba->ide_model != 0) && (ide_background_active != _TRUE_),
-             pba->error_message,
-             "IDE model %d is not implemented in this checkpoint",
-             pba->ide_model);
-
-  if (ide123_active == _TRUE_) {
-    class_call(background_ide123_densities(
-                                             pba,
-                                             a,
-                                             &rho_cdm_ide,
-                                             &rho_de_ide,
-                                             &Q_over_H_ide
-                                             ),
-               pba->error_message,
-               pba->error_message);
-  }
-  else if (ide45_active == _TRUE_) {
-    class_call(background_ide45_densities(
-                                            pba,
-                                            a,
-                                            &rho_cdm_ide,
-                                            &rho_de_ide,
-                                            &Q_over_H_ide
-                                            ),
-               pba->error_message,
-               pba->error_message);
-  }
-  else if (ide6_active == _TRUE_) {
-    class_call(background_ide6_densities(
-                                           pba,
-                                           a,
-                                           &rho_cdm_ide,
-                                           &rho_de_ide,
-                                           &Q_over_H_ide
-                                           ),
-               pba->error_message,
-               pba->error_message);
-  }
-  else if (ide7_active == _TRUE_) {
-    class_call(background_ide7_densities(
-                                           pba,
-                                           a,
-                                           &rho_cdm_ide,
-                                           &rho_de_ide,
-                                           &Q_over_H_ide
-                                           ),
-               pba->error_message,
-               pba->error_message);
-  }
-  else if (ide8_active == _TRUE_) {
-    class_call(background_ide8_densities(
-                                           pba,
-                                           a,
-                                           &rho_cdm_ide,
-                                           &rho_de_ide,
-                                           &Q_over_H_ide
-                                           ),
-               pba->error_message,
-               pba->error_message);
+  ide_background_active = (pba->ide_model >= 1 && pba->ide_model <= 10);
+  class_test(pba->ide_model != 0 && !ide_background_active,
+             pba->error_message,"IDE selector must be 0..10");
+  if (ide_background_active) {
+    class_call(background_ide_densities(pba,a,&rho_cdm_ide,&rho_de_ide,&Q_over_H_ide),
+               pba->error_message,pba->error_message);
   }
 
   /** - pass value of \f$ a\f$ to output */
@@ -958,8 +482,14 @@ int background_functions(
       pvecback[pba->index_bg_rho_cdm] = pba->Omega0_cdm * pow(pba->H0,2) / pow(a,3);
     }
     rho_tot += pvecback[pba->index_bg_rho_cdm];
-    p_tot += 0.;
-    rho_m += pvecback[pba->index_bg_rho_cdm];
+    if (ide_background_active) {
+      p_tot += pba->w_dm_ide*rho_cdm_ide;
+      dp_dloga += pba->w_dm_ide*(-3.*(1.+pba->w_dm_ide)*rho_cdm_ide+Q_over_H_ide);
+      /* Same pressure-based bookkeeping used for massive species. */
+      rho_r += 3.*pba->w_dm_ide*rho_cdm_ide;
+      rho_m += (1.-3.*pba->w_dm_ide)*rho_cdm_ide;
+    }
+    else rho_m += pvecback[pba->index_bg_rho_cdm];
   }
 
   /* idm */
@@ -2309,9 +1839,9 @@ int background_checks(
     "Omegak = %g out of bounds (%g<Omegak<%g) \n",pba->Omega0_k,_OMEGAK_SMALL_,_OMEGAK_BIG_);*/
 
   /* Kosmulator IDE shared-background checks */
-  class_test((pba->ide_model < 0) || (pba->ide_model > 8),
+  class_test((pba->ide_model < 0) || (pba->ide_model > 10),
              pba->error_message,
-             "ide_model must be in [0,8] (got %d)",pba->ide_model);
+             "ide_model must be in [0,10] (got %d)",pba->ide_model);
 
   if (pba->ide_model != 0) {
     class_test(pba->has_cdm != _TRUE_,

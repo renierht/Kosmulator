@@ -437,8 +437,9 @@ def analyse_group(samples, data, cfg, model_name, index, source=None, options=No
             raise ValueError("Saved/current likelihood mismatch: "
                              f"delta chi2={check_chi2-raw_chi2:g}")
         # Automatic paper-regime boundaries apply only to the validated model.
-        positive = model_name == "NonLinear_IDE_2" and not flags[SWITCHES[0]]
-        stable = model_name == "NonLinear_IDE_2" and not flags[SWITCHES[2]]
+        cold = "w_dm" not in names and cfg.get("fixed_parameters", {}).get("w_dm", 0.) == 0.
+        positive = model_name == "NonLinear_IDE_2" and cold and not flags[SWITCHES[0]]
+        stable = model_name == "NonLinear_IDE_2" and cold and not flags[SWITCHES[2]]
         best, best_ll, runs, mle_note = polish_likelihood(
             selected, likelihood, evaluate,
             [cfg["prior_limits"][index][p] for p in names], names, opts,
@@ -456,6 +457,8 @@ def analyse_group(samples, data, cfg, model_name, index, source=None, options=No
             "AIC": chi2+2*k, "AICc": aicc,
             "BIC": chi2+k*np.log(n), "MLE_parameters": dict(zip(names, best.tolist())),
             "Parameter_names": names, "MLE_note": mle_note,
+            "Fixed_parameters": dict(cfg.get("fixed_parameters", {})),
+            "EOS_policy": dict(cfg.get("eos_policy", {})),
             "Optimizer_runs": runs, "Likelihood_source": origin,
             "Burn": int(cfg.get("burn", 0)), "Thin": 1,
             "Physicality_switches": dict(flags), "Postprocessing_options": opts,

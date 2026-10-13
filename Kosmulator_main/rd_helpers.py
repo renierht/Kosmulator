@@ -199,6 +199,8 @@ IDE_CLASS_SELECTORS = {
     "NonLinear_IDE_1": 6,
     "NonLinear_IDE_2": 7,
     "NonLinear_IDE_3": 8,
+    "SignSwitch_IDE_1": 9,
+    "SignSwitch_IDE_2": 10,
 }
 
 MODEL_CLASS_RD_SUPPORTED = {"LCDM_v"} | set(IDE_CLASS_SELECTORS)
@@ -228,6 +230,7 @@ def _rd_model_class_core(
     N_eff: float,
     sum_mnu_ev: float,
     n_ncdm: int,
+    w_dm: float = 0.,
 ) -> float:
     """
     Compute rs_drag with the CLASS background matching `model_name`.
@@ -247,7 +250,7 @@ def _rd_model_class_core(
     backend_name = CR.class_backend_name(model_name)
 
     # Avoid re-hashing/reloading the CLASS source tree for every MCMC point.
-    # All eight IDE models intentionally resolve to IDE_background.
+    # All ten IDE models intentionally resolve to IDE_background.
     if getattr(CR, "_current_class_model", None) != backend_name:
         ok = CR.ensure_class_ready(
             model_name,
@@ -306,6 +309,7 @@ def _rd_model_class_core(
         pars.update({
             "Omega_Lambda": 0.0,
             "w0_fld": float(w),
+            "w_dm_ide": float(w_dm),
             "wa_fld": 0.0,
             "ide_model": int(IDE_CLASS_SELECTORS[model_name]),
             "delta_ide": float(delta),
@@ -377,13 +381,13 @@ def compute_rd_model_class(p: dict) -> float:
         delta_de = 0.0
 
     elif model_name == "Linear_IDE_1":
-        w = float(p["w"])
+        w = float(p.get("w", -1.))
         delta = 0.0
         delta_dm = float(p["delta_dm"])
         delta_de = float(p["delta_de"])
 
     else:
-        w = float(p["w"])
+        w = float(p.get("w", -1.))
         delta = float(p["delta"])
         delta_dm = 0.0
         delta_de = 0.0
@@ -400,6 +404,7 @@ def compute_rd_model_class(p: dict) -> float:
         Neff,
         sum_mnu,
         n_ncdm,
+        float(p.get("w_dm", 0.)),
     )
 
 

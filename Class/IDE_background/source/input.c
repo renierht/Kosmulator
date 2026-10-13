@@ -3292,6 +3292,7 @@ int input_read_parameters_species(struct file_content * pfc,
       class_read_double("cs2_fld",pba->cs2_fld);
       class_read_int("ide_model",pba->ide_model);
       class_read_double("delta_ide",pba->delta_ide);
+      class_read_double("w_dm_ide",pba->w_dm_ide);
       class_read_double("delta_dm_ide",pba->delta_dm_ide);
       class_read_double("delta_de_ide",pba->delta_de_ide);
     }
@@ -5904,6 +5905,7 @@ int input_default_params(struct background *pba,
   pba->w0_fld = -1.;
   pba->ide_model = 0;
   pba->delta_ide = 0.;
+  pba->w_dm_ide = 0.;
   pba->delta_dm_ide = 0.;
   pba->delta_de_ide = 0.;
   pba->cs2_fld = 1.;

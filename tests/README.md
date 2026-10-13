@@ -1,5 +1,8 @@
 # Automated tests
 
+The ten-model warm-DM extension and its independent numerical checks are
+documented in [WARM_DM.md](../validation/WARM_DM.md).
+
 These tests check configuration, existing-chain loading, statistical calculations, physical boundaries and plotting metadata. They complement the scientific checks in [validation/](../validation/README.md).
 
 Run from the repository root in your Kosmulator environment:

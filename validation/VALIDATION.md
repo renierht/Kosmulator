@@ -1,5 +1,8 @@
 # Validation of the IDE CLASS background implementation
 
+For the subsequent ten-model warm-DM update, see [WARM_DM.md](WARM_DM.md).
+The eight-model results below record the original cold-DM baseline.
+
 This document records the numerical and integration tests performed for the shared `Class/IDE_background/` implementation used by Kosmulator.
 
 The validation applies to the **homogeneous IDE background** and to the calculation of the baryon-drag sound horizon using **standard CLASS thermodynamics**. It does **not** validate an IDE perturbation sector.
