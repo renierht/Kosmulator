@@ -174,7 +174,7 @@ def main(
     cmb_nonlinear=None,
     hmcode_version: str = "2020",
     growth_model: str = "gamma",
-    emcee_moves: str = "stretch",
+    emcee_moves: str = "de_snooker",
     zeus_light_mode: bool = False,
     rd_background: str = "model",
     lensing_only_priors: bool = True,

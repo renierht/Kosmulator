@@ -181,14 +181,14 @@ hmcode_version: str = "2020"
 # own expansion history; for a theory that changes gravity that can differ from its true growth, and
 # Kosmulator warns at start-up.
 growth_model: str = "gamma"
-# Proposal moves of the samplers. emcee_moves: "stretch" (default, emcee's own move) or "de_snooker":
-# differential evolution (80% of the steps) plus a snooker move (20%, ter Braak & Vrugt 2008). Both
+# Proposal moves of the samplers. emcee_moves: "de_snooker" (default): differential evolution (80% of
+# the steps) plus a snooker move (20%, ter Braak & Vrugt 2008), or "stretch" (emcee's own move). Both
 # sample the same posterior; in Kosmulator's tests de_snooker needed 2 - 6 times fewer steps than
-# stretch (about 4.5 times on a 27-parameter target shaped like a Planck baseline chain) at the same
-# likelihood calls per step. zeus_light_mode: True skips zeus's interval expansions after its tuning
+# stretch (about 4.5 times on a 27-parameter target shaped like a Planck baseline chain; Planck lite:
+# 4900 against 11 600 steps, same posterior) at the same likelihood calls per step. zeus_light_mode: True skips zeus's interval expansions after its tuning
 # phase (fewer likelihood calls per step but more steps; about 1.0 - 1.5 times faster overall in the
 # tests, on near-Gaussian posteriors). Changing either between a run and its --resume is allowed.
-emcee_moves: str = "stretch"
+emcee_moves: str = "de_snooker"
 zeus_light_mode: bool = False
 # r_d of BAO/DESI groups calibrated by BBN or Planck. "model" (default): CLASS with the model's own
 # E(z) in place of the cosmological constant (rd_Class: compiled once, then cached), for every model

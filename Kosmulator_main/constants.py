@@ -183,17 +183,18 @@ def set_growth_model(mode="gamma") -> None:
 
 
 # Proposal moves (Kosmulator.py: emcee_moves, zeus_light_mode; Kosmulator_main/sampler_moves.py).
-# emcee: "stretch" (emcee's default) or "de_snooker" (differential evolution 0.8 + snooker 0.2,
-# ter Braak & Vrugt 2008). zeus: its DifferentialMove; light mode skips the expansions after tuning.
+# emcee: "de_snooker" (default since 13 Oct, Renier: differential evolution 0.8 + snooker 0.2,
+# ter Braak & Vrugt 2008; t11 matched t9's stretch posterior in 4900 instead of 11 600 steps) or
+# "stretch" (emcee's own move). zeus: its DifferentialMove; light mode skips the expansions after tuning.
 # Only the process that runs the sampler uses these (rank 0 under MPI, which also calls
 # MCMC_setup.main), so pool workers need no KOSM_* variable.
-EMCEE_MOVES: str = "stretch"
+EMCEE_MOVES: str = "de_snooker"
 EMCEE_MOVES_OPTIONS: Tuple[str, ...] = ("stretch", "de_snooker")
 DE_SNOOKER_WEIGHTS: Tuple[float, float] = (0.8, 0.2)
 ZEUS_LIGHT_MODE: bool = False
 
 
-def set_sampler_moves(emcee_moves="stretch", zeus_light_mode=False) -> None:
+def set_sampler_moves(emcee_moves="de_snooker", zeus_light_mode=False) -> None:
     """Moves of this run (Kosmulator.py emcee_moves, zeus_light_mode), validated."""
     global EMCEE_MOVES, ZEUS_LIGHT_MODE
     m = str(emcee_moves).strip().lower()

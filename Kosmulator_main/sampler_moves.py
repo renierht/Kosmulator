@@ -3,12 +3,12 @@ Proposal moves of the samplers (Kosmulator.py: emcee_moves, zeus_light_mode).
 
 emcee
 -----
-"stretch" (default): emcee's own stretch move (Goodman & Weare 2010,
+"stretch": emcee's own stretch move (Goodman & Weare 2010,
 doi:10.2140/camcos.2010.5.65). Exact and robust, but its autocorrelation time grows quickly
 with the number of parameters (about 470 - 600 iterations for the 27 parameters of the
 Planck baseline).
 
-"de_snooker": differential evolution (80% of the steps; emcee's DEMove, ter Braak 2006,
+"de_snooker" (default since 13 Oct): differential evolution (80% of the steps; emcee's DEMove, ter Braak 2006,
 doi:10.1007/s11222-006-8769-1) mixed with a snooker move (20%) written as in ter Braak &
 Vrugt (2008), doi:10.1007/s11222-008-9104-9, with its distances measured in units of the
 other walkers' spread of each parameter (13 Oct). Both are exact Metropolis-Hastings moves,
