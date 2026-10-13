@@ -331,6 +331,9 @@ Kosmulator/
 ## References
 **NB!** Remember to cite the observation’s **original papers** when using their data in Kosmulator.
 
+- `Observations/DATA_SOURCES.md` lists every data set Kosmulator includes: its files, where they come from, the licence status of the source, the papers to cite and the acknowledgements a data licence asks for (DESI's).
+- Every run writes `Statistical_analysis_tables/<output_suffix>/citations.md`: what to cite for exactly the data sets, samplers and codes that run used (its path is printed at the end of the run).
+
 ### Original MCMC code which developed into Kosmulator
 
 1. **Original Kosmulator implementation**  
@@ -352,8 +355,53 @@ Kosmulator/
 2. **Zeus**  
    Karamanis, M., Beutler, F., Peacock, J. A.,(2021).  
    *zeus: A Python implementation of Ensemble Slice Sampling for efficient Bayesian parameter inference*.  
-   ArXiv pre-print.  
-   https://arxiv.org/abs/2105.03468
+   MNRAS, 508(3), 3589 (arXiv:2105.03468).  
+   https://doi.org/10.1093/mnras/stab2867
+
+3. **Ensemble Slice Sampling** (zeus's method)  
+   Karamanis, M., & Beutler, F. (2021).  
+   *Ensemble Slice Sampling: Parallel, black-box and gradient-free inference for correlated & multimodal distributions*.  
+   Statistics and Computing, 31, 61 (arXiv:2002.06212).  
+   https://doi.org/10.1007/s11222-021-10038-2
+
+4. **DE + snooker moves** (`emcee_moves = "de_snooker"`)  
+   ter Braak, C. J. F. (2006). *A Markov Chain Monte Carlo version of the genetic algorithm Differential Evolution: easy Bayesian computing for real parameter spaces*. Statistics and Computing, 16, 239.  
+   https://doi.org/10.1007/s11222-006-8769-1  
+   ter Braak, C. J. F., & Vrugt, J. A. (2008). *Differential Evolution Markov Chain with snooker updater and fewer chains*. Statistics and Computing, 18, 435.  
+   https://doi.org/10.1007/s11222-008-9104-9
+
+---
+
+### Codes Kosmulator uses
+
+1. **CLASS** (CMB spectra, r_d)  
+   Lesgourgues, J. (2011). *The Cosmic Linear Anisotropy Solving System (CLASS) I: Overview*. arXiv:1104.2932.  
+   Blas, D., Lesgourgues, J., & Tram, T. (2011). *The Cosmic Linear Anisotropy Solving System (CLASS) II: Approximation schemes*. JCAP, 07, 034 (arXiv:1104.2933).  
+   https://doi.org/10.1088/1475-7516/2011/07/034
+
+2. **HMcode-2020** (`cmb_nonlinear = "hmcode"`)  
+   Mead, A., Brieden, S., Tröster, T., & Heymans, C. (2021). *HMcode-2020: Improved modelling of non-linear cosmological power spectra with baryonic feedback*. MNRAS, 502, 1401 (arXiv:2009.01858).  
+   https://doi.org/10.1093/mnras/stab082  
+   Halofit (`cmb_nonlinear = "halofit"`): Takahashi, R., et al. (2012). *Revising the Halofit Model for the Nonlinear Matter Power Spectrum*. ApJ, 761, 152 (arXiv:1208.2701).  
+   https://doi.org/10.1088/0004-637X/761/2/152
+
+3. **candl** (ACT and SPT likelihoods)  
+   Balkenhol, L., Trendafilova, C., Benabed, K., & Galli, S. (2024). *candl: Cosmic Microwave Background Analysis with a Differentiable Likelihood*. A&A, 686, A10 (arXiv:2401.13433).  
+   https://doi.org/10.1051/0004-6361/202449432
+
+4. **AlterBBN** (`BBN_DH_AlterBBN`)  
+   Arbey, A. (2012). *AlterBBN: A program for calculating the BBN abundances of the elements in alternative cosmologies*. Comput. Phys. Commun., 183, 1822 (arXiv:1106.1363).  
+   https://doi.org/10.1016/j.cpc.2012.03.018  
+   Arbey, A., Auffinger, J., Hickerson, K. P., & Jenssen, E. S. (2020). *AlterBBN v2*. Comput. Phys. Commun., 248, 106982 (arXiv:1806.11095).  
+   https://doi.org/10.1016/j.cpc.2019.106982
+
+5. **GetDist** (corner plots)  
+   Lewis, A. (2025). *GetDist: a Python package for analysing Monte Carlo samples*. JCAP, 08, 025 (arXiv:1910.13970).  
+   https://doi.org/10.1088/1475-7516/2025/08/025
+
+6. **r_d without CLASS** (BAO groups when CLASS is not loaded)  
+   Eisenstein, D. J., & Hu, W. (1998). *Baryonic Features in the Matter Transfer Function*. ApJ, 496, 605 (arXiv:astro-ph/9709112).  
+   https://doi.org/10.1086/305424
 	
 ---
 
@@ -376,7 +424,7 @@ Kosmulator/
    ApJ, 707, 1449.  
    https://doi.org/10.1088/0004-637X/707/2/1449
 
-3. Conley, A., Guy, J., Sullivan, M., et al. (2010).  
+3. Conley, A., Guy, J., Sullivan, M., et al. (2011).  
    *Supernova Constraints and Systematic Uncertainties from the First Three Years of the SNLS*.  
    ApJS, 192, 1.  
    https://doi.org/10.1088/0067-0049/192/1/1
@@ -393,6 +441,16 @@ Kosmulator/
    ApJ, 938(2), 110.  
    https://doi.org/10.3847/1538-4357/ac8e04
 
+2. Scolnic, D., et al. (2022).  
+   *The Pantheon+ Analysis: The Full Data Set and Light-curve Release*.  
+   ApJ, 938(2), 113 (arXiv:2112.03863).  
+   https://doi.org/10.3847/1538-4357/ac8b7a
+
+3. With the SH0ES calibration (`PantheonPS`): Riess, A. G., et al. (2022).  
+   *A Comprehensive Measurement of the Local Value of the Hubble Constant with 1 km/s/Mpc Uncertainty from the Hubble Space Telescope and the SH0ES Team*.  
+   ApJL, 934(1), L7 (arXiv:2112.04510).  
+   https://doi.org/10.3847/2041-8213/ac5c5b
+
 #### Union3
 1. Rubin, D., Aldering, G., Betoule, M., et al. (2025).  
    *Union through UNITY: Cosmology with 2000 SNe Using a Unified Bayesian Framework*.  
@@ -404,6 +462,11 @@ Kosmulator/
    *The Dark Energy Survey: Cosmology Results with ~1500 New High-redshift Type Ia Supernovae Using the Full 5 yr Data Set*.  
    ApJL, 973(1), L14.  
    https://doi.org/10.3847/2041-8213/ad6f9f
+
+2. Sánchez, B. O., et al. (2024).  
+   *The Dark Energy Survey Supernova Program: Light Curves and 5 Yr Data Release*.  
+   ApJ, 975(1), 5 (arXiv:2406.05046).  
+   https://doi.org/10.3847/1538-4357/ad739a
 
 ---
 
@@ -445,8 +508,8 @@ systematic covariance of the D4000 points (Moresco et al. 2020) is not included.
 Note: This is a compilation paper of all the individual data-point. Also cite the original papers. Citations can be found in this paper.
 1. Sharov, G. S., & Vasiliev, V. O. (2018).  
    *How predictions of cosmological models depend on Hubble parameter data sets*.  
-   arXiv:1807.07323.  
-   https://doi.org/10.48550/arXiv.1807.07323
+   Mathematical Modelling and Geometry, 6(1), 1 (arXiv:1807.07323).  
+   https://doi.org/10.26456/mmg/2018-611
 
 ---
 
@@ -454,8 +517,8 @@ Note: This is a compilation paper of all the individual data-point. Also cite th
 #### Baryon Acoustic Oscillations (BAO) / DESI
 1. Adame, A. G., Aguilar, J., Ahlen, S., et al. (2024).  
    *DESI 2024 VI: Cosmological constraints from the measurements of baryon acoustic oscillations*.  
-   arXiv:2404.03002.  
-   https://arxiv.org/abs/2404.03002
+   JCAP, 02, 021 (2025) (arXiv:2404.03002).  
+   https://doi.org/10.1088/1475-7516/2025/02/021
 
 2. Lodha, K., Shafieloo, A., Calderon, R., et al. (DESI Collaboration) (2025).  
    *DESI 2024: Constraints on physics-focused aspects of dark energy using DESI DR1 BAO data*.  
@@ -467,17 +530,37 @@ Note: This is a compilation paper of all the individual data-point. Also cite th
    Phys. Rev. D, 112(8), 083515.  
    https://doi.org/10.1103/tr6y-kpc6  
 
+4. DESI Collaboration, Abdul Karim, M., et al. (2026).  
+   *Data Release 1 of the Dark Energy Spectroscopic Instrument*.  
+   AJ, 171, 285 (arXiv:2503.14745).  
+   https://doi.org/10.3847/1538-3881/ae4c43  
+   DESI's data licence (CC BY 4.0) asks publications using DESI data to cite the data release paper and include DESI's acknowledgement text: https://data.desi.lbl.gov/doc/acknowledgments/
+
 #### Growth of Structure (fσ₈)
-1. Kazantzidis, L., & Perivolaropoulos, L. (2018).  
+`Observations/f_sigma_8.dat` is Table VI of Skara & Perivolaropoulos (2020), an update of the Kazantzidis & Perivolaropoulos (2018) compilation; also cite the survey papers of the points.
+
+1. Skara, F., & Perivolaropoulos, L. (2020).  
+   *Tension of the E_G statistic and RSD data with Planck/ΛCDM and implications for weakening gravity*.  
+   Phys. Rev. D, 101(6), 063521 (arXiv:1911.10609).  
+   https://doi.org/10.1103/PhysRevD.101.063521
+
+2. Kazantzidis, L., & Perivolaropoulos, L. (2018).  
    *Evolution of the fσ8 tension with the Planck15/ΛCDM determination and implications for modified gravity theories*.  
    Phys. Rev. D, 97(10), 103503.  
    https://doi.org/10.1103/PhysRevD.97.103503
 
-#### σ₈ Constraints
+#### Growth rate f(z) (`f`)
+`Observations/f.dat`: rows 1 - 3 from Perenon et al. (2019), rows 4 - 14 from Table 1 of Avila et al. (2022).
+
 1. Perenon, L., Bel, J., Maartens, R., et al. (2019).  
    *Optimising Growth of Structure Constraints on Modified Gravity*.  
    JCAP, 2019(06), 020.  
    https://doi.org/10.1088/1475-7516/2019/06/020
+
+2. Avila, F., Bernui, A., Bonilla, A., & Nunes, R. C. (2022).  
+   *Inferring S₈(z) and γ(z) with cosmic growth rate measurements using machine learning*.  
+   Eur. Phys. J. C, 82, 594 (arXiv:2201.07829).  
+   https://doi.org/10.1140/epjc/s10052-022-10561-0
 
 ---
 
@@ -493,6 +576,33 @@ library.
    Astronomy & Astrophysics, **641**, A6.  
    https://doi.org/10.1051/0004-6361/201833910
 
+2. Planck Collaboration (2020).  
+   *Planck 2018 results. V. CMB power spectra and likelihoods* (plik, plik_lite, Commander, SimAll).  
+   Astronomy & Astrophysics, **641**, A5 (arXiv:1907.12875).  
+   https://doi.org/10.1051/0004-6361/201936386
+
+3. Planck Collaboration (2020).  
+   *Planck 2018 results. VIII. Gravitational lensing* (`CMB_lensing`).  
+   Astronomy & Astrophysics, **641**, A8 (arXiv:1807.06210).  
+   https://doi.org/10.1051/0004-6361/201833886
+
+4. SRoll2 low-ℓ EE (`CMB_lowl_sroll2`): Pagano, L., et al. (2020).  
+   *Reionization optical depth determination from Planck HFI data with ten percent accuracy*.  
+   A&A, **635**, A99 (arXiv:1908.09856).  
+   https://doi.org/10.1051/0004-6361/201936630
+
+#### Ground-based CMB (ACT DR6, SPT-3G D1) and the P-ACT / CMB-SPA combinations
+`CMB_PACT` and `CMB_SPA` combine the Planck parts above with these.
+
+1. ACT DR6 (`CMB_ACT`): Louis, T., et al. (2025). *The Atacama Cosmology Telescope: DR6 Power Spectra, Likelihoods and ΛCDM Parameters*. JCAP, 11, 062 (arXiv:2503.14452), https://doi.org/10.1088/1475-7516/2025/11/062; Calabrese, E., et al. (2025). *DR6 Constraints on Extended Cosmological Models*. JCAP, 11, 063 (arXiv:2503.14454), https://doi.org/10.1088/1475-7516/2025/11/063; Naess, S., et al. (2025). *DR6 Maps*. JCAP, 11, 061 (arXiv:2503.14451), https://doi.org/10.1088/1475-7516/2025/11/061
+
+2. SPT-3G D1 (`CMB_SPT`): Camphuis, E., et al. (2026). *SPT-3G D1: CMB temperature and polarization power spectra and cosmology from 2019 and 2020 observations of the SPT-3G Main field* (the SPT-lite likelihood is its Appendix F). Phys. Rev. D, 113, 083504 (arXiv:2506.20707), https://doi.org/10.1103/7wt3-9v2y; Balkenhol, L. (2025). *Compressed 'CMB-lite' Likelihoods Using Automatic Differentiation*. Open J. Astrophys. (arXiv:2412.00826), https://doi.org/10.33232/001c.129886; Quan, W., et al. (2026). *SPT-3G D1: Maps of the millimeter-wave sky* (arXiv:2603.20163)
+
+#### CMB lensing beyond Planck 2018
+1. ACT DR6 + Planck PR4 (`CMB_lensing_ACTPlanck`): Qu, F. J., et al. (2024). ApJ, 962, 112 (arXiv:2304.05202), https://doi.org/10.3847/1538-4357/acfe06; Madhavacheril, M. S., et al. (2024). ApJ, 962, 113 (arXiv:2304.05203), https://doi.org/10.3847/1538-4357/acff5f; Carron, J., Mirmelstein, M., & Lewis, A. (2022). *CMB lensing from Planck PR4 maps*. JCAP, 09, 039 (arXiv:2206.07773), https://doi.org/10.1088/1475-7516/2022/09/039
+
+2. SPT-3G MUSE (`CMB_lensing_SPT`): Ge, F., et al. (2025). *Cosmology From CMB Lensing and Delensed EE Power Spectra Using 2019-2020 SPT-3G Polarization Data*. Phys. Rev. D, 111, 083534 (arXiv:2411.06000), https://doi.org/10.1103/PhysRevD.111.083534
+
 #### Big Bang Nucleosynthesis (BBN)
 `BBN_DH` uses the 12 quasar D/H systems of the PDG 2025 BBN review (weighted mean
 25.08 ± 0.29 × 10⁻⁶, scale factor 1.08; values in `constants.BBN_DH_PDG_SYSTEMS`). Without
@@ -506,13 +616,13 @@ AlterBBN the predicted D/H(ω_b) is a power law fitted to the PRyMordial table
    https://doi.org/10.1088/0004-637X/781/1/31
 
 2. Fields, B. D., Molaro, P., & Sarkar, S. (2025).  
-   *Big-Bang Nucleosynthesis*, in the Review of Particle Physics (Particle Data Group), 2025 update.  
-   https://pdg.lbl.gov
+   *Big-Bang Nucleosynthesis*, in the Review of Particle Physics (Particle Data Group), 2025 update; PDG asks to cite S. Navas et al. (Particle Data Group), Phys. Rev. D 110, 030001 (2024) and 2025 update.  
+   https://doi.org/10.1103/PhysRevD.110.030001
 
-3. Burns, A.-K., Tait, T. M. P., & Valli, M. (2023).  
+3. Burns, A.-K., Tait, T. M. P., & Valli, M. (2024).  
    *PRyMordial: the first three minutes, within and beyond the standard model*.  
-   arXiv:2307.07061.  
-   https://doi.org/10.48550/arXiv.2307.07061
+   Eur. Phys. J. C, 84, 86 (arXiv:2307.07061).  
+   https://doi.org/10.1140/epjc/s10052-024-12442-0
 
 ---
 ## Citation

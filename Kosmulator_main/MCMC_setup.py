@@ -614,6 +614,16 @@ def main(
     try:
         if rank == 0:
             MP.generate_plots(samples, CONFIG, PLOT_SETTINGS, data, reference_model)
+            # What to cite for this run: Kosmulator, the data sets of its groups and the codes used
+            from Kosmulator_main import citations as CIT
+            _cite = CIT.write_run_citations(
+                (getattr(args, "output_suffix", "") or "").strip(), list(model_names),
+                [list(g) for g in observations],
+                engines=CIT.ENGINES_USED or set(getattr(K, "engine_for_model", {}).values()),
+                settings={"emcee_moves": K.EMCEE_MOVES, "cmb_nonlinear": K.CMB_NONLINEAR,
+                          "hmcode_version": K.HMCODE_VERSION})
+            if _cite:
+                print(f"\nWhat to cite for this run (data, codes, acknowledgements): {_cite}")
             elapsed = format_elapsed_time(time.time() - t0)
             print_completion_banner(elapsed)
     finally:

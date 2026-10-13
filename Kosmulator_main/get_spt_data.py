@@ -57,13 +57,16 @@ SPT_LITE_FILES: Dict[str, Tuple[str, str]] = {
 MUSE_ZIP_MEMBER = "src/muse3glike/dat/" + K.SPT_MUSE_FILE
 MUSE_MD5 = "8839ad236d98022ba54d4de8a0ead995"
 
+def _cite(*keys):
+    from Kosmulator_main.citations import REFS
+    return "; ".join(REFS[k] for k in keys)
+
+
 CITATIONS = (
-    "candl: L. Balkenhol et al. 2024, A&A 686, A10, arXiv:2401.13433",
-    "SPT-3G D1 T&E (CMB_SPT, CMB_SPA): E. Camphuis et al. 2026, Phys. Rev. D 113, 083504, arXiv:2506.20707 "
-    "(SPT-lite: its Appendix F); L. Balkenhol 2025, Open J. Astrophys., doi:10.33232/001c.129886, "
-    "arXiv:2412.00826 (CMB-lite compression); W. Quan et al. 2026, arXiv:2603.20163 (D1 maps, as "
-    "spt_candl_data lists)",
-    "SPT-3G MUSE lensing (CMB_lensing_SPT): F. Ge et al. 2025, Phys. Rev. D 111, 083534, arXiv:2411.06000",
+    "candl: " + _cite("balkenhol24"),
+    "SPT-3G D1 T&E (CMB_SPT, CMB_SPA; SPT-lite is Appendix F of Camphuis et al.): "
+    + _cite("camphuis26", "balkenhol25", "quan26"),
+    "SPT-3G MUSE lensing (CMB_lensing_SPT): " + _cite("ge25"),
 )
 
 

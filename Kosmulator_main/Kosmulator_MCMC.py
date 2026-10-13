@@ -1224,6 +1224,8 @@ def _run_mcmc_impl(
         engine = "emcee"
     use_zeus = (engine == "zeus" and zeus is not None)
     log.info("[%s | %s] moves: %s", model_name, _resolved_key, SM.describe("zeus" if use_zeus else "emcee"))
+    from Kosmulator_main import citations as _CIT        # the run's citations.md lists the samplers used
+    _CIT.ENGINES_USED.add("zeus" if use_zeus else "emcee")
     
     if use_zeus:
         zeus_chain = chain_path.replace(".h5", "_zeus.h5")
