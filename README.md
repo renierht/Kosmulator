@@ -119,6 +119,7 @@ The SPT-3G data are public but carry no licence that lets Kosmulator host them. 
 ```bash
 python -m Kosmulator_main.get_spt_data
 ```
+For the SPT-3G MUSE lensing likelihood (`CMB_lensing_SPT`), download `muse_3g_like_march_2025.zip` from https://pole.uchicago.edu/public/data/ge25/ and add `--muse-zip /path/to/muse_3g_like_march_2025.zip` (`Observations/spt3g_muse_lensing/README.md`).
 Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced installation section at the end for additional information. With clipy installed, the CLIK build (step 5 there) can be skipped.
 
 ---

@@ -503,8 +503,11 @@ def spt_muse_file() -> str:
         if os.path.isfile(p):
             return p
     raise FileNotFoundError(
-        f"SPT-3G MUSE lensing data not found ({cands[0]}). It is the file src/muse3glike/dat/{K.SPT_MUSE_FILE} "
-        "of muse_3g_like_march_2025.zip (https://pole.uchicago.edu/public/data/ge25/)")
+        f"CMB_lensing_SPT needs the SPT-3G MUSE file {cands[0]}. Kosmulator does not host it (the release "
+        "has no licence file): download muse_3g_like_march_2025.zip from "
+        "https://pole.uchicago.edu/public/data/ge25/ once, then run\n"
+        "    python -m Kosmulator_main.get_spt_data --no-lite --muse-zip /path/to/muse_3g_like_march_2025.zip\n"
+        "and cite it (Observations/spt3g_muse_lensing/README.md)")
 
 
 def spt_muse() -> MusePhiPhi:
