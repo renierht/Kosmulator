@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--num-cores", type=int, default=1)
     parser.add_argument("--ide-model", choices=("NonLinear_IDE_2", "SignSwitch_IDE_1"), default="NonLinear_IDE_2")
+    parser.add_argument("--only-model", choices=("lcdm", "ide"), help="Run one model in a separate output suffix")
     parser.add_argument("--burn", type=int, default=1000, help="Fixed burn-in steps, as in the upstream convergence policy")
     parser.add_argument("--tau-consecutive", type=int, default=1)
     parser.add_argument("--plan", action="store_true", help="Print settings without importing Kosmulator or running CLASS")
@@ -39,10 +40,12 @@ def main():
     root = Path(__file__).resolve().parents[3]
     config = json.loads((root / "reproducibility/SAIP2026_IDE/configs/paper.json").read_text())
     paths = None
+    selected_models = (["LCDM_v"] if args.only_model == "lcdm" else
+                       [args.ide_model] if args.only_model == "ide" else ["LCDM_v", args.ide_model])
     if args.chains:
         mapping = json.loads(args.chains.read_text())
-        if set(mapping) != {"LCDM_v", args.ide_model}:
-            parser.error("--chains must specify LCDM_v and the selected IDE model")
+        if set(mapping) != set(selected_models):
+            parser.error("--chains must specify exactly the selected models")
         paths = {}
         for model, value in mapping.items():
             path = Path(value).expanduser()
@@ -55,7 +58,7 @@ def main():
     suffix = args.run_name + "_" + args.regime
     settings = {
         "mode": args.mode, "regime": args.regime, "output_suffix": suffix,
-        "models": ["LCDM_v", args.ide_model], "free_w": True, "free_w_dm": False,
+        "models": selected_models, "free_w": True, "free_w_dm": False,
         "walkers": config["walkers"], "burn": args.burn, "thin": config["thin"],
         "max_steps": args.max_steps, "convergence_setting": 0.05,
         "convergence_policy": {"tau_factor": 100, "ess_min": 2000, "rhat_max": 1.01, "consecutive": args.tau_consecutive},
@@ -73,9 +76,9 @@ def main():
     import Kosmulator as kc
     import User_defined_modules as udm
     from Kosmulator_main import constants as K
-    kc.model_names = ["LCDM_v", args.ide_model]
+    kc.model_names = selected_models
     udm.FREE_W, udm.FREE_W_DM = True, False
-    kc.true_model = config["reference_model"]
+    kc.true_model = config["reference_model"] if "LCDM_v" in selected_models else args.ide_model
     kc.observations = config["observations"]
     kc.nwalkers, kc.burn = config["walkers"], args.burn
     kc.nsteps, kc.convergence = args.max_steps, 0.05
