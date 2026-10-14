@@ -488,23 +488,23 @@ z_{\mathrm{switch},10}=\left[\frac{-2(w-w_{\mathrm{dm}})(1+3w)}{(1+3w_{\mathrm{d
 
 These are the selected global branches used by Kosmulator. All models require
 finite EOS/couplings, strictly positive present dark densities and a finite,
-positive square-root argument in $`H(z)`$ at every requested point. For nonlinear
+positive square-root argument in <span>H(z)</span> at every requested point. For nonlinear
 interactions, the dark-sector denominator must not vanish, and every real-power
 base must stay positive. A zero denominator in a **generic displayed formula**
 is not automatically a physical singularity: implemented limits are listed below.
 
 | Model | Reality / selected global branch | Generic formula requiring a separate limit |
 |---:|---|---|
-| 1 | $`(\delta_{\mathrm{dm}}+\delta_{\mathrm{de}}+w-w_{\mathrm{dm}})^2\ge4\delta_{\mathrm{dm}}\delta_{\mathrm{de}}`$ | $`w=w_{\mathrm{dm}}`$ or $`\Delta=0`$ |
-| 2 | $`(w-w_{\mathrm{dm}})(w-w_{\mathrm{dm}}+4\delta)\ge0`$ | $`w=w_{\mathrm{dm}}`$ or $`\Delta=0`$ |
-| 3 | $`\Delta`$ is real for all real parameters | $`w=w_{\mathrm{dm}}`$; $`\Delta=0`$ at the uncoupled equal-EOS point |
-| 4 | Always real | $`\delta+w-w_{\mathrm{dm}}=0`$ |
-| 5 | Always real | $`\delta+w-w_{\mathrm{dm}}=0`$ |
-| 6 | Real on its positive solution branch | $`\delta+w-w_{\mathrm{dm}}=0`$ |
-| 7 | $`w-w_{\mathrm{dm}}<0`$, $`w-w_{\mathrm{dm}}<\delta\le-(w-w_{\mathrm{dm}})/r_0`$ | The chosen sufficient branch excludes $`w=w_{\mathrm{dm}}`$ and $`\delta=w-w_{\mathrm{dm}}`$ |
-| 8 | $`w-w_{\mathrm{dm}}<0`$, $`w-w_{\mathrm{dm}}<\delta\le-(w-w_{\mathrm{dm}})r_0`$ | The chosen sufficient branch excludes $`w=w_{\mathrm{dm}}`$ and $`\delta=w-w_{\mathrm{dm}}`$ |
-| 9 | $`\delta\le-\frac{2(w-w_{\mathrm{dm}})}{(1+3w_{\mathrm{dm}})r_0+1+3w}`$ **or** $`\delta\ge-2/3`$ | $`2+3\delta=0`$ or $`2(w-w_{\mathrm{dm}})+\delta(1+3w)=0`$ |
-| 10 | $`-\frac{2(w-w_{\mathrm{dm}})r_0}{(1+3w_{\mathrm{dm}})r_0+1+3w}\le\delta\le2/3`$ | $`2-3\delta=0`$ or $`2(w-w_{\mathrm{dm}})+\delta(1+3w_{\mathrm{dm}})=0`$ |
+| 1 | <span>(δ<sub>dm</sub>+δ<sub>de</sub>+w-w<sub>dm</sub>)<sup>2</sup>≥4δ<sub>dm</sub>δ<sub>de</sub></span> | <span>w=w<sub>dm</sub></span> or <span>Δ=0</span> |
+| 2 | <span>(w-w<sub>dm</sub>)(w-w<sub>dm</sub>+4δ)≥0</span> | <span>w=w<sub>dm</sub></span> or <span>Δ=0</span> |
+| 3 | <span>Δ</span> is real for all real parameters | <span>w=w<sub>dm</sub></span>; <span>Δ=0</span> at the uncoupled equal-EOS point |
+| 4 | Always real | <span>δ+w-w<sub>dm</sub>=0</span> |
+| 5 | Always real | <span>δ+w-w<sub>dm</sub>=0</span> |
+| 6 | Real on its positive solution branch | <span>δ+w-w<sub>dm</sub>=0</span> |
+| 7 | <span>w-w<sub>dm</sub>&lt;0</span>, <span>w-w<sub>dm</sub>&lt;δ≤-(w-w<sub>dm</sub>)/r<sub>0</sub></span> | The chosen sufficient branch excludes <span>w=w<sub>dm</sub></span> and <span>δ=w-w<sub>dm</sub></span> |
+| 8 | <span>w-w<sub>dm</sub>&lt;0</span>, <span>w-w<sub>dm</sub>&lt;δ≤-(w-w<sub>dm</sub>)r<sub>0</sub></span> | The chosen sufficient branch excludes <span>w=w<sub>dm</sub></span> and <span>δ=w-w<sub>dm</sub></span> |
+| 9 | <span>δ≤-(2(w-w<sub>dm</sub>))/((1+3w<sub>dm</sub>)r<sub>0</sub>+1+3w)</span> **or** <span>δ≥-2/3</span> | <span>2+3δ=0</span> or <span>2(w-w<sub>dm</sub>)+δ(1+3w)=0</span> |
+| 10 | <span>-(2(w-w<sub>dm</sub>)r<sub>0</sub>)/((1+3w<sub>dm</sub>)r<sub>0</sub>+1+3w)≤δ≤2/3</span> | <span>2-3δ=0</span> or <span>2(w-w<sub>dm</sub>)+δ(1+3w<sub>dm</sub>)=0</span> |
 
 The Model 9–10 conditions additionally assume
 
@@ -522,28 +522,28 @@ means that the optional physical filters below are disabled.
 ## Conditions for globally nonnegative dark-sector densities
 
 Apply this table together with the real-domain conditions. For the interacting
-Models 1–5 and 7–8 the adopted bounds assume $`w<w_{\mathrm{dm}}`$; Models 9–10
+Models 1–5 and 7–8 the adopted bounds assume <span>w&lt;w<sub>dm</sub></span>; Models 9–10
 use the assumptions above. Uncoupled Models 1–5 pass the positivity check
 without requiring that hierarchy. Model 6 is positive for either EOS hierarchy.
 
 | Model | Global nonnegative-density condition |
 |---:|---|
-| 1 | $`\delta_{\mathrm{dm}}\ge0`$, $`\delta_{\mathrm{de}}\ge0`$, $`\delta_{\mathrm{dm}}r_0+\delta_{\mathrm{de}}\le-\frac{(w-w_{\mathrm{dm}})r_0}{1+r_0}`$ |
-| 2 | $`0\le\delta\le-\frac{(w-w_{\mathrm{dm}})r_0}{(1+r_0)^2}`$ |
-| 3 | No nonzero-coupling globally positive domain; $`\delta=0`$ is uncoupled |
-| 4 | $`0\le\delta\le-\frac{w-w_{\mathrm{dm}}}{1+r_0}`$ |
-| 5 | $`0\le\delta\le-\frac{w-w_{\mathrm{dm}}}{1+1/r_0}`$ |
-| 6 | Any finite $`\delta`$ on the positive regular solution branch |
-| 7 | $`0\le\delta\le-\frac{w-w_{\mathrm{dm}}}{r_0}`$ |
-| 8 | $`0\le\delta\le-(w-w_{\mathrm{dm}})r_0`$ |
-| 9 | $`\delta\le-\frac{2(w-w_{\mathrm{dm}})}{(1+3w_{\mathrm{dm}})r_0+1+3w}`$ **or** $`\delta\ge0`$ |
-| 10 | $`-\frac{2(w-w_{\mathrm{dm}})r_0}{(1+3w_{\mathrm{dm}})r_0+1+3w}\le\delta\le0`$ |
+| 1 | <span>δ<sub>dm</sub>≥0</span>, <span>δ<sub>de</sub>≥0</span>, <span>δ<sub>dm</sub>r<sub>0</sub>+δ<sub>de</sub>≤-((w-w<sub>dm</sub>)r<sub>0</sub>)/(1+r<sub>0</sub>)</span> |
+| 2 | <span>0≤δ≤-((w-w<sub>dm</sub>)r<sub>0</sub>)/((1+r<sub>0</sub>)<sup>2</sup>)</span> |
+| 3 | No nonzero-coupling globally positive domain; <span>δ=0</span> is uncoupled |
+| 4 | <span>0≤δ≤-(w-w<sub>dm</sub>)/(1+r<sub>0</sub>)</span> |
+| 5 | <span>0≤δ≤-(w-w<sub>dm</sub>)/(1+1/r<sub>0</sub>)</span> |
+| 6 | Any finite <span>δ</span> on the positive regular solution branch |
+| 7 | <span>0≤δ≤-(w-w<sub>dm</sub>)/(r<sub>0</sub>)</span> |
+| 8 | <span>0≤δ≤-(w-w<sub>dm</sub>)r<sub>0</sub></span> |
+| 9 | <span>δ≤-(2(w-w<sub>dm</sub>))/((1+3w<sub>dm</sub>)r<sub>0</sub>+1+3w)</span> **or** <span>δ≥0</span> |
+| 10 | <span>-(2(w-w<sub>dm</sub>)r<sub>0</sub>)/((1+3w<sub>dm</sub>)r<sub>0</sub>+1+3w)≤δ≤0</span> |
 
 `ALLOW_NEGATIVE_ENERGIES=False` enforces this filter.
 
 ## Future Big-Rip conditions
 
-A Big Rip means divergence at $`a\to\infty`$ in finite future proper time.
+A Big Rip means divergence at <span>a→∞</span> in finite future proper time.
 A finite-scale-factor singularity is a different outcome. Reality, global
 component positivity and future behavior are separate checks: allowing a
 negative component does not automatically determine whether a Big Rip occurs.
@@ -560,27 +560,27 @@ Kosmulator therefore uses the more general mode checks in the following section.
 
 | Model | No-future-Big-Rip condition as tabulated in the PDF |
 |---:|---|
-| 1 | $`\delta_{\mathrm{dm}}(1+w)-(1+w_{\mathrm{dm}})\delta_{\mathrm{de}}\le(1+w_{\mathrm{dm}})(1+w)`$ |
-| 2 | $`\delta(w-w_{\mathrm{dm}})\le(1+w_{\mathrm{dm}})(1+w)`$ |
-| 3 | $`\delta(2+w_{\mathrm{dm}}+w)\le(1+w_{\mathrm{dm}})(1+w)`$ |
-| 4 | $`w\ge-1`$ |
-| 5 | $`\delta\ge-1-w`$ |
-| 6 | $`w\ge-1`$ |
-| 7 | $`w\ge-1`$ |
-| 8 | $`\delta\ge\frac{(w-w_{\mathrm{dm}})(1+w)}{1+w_{\mathrm{dm}}}`$ |
-| 9 | $`w\ge-1`$ **or** $`(w<-1\ \text{and}\ \delta\le-1-w_{\mathrm{dm}})`$ |
-| 10 | $`\delta\le1+w`$ on its future-regular branch |
+| 1 | <span>δ<sub>dm</sub>(1+w)-(1+w<sub>dm</sub>)δ<sub>de</sub>≤(1+w<sub>dm</sub>)(1+w)</span> |
+| 2 | <span>δ(w-w<sub>dm</sub>)≤(1+w<sub>dm</sub>)(1+w)</span> |
+| 3 | <span>δ(2+w<sub>dm</sub>+w)≤(1+w<sub>dm</sub>)(1+w)</span> |
+| 4 | <span>w≥-1</span> |
+| 5 | <span>δ≥-1-w</span> |
+| 6 | <span>w≥-1</span> |
+| 7 | <span>w≥-1</span> |
+| 8 | <span>δ≥((w-w<sub>dm</sub>)(1+w))/(1+w<sub>dm</sub>)</span> |
+| 9 | <span>w≥-1</span> **or** <span>(w&lt;-1 and δ≤-1-w<sub>dm</sub>)</span> |
+| 10 | <span>δ≤1+w</span> on its future-regular branch |
 
 ### Conditions actually applied to Models 1–8
 
 For Models 1–5, Kosmulator adds the two displayed dark densities and examines
-the largest surviving power of $`a`$. A positive leading coefficient with a
+the largest surviving power of <span>a</span>. A positive leading coefficient with a
 positive power gives a Big Rip; a nonpositive power gives no Big Rip. An
 exactly vanishing coefficient removes that mode, so the next surviving mode
 must be used. A negative leading total is reported as `negative_future_total`,
 not mislabeled as a Big Rip. At a repeated root, the sign of the leading
-$`\ln a`$ coefficient is included; power zero with at most one factor of
-$`\ln a`$ does not give finite future proper time.
+<span>ln  a</span> coefficient is included; power zero with at most one factor of
+<span>ln  a</span> does not give finite future proper time.
 
 For Model 1 the two generic powers of the total density are
 
@@ -591,24 +591,24 @@ For Model 1 the two generic powers of the total density are
 ```
 
 Their coefficients are precisely the two coefficients of the dark-sector
-terms in $`H_1^2/H_0^2`$ above. Models 2–5 use their corresponding coupling
+terms in <span>H<sub>1</sub><sup>2</sup>/H<sub>0</sub><sup>2</sup></span> above. Models 2–5 use their corresponding coupling
 substitutions. Thus the explicit formulas specify both the coefficient and
 power checks without introducing new fitted parameters or eigenmode notation.
 
 For Models 6–8, the implemented surviving future powers are:
 
-| Model and branch | Power of $`a`$ in the leading future dark-sector density |
+| Model and branch | Power of <span>a</span> in the leading future dark-sector density |
 |---|---|
-| 6, $`w-w_{\mathrm{dm}}+\delta<0`$ | $`-3(1+w)`$ |
-| 6, $`w-w_{\mathrm{dm}}+\delta>0`$ | $`-3(1+w_{\mathrm{dm}})`$ |
-| 6, $`w-w_{\mathrm{dm}}+\delta=0`$ | $`-3\left(1+\frac{w_{\mathrm{dm}}r_0+w}{1+r_0}\right)`$ |
-| 7, $`w-w_{\mathrm{dm}}+\delta r_0\ne0`$ | $`-3(1+w)`$ |
-| 7, $`w-w_{\mathrm{dm}}+\delta r_0=0`$ | $`-3\left[1+w_{\mathrm{dm}}-\frac{(w-w_{\mathrm{dm}})\delta}{w-w_{\mathrm{dm}}-\delta}\right]`$ |
-| 8 | $`-3\left[1+w+\frac{(w-w_{\mathrm{dm}})\delta}{w-w_{\mathrm{dm}}-\delta}\right]`$ |
+| 6, <span>w-w<sub>dm</sub>+δ&lt;0</span> | <span>-3(1+w)</span> |
+| 6, <span>w-w<sub>dm</sub>+δ&gt;0</span> | <span>-3(1+w<sub>dm</sub>)</span> |
+| 6, <span>w-w<sub>dm</sub>+δ=0</span> | <span>-3(1+(w<sub>dm</sub>r<sub>0</sub>+w)/(1+r<sub>0</sub>))</span> |
+| 7, <span>w-w<sub>dm</sub>+δ r<sub>0</sub>≠0</span> | <span>-3(1+w)</span> |
+| 7, <span>w-w<sub>dm</sub>+δ r<sub>0</sub>=0</span> | <span>-3[1+w<sub>dm</sub>-((w-w<sub>dm</sub>)δ)/(w-w<sub>dm</sub>-δ)]</span> |
+| 8 | <span>-3[1+w+((w-w<sub>dm</sub>)δ)/(w-w<sub>dm</sub>-δ)]</span> |
 
 Within the selected real branches, a positive power gives a Big Rip and a
 nonpositive power gives no Big Rip. This is why the simple Model 6 condition
-$`w\ge-1`$ cannot be applied regardless of the sign of $`w-w_{\mathrm{dm}}+\delta`$.
+<span>w≥-1</span> cannot be applied regardless of the sign of <span>w-w<sub>dm</sub>+δ</span>.
 
 ### Models 9–10: full future classification
 
@@ -617,12 +617,12 @@ global component positivity:
 
 | Model | Conditions | Future classification |
 |---:|---|---|
-| 9 | $`w<-1`$ and $`\delta>-1-w_{\mathrm{dm}}`$ | Big Rip |
-| 9 | $`w\ge-1`$ or $`\delta\le-1-w_{\mathrm{dm}}`$ | No Big Rip on the corresponding future-regular solution |
-| 10 | $`\delta\le1+w`$ | No Big Rip |
-| 10 | $`1+w<\delta<2/3`$ | Big Rip |
-| 10 | $`\delta=2/3`$ | Big Rip on the exceptional limiting solution |
-| 10 | $`\delta>2/3`$ | Finite-scale-factor singularity, not a Big Rip at infinity |
+| 9 | <span>w&lt;-1</span> and <span>δ&gt;-1-w<sub>dm</sub></span> | Big Rip |
+| 9 | <span>w≥-1</span> or <span>δ≤-1-w<sub>dm</sub></span> | No Big Rip on the corresponding future-regular solution |
+| 10 | <span>δ≤1+w</span> | No Big Rip |
+| 10 | <span>1+w&lt;δ&lt;2/3</span> | Big Rip |
+| 10 | <span>δ=2/3</span> | Big Rip on the exceptional limiting solution |
+| 10 | <span>δ&gt;2/3</span> | Finite-scale-factor singularity, not a Big Rip at infinity |
 
 The last row is classified independently, although the selected global
 real-domain prior already excludes it from sampling.
@@ -635,10 +635,10 @@ The code evaluates equivalent, numerically stable expressions instead of
 substituting zero into the denominators of the generic formulas above.
 No production code is changed by this presentation.
 
-- **Models 1–3:** repeated real roots and $`w=w_{\mathrm{dm}}`$ are evaluated
+- **Models 1–3:** repeated real roots and <span>w=w<sub>dm</sub></span> are evaluated
   with the finite matrix-exponential limit where the selected real domain permits.
-  The generic density expressions above are not to be evaluated as $`0/0`$.
-- **Model 4**, at $`\delta+w-w_{\mathrm{dm}}=0`$:
+  The generic density expressions above are not to be evaluated as <span>0/0</span>.
+- **Model 4**, at <span>δ+w-w<sub>dm</sub>=0</span>:
 
 ```math
 \rho_{\mathrm{dm}}=\rho_{\mathrm{dm},0}a^{-3(1+w)},\qquad
@@ -646,7 +646,7 @@ No production code is changed by this presentation.
 [\rho_{\mathrm{de},0}-3\delta\rho_{\mathrm{dm},0}\ln a]a^{-3(1+w)}.
 ```
 
-- **Model 5**, at $`\delta+w-w_{\mathrm{dm}}=0`$:
+- **Model 5**, at <span>δ+w-w<sub>dm</sub>=0</span>:
 
 ```math
 \rho_{\mathrm{dm}}=
@@ -654,7 +654,7 @@ No production code is changed by this presentation.
 \rho_{\mathrm{de}}=\rho_{\mathrm{de},0}a^{-3(1+w_{\mathrm{dm}})}.
 ```
 
-- **Model 6**, at $`\delta+w-w_{\mathrm{dm}}=0`$, has constant density ratio:
+- **Model 6**, at <span>δ+w-w<sub>dm</sub>=0</span>, has constant density ratio:
 
 ```math
 \rho_{\mathrm{dm}}=\rho_{\mathrm{dm},0}
@@ -664,11 +664,11 @@ a^{-3\left(1+\frac{w_{\mathrm{dm}}r_0+w}{1+r_0}\right)}.
 ```
 
 - **Models 7–8:** the sufficient real branches exclude the singular denominators;
-  no extension through $`\delta=w-w_{\mathrm{dm}}`$ is claimed.
-- **Model 9:** $`\delta=-2/3`$ is handled by its separate continuous limit;
-  $`2(w-w_{\mathrm{dm}})+\delta(1+3w)=0`$ uses the logarithmic density-ratio solution.
-- **Model 10:** $`\delta=2/3`$ is handled by its separate continuous limit;
-  $`2(w-w_{\mathrm{dm}})+\delta(1+3w_{\mathrm{dm}})=0`$ uses the logarithmic density-ratio solution.
+  no extension through <span>δ=w-w<sub>dm</sub></span> is claimed.
+- **Model 9:** <span>δ=-2/3</span> is handled by its separate continuous limit;
+  <span>2(w-w<sub>dm</sub>)+δ(1+3w)=0</span> uses the logarithmic density-ratio solution.
+- **Model 10:** <span>δ=2/3</span> is handled by its separate continuous limit;
+  <span>2(w-w<sub>dm</sub>)+δ(1+3w<sub>dm</sub>)=0</span> uses the logarithmic density-ratio solution.
 
 All ten models have the uncoupled limit
 
@@ -686,31 +686,31 @@ H(z)&=H_0\left[\Omega_{\mathrm{bm},0}(1+z)^3+\Omega_{\mathrm{r},0}(1+z)^4
 
 | `FREE_W` | `FREE_W_DM` | Free EOS | Fixed EOS |
 |---|---|---|---|
-| True | False | $`w`$ | $`w_{\mathrm{dm}}=0`$ |
-| False | False | none | $`w=-1`$, $`w_{\mathrm{dm}}=0`$ |
-| True | True | $`w`$, $`w_{\mathrm{dm}}`$ | none |
-| False | True | $`w_{\mathrm{dm}}`$ | $`w=-1`$ |
+| True | False | <span>w</span> | <span>w<sub>dm</sub>=0</span> |
+| False | False | none | <span>w=-1</span>, <span>w<sub>dm</sub>=0</span> |
+| True | True | <span>w</span>, <span>w<sub>dm</sub></span> | none |
+| False | True | <span>w<sub>dm</sub></span> | <span>w=-1</span> |
 
 `ALLOW_DOOM_FACTOR_INSTABILITIES=False` is supported only for Models 1–8
-with free $`w`$ and fixed $`w_{\mathrm{dm}}=0`$. For nonzero interaction the
+with free <span>w</span> and fixed <span>w<sub>dm</sub>=0</span>. For nonzero interaction the
 implemented sufficient criteria are:
 
 | Model | Cold-DM doom criterion |
 |---:|---|
-| 1 | $`\delta_{\mathrm{de}}>0`$ and $`w<-1`$ |
-| 2, 3, 4, 7 | $`w<-1`$ |
-| 5, 6, 8 | $`\delta(1+w)<0`$ |
+| 1 | <span>δ<sub>de</sub>&gt;0</span> and <span>w&lt;-1</span> |
+| 2, 3, 4, 7 | <span>w&lt;-1</span> |
+| 5, 6, 8 | <span>δ(1+w)&lt;0</span> |
 
 Zero interaction passes the pointwise doom test. Warm/free DM EOS, fixed
-$`w=-1`$ and Models 9–10 are unclassified configurations: enforcing this prior
+<span>w=-1</span> and Models 9–10 are unclassified configurations: enforcing this prior
 raises a configuration error. Setting the switch to `True` disables this
 optional prior; it does not establish perturbative stability.
 
 ### CLASS mapping and validation scope
 
-In Python, `w_dm` represents $`w_{\mathrm{dm}}`$, `w` represents $`w`$,
-`Omega_b` represents $`\Omega_{\mathrm{bm},0}`$, and
-`Omega_m - Omega_b` supplies $`\Omega_{\mathrm{dm},0}`$.
+In Python, `w_dm` represents <span>w<sub>dm</sub></span>, `w` represents <span>w</span>,
+`Omega_b` represents <span>Ω<sub>bm,0</sub></span>, and
+`Omega_m - Omega_b` supplies <span>Ω<sub>dm,0</sub></span>.
 Python density routines return densities in present critical-density units;
 the formulas above use the PDF's physical-density notation.
 
@@ -726,10 +726,10 @@ p_{\mathrm{dark}}&=w_{\mathrm{dm}}\rho_{\mathrm{dm}}+w\rho_{\mathrm{de}},\\
 \end{aligned}
 ```
 
-The low-redshift Python default is $`\Omega_{\mathrm{r},0}=0`$. CLASS retains
+The low-redshift Python default is <span>Ω<sub>r,0</sub>=0</span>. CLASS retains
 calibrated photons and neutrinos, including massive-neutrino evolution.
 Comparison with CLASS must match the density/radiation normalization; massive
-neutrinos cannot be represented by a single constant $`a^{-4}`$ component at all epochs.
+neutrinos cannot be represented by a single constant <span>a<sup>-4</sup></span> component at all epochs.
 This is a homogeneous-background and standard-thermodynamics sound-horizon
 extension, not a warm IDE perturbation or particle free-streaming calculation.
 
