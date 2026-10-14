@@ -16,11 +16,16 @@ def main():
     parser.add_argument("--max-steps", type=int, default=100000)
     parser.add_argument("--derived-rd-samples", type=int, default=6000)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--num-cores", type=int, default=1)
     parser.add_argument("--ide-model", choices=("NonLinear_IDE_2", "SignSwitch_IDE_1"), default="NonLinear_IDE_2")
     parser.add_argument("--burn", type=int, default=1000, help="Fixed burn-in steps, as in the upstream convergence policy")
     parser.add_argument("--tau-consecutive", type=int, default=1)
     parser.add_argument("--plan", action="store_true", help="Print settings without importing Kosmulator or running CLASS")
     args = parser.parse_args()
+    if args.num_cores < 1:
+        parser.error("--num-cores must be positive")
+    for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "BLIS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+        os.environ[var] = "1"
     if not re.fullmatch(r"[A-Za-z0-9_-]+", args.run_name):
         parser.error("--run-name must contain only letters, numbers, underscores or hyphens")
     if args.burn < 0 or args.max_steps <= args.burn or args.derived_rd_samples <= 0 or args.tau_consecutive < 1:
@@ -82,7 +87,7 @@ def main():
         config["regime_switches"][args.regime],
     ):
         setattr(udm, key, value)
-    sys.argv = [str(root / "Kosmulator.py"), "--force_emcee", "--num_cores", "1",
+    sys.argv = [str(root / "Kosmulator.py"), "--force_emcee", "--num_cores", str(args.num_cores),
                 "--plot_table", "--output_suffix", suffix,
                 "--tau-consecutive", str(args.tau_consecutive)]
     if args.resume:

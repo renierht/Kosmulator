@@ -591,6 +591,14 @@ def run_mcmc_for_all_models(
                         hiltt_path,
                         lens_raw,
                         lens_cmbmarg,
+                        {
+                            "constants": {name: getattr(K, name) for name in (
+                                "DERIVE_RD_WITH_MODEL_CLASS", "RD_CLASS_OMEGA_B", "RD_CLASS_N_EFF",
+                                "RD_CLASS_SUM_MNU_EV", "RD_CLASS_N_NCDM")},
+                            "models": {name: getattr(UDM, name) for name in (
+                                "FREE_W", "FREE_W_DM", "ALLOW_NEGATIVE_ENERGIES",
+                                "ALLOW_BIG_RIP", "ALLOW_DOOM_FACTOR_INSTABILITIES")},
+                        },
                     ),
                 )
             pool_for_model = pool_cache[key]

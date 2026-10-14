@@ -638,6 +638,7 @@ def init_clik_worker(
     hiltt_path: str | None = None,
     lens_raw_path: str | None = None,
     lens_cmbmarg_path: str | None = None,
+    runtime_settings: dict | None = None,
 ) -> None:
     """
     Initialiser for worker processes that need Planck clik likelihoods.
@@ -646,6 +647,13 @@ def init_clik_worker(
     - Optionally preloads paths for CMB high-ℓ, low-ℓ, TT-only, and lensing.
     """
     # keep workers single-threaded
+    if runtime_settings:
+        from Kosmulator_main import constants as K
+        import User_defined_modules as U
+        for key, value in runtime_settings.get("constants", {}).items():
+            setattr(K, key, value)
+        for key, value in runtime_settings.get("models", {}).items():
+            setattr(U, key, value)
     for var in (
         "OMP_NUM_THREADS",
         "MKL_NUM_THREADS",
