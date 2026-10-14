@@ -2,13 +2,24 @@
   <img src="assets/Kosmulator.png" alt="Kosmulator logo" width="300">
 </p>
 
-# Kosmulator IDE branch: Interacting Dark Energy extensions
+# Kosmulator: ten interacting backgrounds with warm dark matter
 
-For installation instructions, general information about Kosmulator, model selection, dataset selection, sampler configuration, and setting parameter bounds, users should refer to the [`main` branch](https://github.com/renierht/Kosmulator). This branch specifically contains modifications of Kosmulator for **Interacting Dark Energy (IDE)** background models.
+This branch extends the eight IDE backgrounds to a constant dark-matter EOS
+`w_dm` and adds two dark-sector sign-switching interactions (Models 9–10).
+It includes independent free/fixed EOS switches, mathematical and optional
+physical-domain filters, and a shared CLASS background for model-derived
+baryon-drag sound horizons. “Warm” denotes a background EOS extension;
+IDE perturbations and particle free streaming are not implemented.
 
-The purpose of this branch is to add analytical background solutions for five linear and three non-linear IDE kernels, together with parameter-domain checks that can be used to exclude imaginary or undefined dark-sector densities, negative energy densities, future big-rip singularities, and early-time perturbative instabilities according to the doom-factor analysis. The branch also contains a shared CLASS background backend used to compute the baryon-drag sound horizon consistently with the selected homogeneous IDE expansion history.
+**Full equations and conditions:** [Ten-model equation reference](docs/WARM_DM_EQUATIONS.md).
+This reference supersedes the earlier cold-only formulas in this README.
+It contains each kernel and density solution, exceptional limits, global
+real-domain and positivity conditions, future classification and supported
+doom criteria. The cold-DM limit is `w_dm=0`.
 
----
+For general installation and upstream usage, see the
+[main repository](https://github.com/renierht/Kosmulator).
+For implementation evidence, see [the warm-DM report](validation/WARM_DM.md).
 
 ## Repository layout and IDE additions
 
@@ -28,241 +39,61 @@ For SAIP settings and commands, see
 
 ---
 
-## IDE background equations
-
-Phenomenological IDE models modify the separate conservation equations of dark matter and dark energy by introducing an interaction four-vector $Q^\nu$. At background level, only the energy-transfer kernel $Q$ is required, and the dark-sector conservation equations become
-
-$$
-\dot{\rho}_{\rm dm}+3H\rho_{\rm dm}=Q,
-\qquad
-\dot{\rho}_{\rm de}+3H\rho_{\rm de}(1+w)=-Q.
-$$
-
-Here $\rho_{\rm dm}$ and $\rho_{\rm de}$ are the dark matter and dark energy densities, $H$ is the Hubble function, and $w$ is the dark energy equation-of-state parameter. With this sign convention, $Q>0$ corresponds to energy transfer from dark energy to dark matter, while $Q<0$ corresponds to energy transfer from dark matter to dark energy.
-
-The interaction kernel $Q$ is usually taken to be proportional to $H$, one or more dark-sector densities, and a dimensionless coupling parameter $\delta$. In most one-coupling models, $w$ is also kept as a free parameter, so the interacting model typically introduces two additional/free dark-sector parameters to constrain: $\delta$ and $w$. The most general linear model in this branch contains two coupling parameters, $\delta_{\rm dm}$ and $\delta_{\rm de}$, together with $w$.
-
-Throughout this README we define
-
-$$
-h(z) \equiv E(z) \equiv \frac{H(z)}{H_0},
-\qquad
-r_0 \equiv \frac{\Omega_{\rm dm,0}}{\Omega_{\rm de,0}}.
-$$
-
----
-
-## IDE kernels implemented in this branch
-
-### Linear IDE model 1: $Q=3H(\delta_{\rm dm}\rho_{\rm dm}+\delta_{\rm de}\rho_{\rm de})$
-
-For a flat FLRW universe containing radiation, baryons, dark matter, and dark energy, the normalized Hubble function is
+## Conservation equations and EOS selection
 
 ```math
-\begin{aligned}
-h(z)=\{&
--\frac{1}{2\Delta}
-\left[\Omega_{\rm de,0}(\delta_{\rm dm}-\delta_{\rm de}+w-\Delta)
-+\Omega_{\rm dm,0}(\delta_{\rm dm}-\delta_{\rm de}-w-\Delta)\right]
-(1+z)^{-\frac{3}{2}(\delta_{\rm dm}-\delta_{\rm de}-w-2+\Delta)}
-\\[1mm]
-&+\frac{1}{2\Delta}
-\left[\Omega_{\rm de,0}(\delta_{\rm dm}-\delta_{\rm de}+w+\Delta)
-+\Omega_{\rm dm,0}(\delta_{\rm dm}-\delta_{\rm de}-w+\Delta)\right]
-(1+z)^{-\frac{3}{2}(\delta_{\rm dm}-\delta_{\rm de}-w-2-\Delta)}
-\\[1mm]
-&+\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
-\}^{1/2},
-\end{aligned}
+\dot\rho_{\rm dm}+3H(1+w_{\rm dm})\rho_{\rm dm}=Q,\qquad
+\dot\rho_{\rm de}+3H(1+w)\rho_{\rm de}=-Q.
 ```
+
+Positive `Q` transfers energy from DE to DM. Models 9 and 10 use
+`Q = 3 H delta q_dark rho_dm` and `Q = 3 H delta q_dark rho_de`, respectively,
 where
 
-$$
-\Delta=\sqrt{(\delta_{\rm dm}+\delta_{\rm de}+w)^2-4\delta_{\rm de}\delta_{\rm dm}}.
-$$
-
-The sign of $\delta_{\rm dm}$ determines the initial direction of energy transfer, while $\delta_{\rm de}$ determines the late-time direction of energy transfer. A positive coupling corresponds to energy transfer from dark energy to dark matter. If $\delta_{\rm dm}$ and $\delta_{\rm de}$ have opposite signs, the interaction changes direction during the cosmic evolution. Negative dark energy appears in the past when $\delta_{\rm dm}<0$, while negative dark matter appears in the future when $\delta_{\rm de}<0$.
-
-### Linear IDE model 2: $Q=3H\delta(\rho_{\rm dm}+\rho_{\rm de})$
-
-The Hubble function is obtained from the general linear solution above by setting
-
-$$
-\delta_{\rm dm}=\delta_{\rm de}=\delta.
-$$
-
-For $\delta<0$, corresponding to energy transfer from dark matter to dark energy, this model exhibits negative dark energy densities in the past and negative dark matter densities in the future. For a sufficiently small positive coupling, all dark-sector densities remain positive, provided the positive-energy bounds below are satisfied.
-
-### Linear IDE model 3: $Q=3H\delta(\rho_{\rm dm}-\rho_{\rm de})$
-
-The Hubble function is obtained from the general linear solution by setting
-
-$$
-\delta_{\rm dm}=\delta,
-\qquad
-\delta_{\rm de}=-\delta.
-$$
-
-This is a sign-switching interaction. If $\delta<0$, the initial energy flow is from dark matter to dark energy and reverses later, with negative dark energy appearing in the past. If $\delta>0$, the initial energy flow is from dark energy to dark matter and later reverses, with negative dark matter appearing in the future. This kernel has no viable domain in which both dark-sector densities remain positive for all times.
-
-### Linear IDE model 4: $Q=3H\delta\rho_{\rm dm}$
-
-The Hubble function is obtained from the general linear solution by setting
-
-$$
-\delta_{\rm dm}=\delta,
-\qquad
-\delta_{\rm de}=0.
-$$
-
-For $\delta<0$, energy flows from dark matter to dark energy and dark energy becomes negative in the past. For a sufficiently small positive coupling, energy flows from dark energy to dark matter and all dark-sector densities can remain positive.
-
-### Linear IDE model 5: $Q=3H\delta\rho_{\rm de}$
-
-The Hubble function is obtained from the general linear solution by setting
-
-$$
-\delta_{\rm de}=\delta,
-\qquad
-\delta_{\rm dm}=0.
-$$
-
-For $\delta<0$, energy flows from dark matter to dark energy and dark matter becomes negative in the future. For a sufficiently small positive coupling, energy flows from dark energy to dark matter and all dark-sector densities can remain positive.
-
-### Non-linear IDE model 1: $Q=3H\delta\left(\dfrac{\rho_{\rm dm}\rho_{\rm de}}{\rho_{\rm dm}+\rho_{\rm de}}\right)$
-
-The normalized Hubble function is
-
 ```math
-\begin{aligned}
-h(z)=\{&
-\left[\Omega_{\rm dm,0}(1+z)^{3(1-\delta)}
-+\Omega_{\rm de,0}(1+z)^{3(1+w)}\right]
-\left[
-\frac{1+r_0(1+z)^{-3(w+\delta)}}{1+r_0}
-\right]^{-\frac{\delta}{w+\delta}}
-\\[1mm]
-&+\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
-\}^{1/2}.
-\end{aligned}
+q_{\rm dark}=\frac{(1+3w_{\rm dm})\rho_{\rm dm}+(1+3w)\rho_{\rm de}}
+{2(\rho_{\rm dm}+\rho_{\rm de})}.
 ```
 
-This interaction always gives positive dark-sector densities, independently of the sign or magnitude of $\delta$.
+This proxy excludes baryons and radiation. See the equation reference for its
+assumptions and the complete ten-model kernel table.
 
-### Non-linear IDE model 2: $Q=3H\delta\left(\dfrac{\rho_{\rm dm}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$
+Set the independent defaults in `User_defined_modules.py`:
 
-The normalized Hubble function is
-
-```math
-\begin{aligned}
-h(z)=\{&
-\left[\Omega_{\rm dm,0}
-+\Omega_{\rm de,0}
-\left(
-\frac{[w+\delta r_0](1+z)^{3w}-\delta r_0}{w}
-\right)\right]
-(1+z)^{3\left(1-\frac{w\delta}{w-\delta}\right)}
-\\[1mm]
-&\times
-\left[
-\frac{[w+\delta r_0](1+z)^{3w}+r_0(w-\delta)}{w(1+r_0)}
-\right]^{\frac{\delta}{w-\delta}}
-+\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
-\}^{1/2}.
-\end{aligned}
+```python
+FREE_W = True
+FREE_W_DM = False
 ```
 
-For $\delta<0$, energy flows from dark matter to dark energy and dark energy becomes negative in the past. For a sufficiently small positive coupling, energy flows from dark energy to dark matter and all dark-sector densities can remain positive.
-
-### Non-linear IDE model 3: $Q=3H\delta\left(\dfrac{\rho_{\rm de}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$
-
-The normalized Hubble function is
-
-```math
-\begin{aligned}
-h(z)=\{&
-\left[\Omega_{\rm dm,0}
-\left(
-\frac{(wr_0+\delta)(1+z)^{-3w}-\delta}{wr_0}
-\right)
-+\Omega_{\rm de,0}\right]
-(1+z)^{3\left(1+\frac{w^2}{w-\delta}\right)}
-\\[1mm]
-&\times
-\left[
-\frac{(wr_0+\delta)(1+z)^{-3w}+w-\delta}{w(1+r_0)}
-\right]^{\frac{\delta}{w-\delta}}
-+\Omega_{\rm bm,0}(1+z)^3+\Omega_{\rm r,0}(1+z)^4
-\}^{1/2}.
-\end{aligned}
-```
-
-For $\delta<0$, energy flows from dark matter to dark energy and dark matter becomes negative in the future. For a sufficiently small positive coupling, energy flows from dark energy to dark matter and all dark-sector densities can remain positive.
-
----
-
-## Enforced regularity bounds
-
-Bounds have been enforced on each $h(z)$ over the evaluated cosmological domain to prevent undefined or imaginary dark-sector densities from entering the likelihood calculation.
-
-| Interaction $Q$ | Conditions to avoid imaginary $\rho_{\rm dm/de}$ | Conditions to avoid undefined $\rho_{\rm dm/de}$ |
-|---|---|---|
-| $3H(\delta_{\rm dm}\rho_{\rm dm}+\delta_{\rm de}\rho_{\rm de})$ | $(\delta_{\rm dm}+\delta_{\rm de}+w)^2>4\delta_{\rm de}\delta_{\rm dm}$ | $w\ne0$; $(\delta_{\rm dm}+\delta_{\rm de}+w)^2-4\delta_{\rm de}\delta_{\rm dm}\ne0$ |
-| $3H\delta(\rho_{\rm dm}+\rho_{\rm de})$ | $\delta\le -w/4$ | $w\ne0$; $\delta\ne -w/4$ |
-| $3H\delta(\rho_{\rm dm}-\rho_{\rm de})$ | $\rho_{\rm dm/de}$ always real | $w\ne0$ |
-| $3H\delta\rho_{\rm dm}$ | $\rho_{\rm dm/de}$ always real | $\delta\ne -w$ |
-| $3H\delta\rho_{\rm de}$ | $\rho_{\rm dm/de}$ always real | $\delta\ne -w$ |
-| $3H\delta\left(\dfrac{\rho_{\rm dm}\rho_{\rm de}}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | $\rho_{\rm dm/de}$ always real | $\delta\ne -w$ |
-| $3H\delta\left(\dfrac{\rho_{\rm dm}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | $\rho_{\rm dm/de}$ always real | $w<0$; $w<\delta\le -w/r_0$ |
-| $3H\delta\left(\dfrac{\rho_{\rm de}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | $\rho_{\rm dm/de}$ always real | $w<0$; $w<\delta\le -wr_0$ |
-
-**Table 1.** Conditions required to avoid imaginary or undefined energy densities for the different interaction kernels. Here $r_0=\Omega_{\rm dm,0}/\Omega_{\rm de,0}$.
-
----
-
-## Optional physical-domain switches
-
-Additional switches have been added so that users can decide whether to allow or reject parameter points associated with:
-
-1. negative dark matter or dark energy densities;
-2. future big-rip singularities;
-3. early-time instabilities based on the doom-factor analysis of Gavela et al. (2009).
-
-The positive-energy conditions also ensure that past big-bounce solutions and future big-crunch solutions are avoided in flat universes.
-
-| Interaction $Q$ | $\rho_{\rm dm/de}>0$ domain | $\rho_{\rm dm/de}>0$ conditions | No future big rip |
+| `FREE_W` | `FREE_W_DM` | Sampled EOS | Fixed EOS |
 |---|---|---|---|
-| $3H(\delta_{\rm dm}\rho_{\rm dm}+\delta_{\rm de}\rho_{\rm de})$ | DE $\rightarrow$ DM | $\delta_{\rm dm}\ge0$; $\delta_{\rm de}\ge0$; $\delta_{\rm dm}r_0+\delta_{\rm de}\le -\dfrac{wr_0}{1+r_0}$ | $\delta_{\rm dm}(w+1)-\delta_{\rm de}\le w+1$ |
-| $3H\delta(\rho_{\rm dm}+\rho_{\rm de})$ | DE $\rightarrow$ DM | $0\le\delta\le -\dfrac{wr_0}{(1+r_0)^2}$ | $\delta\ge 1+\dfrac{1}{w}$ |
-| $3H\delta(\rho_{\rm dm}-\rho_{\rm de})$ | No viable domain | No viable domain | $\delta\le\dfrac{1+w}{2+w}$ |
-| $3H\delta\rho_{\rm dm}$ | DE $\rightarrow$ DM | $0\le\delta\le -\dfrac{w}{1+r_0}$ | $w>-1$ |
-| $3H\delta\rho_{\rm de}$ | DE $\rightarrow$ DM | $0\le\delta\le -\dfrac{w}{1+1/r_0}$ | $\delta\ge -w-1$ |
-| $3H\delta\left(\dfrac{\rho_{\rm dm}\rho_{\rm de}}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | DE $\leftrightarrow$ DM | $\forall\delta$ | $w\ge -1$ |
-| $3H\delta\left(\dfrac{\rho_{\rm dm}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | DE $\rightarrow$ DM | $0\le\delta\le -\dfrac{w}{r_0}$ | $w\ge -1$ |
-| $3H\delta\left(\dfrac{\rho_{\rm de}^2}{\rho_{\rm dm}+\rho_{\rm de}}\right)$ | DE $\rightarrow$ DM | $0\le\delta\le -wr_0$ | $\delta\ge w(w+1)$ |
+| True | False | `w` | `w_dm=0` |
+| False | False | none | `w=-1`, `w_dm=0` |
+| True | True | `w`, `w_dm` | none |
+| False | True | `w_dm` | `w=-1` |
 
-**Table 2.** Conditions required to ensure positive energy densities and avoid future big-rip singularities for the different interaction kernels. Here $r_0=\Omega_{\rm dm,0}/\Omega_{\rm de,0}$.
+`Config.create_config(..., free_w=..., free_w_dm=...)` overrides the defaults.
+Fixed EOS values are injected into likelihoods, CLASS and plotting; they are
+not counted as sampled parameters. The editable default `w_dm` prior is
+`(-0.1, 0.1)`. Add `SignSwitch_IDE_1` or `SignSwitch_IDE_2` to the model list
+for Model 9 or 10. The default model list remains the original eight.
+The paper launcher explicitly uses free `w` and fixed `w_dm=0`.
 
----
+## Domain and physical-prior switches
 
-## Doom-factor stability switches
+The selected global real branch and finite positive expansion are always
+required. These independent settings disable optional filters when `True`:
 
-The doom-factor condition is used here as a preliminary background-level stability filter. The implementation follows the narrow early-time interpretation used by Gavela et al. (2009): the sign of the doom factor $d$ is evaluated in the early-time branch, without globally discarding branches where $\rho_{\rm de}$ may become negative.
+- `ALLOW_NEGATIVE_ENERGIES`: allow violation of global component positivity.
+- `ALLOW_BIG_RIP`: allow futures other than the classified `no_big_rip` branch.
+- `ALLOW_DOOM_FACTOR_INSTABILITIES`: run without the supported doom prior.
 
-| Interaction $Q$ | Doom factor $d$ | Doom-factor stability | Doom stability plus positive-energy condition |
-|---|---|---|---|
-| $3H(\delta_{\rm dm}\rho_{\rm dm}+\delta_{\rm de}\rho_{\rm de})$ | $d=\dfrac{\delta_{\rm dm}r+\delta_{\rm de}}{1+w}$ | $\delta_{\rm de}>0$; $\delta_{\rm dm}\in\mathbb{R}$; $w<-1$ | $\delta_{\rm dm}\ge0$; $\delta_{\rm de}\ge0$; $\delta_{\rm dm}r_0+\delta_{\rm de}\le -\dfrac{wr_0}{1+r_0}$; $w<-1$ |
-| $3H\delta(\rho_{\rm dm}+\rho_{\rm de})$ | $d=\dfrac{\delta(r+1)}{1+w}$ | $w<-1$ | $0<\delta\le -\dfrac{wr_0}{(1+r_0)^2}$; $w<-1$ |
-| $3H\delta(\rho_{\rm dm}-\rho_{\rm de})$ | $d=\dfrac{\delta(r-1)}{1+w}$ | $w<-1$ | No viable positive-energy domain |
-| $3H\delta\rho_{\rm dm}$ | $d=\dfrac{\delta r}{1+w}$ | $w<-1$ | $0<\delta\le -\dfrac{w}{1+r_0}$; $w<-1$ |
-| $3H\delta\rho_{\rm de}$ | $d=\dfrac{\delta}{1+w}$ | $\delta(1+w)<0$ | $0<\delta\le -\dfrac{w}{1+1/r_0}$; $w<-1$ |
-| $3H\delta\dfrac{\rho_{\rm dm}\rho_{\rm de}}{\rho_{\rm dm}+\rho_{\rm de}}$ | $d=\dfrac{\delta r}{(1+r)(1+w)}$ | $\delta(1+w)<0$ | No additional positive-energy bound; only $\delta(1+w)<0$ |
-| $3H\delta\dfrac{\rho_{\rm dm}^2}{\rho_{\rm dm}+\rho_{\rm de}}$ | $d=\dfrac{\delta r^2}{(1+r)(1+w)}$ | $w<-1$ | $0<\delta\le -\dfrac{w}{r_0}$; $w<-1$ |
-| $3H\delta\dfrac{\rho_{\rm de}^2}{\rho_{\rm dm}+\rho_{\rm de}}$ | $d=\dfrac{\delta}{(1+r)(1+w)}$ | $\delta(1+w)<0$ | $0<\delta\le -wr_0$; $w<-1$ |
-
-**Table 3.** Doom-factor stability conditions for the five linear and three non-linear interacting dark energy kernels. The doom-factor-only column follows the narrow early-time Gavela interpretation. The final column combines the early-time doom-factor condition with the corresponding positive-energy bounds.
-
----
+The positivity inequalities, Big-Rip boundaries and exceptional coefficients
+are listed in [the equation reference](docs/WARM_DM_EQUATIONS.md).
+The doom prior is available only for Models 1–8 with free `w` and fixed
+`w_dm=0`. Warm/free DM EOS, fixed `w=-1` and Models 9–10 have no supported
+classification; enforcing the prior raises a configuration error.
+Disabling it does not assert stability.
 
 ## Shared CLASS background backend and model-derived sound horizon
 
@@ -272,7 +103,7 @@ This branch contains a single shared CLASS source tree at
 Class/IDE_background/
 ```
 
-for the eight IDE background models. A single backend is used instead of maintaining eight duplicated CLASS trees. Kosmulator selects the required homogeneous IDE background at runtime with the following selector:
+for the ten IDE background models. A single backend is used instead of maintaining ten duplicated CLASS trees. Kosmulator selects the required homogeneous IDE background at runtime with the following selector:
 
 | `ide_model` | Kosmulator model |
 |---:|---|
@@ -285,8 +116,12 @@ for the eight IDE background models. A single backend is used instead of maintai
 | 6 | `NonLinear_IDE_1` |
 | 7 | `NonLinear_IDE_2` |
 | 8 | `NonLinear_IDE_3` |
+| 9 | `SignSwitch_IDE_1` |
+| 10 | `SignSwitch_IDE_2` |
 
-For `Linear_IDE_1`, CLASS receives the two independent interaction parameters `delta_dm_ide` and `delta_de_ide`. Models 2--8 use the single interaction parameter `delta_ide`.
+For `Linear_IDE_1`, CLASS receives the two independent interaction parameters `delta_dm_ide` and `delta_de_ide`. Models 2--10 use the single interaction parameter `delta_ide`.
+
+`w_dm` is passed as `w_dm_ide`; the dark-energy EOS is passed as `w0_fld`. The sound-horizon cache includes the DM EOS.
 
 The CLASS implementation modifies the **homogeneous dark-sector background only**. The exact analytical IDE densities are evaluated inside the shared background module, while the ordinary CLASS thermodynamics calculation is retained. This allows Kosmulator to obtain the baryon-drag sound horizon
 
@@ -306,7 +141,7 @@ The optional switch
 DERIVE_RD_WITH_MODEL_CLASS = True
 ```
 
-activates the model-derived CLASS sound-horizon route for `LCDM_v` and the eight IDE models listed above. When enabled for a BAO or DESI likelihood:
+activates the model-derived CLASS sound-horizon route for `LCDM_v` and the ten IDE models listed above. When enabled for a BAO or DESI likelihood:
 
 1. `r_d` is removed from the sampled parameter list for supported models;
 2. Kosmulator passes the selected model name and interaction parameters to the matching CLASS background;
@@ -329,33 +164,34 @@ with the neutrino mass distributed as three equal massive species in the CLASS c
 
 ---
 
-## Validation of the IDE CLASS implementation
+## Validation, saved chains and current limitations
 
-The shared background implementation and its integration into Kosmulator were tested at several independent levels.
+The [warm-DM report](validation/WARM_DM.md) records independent conservation-ODE
+comparisons for all ten backgrounds, exceptional-limit checks, full CLASS
+background/sound-horizon checks, cold-limit regressions and sampling smoke tests.
+The [original CLASS report](validation/VALIDATION.md) remains a historical
+record of the eight-model cold baseline. The latest general integration passed
+61 tests and the short Zeus save/load/resume checks; see the
+[general update checkpoint](validation/GENERAL_FOLLOWUP_CHECKPOINT.md).
+Short smoke chains establish workflow correctness, not convergence.
 
-- **Analytical background validation:** all eight IDE selectors were compared with their exact analytical dark-matter and dark-energy densities and with the corresponding Hubble function over 40,000 points spanning approximately `0 <= z <= 1e14`. Maximum relative differences were typically of order `1e-12`.
-- **Standard CLASS regression:** with `ide_model = 0`, the shared tree reproduced the tested untouched CLASS wCDM background exactly.
-- **Zero-coupling regression:** all eight IDE selectors recovered the uncoupled wCDM background and drag-scale sound horizon. The zero-coupling `r_d` comparison agreed at approximately `1e-9` relative precision.
-- **All-model `rs_drag()` smoke test:** finite model-derived sound horizons were obtained for all eight non-zero-coupling IDE test points.
-- **Backend reuse:** all eight IDE model names were confirmed to resolve to the same `Class/IDE_background/` backend and cached source signature.
-- **Domain rejection:** deliberately invalid mathematical parameter points were rejected by CLASS rather than silently evaluated outside the model domain.
-- **Likelihood-level validation:** valid IDE points produced finite BAO and DESI likelihoods, while invalid CLASS points were mapped to the rejection penalty. Instrumentation confirmed zero calls to both the EH98 and fixed-`r_d` fallbacks in strict mode.
-- **Kosmulator runner validation:** the normal `model_likelihood()` route propagated the selected IDE model to the CLASS sound-horizon calculation and reproduced the direct BAO likelihood result.
-- **Configuration-policy validation:** supported CLASS models remove `r_d` from BAO/DESI sampled parameter sets when model-derived `r_d` is enabled, while unsupported models retain the legacy policy.
+New chain metadata records parameter order, fixed EOS and physical-prior
+policy. Changing these settings requires compatible metadata or separate
+chains. Legacy metadata-free chains are accepted only for the original eight
+IDE models with free `w` and fixed `w_dm=0`.
+See [convergence and resume guidance](reproducibility/SAIP2026_IDE/CONVERGENCE.md).
 
-The numerical results and regression tolerances used in these tests are recorded in [the CLASS validation report](validation/VALIDATION.md).
+The backend is homogeneous-background plus standard thermodynamics only.
+It is not a self-consistent IDE CMB-anisotropy or warm-DM perturbation solver;
+IDE CMB likelihoods are guarded against using it.
+Some backgrounds do not admit CLASS's required early radiation era.
 
----
-
-## Current limitations
-
-This branch implements the analytical IDE background expansion histories, the associated parameter-domain checks, and a shared CLASS backend for **homogeneous-background plus standard-thermodynamics** calculations such as the drag-scale sound horizon.
-
-The IDE perturbation equations required for a self-consistent perturbation treatment have **not** been implemented in `Class/IDE_background/`. Consequently, the shared IDE backend must not be interpreted as a perturbation-complete IDE implementation and must not be used to claim IDE CMB-anisotropy predictions. Kosmulator therefore guards against using this background-only backend for IDE CMB likelihoods.
-
-The doom-factor switches remain useful as an early-time theoretical filter based on the adopted analytical criteria, but they do not constitute a numerical validation of a full IDE perturbation sector.
-
----
+The current CLASS BBN helium table also has a finite baryon-density range:
+with fixed `Omega_b=0.048`, its upper `omega_b=0.03287` corresponds to
+`H_0` approximately `82.752` km/s/Mpc. Thus some of the nominal paper prior
+`H_0=60–90` fails CLASS. This computational prior restriction remains unresolved;
+no helium value or prior bound has been silently changed. See the
+[measured performance and BBN report](validation/PERFORMANCE_CHECKPOINT.md).
 
 ## References
 

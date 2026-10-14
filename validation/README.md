@@ -1,5 +1,9 @@
 # Scientific validation
 
+- [Ten-model equations and conditions](../docs/WARM_DM_EQUATIONS.md) is the current mathematical reference.
+- [WARM_DM.md](WARM_DM.md) records the ten-model warm-DM implementation and independent numerical validation.
+- [GENERAL_FOLLOWUP_CHECKPOINT.md](GENERAL_FOLLOWUP_CHECKPOINT.md) records subsequent cache/persistence fixes and 61 passing tests.
+
 - [VALIDATION.md](VALIDATION.md) records the analytical and numerical checks of the IDE CLASS background implementation, including zero-coupling limits and sound horizons.
 - [validate_paper_postprocessing.py](validate_paper_postprocessing.py) checks the statistical results using the four original SAIP analysis chains.
 

@@ -1,3 +1,26 @@
+# Kosmulator shared IDE background extension
+
+This tree provides selectors 1–10 for the constant-EOS IDE backgrounds,
+including `w_dm_ide`. Selector 0 retains the ordinary non-IDE CLASS route.
+Models 1–5 are linear, 6–8 nonlinear and 9–10 dark-sector sign-switching.
+See the [full equation and condition reference](../../docs/WARM_DM_EQUATIONS.md)
+and [implementation validation](../../validation/WARM_DM.md).
+
+`include/ide_densities.h` evaluates the shared analytic density kernel.
+`source/background.c` includes warm-DM pressure and its derivative.
+`delta_dm_ide` and `delta_de_ide` specify Model 1; `delta_ide` specifies
+Models 2–10; `w0_fld` supplies the DE EOS. Mathematical safeguards apply
+inside CLASS; Python applies the optional physical-prior policy.
+
+This extension covers homogeneous backgrounds and standard-thermodynamics
+sound horizons only. It adds no warm IDE perturbation equations.
+Kosmulator selects/builds the matching source-hash artifact through
+`Kosmulator_main/Class_run.py`; stale unstamped IDE binaries are not reused.
+
+The original CLASS project information follows, with authorship retained.
+
+---
+
 CLASS: Cosmic Linear Anisotropy Solving System  {#mainpage}
 ==============================================
 

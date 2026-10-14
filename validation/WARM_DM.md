@@ -1,7 +1,11 @@
 # Ten-model warm-DM background update
 
 Validated 13 October 2026 in WSL Conda `Kosmulator_test` (Python 3.11,
-NumPy 2.4.6, SciPy 1.17.1). Development branch: `codex/warm-dm-ten-models`.
+NumPy 2.4.6, SciPy 1.17.1). Original implementation branch: `codex/warm-dm-ten-models`.
+The prepared local branch `codex/warm-dark-matter` includes that implementation,
+the subsequent convergence/performance work and general fixes from `fec7ac2`.
+It has not been pushed. The full current [equations and conditions](../docs/WARM_DM_EQUATIONS.md)
+include all ten density solutions and their exceptional limits.
 
 ## Audit and preservation
 
@@ -131,7 +135,7 @@ including on resume, avoiding lost tails in short runs.
 ## Validation evidence
 
 - Baseline: 32 original tests passed before implementation.
-- Final suite: 50 tests passed, including all 40 model/EOS combinations,
+- Original warm-DM integration suite: 50 tests passed, including all 40 model/EOS combinations,
   fixed injection, chain mismatch protection, C kernel boundaries, and
   Models 9/10's model-derived BAO sound-horizon configuration.
 - Independent DOP853 conservation ODEs: all ten models, 50 random cases,
@@ -172,3 +176,11 @@ validation/smoke_warm_zeus.py
 
 Use `MPLBACKEND=Agg` for headless plotting. Smoke chains use temporary
 directories; generated plots and CLASS builds are ignored artifacts.
+
+## Subsequent verification
+
+The general integration at `fec7ac2` passed all 61 tests and the two Zeus
+save/load/resume smoke cases. It adds CLASS relink/stale-cache checks, confirmed-empty
+emcee recovery and aligned Zeus posterior storage. See
+[the integration checkpoint](GENERAL_FOLLOWUP_CHECKPOINT.md).
+The documentation update does not change equations, likelihoods or active chains.
