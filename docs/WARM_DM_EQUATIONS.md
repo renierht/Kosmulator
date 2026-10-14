@@ -739,3 +739,58 @@ See [validation evidence](../validation/WARM_DM.md),
 The original eight-model reference is cited in the [repository README](../README.md).
 The companion LaTeX was used to transcribe the generic formulas; the clarified
 PDF supplies the updated Models 9–10 condition tables and future classifications.
+
+### How the PDF equations map to the implementation
+
+Opening `User_defined_modules.py` shows thin model wrappers, rather than the
+long PDF expressions written out line by line. Each wrapper selects a model
+number and calls `ide_background.expansion(...)`, passing the optional
+physical-prior switches. The analytical density solutions live in
+[`Kosmulator_main/ide_background.py`](../Kosmulator_main/ide_background.py).
+
+These are different algebraic representations of the same background equations,
+not replacement interaction models:
+
+| Models | Evaluation used in the code | Reason for that representation |
+|---|---|---|
+| 1–5 | Exact matrix/eigenmode solution, with triangular and repeated-root limits | Avoid singular coefficients and cancellation near coincident modes |
+| 6 | Explicit nonlinear solution evaluated using logarithms, with a constant-ratio limit | Reduce overflow/cancellation and handle the exceptional denominator |
+| 7–8 | Explicit nonlinear formulas with the repeated brackets stored as intermediate values | Reuse terms and check the selected real-power branch |
+| 9–10 | Exact analytical density-ratio solution and its integrated expression | Handle the sign-switching formulas and their zero-exponent/exceptional limits |
+
+The production background is analytical; it is not replaced by a numerical ODE
+solver during MCMC. Numerical conservation-equation integration is used separately
+for validation. The shared CLASS backend evaluates the corresponding analytical
+kernel in `Class/IDE_background/include/ide_densities.h`.
+
+**Measured equivalence check:** we compared explicit transcriptions of the
+PDF-form expressions with the production implementation across **100 parameter
+cases and 8,100 scale-factor points**, covering all ten models. The maximum
+scaled component-density difference was **5.34 × 10⁻¹⁵**, and the maximum
+relative Hubble-function difference was **2.22 × 10⁻¹⁵**—floating-point precision
+for these tested cases. The switching-redshift expressions for Models 9–10
+also gave a maximum normalized dark-sector proxy residual of **4.61 × 10⁻¹⁶**.
+
+The density error is normalized at each point by the largest absolute reference
+component density, with a floor of 10⁻²⁰; it is not a relative error obtained by
+dividing by a potentially vanishing individual component. These finite generic-
+branch checks do not prove equivalence at every parameter value. Separate
+independent integrations of the conservation equations, including random cases
+and exceptional-limit tests, also passed (nine background tests).
+
+Reproduce the comparison and the independent ODE checks from the repository root:
+
+```bash
+conda activate Kosmulator_test
+python validation/validate_pdf_equivalence.py
+python -m unittest discover -s tests -p 'test_warm_background.py'
+```
+
+The [comparison script](../validation/validate_pdf_equivalence.py) records its
+seed, parameter ranges, tolerances and measured errors in
+[`pdf_equivalence_results.json`](../validation/pdf_equivalence_results.json).
+The comparison uses 10 cases per model and 81 scale factors per case between
+0.02 and 3. The direct formulas and their numerical agreement describe the
+background solutions. Which physical conditions become sampler priors still
+depends on the switches documented above; CLASS thermodynamics also has the
+separately documented BBN-table limitation.

@@ -184,3 +184,18 @@ save/load/resume smoke cases. It adds CLASS relink/stale-cache checks, confirmed
 emcee recovery and aligned Zeus posterior storage. See
 [the integration checkpoint](GENERAL_FOLLOWUP_CHECKPOINT.md).
 The documentation update does not change equations, likelihoods or active chains.
+
+## Explicit PDF-form equivalence check
+
+The public model functions in `User_defined_modules.py` delegate to the shared
+analytical implementation; they do not repeat the PDF's long formulas verbatim.
+See [the implementation mapping and measured comparison](../docs/WARM_DM_EQUATIONS.md#how-the-pdf-equations-map-to-the-implementation).
+
+`validate_pdf_equivalence.py` directly transcribes the generic PDF-form densities
+and compares them against production over 100 cases / 8,100 scale-factor points.
+The maximum scaled density error is 5.34e-15 and maximum relative H error is
+2.22e-15; the Model 9/10 switching residual is at most 4.61e-16.
+`pdf_equivalence_results.json` records the exact coverage and tolerances.
+This finite formula comparison is distinct from the independent conservation-ODE
+and exceptional-limit checks in `tests/test_warm_background.py`. It does not
+validate new perturbation equations or remove the documented CLASS prior limitation.
