@@ -142,7 +142,21 @@ def saved_likelihood(samples, source, burn, cfg, index):
         import h5py
         with h5py.File(path, "r") as f:
             if "mcmc" not in f:
-                continue  # Older Zeus files contain samples, not likelihoods.
+                if "samples" not in f or "log_prob_chain" not in f:
+                    continue  # Legacy files require explicit likelihood evaluation.
+                raw = f["samples"]
+                logs = f["log_prob_chain"]
+                if logs.shape != raw.shape[:2]:
+                    continue
+                chain = np.asarray(raw[burn:]).reshape(-1, raw.shape[-1])
+                if chain.shape != samples.shape or not np.array_equal(chain, samples, equal_nan=True):
+                    continue
+                post = np.asarray(logs[burn:]).reshape(-1)
+                prior = km.log_prior_all(samples, cfg, index)
+                ll = np.full(len(post), np.nan)
+                valid = np.isfinite(post) & np.isfinite(prior)
+                ll[valid] = post[valid] - prior[valid]
+                return ll, f"saved Zeus log posterior minus evaluated log prior: {path.resolve()}"
         backend = emcee.backends.HDFBackend(str(path), read_only=True)
         chain = backend.get_chain(discard=burn, flat=True)
         if chain.shape != samples.shape or not np.array_equal(

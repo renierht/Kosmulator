@@ -127,6 +127,24 @@ def _toolchain_sig() -> dict:
     }
 
 
+def _source_newer_than(model_dir: str, artifact: str):
+    """Return a newer build input, excluding generated Cython/build files."""
+    stamp = os.path.getmtime(artifact)
+    inputs = [os.path.join(model_dir, "Makefile"),
+              os.path.join(model_dir, "python", "setup.py")]
+    for root in ("source", "tools", "external", "include", "python"):
+        for dp, dirs, files in os.walk(os.path.join(model_dir, root)):
+            dirs[:] = sorted(d for d in dirs if d not in {"build", "__pycache__", ".eggs"})
+            for name in sorted(files):
+                path = os.path.join(dp, name)
+                if not name.endswith((".c", ".h", ".cc", ".cpp", ".hpp", ".py", ".pyx", ".pxd", ".pxi", ".txt")):
+                    continue
+                if os.path.relpath(path, model_dir) in {os.path.join("python", "classy.c"), os.path.join("python", "classy.cpp")}:
+                    continue
+                inputs.append(path)
+    return next((p for p in inputs if os.path.isfile(p) and os.path.getmtime(p) > stamp), None)
+
+
 def _source_tree_hash(model_dir: str) -> str:
     """Stable hash of all build-relevant sources for this CLASS model."""
     h = hashlib.sha256()
@@ -153,10 +171,10 @@ def _source_tree_hash(model_dir: str) -> str:
         for dp, dns, fns in os.walk(r):
 
             # Never include generated/cache directories in the source signature.
-            dns[:] = [
+            dns[:] = sorted([
                 d for d in dns
                 if d not in {"build", "__pycache__", ".eggs"}
-            ]
+            ])
 
             for fn in sorted(fns):
                 if not fn.endswith(source_exts):
@@ -360,13 +378,10 @@ def _build_python_extension(model_dir: str) -> None:
     subprocess.run(["make", "-C", str(model_dir_path), "libclass.a"], check=True)
     _strip_mvec_from_setup(str(model_dir_path / "python"))
     subprocess.run(
-        [sys.executable, "setup.py", "build_ext", "--inplace"],
+        [sys.executable, "setup.py", "build_ext", "--inplace", "--force"],
         cwd=str(model_dir_path / "python"),
         check=True,
     )
-    subprocess.run([sys.executable, "setup.py", "build_ext", "--inplace"],
-                   cwd=str(model_dir_path / "python"),
-                   check=True)
     _ensure_python_external_symlink(model_dir)
 
 
@@ -552,6 +567,8 @@ def ensure_class_ready(
     if not force and backend_name != IDE_CLASS_BACKEND:
         try:
             local_so = find_classy_so(backend_name)
+            if _source_newer_than(model_dir, local_so):
+                raise RuntimeError("Local CLASS binary predates its sources")
             load_classy_so(local_so, backend_name, sig_hash)
             from classy import Class  # type: ignore
             _ = Class()

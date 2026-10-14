@@ -652,6 +652,20 @@ class ZeusAutoCorrPlotter:
 # Public API
 # ───────────────────────────────────────────────────────────────────────────────
 
+def _saved_steps(chain_path):
+    """Return confirmed emcee iteration count, or None if unreadable/unknown.
+
+    A foreign HDF5 file is not an empty emcee chain and must not be reset.
+    """
+    try:
+        with h5py.File(chain_path, "r") as handle:
+            if "mcmc" not in handle:
+                return 0 if not list(handle.keys()) else None
+            return int(handle["mcmc"].attrs.get("iteration", 0))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
 def run_mcmc(
     data,
     saveChains,
@@ -774,6 +788,7 @@ def run_mcmc(
         and resumeChains
         and os.path.exists(chain_path)
         and not overwrite
+        and _saved_steps(chain_path) != 0
         and any(str(t).startswith("CMB") for t in Type)
     )
     pos0     = None
@@ -1047,6 +1062,8 @@ def run_mcmc(
                 except FileNotFoundError:
                     pass
             backend = emcee.backends.HDFBackend(chain_path)
+            if _saved_steps(chain_path) == 0:
+                backend.reset(nwalker, ndim)
             chain_policy.write(chain_path, CONFIG, obs_index)
 
         # ------------------------------------------------------------
@@ -1060,7 +1077,8 @@ def run_mcmc(
         # ------------------------------------------------------------
         # Resume if requested and chain exists
         # ------------------------------------------------------------
-        if saveChains and resumeChains and backend.initialized and not overwrite:
+        if (saveChains and resumeChains and backend.initialized and not overwrite
+                and _saved_steps(chain_path) != 0):
             backend = emcee.backends.HDFBackend(chain_path)
             chain_policy.write(chain_path, CONFIG, obs_index)
             current = backend.iteration

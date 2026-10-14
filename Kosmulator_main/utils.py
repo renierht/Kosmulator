@@ -1005,7 +1005,7 @@ def load_or_run_chain(
         and is_emcee_run          # instead of "not vectorised"
         and not overwrite
         and not resumeChains
-        and (not os.path.exists(chain_path))
+        and (not os.path.exists(chain_path) or Kosmulator_MCMC._saved_steps(chain_path) == 0)
         and os.path.exists(zeus_chain)
     ):
         print(
@@ -1026,7 +1026,8 @@ def load_or_run_chain(
     # A) Existing chain, not overwriting (emcee only)
     # For vectorised/Zeus runs we *always* delegate loading/resume to
     # Kosmulator_MCMC.run_mcmc, which knows about "<name>_zeus.h5".
-    if is_emcee_run and os.path.exists(chain_path) and not overwrite:
+    if (is_emcee_run and os.path.exists(chain_path) and not overwrite
+            and Kosmulator_MCMC._saved_steps(chain_path) != 0):
         # A0) Already converged (autocorr) → fast-path load
         with h5py.File(chain_path, "r") as h5f:
             if h5f.attrs.get("converged", False) and not resumeChains:
@@ -1102,6 +1103,7 @@ def load_or_run_chain(
         and not overwrite
         and not resumeChains
         and os.path.exists(chain_path)    # EMCEE file exists
+        and Kosmulator_MCMC._saved_steps(chain_path) != 0
         and (not os.path.exists(zeus_chain))   # <-- added guard
     ):
         print(
@@ -1354,7 +1356,21 @@ class AppendProgressCallback:
             return False
 
         new_block = chain[self._prev_local:local_n]
+        lp = np.asarray(log_prob)
+        valid_lp = lp.shape == (local_n, nwalker)
         with h5py.File(self.filename, "a") as f:
+            old_n = f["samples"].shape[0] if "samples" in f else 0
+            # Store posterior in exactly the same step/walker order as samples.
+            # Never fabricate missing history when resuming a legacy file.
+            if valid_lp and "log_prob_chain" not in f and old_n == 0:
+                f.create_dataset("log_prob_chain", shape=(0, nwalker),
+                                 maxshape=(None, nwalker), dtype=float)
+            if valid_lp and "log_prob_chain" in f:
+                logs = f["log_prob_chain"]
+                if logs.shape == (old_n, nwalker):
+                    logs.resize((old_n + new_local, nwalker))
+                    logs[old_n:] = lp[self._prev_local:local_n]
+
             if "samples" not in f:
                 ds = f.create_dataset(
                     "samples",
