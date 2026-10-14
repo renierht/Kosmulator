@@ -333,3 +333,10 @@ PLANCK_TTTEEE_NUISANCE: Set[str] = (
     - {"calib_100P","calib_143P","calib_217P"}
     | {"calib_100P","calib_143P","calib_217P","A_pol"}
 )
+
+# Same convergence defaults as fR_followup_fixes, 8de59c3.
+CONV_TAU_FACTOR = 100.0
+CONV_ESS_MIN = 2000.0
+CONV_RHAT_MAX = 1.01
+CONV_TAU_RTOL = 0.05
+CONV_CONSECUTIVE = 1

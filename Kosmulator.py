@@ -120,7 +120,7 @@ true_model: str = "LCDM_v"
 nwalkers: int = 48     
 nsteps: int = 100000   
 burn: int = 10000     
-convergence: float = 0.01   
+convergence: float = 0.05
 
 
 prior_limits: Dict[str, Tuple[float, float]] = {

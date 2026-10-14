@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Tuple, Optional, Union
 from collections import defaultdict, Counter
 from contextlib import contextmanager
 from Kosmulator_main import constants as K
+from Kosmulator_main.convergence import ConvergenceMonitor, convergence_rules, make_zeus_callbacks
 
 import numpy as np
 from scipy import linalg as la
@@ -167,17 +168,17 @@ def parse_cli_args():
     )
     parser.add_argument(
         "--tau-consecutive", "--consecutive-required",
-        dest="consecutive_required", type=int, default=3,
+        dest="consecutive_required", type=int, default=K.CONV_CONSECUTIVE,
         help=(
-            "For Zeus early-stop: require this many consecutive callback checks "
-            "with |Δτ|/τ < target. Default 3."
+            "For both samplers: require this many consecutive checks "
+            "meeting every convergence condition. Default 1."
         ),
     )
     parser.add_argument(
         "--autocorr-buffer", type=int, default=None,
         help=(
             "Extra iterations AFTER burn before convergence checks start. "
-            "Default: max(1000, burn/5)."
+            "Default: 0."
         ),
     )
     parser.add_argument(
@@ -611,7 +612,7 @@ def build_plot_settings(
         "cmb_lensing_Lmax": CMB_LENSING_LMAX,
         # Autocorr
         "autocorr_check_every": 100,
-        "autocorr_buffer_after_burn": 1000,
+        "autocorr_buffer_after_burn": 0,
         # Misc plot options
         "legend_loc": "upper left",
         "legend_bbox_anchor": (0.02, 0.98),
@@ -1028,7 +1029,7 @@ def load_or_run_chain(
     if is_emcee_run and os.path.exists(chain_path) and not overwrite:
         # A0) Already converged (autocorr) → fast-path load
         with h5py.File(chain_path, "r") as h5f:
-            if h5f.attrs.get("converged", False):
+            if h5f.attrs.get("converged", False) and not resumeChains:
                 print(f"[INFO] Chain flagged converged → loading: {chain_path}\n")
                 return Kosmulator_MCMC.load_mcmc_results(
                     output_path=output_dir,
@@ -1160,202 +1161,87 @@ def emcee_autocorr_stopping(
     colors: list,
     obs: list,
     PLOT_SETTINGS: dict,
-    convergence: float = 0.01,
+    convergence: float = None,
     last_obs: bool = False,
     resume_offset: int = 0,
     local_burn: Optional[int] = None,
     global_burn: Optional[int] = None,
     buffer_after_burn: Optional[int] = None,
-    # ---------------- NEW ----------------
     print_enabled: bool = False,
     print_every: int = 0,
+    param_names: Optional[List[str]] = None,
 ) -> np.ndarray:
     """
-    emcee with periodic autocorr checks; only start checking once
-    global_iter >= global_burn + buffer_after_burn.
-
-    - resume_offset: steps already completed BEFORE this call
-    - local_burn:    how many steps in THIS call to still consider burn
-    - global_burn:   the absolute burn target for the overall chain
-    - buffer_after_burn: extra margin after burn before checking (default 100)
-
-    NEW:
-    - print_enabled / print_every:
-        Emit "[EMCEE Step N] Log-Post: Max=... | Mean=..." from the MAIN PROCESS
-        so it works even when emcee uses a multiprocessing Pool.
+    Run emcee for up to `nsteps` more steps, checking the convergence rule
+    (ConvergenceMonitor) every autocorr_check_every steps on the whole chain,
+    including steps from a resumed file, and stop once it holds. Sets
+    sampler.kosm_converged and sampler.kosm_monitor for the caller and draws the
+    convergence plot (auto_corr/<group>.png).
     """
-    import matplotlib.pyplot as plt  # noqa: F401
     import Plots.Plots as MP
 
-    if h5py is None:
-        raise RuntimeError(
-            "h5py required for autocorr plotting/checkpointing."
-        )
-
-    if local_burn is None:
-        local_burn = global_burn or 0
     if global_burn is None:
-        global_burn = local_burn
-
+        global_burn = local_burn or 0
     check_every = int(PLOT_SETTINGS.get("autocorr_check_every", 100))
-    buffer_after_burn = int(
-        buffer_after_burn
-        if buffer_after_burn is not None
-        else PLOT_SETTINGS.get("autocorr_buffer_after_burn", 1000)
-    )
-    min_check_global = int(global_burn + buffer_after_burn)
-
-    # ---------------- NEW ----------------
-    # Normalize/validate print cadence
+    buffer_after_burn = int(buffer_after_burn if buffer_after_burn is not None
+                            else PLOT_SETTINGS.get("autocorr_buffer_after_burn", 0))
     try:
-        print_every = int(print_every or 0)
+        print_every = max(0, int(print_every or 0))
     except Exception:
         print_every = 0
-    if print_every < 0:
-        print_every = 0
-    # ------------------------------------
 
-    max_checks = int(np.ceil((resume_offset + nsteps) / max(check_every, 1))) + 2
-    autocorr = np.empty(max_checks)
-    index = 0
-    old_tau = np.inf
-
-    obs_label = generate_label(obs).replace("+", "_")
-    folder = os.path.join(
-        PLOT_SETTINGS["autocorr_save_path"], model_name, "auto_corr"
-    )
+    group = generate_label(obs)
+    folder = os.path.join(PLOT_SETTINGS["autocorr_save_path"], model_name, "auto_corr")
     os.makedirs(folder, exist_ok=True)
-    plot_path = os.path.join(folder, f"{obs_label}.png")
-    tau_target = convergence
+    plot_path = os.path.join(folder, f"{group.replace('+', '_')}.png")
 
-    # Drive step-by-step to control the check cadence
+    monitor = ConvergenceMonitor(
+        burn=int(global_burn),
+        rules=convergence_rules(PLOT_SETTINGS, convergence),
+        check_every=check_every,
+        earliest_stop=int(global_burn) + buffer_after_burn,
+        consecutive=int(PLOT_SETTINGS.get("tau_consecutive", K.CONV_CONSECUTIVE)),
+        param_names=param_names,
+    )
+    sampler.kosm_converged = False
+    sampler.kosm_monitor = monitor
+
     for sample in sampler.sample(pos, iterations=nsteps, progress=True):
-        it_local = sampler.iteration            # steps in *this* call so far
-        it_global = resume_offset + it_local    # absolute progress
+        it_global = int(sampler.iteration)          # backend total (includes resumed steps)
 
-        # Pool-safe EMCEE logging (main process only)
-        if (
-            print_enabled
-            and (print_every > 0)
-            and (it_global % print_every) == 0
-            and is_rank0()
-            and is_main_process()
-        ):
+        if (print_enabled and print_every > 0 and (it_global % print_every) == 0
+                and is_rank0() and is_main_process()):
             lp = getattr(sample, "log_prob", None)
-
-            # Fallback for emcee state variants
-            if lp is None:
-                try:
-                    lp_all = sampler.get_log_prob()
-                    lp = lp_all[-1] if getattr(lp_all, "ndim", 0) > 1 else lp_all
-                except Exception:
-                    lp = None
-
             if lp is not None:
                 lp = np.asarray(lp, dtype=float)
                 if lp.size:
-                    lp_max = float(np.nanmax(lp))
-                    lp_mean = float(np.nanmean(lp))
-                    print(
-                        f"[EMCEE Step {it_global}] Log-Post: Max={lp_max:.4f} | Mean={lp_mean:.4f}",
-                        flush=True,
-                    )
+                    print(f"[EMCEE Step {it_global}] Log-Post: Max={np.nanmax(lp):.4f} | "
+                          f"Mean={np.nanmean(lp):.4f}", flush=True)
 
-        # only do work on our check cadence
         if (it_global % check_every) != 0:
             continue
-
-        # Try to get τ̂; early on this can fail or be noisy
-        tau = None
+        stop = monitor.update(it_global, sampler.get_chain())
         try:
-            tau = sampler.get_autocorr_time(tol=0, quiet=True)
-            tau_mean = float(np.mean(tau))
-        except Exception:
-            tau_mean = np.nan
+            MP.convergence_plot(monitor, plot_path, model_name, group, PLOT_SETTINGS)
+        except Exception as e:
+            logging.getLogger(__name__).debug("convergence plot failed: %s", e)
+        if stop:
+            break
 
-        # Record for the live plot (even before burn), then draw
-        autocorr[index] = tau_mean
-        index += 1
+    chain = sampler.get_chain()
+    st = monitor.final(chain.shape[0], chain)
+    sampler.kosm_converged = bool(st.get("converged", False))
+    from Kosmulator_main.convergence import save_report
+    save_report(monitor, st, getattr(sampler.backend, "filename", None), model_name, group, "emcee")
+    try:
+        MP.convergence_plot(monitor, plot_path, model_name, group, PLOT_SETTINGS)
+    except Exception:
+        pass
+    msg = monitor.message(st, model_name, group, "emcee")
+    log = logging.getLogger(__name__)
+    (log.info if sampler.kosm_converged else log.warning)(msg)
 
-        MP.autocorrPlot(
-            autocorr,
-            index,
-            model_name,
-            colors[0] if isinstance(colors, (list, tuple)) and colors else "C0",
-            obs,
-            PLOT_SETTINGS,
-            plot_path=plot_path,
-            close_plot=False,
-            resume_offset=resume_offset,
-            check_every=check_every,
-            global_burn=global_burn,
-            nsteps=nsteps,
-            convergence=convergence,
-        )
-
-        # Only attempt a STOP decision after burn + buffer, and only with finite τ̂
-        if (
-            (it_global >= min_check_global)
-            and (tau is not None)
-            and np.all(np.isfinite(tau))
-        ):
-            # Use a *global* effective iteration count since the start of sampling
-            effective_iter = max(0, it_global - global_burn)
-
-            # Same criterion you used, but vs global steps
-            converged = np.all(tau * check_every < effective_iter)
-
-            # Stable τ̂ (relative change tolerance)
-            if np.all(np.isfinite(old_tau)):
-                stable = np.all(
-                    np.abs(old_tau - tau)
-                    / np.maximum(tau, 1e-12)
-                    < tau_target
-                )
-            else:
-                stable = False
-
-            if converged and stable:
-                MP.autocorrPlot(
-                    autocorr,
-                    index,
-                    model_name,
-                    colors,
-                    obs,
-                    PLOT_SETTINGS,
-                    plot_path=plot_path,
-                    close_plot=True,
-                    resume_offset=resume_offset,
-                    check_every=check_every,
-                    global_burn=global_burn,
-                    nsteps=nsteps,
-                    convergence=convergence,
-                )
-                break
-
-        # Update old_tau only if we got a valid estimate
-        if (tau is not None) and np.all(np.isfinite(tau)):
-            old_tau = tau
-    else:
-        # Finished all iterations without “break”: close the plot (or leave open if more obs)
-        MP.autocorrPlot(
-            autocorr,
-            index,
-            model_name,
-            colors,
-            obs,
-            PLOT_SETTINGS,
-            plot_path=plot_path,
-            close_plot=last_obs,
-            resume_offset=resume_offset,
-            check_every=check_every,
-            global_burn=global_burn,
-            nsteps=nsteps,
-            convergence=convergence,
-        )
-
-    backend = sampler.backend
-    return backend.get_chain(discard=global_burn, flat=True)
+    return sampler.get_chain(discard=int(global_burn), flat=True)
 
 
 
@@ -1363,132 +1249,6 @@ def emcee_autocorr_stopping(
 # 9) Zeus callbacks / monitors
 # ───────────────────────────────────────────────────────────────────────────────
 
-def make_zeus_callbacks(
-    burn: int,
-    nsteps: int,
-    target_autocorr: float = 0.01,
-    plot_func=None,
-    debug: bool = False,
-    precision_switch_iter: Optional[int] = None,
-    coarse_kwargs: Optional[dict] = None,
-    fine_kwargs: Optional[dict] = None,
-    ncheck: Optional[int] = None,
-    append_writer: Optional[callable] = None,
-    consecutive_required: int = 1,
-):
-    """
-    Composite Zeus callback:
-      • updates τ every ncheck via AutocorrelationCallback
-      • plots (optional) and appends (optional)
-      • optional precision switch at precision_switch_iter
-      • early-stop AFTER local 'burn' when fractional change |Δτ|/τ < target_autocorr
-        for `consecutive_required` consecutive checks
-    """
-    try:
-        from zeus.callbacks import AutocorrelationCallback
-    except Exception:
-        logging.getLogger(__name__).warning(
-            "Zeus not installed: no callbacks will be created."
-        )
-        return []
-
-    import numpy as _np
-    from collections import deque
-
-    ncheck = int(ncheck) if ncheck is not None else 100
-    discard_frac = max(0.1, min(0.7, float(max(1, burn)) / float(max(nsteps, 1))))
-    consecutive_required = max(1, int(consecutive_required))
-
-    class CompositeAutoCorr(AutocorrelationCallback):
-        def __init__(self):
-            super().__init__(ncheck=ncheck, dact=1e9, nact=1, discard=discard_frac)
-            self._prev_tau = None
-            self._fracs = deque(maxlen=8)   # recent fractional |Δτ|/τ
-            self._taus = deque(maxlen=8)    # optional τ history (debug)
-            self._switched = False
-
-        def __call__(self, iteration, chain, log_prob):
-            # Update τ̂ estimates every ncheck via the parent
-            super().__call__(iteration, chain, log_prob)
-
-            # Optional precision switch (one-time)
-            if (
-                precision_switch_iter is not None
-                and (not self._switched)
-                and iteration >= int(precision_switch_iter)
-            ):
-                try:
-                    from Kosmulator_main import Statistical_packages as SP
-                    SP.set_precision("fine", **(fine_kwargs or {}))
-                    self._switched = True
-                    if debug:
-                        print(f"[Zeus] precision -> fine at iter {iteration}")
-                except Exception as e:
-                    if debug:
-                        print(f"[Zeus] precision switch failed: {e}")
-
-            # --- NEW PRINT LOGIC FOR ZEUS ---
-            if K.print_loglike and (iteration % K.print_loglike_every == 0):
-                # log_prob is the Posterior (shape: nwalkers,)
-                valid_lp = log_prob[_np.isfinite(log_prob)]
-                if valid_lp.size > 0:
-                    max_p = _np.max(valid_lp)
-                    mean_p = _np.mean(valid_lp)
-                    # We print "Log-Post" because Zeus passes Posterior, not just Likelihood
-                    print(f"[Zeus Step {iteration}] Log-Post: Max={max_p:.4f} | Mean={mean_p:.4f}", flush=True)
-            # -------------------------------
-
-            # Only act on callback ticks for autocorr/plotting
-            if iteration % ncheck != 0:
-                return False
-
-            ests = getattr(self, "estimates", None)
-            if ests is None:
-                return False
-
-            # Current τ̂ (scalar summary from zeus’ estimates)
-            tau = float(_np.asarray(ests, dtype=float)[-1])
-            stopped = False
-
-            # Compute fractional change and record
-            if self._prev_tau is not None:
-                delta = abs(tau - self._prev_tau)
-                frac = delta / max(tau, 1e-12)
-                self._fracs.append(frac)
-                self._taus.append(tau)
-
-                # Plot (pass τ̂; plotter can compute its own metric)
-                if callable(plot_func):
-                    try:
-                        plot_func(ests, iteration)
-                    except Exception:
-                        if debug:
-                            print("[Zeus] plot_func raised; ignored.")
-
-                # Optional incremental writer
-                if callable(append_writer):
-                    try:
-                        append_writer(iteration, chain, log_prob)
-                    except Exception:
-                        if debug:
-                            print("[Zeus] append_writer raised; ignored.")
-
-                # ---- Early-stop rule (LOCAL burn gate) ----
-                if iteration >= int(burn) and len(self._fracs) >= consecutive_required:
-                    window = list(self._fracs)[-consecutive_required:]
-                    if all(f < float(target_autocorr) for f in window):
-                        if debug:
-                            print(
-                                f"[Zeus] Early stop at iter={iteration}: "
-                                f"(Δτ/τ)={window[-1]:.3g} < target={target_autocorr} "
-                                f"(for {consecutive_required} consecutive checks)"
-                            )
-                        stopped = True
-
-            self._prev_tau = tau
-            return stopped
-
-    return [CompositeAutoCorr()]
 
 
 # ───────────────────────────────────────────────────────────────────────────────

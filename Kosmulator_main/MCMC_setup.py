@@ -223,9 +223,10 @@ def main(
     )
     _user_buf = getattr(args, "autocorr_buffer", None)
     PLOT_SETTINGS["autocorr_buffer_after_burn"] = int(
-        _user_buf if _user_buf is not None else max(1000, burn // 5)
+        _user_buf if _user_buf is not None else 0
     )
     PLOT_SETTINGS["tau_consecutive"] = max(1, int(args.consecutive_required))
+    PLOT_SETTINGS["conv_tau_rtol"] = float(convergence)
     PLOT_SETTINGS["callback_ncheck"] = PLOT_SETTINGS["autocorr_check_every"]
 
     # ------------------------------------------------------------------

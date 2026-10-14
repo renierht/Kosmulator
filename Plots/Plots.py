@@ -1793,3 +1793,115 @@ def _plot_cmb_bestfit_spectra(model_name, obs_key, param_med, PLOT_SETTINGS):
 
     save_figure(fig, model_name, obs_key, "spectra", PLOT_SETTINGS)
     plt.close(fig)
+
+
+def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_SETTINGS: dict) -> None:
+    """
+    Convergence diagnostics of one run (auto_corr/<group>.png), redrawn at every check.
+
+    Top: tau_max (largest autocorrelation time over the parameters, zeus estimator)
+    against the step, with the two limits it must stay below: the length limit
+    (N - burn)/CONV_TAU_FACTOR and the ESS limit (N - burn) x walkers / CONV_ESS_MIN.
+    Bottom (log scale): the relative change of tau_max since the previous check
+    and split-Rhat - 1, each with its tolerance. Grey open markers in the shaded
+    burn-in region: the same numbers on the second half of the chain so far
+    (shown only, never used to stop). Vertical lines: burn-in, the earliest step
+    at which the run may stop (if set) and the step where it stopped. Legends sit
+    to the right of the panels so they never cover the data.
+    """
+    h, pre = monitor.hist, getattr(monitor, "pre", None) or {"it": []}
+    it = np.asarray(h["it"], dtype=float)
+    it_pre = np.asarray(pre.get("it", []), dtype=float)
+    if it.size == 0 and it_pre.size == 0:
+        return
+    r = monitor.rules
+    burn = float(monitor.burn)
+    W = monitor.walkers or 0
+    tau = np.asarray(h["tau_max"], dtype=float)
+    rel = np.asarray(h["rel"], dtype=float)
+    rhat = np.asarray(h["rhat_max"], dtype=float)
+    ok = np.asarray(h["ok"], dtype=bool)
+    tau_pre = np.asarray(pre.get("tau_max", []), dtype=float)
+    rel_pre = np.asarray(pre.get("rel", []), dtype=float)
+    rhat_pre = np.asarray(pre.get("rhat_max", []), dtype=float)
+    grey = dict(color="0.55", mfc="white", ms=4, lw=0.8)
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.2, 6.4), sharex=True,
+                                   gridspec_kw={"height_ratios": (1.5, 1.0), "hspace": 0.08})
+    last = max([float(x[-1]) for x in (it, it_pre) if x.size] + [burn])
+    x_hi = max(last, float(monitor.earliest_stop)) * 1.03
+    for ax in (ax1, ax2):
+        ax.axvspan(0, burn, color="0.94", lw=0, zorder=0)
+
+    if it_pre.size:
+        ax1.plot(it_pre, tau_pre, "o-", label="burn-in phase (second half of\nthe chain so far; not used to stop)",
+                 **grey)
+    if it.size:
+        ax1.plot(it, tau, "o-", color="C0", ms=4, lw=1.4, label=r"$\tau_{\max}$ (largest over the parameters)")
+    xx = np.linspace(burn, x_hi, 300)
+    ax1.plot(xx, (xx - burn) / r["tau_factor"], "k--", lw=1.2,
+             label=rf"length limit $(N-N_{{\rm burn}})/{r['tau_factor']:g}$")
+    if W:
+        ax1.plot(xx, (xx - burn) * W / r["ess_min"], ":", color="C3", lw=1.6,
+                 label=rf"ESS limit $(N-N_{{\rm burn}})\times{W}/{r['ess_min']:g}$")
+    fin = np.concatenate([tau[np.isfinite(tau)], tau_pre[np.isfinite(tau_pre)]])
+    ax1.set_ylim(0, max(1.15 * float(fin.max()) if fin.size else 1.0, 1.0))
+    ax1.set_ylabel(r"$\tau_{\max}$ (steps)")
+
+    good_pre = np.isfinite(rel_pre) & (rel_pre > 0)
+    if good_pre.any():
+        ax2.semilogy(it_pre[good_pre], rel_pre[good_pre], "o-", **grey)
+    goodr_pre = np.isfinite(rhat_pre) & (rhat_pre > 1.0)
+    if goodr_pre.any():
+        ax2.semilogy(it_pre[goodr_pre], rhat_pre[goodr_pre] - 1.0, "s-", **grey)
+    good = np.isfinite(rel) & (rel > 0)
+    ax2.semilogy(it[good], rel[good], "o-", color="C0", ms=4, lw=1.0,
+                 label=r"$|\Delta\tau_{\max}|/\tau_{\max}$ since the previous check")
+    ax2.axhline(r["rtol"], color="C0", ls="--", lw=1.0, alpha=0.8, label=f"tolerance {r['rtol']:g}")
+    goodr = np.isfinite(rhat) & (rhat > 1.0)
+    ax2.semilogy(it[goodr], rhat[goodr] - 1.0, "s-", color="C2", ms=4, lw=1.0,
+                 label=r"split-$\hat{R}-1$ (largest over the parameters)")
+    ax2.axhline(r["rhat_max"] - 1.0, color="C2", ls="--", lw=1.0, alpha=0.8,
+                label=rf"$\hat{{R}}-1$ limit {r['rhat_max'] - 1.0:g}")
+    need = int(getattr(monitor, "consecutive", 1) or 1)
+    if ok.any():
+        ymin = ax2.get_ylim()[0]
+        ax2.plot(it[ok], np.full(ok.sum(), ymin * 1.5), "|", color="C2", ms=10, mew=2,
+                 label=("all conditions met at this check" if need <= 1 else
+                        f"all conditions met at this check\n(the run stops after {need} in a row)"))
+    ax2.set_xlabel("Step")
+    ax2.set_ylabel("Relative change")
+
+    for ax in (ax1, ax2):
+        ax.axvline(burn, color="r", ls="--", lw=1.0, alpha=0.6, label="end of burn-in" if ax is ax1 else None)
+        if monitor.earliest_stop > burn:
+            ax.axvline(monitor.earliest_stop, color="0.4", ls=":", lw=1.0,
+                       label="earliest stop" if ax is ax1 else None)
+        if monitor.stopped_at is not None:
+            ax.axvline(monitor.stopped_at, color="C2", ls="-", lw=1.5,
+                       label="stopped (converged)" if ax is ax1 else None)
+        ax.set_xlim(0, x_hi)
+    leg = dict(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0, framealpha=0.9)
+    ax1.legend(fontsize=8, title=r"needs $\tau_{\max}$ below both limits", title_fontsize=8, **leg)
+    ax2.legend(fontsize=8, title="needs both below their limits", title_fontsize=8, **leg)
+    # The title says what the stopping rule (ConvergenceMonitor.update) needs, not only the last check
+    streak = int(getattr(monitor, "streak", 0) or 0)
+    ended = getattr(monitor, "ended_at", None)
+    if monitor.stopped_at is not None or (ok.size and ok[-1] and streak >= need
+                                           and float(it[-1]) >= float(monitor.earliest_stop)):
+        status = "converged"                 # stopped, or met the rule at the run's last check
+    elif ended is not None:
+        status = f"not converged in {int(ended)} steps"
+    elif ok.size and ok[-1] and streak < need:
+        status = f"conditions met at {streak} of {need} checks in a row"
+    elif ok.size and ok[-1]:
+        status = f"conditions met; the run may stop from step {int(monitor.earliest_stop)}"
+    else:
+        status = "not converged yet"
+    title = f"Convergence: {model_name}, {group} ({status})"
+    if plt.rcParams.get("text.usetex", False):
+        title = title.replace("_", r"\_")
+    ax1.set_title(title, fontsize=10)
+    os.makedirs(os.path.dirname(plot_path) or ".", exist_ok=True)
+    fig.savefig(plot_path, dpi=PLOT_SETTINGS.get("dpi", 200), bbox_inches="tight")
+    plt.close(fig)

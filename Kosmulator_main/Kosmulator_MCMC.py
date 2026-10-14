@@ -25,6 +25,7 @@ import emcee
 from scipy import optimize
 
 from Kosmulator_main import utils
+from Kosmulator_main import convergence as CV
 from Kosmulator_main import Statistical_packages as SP
 import Kosmulator_main.constants as K
 from Plots.Plot_functions import compute_rd as _compute_rd
@@ -627,7 +628,7 @@ class ZeusAutoCorrPlotter:
         )
         ax.axvline(
             self.global_burn
-            + self.settings.get("autocorr_buffer_after_burn", 1000),
+            + self.settings.get("autocorr_buffer_after_burn", 0),
             color="k",
             ls=":",
             alpha=0.6,
@@ -888,11 +889,9 @@ def run_mcmc(
         pool_for_zeus = None if zeus_vectorize else pool
         
         buffer_after_burn = int(
-            PLOT_SETTINGS.get("autocorr_buffer_after_burn", max(1000, burn // 5))
+            PLOT_SETTINGS.get("autocorr_buffer_after_burn", 0)
         )
         iters_per_cb = int(PLOT_SETTINGS.get("autocorr_check_every", 100))
-        target_tau   = float(convergence)
-        local_gate   = max(0, (burn + buffer_after_burn) - done)
 
         # Precision switch for CMB
         switch_iter_local = max(1, burn - done) if has_cmb else None
@@ -908,21 +907,15 @@ def run_mcmc(
             except Exception:
                 pass
 
-        # Zeus plotter
-        obs_label = _resolved_label
-        out_dir   = os.path.join(
-            PLOT_SETTINGS["autocorr_save_path"], model_name, "auto_corr"
-        )
-        plot_cb = ZeusAutoCorrPlotter(
-            model_name,
-            obs_label,
-            burn,
-            target_tau,
-            done,
-            iters_per_cb,
-            out_dir,
-            PLOT_SETTINGS,
-        )
+        from Plots import Plots as MP
+        monitor = CV.ConvergenceMonitor(
+            burn=burn, rules=CV.convergence_rules(PLOT_SETTINGS, convergence),
+            check_every=iters_per_cb, earliest_stop=burn+buffer_after_burn,
+            consecutive=int(PLOT_SETTINGS.get("tau_consecutive", K.CONV_CONSECUTIVE)),
+            param_names=param_names)
+        plot_path = os.path.join(PLOT_SETTINGS["autocorr_save_path"], model_name,
+                                 "auto_corr", _resolved_key+".png")
+        plot_cb = lambda mon: MP.convergence_plot(mon, plot_path, model_name, _resolved_key, PLOT_SETTINGS)
 
         # Append writer for HDF (injected into composite callback)
         writer = None
@@ -933,9 +926,8 @@ def run_mcmc(
 
         # Build the composite callback
         callbacks = utils.make_zeus_callbacks(
-            burn=local_gate,
-            nsteps=nsteps,
-            target_autocorr=target_tau,
+            monitor=monitor, done=done,
+            prefix_chain=old if done else None,
             plot_func=plot_cb,
             debug=bool(PLOT_SETTINGS.get("debug", False)),
             precision_switch_iter=switch_iter_local,
@@ -950,7 +942,6 @@ def run_mcmc(
             else None,
             ncheck=iters_per_cb,
             append_writer=writer,
-            consecutive_required=int(PLOT_SETTINGS.get("tau_consecutive", 1)),
         )
 
         # Optional: τ probe for CMB (debug only)
@@ -979,6 +970,8 @@ def run_mcmc(
 
         if saveChains:
             chain_policy.write(zeus_chain, CONFIG, obs_index)
+            with h5py.File(zeus_chain, "a") as handle:
+                handle.attrs["converged"] = False
         # Run Zeus
         start = time.time()
         logprob_fn = (
@@ -1008,8 +1001,11 @@ def run_mcmc(
                 pass
 
         # Read back and ensure > burn rows (rare extension)
-        with h5py.File(zeus_chain, "r") as f:
-            all_samples = f["samples"][:]
+        if saveChains:
+            with h5py.File(zeus_chain, "r") as f:
+                all_samples = f["samples"][:]
+        else:
+            all_samples = sampler.get_chain()
         if all_samples.shape[0] <= burn:
             extend = max(buffer_after_burn, iters_per_cb)
             sampler.run_mcmc(None, extend, callbacks=callbacks)
@@ -1023,9 +1019,18 @@ def run_mcmc(
                     )
             except Exception:
                 pass
-            with h5py.File(zeus_chain, "r") as f:
-                all_samples = f["samples"][:]
+            if saveChains:
+                with h5py.File(zeus_chain, "r") as f:
+                    all_samples = f["samples"][:]
+            else:
+                all_samples = sampler.get_chain()
 
+        status = monitor.final(all_samples.shape[0], all_samples)
+        CV.save_report(monitor, status, zeus_chain if saveChains else None,
+                       model_name, _resolved_key, "zeus")
+        plot_cb(monitor)
+        (log.info if status.get("converged") else log.warning)(
+            monitor.message(status, model_name, _resolved_key, "zeus"))
         return all_samples[burn:, :, :].reshape(-1, ndim)
 
     # ── emcee branch ────────────────────────────────────────────────────────────
@@ -1055,7 +1060,7 @@ def run_mcmc(
         # ------------------------------------------------------------
         # Resume if requested and chain exists
         # ------------------------------------------------------------
-        if saveChains and resumeChains and os.path.exists(chain_path) and not overwrite:
+        if saveChains and resumeChains and backend.initialized and not overwrite:
             backend = emcee.backends.HDFBackend(chain_path)
             chain_policy.write(chain_path, CONFIG, obs_index)
             current = backend.iteration
@@ -1065,6 +1070,9 @@ def run_mcmc(
 
             if current >= nsteps:
                 return backend.get_chain(discard=burn, flat=True)
+
+            with h5py.File(chain_path, "a") as handle:
+                handle.attrs["converged"] = False
 
             print(f"\nInitialising ensemble of {nwalker} walkers...")
             try:
@@ -1100,10 +1108,11 @@ def run_mcmc(
                         local_burn=local_burn,
                         global_burn=burn,
                         buffer_after_burn=PLOT_SETTINGS.get(
-                            "autocorr_buffer_after_burn", 1000
+                            "autocorr_buffer_after_burn", 0
                         ),
                         print_enabled=print_enabled,
                         print_every=print_every,
+                        param_names=param_names,
                     )
                     return flat_samples
                 else:
@@ -1111,7 +1120,7 @@ def run_mcmc(
                     for state in sampler.sample(
                         last_state, iterations=nsteps - current, progress=True
                     ):
-                        it = current + sampler.iteration
+                        it = sampler.iteration
                         if (
                             print_enabled
                             and (it % print_every) == 0
@@ -1158,6 +1167,10 @@ def run_mcmc(
             backend=backend,
         )
 
+        if saveChains:
+            with h5py.File(chain_path, "a") as handle:
+                handle.attrs["converged"] = False
+
         if autoCorr:
             obs_for_plot = [_resolved_key]
             flat_samples = utils.emcee_autocorr_stopping(
@@ -1174,10 +1187,11 @@ def run_mcmc(
                 local_burn=burn,
                 global_burn=burn,
                 buffer_after_burn=PLOT_SETTINGS.get(
-                    "autocorr_buffer_after_burn", 1000
+                    "autocorr_buffer_after_burn", 0
                 ),
                 print_enabled=print_enabled,
                 print_every=print_every,
+                param_names=param_names,
             )
         else:
             # Manual loop to allow step printing (Pool-safe)
@@ -1209,7 +1223,7 @@ def run_mcmc(
         print(f"Emcee sampling took {utils.format_elapsed_time(time.time() - start)}\n")
         if saveChains:
             with h5py.File(chain_path, "a") as h5f:
-                h5f.attrs["converged"] = True
+                h5f.attrs["converged"] = bool(getattr(sampler, "kosm_converged", False))
 
         return flat_samples
 
