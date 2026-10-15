@@ -1225,7 +1225,11 @@ int numjac(
   /* Set new_jacobian flag: */
   jac->new_jacobian = _TRUE_;
 
+  /* Non-finite derivatives cannot define a Jacobian. In particular, NaNs
+     leave Rowmax uninitialised below and used to cause a native crash. */
   for(j=1;j<=neq;j++){
+    class_test(!isfinite(y[j]) || !isfinite(fval[j]), error_message,
+               "Non-finite state or derivative in numjac at t=%g, component=%d", t, j);
     nj_ws->yscale[j] = MAX(fabs(y[j]),thresh);
     nj_ws->del[j] = (y[j] + fac[j] * nj_ws->yscale[j]) - y[j];
   }
@@ -1306,7 +1310,11 @@ int numjac(
                error_message,error_message);
 
     *nfe+=1;
-    for(i=1;i<=neq;i++) nj_ws->ydel_Fdel[i][j] = nj_ws->ffdel[i];
+    for(i=1;i<=neq;i++) {
+      class_test(!isfinite(nj_ws->ffdel[i]), error_message,
+                 "Non-finite perturbed derivative in numjac at t=%g, component=%d", t, i);
+      nj_ws->ydel_Fdel[i][j] = nj_ws->ffdel[i];
+    }
   }
 
 
