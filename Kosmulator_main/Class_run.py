@@ -80,6 +80,8 @@ IDE_CLASS_BACKEND = "IDE_background"
 
 def class_backend_name(model_name: str) -> str:
     """Return the CLASS source/cache backend used by a cosmological model."""
+    if model_name == "w0waCDM":
+        return "LCDM_v"  # Native CLASS CPL fluid; no IDE source modifications.
     if model_name in IDE_CLASS_MODELS:
         return IDE_CLASS_BACKEND
     return model_name

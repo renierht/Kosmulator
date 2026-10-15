@@ -203,7 +203,7 @@ IDE_CLASS_SELECTORS = {
     "SignSwitch_IDE_2": 10,
 }
 
-MODEL_CLASS_RD_SUPPORTED = {"LCDM_v"} | set(IDE_CLASS_SELECTORS)
+MODEL_CLASS_RD_SUPPORTED = {"LCDM_v", "w0waCDM"} | set(IDE_CLASS_SELECTORS)
 
 
 def _model_class_rd_enabled(p: Mapping[str, object]) -> bool:
@@ -231,6 +231,7 @@ def _rd_model_class_core(
     sum_mnu_ev: float,
     n_ncdm: int,
     w_dm: float = 0.,
+    wa: float = 0.,
 ) -> float:
     """
     Compute rs_drag with the CLASS background matching `model_name`.
@@ -304,6 +305,13 @@ def _rd_model_class_core(
         "Neff": float(N_eff),
         "output": "",
     }
+
+    if model_name == "w0waCDM":
+        if not math.isfinite(w + wa) or w + wa >= 0.:
+            raise ValueError("CPL comparison requires w0 + wa < 0")
+        # At the exact Lambda limit use the identical LCDM CLASS input.
+        if w != -1. or wa != 0.:
+            pars.update(Omega_Lambda=0., w0_fld=float(w), wa_fld=float(wa), use_ppf="yes")
 
     if model_name in IDE_CLASS_SELECTORS:
         pars.update({
@@ -380,6 +388,10 @@ def compute_rd_model_class(p: dict) -> float:
         delta_dm = 0.0
         delta_de = 0.0
 
+    elif model_name == "w0waCDM":
+        w = float(p["w0"])
+        delta = delta_dm = delta_de = 0.0
+
     elif model_name == "Linear_IDE_1":
         w = float(p.get("w", -1.))
         delta = 0.0
@@ -405,6 +417,7 @@ def compute_rd_model_class(p: dict) -> float:
         sum_mnu,
         n_ncdm,
         float(p.get("w_dm", 0.)),
+        float(p["wa"]) if model_name == "w0waCDM" else 0.,
     )
 
 

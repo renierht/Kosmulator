@@ -1087,7 +1087,7 @@ def create_config(
             #  - Optional validation mode: derive r_d from the matching CLASS
             #    homogeneous background for every BAO/DESI group.
             #  - Otherwise preserve the legacy early-calibrator/fixed/free policy.
-            model_class_supported = mod == "LCDM_v" or mod in SELECTORS
+            model_class_supported = mod in ("LCDM_v", "w0waCDM") or mod in SELECTORS
 
             derive_rd_model_class = (
                 bool(getattr(K, "DERIVE_RD_WITH_MODEL_CLASS", False))

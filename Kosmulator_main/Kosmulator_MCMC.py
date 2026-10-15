@@ -242,6 +242,11 @@ def log_prior_all(theta_batch: np.ndarray, CONFIG: Dict[str, Any], obs_index: in
         mask = (theta_batch[:, i] < low) | (theta_batch[:, i] > high)
         lp[mask] = -np.inf
 
+    if CONFIG.get("model_name") == "w0waCDM":
+        w0 = theta_batch[:, params.index("w0")]
+        wa = theta_batch[:, params.index("wa")]
+        lp[~np.isfinite(theta_batch).all(axis=1) | (w0 + wa >= 0.)] = -np.inf
+
     # 2) per-parameter restrictions (1D predicates)
     restr = CONFIG.get("restrictions", {})
     for i, p in enumerate(params):

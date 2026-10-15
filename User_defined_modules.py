@@ -100,6 +100,21 @@ def LCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
     return _scalar_or_array(out)
 
 
+def w0waCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    """Flat CPL late-time background, using the same matter convention as LCDM_v.
+
+    The comparison prior w0 + wa < 0 is enforced before likelihood evaluation.
+    Radiation/neutrinos enter the matching CLASS sound horizon, as for LCDM_v.
+    """
+    z = _asarray(z)
+    Om, w0, wa = float(p["Omega_m"]), float(p["w0"]), float(p["wa"])
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        de = np.exp(3. * (1. + w0 + wa) * np.log1p(z) - 3. * wa * z / (1. + z))
+        E2 = Om * (1. + z)**3 + (1. - Om) * de
+    out = np.sqrt(E2) if np.all(np.isfinite(E2) & (E2 > 0)) else np.full_like(z, np.nan)
+    return _scalar_or_array(out)
+
+
 def LCDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
     """Slow but simple non-vectorised LCDM wrapper (kept for completeness)."""
     z_arr = _asarray(z)
@@ -440,6 +455,7 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
     # Background-only models
     "LCDM_v":   (LCDM_MODEL_vectorised,      ["Omega_m"]),
     "LCDM_nv":  (LCDM_MODEL_non_vectorised,  ["Omega_m"]),
+    "w0waCDM": (w0waCDM_MODEL_vectorised, ["Omega_m", "w0", "wa"]),
     "f1CDM_v":  (f1CDM_MODEL_vectorised,     ["Omega_m", "n"]),
     "f1CDM_nv": (f1CDM_MODEL_non_vectorised, ["Omega_m", "n"]),
 

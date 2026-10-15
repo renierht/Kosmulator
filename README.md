@@ -11,6 +11,8 @@ physical-domain filters, and a shared CLASS background for model-derived
 baryon-drag sound horizons. “Warm” denotes a background EOS extension;
 IDE perturbations and particle free streaming are not implemented.
 
+**Additional comparison:** [CPL w0waCDM equations, priors, validation and launch instructions](docs/CPL_COMPARISON.md).
+
 **Full equations and conditions:** [Ten-model equation reference](docs/WARM_DM_EQUATIONS.md).
 This reference supersedes the earlier cold-only formulas in this README.
 It contains each kernel and density solution, exceptional limits, global

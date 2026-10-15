@@ -93,6 +93,8 @@ def print_rule() -> None:
 # Label helpers
 # =============================================================================
 PARAM_LATEX_OVERRIDES = {
+    "w0": r"w_0",
+    "wa": r"w_a",
     # Core cosmological / CMB parameters with non-trivial syntax
     "Omega_bh^2":  r"\Omega_b h^2",
     "Omega_dh^2":  r"\Omega_d h^2",

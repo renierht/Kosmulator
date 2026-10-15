@@ -14,6 +14,8 @@ def regime_flags(config):
 
 
 def model_label(model, config=None, flags=None, mathtext=False):
+    if model == 'w0waCDM':
+        return r'$w_0w_a$CDM' if mathtext else 'w0waCDM'
     if model == 'LCDM_v':
         return r'$\Lambda$CDM' if mathtext else 'LCDM'
     config = config or {}

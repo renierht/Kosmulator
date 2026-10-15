@@ -6,7 +6,7 @@ from Kosmulator_main.ide_background import SELECTORS
 
 def policy(config, index):
     import User_defined_modules as UDM
-    return dict(model=config.get('model_name'),
+    result = dict(model=config.get('model_name'),
                 parameters=list(config['parameters'][index]),
                 fixed_parameters=config.get('fixed_parameters', {}),
                 eos_policy=config.get('eos_policy', {}),
@@ -14,6 +14,11 @@ def policy(config, index):
                 switches=config.get('_postprocessing_switches') or {
                     key: bool(getattr(UDM,key)) for key in (
                         'ALLOW_NEGATIVE_ENERGIES','ALLOW_BIG_RIP','ALLOW_DOOM_FACTOR_INSTABILITIES')})
+
+    if config.get('model_name') == 'w0waCDM':
+        result.update(background_version='cpl-1', coupled_prior='w0+wa<0',
+                      prior_limits={k: list(v) for k, v in config['prior_limits'][index].items()})
+    return result
 
 
 def check(path, config, index):
