@@ -182,9 +182,12 @@ def _build_failure_hint(log: Path) -> str:
 
 
 def _compiler_fix() -> str:
-    return _install_hint(conda="conda install -c conda-forge c-compiler cxx-compiler make",
+    hint = _install_hint(conda="conda install -c conda-forge c-compiler cxx-compiler make",
                          apt="sudo apt install build-essential python3-dev",
                          mac="xcode-select --install")
+    if not _in_conda():
+        hint += "\nor use the conda environment, which has its own compilers: conda env create -f environment.yml"
+    return hint
 
 
 def find_root() -> Optional[Path]:

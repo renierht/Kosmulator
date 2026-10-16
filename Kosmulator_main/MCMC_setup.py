@@ -544,6 +544,14 @@ def main(
                      for g in CONFIG[m].get("observations", [])
                      if set(g) & _bao and any(str(o).startswith("BBN") for o in g)
                      and not set(g) & set(K.CMB_TAGS)]
+        if rd_groups and RDH.classy_import_problem():
+            # No classy loaded or installed: Kosmulator's own LCDM_v build (compiled once, then
+            # cached) gives the flat-LCDM r_d; built here, before any worker pool exists
+            try:
+                CR.ensure_class_ready(RDH.OWN_CLASS_MODEL, announce=True)
+                RDH._OWN_CLASS_FAILED = False
+            except Exception as e:
+                log.warning("CLASS for %s could not be built or loaded: %s", RDH.OWN_CLASS_MODEL, e)
         _rd_problem = RDH.classy_import_problem() if rd_groups else None
         if _rd_problem:
             bar = "#" * 78
