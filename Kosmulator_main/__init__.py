@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import importlib
 import os
 import sys
@@ -360,22 +359,8 @@ def print_installation_report(report: Dict[str, Any]) -> None:
 
 
 def main_doctor() -> None:
-    parser = argparse.ArgumentParser(prog="kosmulator-doctor", add_help=True)
-    parser.add_argument("--no-class", action="store_true", help="Skip CLASS/classy checks.")
-    parser.add_argument("--no-clik", action="store_true", help="Skip CLIK/clik checks.")
-    parser.add_argument("--no-clik-env", action="store_true", help="Skip checking CLIKROOT env var.")
-    parser.add_argument("--no-planck-assets", action="store_true", help="Skip checking Observations/*.clik directories.")
-    parser.add_argument("--test-load", action="store_true", help="Attempt to load Planck .clik likelihoods via clik.clik(path).")
-    parser.add_argument("--alterbbn", action="store_true", help="Also check optional AlterBBN wrapper and KOSMO_BBN_LIB.")
-    args = parser.parse_args()
-
-    rep = check_installation(
-        check_class=not args.no_class,
-        check_clik=not args.no_clik,
-        check_clik_env=not args.no_clik_env,
-        check_planck_assets=not args.no_planck_assets,
-        planck_test_load=args.test_load,
-        check_alterbbn=args.alterbbn,
-    )
-    print_installation_report(rep)
+    """The kosmulator-doctor command (Kosmulator_main/doctor.py). check_installation and
+    print_installation_report above are the earlier report, kept for scripts that import them."""
+    from Kosmulator_main.doctor import main
+    sys.exit(main())
 

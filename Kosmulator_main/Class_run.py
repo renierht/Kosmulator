@@ -324,6 +324,38 @@ def _wait_for_artifact(model_name: str, sig_hash: str, timeout_s: int = 180) -> 
 # ---------------------------------------------------------------------------
 
 
+_BUILD_ENV: Optional[dict] = None
+
+
+def _build_env() -> dict:
+    """Environment for the CLASS build commands (make, python setup.py build_ext).
+
+    CLASS's Makefile and python/setup.py call the compilers by name (gcc, g++). A conda environment
+    with conda-forge's compilers may have them only under their own names, in $CC and $CXX
+    (x86_64-conda-linux-gnu-cc, clang on macOS). Only then a private folder with gcc and g++ links
+    to those goes first on PATH for the build; with gcc and g++ on PATH nothing changes."""
+    global _BUILD_ENV
+    if _BUILD_ENV is None:
+        import shutil as _shutil
+        import tempfile as _tempfile
+        env = dict(os.environ)
+        links = {}
+        for name, var in (("gcc", "CC"), ("g++", "CXX")):
+            if _shutil.which(name) is None:
+                cmd = (os.environ.get(var) or sysconfig.get_config_var(var) or "").split()
+                target = _shutil.which(cmd[0]) if cmd else None
+                if target:
+                    links[name] = target
+        if links:
+            shim = _tempfile.mkdtemp(prefix="kosmulator_cc_")
+            for name, target in links.items():
+                os.symlink(target, os.path.join(shim, name))
+            env["PATH"] = shim + os.pathsep + env.get("PATH", "")
+            logger.info("[CLASS] build uses %s", ", ".join(f"{n} -> {t}" for n, t in links.items()))
+        _BUILD_ENV = env
+    return _BUILD_ENV
+
+
 def find_classy_so(model_name: str) -> str:
     """
     Search under ./Class/<model_name> for a built classy .so.
@@ -358,10 +390,10 @@ def _ensure_libclass(model_dir: str) -> None:
     Many CLASS Makefiles already provide a 'libclass.a' target.
     """
     try:
-        subprocess.run(["make", "-C", model_dir, "libclass.a"], check=True)
+        subprocess.run(["make", "-C", model_dir, "libclass.a"], check=True, env=_build_env())
     except subprocess.CalledProcessError:
         # Fallback: try a minimal build that may produce libclass.a
-        subprocess.run(["make", "-C", model_dir, "class", "-k"], check=False)
+        subprocess.run(["make", "-C", model_dir, "class", "-k"], check=False, env=_build_env())
         if not os.path.exists(os.path.join(model_dir, "libclass.a")):
             raise
 
@@ -394,7 +426,7 @@ def _build_python_extension(model_dir: str) -> None:
     """Build the Python extension for CLASS in model_dir/python."""
     model_dir_path = Path(model_dir)
     _ensure_libclass(str(model_dir_path))
-    subprocess.run(["make", "-C", str(model_dir_path), "libclass.a"], check=True)
+    subprocess.run(["make", "-C", str(model_dir_path), "libclass.a"], check=True, env=_build_env())
     _strip_mvec_from_setup(str(model_dir_path / "python"))
     # --force: classy links libclass.a, which setup.py does not list as a dependency, so
     # without it build_ext sees classy.pyx unchanged, keeps the old in-place classy*.so and
@@ -403,10 +435,11 @@ def _build_python_extension(model_dir: str) -> None:
         [sys.executable, "setup.py", "build_ext", "--inplace", "--force"],
         cwd=str(model_dir_path / "python"),
         check=True,
+        env=_build_env(),
     )
     subprocess.run([sys.executable, "setup.py", "build_ext", "--inplace"],
                    cwd=str(model_dir_path / "python"),
-                   check=True)
+                   check=True, env=_build_env())
     _ensure_python_external_symlink(model_dir)
 
 
@@ -420,14 +453,14 @@ def run_model(model_name: str) -> None:
     built = False
     for target in ["libclass.a", "lib"]:
         try:
-            subprocess.run(["make", "-C", str(model_dir), target], check=True)
+            subprocess.run(["make", "-C", str(model_dir), target], check=True, env=_build_env())
             built = True
             break
         except subprocess.CalledProcessError:
             continue
 
     if not built:
-        subprocess.run(["make", "-C", str(model_dir)], check=True)
+        subprocess.run(["make", "-C", str(model_dir)], check=True, env=_build_env())
 
     _build_python_extension(str(model_dir))
 
