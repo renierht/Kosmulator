@@ -325,34 +325,44 @@ def _wait_for_artifact(model_name: str, sig_hash: str, timeout_s: int = 180) -> 
 
 
 _BUILD_ENV: Optional[dict] = None
+_BUILD_ENV_DONE = False
 
 
-def _build_env() -> dict:
-    """Environment for the CLASS build commands (make, python setup.py build_ext).
+def _build_env() -> Optional[dict]:
+    """Environment for the CLASS build commands (make, python setup.py build_ext), or None for
+    this process's own environment.
 
-    CLASS's Makefile and python/setup.py call the compilers by name (gcc, g++). A conda environment
-    with conda-forge's compilers may have them only under their own names, in $CC and $CXX
-    (x86_64-conda-linux-gnu-cc, clang on macOS). Only then a private folder with gcc and g++ links
-    to those goes first on PATH for the build; with gcc and g++ on PATH nothing changes."""
-    global _BUILD_ENV
-    if _BUILD_ENV is None:
+    CLASS's Makefile and python/setup.py call the tools by name (gcc, g++, ar). A conda environment
+    with conda-forge's compilers may have them only under their own names, in $CC, $CXX and $AR
+    (x86_64-conda-linux-gnu-cc, ...). Only then a private folder with gcc, g++ and ar that call those
+    goes first on PATH for the build (removed at exit); with gcc, g++ and ar on PATH nothing changes.
+    (On macOS /usr/bin/gcc always exists; it needs the Xcode Command Line Tools.)"""
+    global _BUILD_ENV, _BUILD_ENV_DONE
+    if not _BUILD_ENV_DONE:
         import shutil as _shutil
         import tempfile as _tempfile
-        env = dict(os.environ)
-        links = {}
-        for name, var in (("gcc", "CC"), ("g++", "CXX")):
+        tools = {}
+        for name, var in (("gcc", "CC"), ("g++", "CXX"), ("ar", "AR")):
             if _shutil.which(name) is None:
-                cmd = (os.environ.get(var) or sysconfig.get_config_var(var) or "").split()
-                target = _shutil.which(cmd[0]) if cmd else None
-                if target:
-                    links[name] = target
-        if links:
+                cmd = shlex.split(os.environ.get(var) or sysconfig.get_config_var(var) or "")
+                if cmd and _shutil.which(cmd[0]):
+                    tools[name] = [_shutil.which(cmd[0])] + cmd[1:]
+        if tools:
+            import atexit
             shim = _tempfile.mkdtemp(prefix="kosmulator_cc_")
-            for name, target in links.items():
-                os.symlink(target, os.path.join(shim, name))
-            env["PATH"] = shim + os.pathsep + env.get("PATH", "")
-            logger.info("[CLASS] build uses %s", ", ".join(f"{n} -> {t}" for n, t in links.items()))
-        _BUILD_ENV = env
+            atexit.register(_shutil.rmtree, shim, True)
+            for name, cmd in tools.items():
+                dst = os.path.join(shim, name)
+                if len(cmd) == 1:
+                    os.symlink(cmd[0], dst)          # gcc finds its own tools through the link
+                else:                                # e.g. CC="ccache gcc"
+                    with open(dst, "w") as f:
+                        f.write("#!/bin/sh\nexec " + " ".join(shlex.quote(c) for c in cmd) + ' "$@"\n')
+                    os.chmod(dst, 0o755)
+            _BUILD_ENV = dict(os.environ)
+            _BUILD_ENV["PATH"] = shim + os.pathsep + _BUILD_ENV.get("PATH", "")
+            logger.info("[CLASS] build uses %s", ", ".join(f"{n} -> {' '.join(c)}" for n, c in tools.items()))
+        _BUILD_ENV_DONE = True
     return _BUILD_ENV
 
 

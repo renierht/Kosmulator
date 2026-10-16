@@ -4,7 +4,7 @@ kosmulator-doctor: check, and with --setup finish, a Kosmulator installation.
     kosmulator-doctor                   what is installed, what is missing and the command that adds it
                                         (a few seconds; nothing is built or changed)
     kosmulator-doctor --setup           the same, then builds CLASS for LCDM_v and rd_Class, loads every
-                                        likelihood code with its data and makes a short test run
+                                        CMB likelihood with its data and makes a short test run
                                         (a few minutes, once after installing)
     kosmulator-doctor --build-class M   builds Class/M now, so that its compiler errors show before a run
 
@@ -242,17 +242,23 @@ def check_build_tools(rep: Report) -> bool:
     """What Kosmulator needs to compile CLASS (per model, from Class/<model>). True if all present."""
     rep.section("CLASS build tools (required for CMB groups and for r_d in BAO/DESI + BBN/CMB groups)")
     from Kosmulator_main import Class_run as CR
-    env = CR._build_env()
+    env = CR._build_env()                   # None: this process's own environment
+    path = (env or os.environ).get("PATH")
     ok_all = True
-    gcc = shutil.which("gcc", path=env.get("PATH"))
-    gxx = shutil.which("g++", path=env.get("PATH"))
-    if gcc and gxx:
-        rep.add("class", "C/C++ compiler", OK, _first_line([gcc, "--version"], env))
+    gcc = shutil.which("gcc", path=path)
+    gxx = shutil.which("g++", path=path)
+    ver = subprocess.run([gcc, "--version"], capture_output=True, text=True, env=env) if gcc else None
+    if gcc and gxx and ver.returncode == 0:
+        rep.add("class", "C/C++ compiler", OK, (ver.stdout.strip().splitlines() or ["?"])[0])
+    elif gcc and gxx:                       # e.g. macOS's /usr/bin/gcc without the Command Line Tools
+        ok_all = False
+        rep.add("class", "C/C++ compiler", MISSING, ((ver.stderr or ver.stdout).strip().splitlines() or
+                                                     ["gcc --version failed"])[0], fix=_compiler_fix(), required=True)
     else:
         ok_all = False
         rep.add("class", "C/C++ compiler (gcc, g++)", MISSING, "not found", fix=_compiler_fix(), required=True)
     for tool in ("make", "ar"):
-        if shutil.which(tool, path=env.get("PATH")):
+        if shutil.which(tool, path=path):
             rep.add("class", tool, OK, _first_line([tool, "--version"], env))
         else:
             ok_all = False
@@ -311,12 +317,17 @@ def build_class(rep: Report, root: Path, model: str, verbose: bool = False) -> b
     if not os.path.isfile(os.path.join(model_dir, "Makefile")):
         rep.add("class", f"CLASS {model}", MISSING, f"Class/{model} is not a CLASS source folder", required=True)
         return False
+    broken = False
     if _cached(model, model_dir):
-        ok = CR.ensure_class_ready(model, no_rebuild=True)
-        rep.add("class", f"CLASS {model}", OK if ok else MISSING,
-                "built earlier (cache)" if ok else "cached build does not load", required=True)
+        try:
+            ok = bool(CR.ensure_class_ready(model, no_rebuild=True))
+        except Exception:
+            ok = False
         if ok:
+            rep.add("class", f"CLASS {model}", OK, "built earlier (cache)")
             return True
+        broken = True                       # the cached build does not load: build it again
+        print(f"  ... the cached CLASS build of {model} does not load; building it again", flush=True)
     log = root / "Class" / model / "build.log"
     print(f"  ... building CLASS for {model} (about 1 - 3 min; output in Class/{model}/build.log)", flush=True)
     t0 = time.time()
@@ -324,7 +335,7 @@ def build_class(rep: Report, root: Path, model: str, verbose: bool = False) -> b
     ctx = contextlib.nullcontext() if verbose else _output_to(log)
     try:
         with ctx:
-            ok = bool(CR.ensure_class_ready(model))
+            ok = bool(CR.ensure_class_ready(model, force=broken))
     except Exception as e:
         err = f"{type(e).__name__}: {e}"
     if ok:
@@ -338,9 +349,22 @@ def build_class(rep: Report, root: Path, model: str, verbose: bool = False) -> b
 
 def build_rd_class(rep: Report, root: Path, verbose: bool = False) -> bool:
     from Kosmulator_main import rd_class as RD
-    tree = Path(RD.make_tree())
+    try:
+        tree = Path(RD.make_tree())
+    except Exception as e:                  # e.g. its hook does not fit an edited Class/LCDM_v
+        rep.add("class", "rd_Class", MISSING, f"{type(e).__name__}: {e}", required=True,
+                fix="rd_Class is made from Class/LCDM_v plus a small hook (Kosmulator_main/rd_class.py); "
+                    "restore Class/LCDM_v (git checkout -- Class/LCDM_v) or set rd_background = \"lcdm\"")
+        return False
     if _cached(RD.RD_CLASS_NAME, str(tree)):
-        mod = RD.ensure_ready(build=False)
+        try:
+            mod = RD.ensure_ready(build=False)
+        except Exception as e:
+            mod = None
+            rep.add("class", "rd_Class", MISSING, f"the cached build does not load ({type(e).__name__}: {e})",
+                    fix=f"delete Class/.cache/{RD.RD_CLASS_NAME} and run kosmulator-doctor --setup again",
+                    required=True)
+            return False
         rep.add("class", "rd_Class (r_d with the model's E(z))", OK if mod else MISSING,
                 "built earlier (cache)" if mod else "cached build does not load", required=True)
         return mod is not None
@@ -558,8 +582,17 @@ def check_mpi(rep: Report, run: bool) -> None:
     code = ("from mpi4py import MPI; c = MPI.COMM_WORLD; n = c.allreduce(1)\n"
             "if c.Get_rank() == 0: print('KOSM_MPI', c.Get_size(), n)")
     try:
-        r = subprocess.run([mpiexec, "-n", "2", sys.executable, "-c", code], capture_output=True, text=True,
-                           timeout=120)
+        # own process group, so that a hanging mpiexec is stopped together with its ranks
+        proc = subprocess.Popen([mpiexec, "-n", "2", sys.executable, "-c", code], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, start_new_session=True)
+        try:
+            out, err = proc.communicate(timeout=120)
+        except subprocess.TimeoutExpired:
+            import signal
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.communicate()
+            raise
+        r = subprocess.CompletedProcess(proc.args, proc.returncode, out, err)
         found = [line.split()[1:] for line in r.stdout.splitlines() if line.startswith("KOSM_MPI")]
         if r.returncode == 0 and found == [["2", "2"]]:
             rep.add("mpi", "MPI", OK, f"mpi4py {v_mpi}, schwimmbad {v_sch}; mpiexec -n 2 test passed")
@@ -697,6 +730,10 @@ def summary(rep: Report, setup: bool) -> None:
     if rep.required_ok():
         print("Overall: READY" + ("" if setup else "   (kosmulator-doctor --setup builds CLASS and makes a "
                                                      "test run)"))
+    elif all(r.status != MISSING for r in rep.items if r.required and r.feature in ("core", "test")):
+        print("Overall: NOT READY for CLASS (CMB groups, r_d in BAO/DESI + BBN/CMB groups); runs with "
+              "late-time data only work. Fix the MISSING lines above (command after '>') and run "
+              "kosmulator-doctor again")
     else:
         print("Overall: NOT READY: fix the MISSING lines above (each has the command after '>') and run "
               "kosmulator-doctor again")
@@ -710,7 +747,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         prog="kosmulator-doctor",
         description="Check a Kosmulator installation; --setup also builds CLASS and makes a test run.")
     p.add_argument("--setup", action="store_true",
-                   help="Build CLASS for LCDM_v and rd_Class, load every likelihood code and its data, test "
+                   help="Build CLASS for LCDM_v and rd_Class, load every CMB likelihood code and its data, test "
                         "MPI and LaTeX, and make a short test run (a few minutes; run once after installing).")
     p.add_argument("--build-class", metavar="MODEL", action="append", default=[],
                    help="Build Class/MODEL now (repeatable), e.g. a model with its own CLASS.")
@@ -736,6 +773,10 @@ def main(argv: Optional[List[str]] = None) -> int:
               "kosmulator-doctor from inside it, and install Kosmulator with pip install -e . (editable).")
         return 1
     print(f"Kosmulator folder: {root}")
+    pkg = Path(__file__).resolve().parent
+    if pkg.parent != root:
+        print(f"WARNING: Kosmulator is installed as a copy ({pkg}), not from this folder; the copy is what "
+              "this check runs. Install it from the Kosmulator folder with: pip install -e .")
     os.chdir(root)                       # Kosmulator's paths (./Class, ./Observations) are relative
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))

@@ -103,7 +103,7 @@ while others are required only when specific observational datasets are used.
 ## Installation
 Kosmulator runs on Linux, macOS and Windows through WSL2. On WSL, clone it into your Linux home folder (`~/`), not into `/mnt/c` or `/mnt/d`: reading and writing files there is much slower.
 
-**Recommended: conda** ([Miniforge](https://github.com/conda-forge/miniforge)). The environment brings everything, including the C compiler Kosmulator uses to build CLASS, so nothing needs `sudo`:
+**Recommended: conda** ([Miniforge](https://github.com/conda-forge/miniforge)). The environment brings everything, including the C compiler Kosmulator uses to build CLASS, so nothing needs `sudo` (on macOS the Xcode Command Line Tools are needed as well: `xcode-select --install`):
 ```bash
 git clone --depth 1 https://github.com/renierht/Kosmulator.git
 cd Kosmulator
@@ -111,9 +111,9 @@ conda env create -f environment.yml
 conda activate kosmulator
 kosmulator-doctor --setup
 ```
-`kosmulator-doctor --setup` checks the installation, builds CLASS for LCDM_v and rd_Class (a few minutes, once), loads every likelihood with its data and makes a short test run. Anything missing is listed with the command that adds it. Run `kosmulator-doctor` (without `--setup`) at any time for a quick check.
+`kosmulator-doctor --setup` checks the installation, builds CLASS for LCDM_v and rd_Class (a few minutes, once), loads every CMB likelihood with its data and makes a short test run. Anything missing is listed with the command that adds it. Run `kosmulator-doctor` (without `--setup`) at any time for a quick check.
 
-**Without conda (pip).** Use a clean virtual environment with Python 3.9 - 3.12 (3.11 recommended) and a C/C++ compiler (Ubuntu/WSL: `sudo apt install build-essential python3-dev`; macOS: `xcode-select --install`):
+**Without conda (pip).** Use a clean virtual environment with Python 3.9 - 3.12 (3.11 recommended) and a C/C++ compiler (Ubuntu/WSL: `sudo apt install build-essential python3-dev python3-venv`; macOS: `xcode-select --install`):
 ```bash
 git clone --depth 1 https://github.com/renierht/Kosmulator.git
 cd Kosmulator
@@ -757,6 +757,8 @@ This is a *kitchen-sink* setup intended for advanced users who require:
 > **Platform assumed:** Ubuntu / WSL  
 > Paths shown use `/mnt/d/`; adjust paths as needed for your system.  
 > macOS installation should be similar, with only different gcc and gfortran compilers.
+
+> **Most users do not need this section.** The Installation section above covers CLASS (Kosmulator builds its own, per model, from `Class/<model>`) and the Planck likelihoods (clipy, with the `.clik` data in `Observations/`). Use this section for compiled CLIK instead of clipy, or for live AlterBBN. Steps 1.2 (Planck download) and 4 (CLASS) can be skipped: a globally installed classy would only be used for the flat-LCDM r_d of BAO/DESI + BBN groups, which Kosmulator's own `Class/LCDM_v` build provides.
 
 ---
 
