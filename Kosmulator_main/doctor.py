@@ -468,7 +468,7 @@ def check_cmb(rep: Report, root: Path, load: bool) -> None:
                 ctor = getattr(CR.clik, kind)
                 with _output_to(Path(os.devnull)):          # clik prints from C
                     dt = _timed(lambda: ctor(str(path)))
-                rep.add("planck", f"{tag}", OK, f"{folder} loads ({dt:.1f} s)")
+                rep.add("planck", f"{tag}", OK, f"{folder} loads" + (f" ({dt:.0f} s)" if dt >= 1 else ""))
             except Exception as e:
                 rep.add("planck", f"{tag}", MISSING, f"{folder} does not load: {type(e).__name__}: {e}")
         if not load:
@@ -483,7 +483,7 @@ def check_cmb(rep: Report, root: Path, load: bool) -> None:
             for tag in ("CMB_ACT", "CMB_SPT"):
                 try:
                     dt = _timed(lambda: G.candl_like(tag))
-                    rep.add("candl", tag, OK, f"loads ({dt:.1f} s)")
+                    rep.add("candl", tag, OK, "loads" + (f" ({dt:.0f} s)" if dt >= 1 else ""))
                 except Exception as e:
                     rep.add("candl", tag, MISSING, f"{type(e).__name__}: {e}")
     # ACT DR6 + Planck PR4 lensing
@@ -499,7 +499,8 @@ def check_cmb(rep: Report, root: Path, load: bool) -> None:
                     what = "lensing only" if lens_only else "with primary CMB"
                     try:
                         dt = _timed(lambda: G.act_lens_data(lens_only))
-                        rep.add("act_lens", f"CMB_lensing_ACTPlanck ({what})", OK, f"loads ({dt:.1f} s)")
+                        rep.add("act_lens", f"CMB_lensing_ACTPlanck ({what})", OK,
+                                "loads" + (f" ({dt:.0f} s)" if dt >= 1 else ""))
                     except Exception as e:
                         rep.add("act_lens", f"CMB_lensing_ACTPlanck ({what})", MISSING,
                                 f"{type(e).__name__}: {e}")
@@ -511,7 +512,7 @@ def check_cmb(rep: Report, root: Path, load: bool) -> None:
         msg = os.path.relpath(f, root)
         if load:
             dt = _timed(G.spt_muse)
-            msg += f" loads ({dt:.1f} s)"
+            msg += " loads" + (f" ({dt:.0f} s)" if dt >= 1 else "")
         rep.add("spt_lens", "CMB_lensing_SPT (MUSE)", OK, msg)
     except Exception as e:
         rep.add("spt_lens", "CMB_lensing_SPT (MUSE)", MISSING, f"{type(e).__name__}: {e}".splitlines()[0],
@@ -533,16 +534,21 @@ def check_mpi(rep: Report, run: bool) -> None:
     if not run:
         rep.add("mpi", "MPI", OK, f"mpi4py {v_mpi}, schwimmbad {v_sch}, {mpiexec}")
         return
-    code = "from mpi4py import MPI; c = MPI.COMM_WORLD; print(c.Get_rank(), c.Get_size())"
+    # rank 0 alone prints (the ranks' outputs can interleave): the size and a sum over the ranks
+    code = ("from mpi4py import MPI; c = MPI.COMM_WORLD; n = c.allreduce(1)\n"
+            "if c.Get_rank() == 0: print('KOSM_MPI', c.Get_size(), n)")
     try:
         r = subprocess.run([mpiexec, "-n", "2", sys.executable, "-c", code], capture_output=True, text=True,
                            timeout=120)
-        sizes = sorted(line.split()[1] for line in r.stdout.splitlines() if len(line.split()) == 2)
-        if r.returncode == 0 and sizes == ["2", "2"]:
+        found = [line.split()[1:] for line in r.stdout.splitlines() if line.startswith("KOSM_MPI")]
+        if r.returncode == 0 and found == [["2", "2"]]:
             rep.add("mpi", "MPI", OK, f"mpi4py {v_mpi}, schwimmbad {v_sch}; mpiexec -n 2 test passed")
         elif r.returncode == 0:
             rep.add("mpi", "MPI", WARN, "mpiexec started separate one-process jobs: mpi4py and mpiexec use "
-                    "different MPI libraries", fix=mpi_fix)
+                    "different MPI libraries",
+                    fix=_install_hint(conda="conda install -c conda-forge mpich mpi4py",
+                                      pip="pip install --force-reinstall --no-binary mpi4py mpi4py   "
+                                          "(builds mpi4py with the mpicc next to this mpiexec)"))
         else:
             rep.add("mpi", "MPI", WARN, f"mpiexec -n 2 failed: {(r.stderr or r.stdout).strip()[-300:]}",
                     fix=mpi_fix)
@@ -739,11 +745,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     check_mpi(rep, run=a.setup)
     check_latex(rep, run=a.setup)
     if a.setup and not a.no_test_run:
-        if rep.required_ok():
-            quick_test(rep, root, a.keep_test)
-        else:
-            rep.section("Test run")
-            rep.add("test", "Test run", SKIP, "skipped: fix the MISSING lines above first")
+        quick_test(rep, root, a.keep_test)       # needs the core only (no CLASS), checked above
     summary(rep, a.setup)
     return 0 if rep.required_ok() else 1
 
