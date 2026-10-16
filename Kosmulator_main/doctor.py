@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import importlib
+import io
 import os
 import platform
 import shutil
@@ -72,7 +73,8 @@ class Report:
         line = f"  [{status:^7}] {name}"
         if detail:
             line += f": {detail}"
-        print(textwrap.fill(line, width=100, subsequent_indent=" " * 12), flush=True)
+        print(textwrap.fill(line, width=100, subsequent_indent=" " * 12, break_on_hyphens=False,
+                            break_long_words=False), flush=True)
         if fix and status in (MISSING, WARN):
             print(textwrap.indent(fix.strip(), " " * 12 + "> "), flush=True)
         return r
@@ -87,7 +89,8 @@ class Report:
 def _version(mod_name: str, dist_name: Optional[str] = None) -> Optional[str]:
     """Version of an importable module, or None if it does not import."""
     try:
-        m = importlib.import_module(mod_name)
+        with contextlib.redirect_stdout(io.StringIO()):   # candl prints a notice on import
+            m = importlib.import_module(mod_name)
     except Exception:
         return None
     v = getattr(m, "__version__", None)
