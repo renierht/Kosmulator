@@ -159,6 +159,23 @@ def _tail(path: Path, n: int = 12) -> str:
     return "\n".join(lines[-n:])
 
 
+def _log_errors(log: Path, n: int = 12) -> str:
+    """The compiler's first error lines (with the two lines after each), else the log's last lines."""
+    try:
+        lines = log.read_text(errors="replace").splitlines()
+    except Exception:
+        return ""
+    out: List[str] = []
+    for i, line in enumerate(lines):
+        if "error:" in line or "Error:" in line:
+            out += [x for x in lines[i:i + 3] if x not in out]
+        if len(out) >= n:
+            break
+    if out:
+        return "first errors in the log:\n" + "\n".join(out[:n])
+    return "last lines of the log:\n" + _tail(log, n)
+
+
 def _build_failure_hint(log: Path) -> str:
     """The likely fix for a failed CLASS build, from its log."""
     text = ""
@@ -314,7 +331,7 @@ def build_class(rep: Report, root: Path, model: str, verbose: bool = False) -> b
         rep.add("class", f"CLASS {model}", OK, f"built in {time.time() - t0:.0f} s")
         return True
     rep.add("class", f"CLASS {model}", MISSING, "build failed" + (f" ({err})" if err else ""),
-            fix=_build_failure_hint(log) + ("\nlast lines of the log:\n" + _tail(log) if log.is_file() else ""),
+            fix=_build_failure_hint(log) + ("\n" + _log_errors(log) if log.is_file() else ""),
             required=True)
     return False
 
@@ -341,7 +358,7 @@ def build_rd_class(rep: Report, root: Path, verbose: bool = False) -> bool:
         rep.add("class", "rd_Class (r_d with the model's E(z))", OK, f"built in {time.time() - t0:.0f} s")
         return True
     rep.add("class", "rd_Class", MISSING, "build failed" + (f" ({err})" if err else ""),
-            fix=_build_failure_hint(log) + ("\nlast lines of the log:\n" + _tail(log) if log.is_file() else ""),
+            fix=_build_failure_hint(log) + ("\n" + _log_errors(log) if log.is_file() else ""),
             required=True)
     return False
 
@@ -735,7 +752,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         for m in a.build_class:
             if tools_ok:
                 build_class(rep, root, m, a.verbose_build)
-        print()
+            else:
+                rep.add("class", f"CLASS {m}", SKIP, "skipped: build tools missing (above)")
+        print("\nOverall: " + ("OK" if rep.required_ok() else "NOT READY: fix the MISSING lines above"))
         return 0 if rep.required_ok() else 1
 
     tools_ok = True

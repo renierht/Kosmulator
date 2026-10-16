@@ -52,7 +52,7 @@ The package is designed to be **modular**, **flexible**, and **user-friendly**, 
   Reload, resume, or extend existing MCMC chains for reproducibility and efficient experimentation.
 
 - **Environment Diagnostics**  
-  Includes a built-in `kosmulator-doctor` command to verify Python dependencies, CLASS, Planck CLIK likelihoods, and optional AlterBBN support.
+  Includes a built-in `kosmulator-doctor` command that checks the installation and, with `--setup`, builds CLASS and makes a short test run.
 
 ---
 
@@ -69,27 +69,31 @@ while others are required only when specific observational datasets are used.
 - **Matplotlib**
 - **h5py**
 - **Pandas**
-- **mpi4py
 - **GetDist** (corner plots and statistical visualisation)
 - **EMCEE** (MCMC sampler)
 - **Zeus** (vectorised MCMC sampler)
+- **tqdm**, **threadpoolctl**
+- **Cython**, **setuptools** and a **C/C++ compiler with make**, for the CLASS builds (CMB groups, and r_d in BAO/DESI groups calibrated by BBN or the CMB)
 
 #### CMB-Specific Dependencies (required only when CMB likelihoods are used)
 
 - **CLASS (classy)**  
-  Used to compute background and perturbation quantities and CMB power spectra.
+  Used to compute background and perturbation quantities and CMB power spectra. Kosmulator builds it itself, per model, from `Class/<model>`; no separate CLASS installation is needed.
 - **Planck likelihood code: CLIK or clipy**  
   Required for Planck CMB likelihoods (TT, TTTEEE, low-ℓ, lensing).  
   The easiest route is clipy, the pure-Python implementation of CLIK by K. Benabed and L. Balkenhol (https://github.com/benabed/clipy): `pip install "clipy-like>=0.15"`. Kosmulator uses CLIK when it is installed and clipy otherwise; both read the same `.clik` folders, and the run log records which one was used. clipy 0.15's low-ℓ EE likelihood (SimAll, tag `CMB_lowl`) needs NumPy 2.0 or newer; with an older NumPy, Kosmulator stops at start-up and asks for CLIK for that tag.  
-  The corresponding `.clik` likelihood directories must be available locally.
-- **Astropy** 
-- **Cython** 
+  The corresponding `.clik` likelihood directories are in `Observations/`.
+- **candl** (`pip install "candl-like>=2.0.3"`) for ACT DR6 and SPT-3G D1, and **act_dr6_lenslike** for the ACT DR6 lensing likelihood
+- **Astropy** (installed with clipy)
 
 #### Optional Dependencies
 
 - **AlterBBN**  
   Optional backend for Big Bang Nucleosynthesis (BBN) D/H likelihoods.  
-  Kosmulator supports approximate BBN likelihoods without AlterBBN, as well as physically motivated predictions using live AlterBBN calls or precomputed grids.
+  Kosmulator supports approximate BBN likelihoods without AlterBBN, as well as physically motivated predictions using live AlterBBN calls or precomputed grids. The AlterBBN grid `BBN_DH_AlterBBN` uses by default is included (`Observations/BBN/bbn_grid.npz`), so AlterBBN itself is only needed for live calls or a new grid.
+
+- **mpi4py** and **schwimmbad**  
+  For MPI runs (`--use_mpi`, clusters).
 
 - **LaTeX (TeX Live / MiKTeX)**  
   Strongly recommended for publication-quality plots and LaTeX-ready tables. See Latex installation section at the end for additional information.
@@ -97,26 +101,32 @@ while others are required only when specific observational datasets are used.
 ---
 
 ## Installation
-Clone the repository and install Kosmulator in a clean Python environment (recommended):
+Kosmulator runs on Linux, macOS and Windows through WSL2. On WSL, clone it into your Linux home folder (`~/`), not into `/mnt/c` or `/mnt/d`: reading and writing files there is much slower.
+
+**Recommended: conda** ([Miniforge](https://github.com/conda-forge/miniforge)). The environment brings everything, including the C compiler Kosmulator uses to build CLASS, so nothing needs `sudo`:
 ```bash
-git clone https://github.com/renierht/Kosmulator.git
+git clone --depth 1 https://github.com/renierht/Kosmulator.git
 cd Kosmulator
-pip install -e .
+conda env create -f environment.yml
+conda activate kosmulator
+kosmulator-doctor --setup
 ```
-To verify your installation and check optional backends (CLASS, Planck CLIK, AlterBBN), run:
+`kosmulator-doctor --setup` checks the installation, builds CLASS for LCDM_v and rd_Class (a few minutes, once), loads every likelihood with its data and makes a short test run. Anything missing is listed with the command that adds it. Run `kosmulator-doctor` (without `--setup`) at any time for a quick check.
+
+**Without conda (pip).** Use a clean virtual environment with Python 3.9 - 3.12 (3.11 recommended) and a C/C++ compiler (Ubuntu/WSL: `sudo apt install build-essential python3-dev`; macOS: `xcode-select --install`):
 ```bash
-kosmulator-doctor
+git clone --depth 1 https://github.com/renierht/Kosmulator.git
+cd Kosmulator
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[all]"
+kosmulator-doctor --setup
 ```
-For the Planck CMB likelihoods without compiling CLIK, install clipy as well:
-```bash
-pip install "clipy-like>=0.15"
-```
-For ACT DR6 and SPT-3G D1 (`CMB_ACT`, `CMB_SPT`, `CMB_PACT`, `CMB_SPA`), install the candl code; the ACT data are in `Observations/candl`:
-```bash
-pip install "candl-like>=2.0.3"
-```
-The SPT-3G data are included as well. If the SPT-3G D1 files are ever missing or changed in your copy, `python -m Kosmulator_main.get_spt_data` downloads and checks them again; for the MUSE lensing file add `--muse-zip` with the zip from https://pole.uchicago.edu/public/data/ge25/ (`Observations/candl/README.md`, `Observations/spt3g_muse_lensing/README.md`).
-Note: For a full "Kitchen Sink" installation including CLASS and Planck CLIK, please see the Advanced installation section at the end for additional information. With clipy installed, the CLIK build (step 5 there) can be skipped.
+`pip install -e .` installs the core only (enough for the late-time data); `".[cmb]"` adds the CMB likelihood codes (clipy, candl, act_dr6_lenslike), `".[mpi]"` adds MPI (mpi4py and schwimmbad; it needs an MPI library, e.g. `sudo apt install mpich`), and `".[all]"` both.
+
+You do not have to install CLASS or the Planck likelihood code yourself. Kosmulator builds its own CLASS for each model from `Class/<model>` on first use, and the Planck, ACT DR6, SPT-3G and lensing data are in `Observations/` (read by clipy, the pure-Python implementation of CLIK by K. Benabed and L. Balkenhol, and by candl). A model with its own modified CLASS goes in `Class/<model>`; `kosmulator-doctor --build-class <model>` builds it straight away, so that compiler errors show before a run.
+
+If the SPT-3G D1 files are ever missing or changed in your copy, `python -m Kosmulator_main.get_spt_data` downloads and checks them again; for the MUSE lensing file add `--muse-zip` with the zip from https://pole.uchicago.edu/public/data/ge25/ (`Observations/candl/README.md`, `Observations/spt3g_muse_lensing/README.md`).
+Note: the optional extras (compiled CLIK instead of clipy, live AlterBBN, LaTeX for the plot labels) are in the Advanced installation section at the end.
 
 ---
 
