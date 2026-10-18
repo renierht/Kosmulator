@@ -2698,7 +2698,10 @@ def chain_convergence_summary(output_dir: str, key: str, burn: int, param_names:
         old = lg.level
         lg.setLevel(logging.ERROR)
         try:
-            row["tau_emcee"] = float(np.nanmax(_emcee.autocorr.integrated_time(post, quiet=True)))
+            import warnings as _w
+            with np.errstate(divide="ignore", invalid="ignore"), _w.catch_warnings():
+                _w.simplefilter("ignore", RuntimeWarning)       # very short chains: nan, said as n/a
+                row["tau_emcee"] = float(np.nanmax(_emcee.autocorr.integrated_time(post, quiet=True)))
         except Exception:
             pass
         finally:
