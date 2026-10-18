@@ -202,6 +202,20 @@ def suggestion_lines(CONFIG, model_names, vectorised, num_cores: int, use_mpi: b
     return out
 
 
+def pool_rule(CONFIG, model_name: str, can_vec: bool) -> bool:
+    """
+    One rule for main's any_needs_pool (MPI: whether the worker ranks serve a pool) and for
+    run_mcmc_for_all_models (whether a pool is built): a group with CMB or BBN (CLASS per point: emcee
+    through the pool, and the initial ball through it with any engine), a model that cannot be
+    vectorised, or a pool-preferred data set (official JLA). Audit 19 Oct: the two rules had drifted
+    apart, so under MPI with --force_zeus a pool could be built on rank 0 while the other ranks waited
+    in the idle barrier (a hang).
+    """
+    return bool(_model_has_any_cmb_or_bbn(CONFIG, model_name) or not can_vec
+                or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set())
+                       for grp in CONFIG[model_name].get("observations", []) for o in grp))
+
+
 def _model_has_any_cmb_or_bbn(CONFIG, model_name: str) -> bool:
     """
     Return True if *any* observation group for this model
@@ -358,10 +372,11 @@ def main(
     # 4) Master builds CONFIG & data
     # ------------------------------------------------------------------
     if rank == 0 and int(nsteps) <= int(burn):
-        # CT-32: the run extends itself after sampling so that samples remain after the burn-in
-        log.warning("nsteps (%d) is not larger than burn (%d): after sampling, %d more steps will be run so "
-                    "that the chain has samples after the burn-in. Set nsteps above burn.",
-                    int(nsteps), int(burn), max(int(getattr(args, "autocorr_buffer", 0) or 0), 100))
+        # CT-32 (audit 19 Oct): refused rather than warned. zeus extended such a chain once by at most
+        # max(buffer, check interval) steps; emcee not at all, so its chain after the burn-in was empty
+        from Kosmulator_main.utils import refuse
+        refuse(f"nsteps ({int(nsteps)}) must be larger than burn ({int(burn)}): no samples would remain after "
+               "the burn-in. Raise nsteps or lower burn.")
     if rank == 0:
         style = getattr(args, "init_log", "terse")
         with init_summary_context(style=style):
@@ -475,22 +490,15 @@ def main(
 
             K.engine_for_model[m] = eng
 
-            # emcee needs workers only for CMB/BBN groups or non-vectorisable models;
-            # other emcee groups run vectorised in this process (Kosmulator_MCMC).
-            if (eng == "emcee" and (touches_cmb_bbn or not can_vec)) or (eng == "zeus" and not can_vec):
-                any_needs_pool = True
-
-        elif engine_mode == "fastest":
-            if (not can_vec) or touches_cmb_bbn:
-                any_needs_pool = True
-
-        else:
+        elif engine_mode != "fastest":
             eng = "emcee" if touches_cmb_bbn else (
                 "zeus" if (can_vec and zeus is not None) else "emcee"
             )
             K.engine_for_model[m] = eng
-            if eng == "emcee" or (eng == "zeus" and not can_vec):
-                any_needs_pool = True
+        # the same rule as run_mcmc_for_all_models (pool_rule): CMB/BBN groups (emcee, or the
+        # initial ball with zeus), non-vectorisable models, the official JLA
+        if pool_rule(CONFIG, m, can_vec):
+            any_needs_pool = True
 
     # ------------------------------------------------------------------
     # 9) MPI early-exit if no pool is ever needed
@@ -685,6 +693,16 @@ def main(
             _check["rd_background"] = K.RD_BACKGROUND
         if any(K.group_is_lensing_only(g) for g in observations):    # item 62
             _check["lensing_only_priors"] = bool(K.LENSING_ONLY_PRIORS)
+        # data-set switches, when the run has that data set (audit 19 Oct: chains made without
+        # Pantheon's systematics were reused after PANTHEON_SYS_COV = "full")
+        _flat = {o for g in observations for o in g}
+        if "Pantheon" in _flat:
+            _check["PANTHEON_SYS_COV"] = getattr(K, "PANTHEON_SYS_COV", None)
+        if "CC" in _flat:
+            _check["CC_SYS_COV"] = K.CC_SYS_COV
+        if "f_sigma_8" in _flat:
+            _check["FS8_WIGGLEZ_COV"] = bool(K.FS8_WIGGLEZ_COV)
+            _check["FS8_AP_CORRECTION"] = bool(K.FS8_AP_CORRECTION)
         check_run_settings((getattr(args, "output_suffix", "") or "").strip(), _check,
                            overwrite=bool(getattr(args, "overwrite", False)))
         _run = {
@@ -987,17 +1005,7 @@ def run_mcmc_for_all_models(
         model-level engine), a model that cannot be vectorised, or a pool-preferred
         dataset (official JLA). The same rule as any_needs_pool in main.
         """
-        cv = bool(vectorised.get(m, False))
-        eng = (getattr(K, "engine_for_model", {}) or {}).get(m)
-        if eng not in ("zeus", "emcee"):
-            eng = "zeus" if (cv and (zeus is not None)) else "emcee"
-        touches = _model_has_any_cmb_or_bbn(CONFIG, m)
-        return bool(
-            (touches and (eng == "emcee" or engine_mode in ("fastest", "mixed")))
-            or not cv
-            or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set())
-                   for grp in CONFIG[m].get("observations", []) for o in grp)
-        )
+        return pool_rule(CONFIG, m, bool(vectorised.get(m, False)))
 
     any_model_needs_pool = any(_model_needs_pool(m) for m in model_list)
 
@@ -1110,8 +1118,9 @@ def run_mcmc_for_all_models(
                 if not ok and no_rebuild:
                     raise RuntimeError("classy missing and rebuild forbidden (KOSM_NO_CLASS_REBUILD=1).")
                 if not ok:
-                    # ultra-conservative fallback (should be rare)
-                    CR.run_model(model_name)
+                    # ultra-conservative fallback (should be rare); its output to the build log (CT-22)
+                    CR.build_logged(f"[CLASS] Building CLASS for {model_name}", model_name,
+                                    lambda: CR.run_model(model_name))
                     # and load it explicitly so the right binary is active
                     CR.ensure_class_ready(model_name, force=False, no_rebuild=False)
                 did_class_prep = True

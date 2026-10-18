@@ -9,7 +9,8 @@ matplotlib
 h5py
 pandas
 getdist
-emcee
+# 3.1 or newer: Kosmulator labels emcee's progress bar (progress_kwargs)
+emcee>=3.1
 zeus-mcmc
 tqdm
 # caps BLAS threads in pool workers

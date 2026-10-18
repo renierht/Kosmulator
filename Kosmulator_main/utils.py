@@ -404,7 +404,7 @@ def print_model_banner(
     used = sorted(set((group_engines or {}).values()))
     if len(used) == 2:
         zeus_part = "Zeus vectorised" if can_vec else f"Zeus scalar {pool_word}"
-        label = f"{zeus_part} and EMCEE ({pool_word} for CMB/BBN groups) ({mode_label})"
+        label = f"{zeus_part} and EMCEE (its groups: {pool_word} for CMB/BBN) ({mode_label})"
         msg = f"Processing model: {model_name}  |  Engine: {label}"
         bar = "#" * max(48, len(msg) + 6)
         print(f"\n\033[33m{bar}\033[0m", flush=True)
@@ -1593,8 +1593,8 @@ def warn_unfinished_chain(model_name: str, group: str, path: str, steps: int, ns
         return
     name = os.path.basename(path)
     if int(steps) < int(nsteps):
-        log.warning("[%s | %s] %s has %d of %d steps and did not finish (stopped or killed): it is loaded "
-                    "as it is and its results are preliminary. --resume continues it.",
+        log.warning("[%s | %s] %s has %d of %d steps and did not converge (stopped, killed, or run with a "
+                    "smaller nsteps): it is loaded as it is and its results are preliminary. --resume continues it.",
                     model_name, group, name, int(steps), int(nsteps))
     else:
         log.warning("[%s | %s] %s reached nsteps (%d) without meeting the convergence rule: it is loaded as "
@@ -1792,17 +1792,26 @@ def load_or_run_chain(
     # ------------------------------------------------------------------
     # Cross-engine reuse II:
     #   Zeus run sees an existing EMCEE chain → reuse it instead of
-    #   recomputing, as long as we are not overwriting or resuming.
+    #   recomputing, as long as we are not overwriting or resuming. With --resume an emcee chain
+    #   flagged converged is reused too (audit 19 Oct: groups that CT-31 moved from emcee to zeus
+    #   would otherwise start a new zeus chain from step 0); an unconverged one is said below.
     # ------------------------------------------------------------------
-    if (
-        is_zeus_run
-        and engine_mode != "single"
-        and not overwrite
-        and not resumeChains
-        and os.path.exists(chain_path)    # EMCEE file exists
-        and Kosmulator_MCMC._saved_steps(chain_path) != 0  # not an empty file
-        and (not os.path.exists(zeus_chain))   # <-- added guard
-    ):
+    _emcee_ok = (is_zeus_run and engine_mode != "single" and not overwrite and os.path.exists(chain_path)
+                 and Kosmulator_MCMC._saved_steps(chain_path) != 0 and not os.path.exists(zeus_chain))
+    _emcee_conv = False
+    if _emcee_ok and resumeChains:
+        try:
+            with h5py.File(chain_path, "r") as h5f:
+                _emcee_conv = bool(h5f.attrs.get("converged", False))
+        except Exception:
+            _emcee_conv = False
+        if not _emcee_conv:
+            log.warning("[%s | %s] --resume: this group now runs zeus (engine per group, CT-31); its emcee chain "
+                        "%s did not converge and is not continued: a new zeus chain starts. To continue the "
+                        "emcee chain instead, resume with --force_emcee.", model_name,
+                        other_kwargs.get("obs_key") or "+".join(map(str, other_kwargs.get("obs") or [])),
+                        os.path.basename(chain_path))
+    if _emcee_ok and (not resumeChains or _emcee_conv):
         print(
             "[INFO] Zeus requested but found existing EMCEE chain.\n"
             f"       Re-using samples from {chain_path}.\n"
@@ -2071,17 +2080,21 @@ class ConvergenceMonitor:
         CT-08: a resumed run's saved steps. The check at the last multiple of check_every in them is
         made, as the run would have made it, so the resumed run's first check can judge tau's
         stability against it (before, the first check after a resume could never stop the run).
-        It counts towards the consecutive checks as in an uninterrupted run; it never stops the run.
+        The last two checks are made, so they count towards the consecutive checks as in an
+        uninterrupted run; seeding never stops the run.
         """
         it = (int(it) // self.check_every) * self.check_every
-        if it <= 0:
-            return
-        try:
-            st = self._evaluate(it, chain)
-        except Exception:
-            return
-        if st is not None:
-            self.streak = self.streak + 1 if st["ok"] else 0
+        # the last two checks: the first gives the earlier tau, so the second is judged as in an
+        # uninterrupted run and counts towards consecutive checks (audit 19 Oct)
+        for i_ in (it - self.check_every, it):
+            if i_ <= 0:
+                continue
+            try:
+                st = self._evaluate(i_, chain)
+            except Exception:
+                continue
+            if st is not None:
+                self.streak = self.streak + 1 if st["ok"] else 0
 
     def update(self, it: int, chain) -> bool:
         st = self._evaluate(it, chain)
@@ -2109,14 +2122,20 @@ class ConvergenceMonitor:
         return st
 
     def first_met(self) -> Optional[int]:
-        """The first check at which the rule held (consecutive checks included), whether or not the
-        run could stop there (CT-16: before the end of --autocorr-buffer it could not)."""
-        streak = 0
+        """The check from which the rule held without a break up to the stop (or the last check),
+        consecutive checks included, whether or not the run could stop there (CT-16: before the end
+        of --autocorr-buffer it could not)."""
+        end = self.stopped_at
+        streak, start = 0, None
         for i_, ok in zip(self.hist["it"], self.hist["ok"]):
+            if end is not None and int(i_) > int(end):
+                break
             streak = streak + 1 if ok else 0
-            if streak >= self.consecutive:
-                return int(i_)
-        return None
+            if streak == 0:
+                start = None
+            elif streak >= self.consecutive and start is None:
+                start = int(i_)
+        return start
 
     def steps_needed(self, st: Dict[str, Any]) -> Optional[int]:
         """Rough number of extra steps for the length and ESS conditions at the current tau_max."""
@@ -2261,7 +2280,7 @@ def emcee_autocorr_stopping(
         if (it_global % check_every) != 0:
             continue
         _ch = sampler.get_chain()
-        if it_global >= 1000:                                   # CT-18: trapped walkers, once each
+        if it_global - 1000 >= int(global_burn or 0):           # CT-18: trapped walkers after burn-in, once each
             try:
                 _warn_trapped(_ch[-1000:], model_name, group, param_names, _warned_trapped)
             except Exception:
@@ -2285,7 +2304,7 @@ def emcee_autocorr_stopping(
     log = logging.getLogger(__name__)
     (log.info if sampler.kosm_converged else log.warning)(msg)
 
-    return sampler.get_chain(discard=int(global_burn), flat=True)
+    return np.array(sampler.get_chain(discard=int(global_burn), flat=True))   # a copy (CT-19 buffer)
 
 
 class ZeusConvergenceCallback:

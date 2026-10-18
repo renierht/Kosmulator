@@ -285,15 +285,21 @@ def build_logged(label: str, model_name: str, fn):
     if str(os.environ.get("KOSM_VERBOSE_BUILD", "")).strip().lower() in ("1", "true", "yes", "on"):
         return fn()
     log_path = Path("./Class") / model_name / "build.log"
+    try:                                       # a log that cannot be written: build on the console
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        open(log_path, "a").close()
+    except OSError as e:
+        print(f"{label} (once; about 1 - 3 minutes; the log {log_path} cannot be written: {e})", flush=True)
+        return fn()
     print(f"{label} (once; about 1 - 3 minutes; log: Class/{model_name}/build.log)", flush=True)
     try:
         with output_to(log_path):
             return fn()
-    except BaseException:
+    except Exception:
         print(f"[CLASS] The build of {model_name} failed; {log_errors(log_path)}\n"
               f"(full log: {log_path}; KOSM_VERBOSE_BUILD=1 shows the build output on the console)",
               flush=True)
-        raise
+        raise                                  # (Ctrl-C and exits pass through without the message)
 
 
 def _mpi_rank0() -> bool:
@@ -342,7 +348,7 @@ def _lock_path(model_name: str, sig_hash: str) -> str:
 
 
 @contextmanager
-def _with_lock(model_name: str, sig_hash: str, timeout_s: int = 120):
+def _with_lock(model_name: str, sig_hash: str, timeout_s: int = 900):
     """
     Acquire a simple filesystem lock for this model/signature.
 
@@ -370,7 +376,7 @@ def _with_lock(model_name: str, sig_hash: str, timeout_s: int = 120):
             time.sleep(0.1)
 
 
-def _wait_for_artifact(model_name: str, sig_hash: str, timeout_s: int = 180) -> Optional[str]:
+def _wait_for_artifact(model_name: str, sig_hash: str, timeout_s: int = 900) -> Optional[str]:
     """Wait for another rank/process to build the .so and put it in cache."""
     start = time.time()
     while time.time() - start < timeout_s:

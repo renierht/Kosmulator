@@ -380,10 +380,14 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
 
     # 3a) One parameter table per model (CT-43): parameters as rows (the corner order, the likelihoods'
     #     nuisance parameters after a "nuisance" line), groups as columns, in blocks that fit the line
+    # one width for the console and aligned_table_pretty.txt, so both have the same blocks (A8)
+    from Plots.Plot_functions import _table_width
+    table_width = _table_width(None)
     for model_name, (aligned_table, param_labels, obs_names) in all_tables.items():
         print_rule()
-        print_parameter_table(aligned_table, list(param_labels), obs_names, **_param_table_kwargs(
-            CONFIG[model_name], model_name, aligned_table, list(param_labels), obs_names))
+        print_parameter_table(aligned_table, list(param_labels), obs_names, width=table_width,
+                              **_param_table_kwargs(CONFIG[model_name], model_name, aligned_table,
+                                                    list(param_labels), obs_names))
         print_rule()
         print()
 
@@ -568,8 +572,9 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
                 print(settings_header(), file=out)          # CT-26
                 print(file=out)
             # the same table and blocks as the console (CT-43; 160 characters per line)
-            print_parameter_table(aligned_table, list(param_labels), obs_names, out=out, **_param_table_kwargs(
-                CONFIG[model], model, aligned_table, list(param_labels), obs_names))
+            print_parameter_table(aligned_table, list(param_labels), obs_names, out=out, width=table_width,
+                                  **_param_table_kwargs(CONFIG[model], model, aligned_table,
+                                                        list(param_labels), obs_names))
 
             # 3) Append S-lines directly into the pretty file (no S_scale_summary.txt anymore)
             s_lines = bao_S_lines_by_model.get(model, [])
@@ -739,8 +744,8 @@ def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_
     _fm = monitor.first_met() if hasattr(monitor, "first_met") else None
     if (monitor.stopped_at is not None and _fm is not None and _fm < monitor.stopped_at
             and monitor.earliest_stop > burn and monitor.stopped_at <= monitor.earliest_stop + monitor.check_every):
-        status = (f"converged; conditions met from step {_fm}, stopped at the end of the buffer "
-                  f"(step {int(monitor.stopped_at)})")                                    # CT-16
+        status = (f"converged: conditions met from step {_fm}, stopped at the end of the buffer, "
+                  f"step {int(monitor.stopped_at)}")                                      # CT-16
     elif monitor.stopped_at is not None or (ok.size and ok[-1] and streak >= need
                                              and float(it[-1]) >= float(monitor.earliest_stop)):
         status = "converged"                 # stopped, or met the rule at the run's last check
@@ -768,12 +773,13 @@ def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_
 
 def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     """
-    Corner plot generator with optional reduction of CMB nuisance parameters on the PLOT ONLY.
+    Corner plot generator. The axes leave out the likelihoods' nuisance parameters and, per group,
+    parameters that are only their prior (corner_parameters; CT-15, CT-30, CT-37); the tables keep
+    every parameter.
 
     Switches (thread via CLI into PLOT_SETTINGS beforehand):
-      - PLOT_SETTINGS["corner_show_all_cmb_params"] : bool, default False
-          If False and any CMB_* obs present, only keep the commonly-reported CMB parameters
-          on the corner axes, dropping the rest of the CMB nuisance parameters.
+      - PLOT_SETTINGS["corner_show_nuisance"] (Kosmulator.py) or ["corner_show_all_cmb_params"]
+        (--corner-show-all-cmb-params): draw every parameter.
       - PLOT_SETTINGS["corner_table_full_params"]   : bool, default True
           If True, the printed/top table shows ALL parameters (recommended).
           If False, the printed/top table mirrors whatever appears on the corner axes.
@@ -1105,7 +1111,7 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         else:
             table_param_labels.append("r_d")
             for row, cell in zip(aligned_latex_table, derived_rd_col):
-                row.append(cell)
+                row.append(cell if cell != "—" else "")      # no value, not a dash (audit 19 Oct)
 
 
 
@@ -1468,7 +1474,12 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
                       f"runs for the 68% bands ({len(band_draws) + 3} points x {len(_modes)} l-range(s)) ...",
                       flush=True)
                 _t0 = __import__("time").time()
-                _n = _SP.prefetch_cls(list(band_draws) + [params_med, params_lo, params_hi], model_name, _modes)
+                try:
+                    _n = _SP.prefetch_cls(list(band_draws) + [params_med, params_lo, params_hi], model_name, _modes)
+                except Exception as _e:                # the figure computes its spectra itself then
+                    _n = 0
+                    print(f"[CMB] {model_name} {obs_key}: band spectra not computed ahead ({_e}); computing "
+                          "them while drawing", flush=True)
                 if _n:
                     print(f"[CMB] {model_name} {obs_key}: {_n} CLASS runs for the 68% bands "
                           f"({__import__('time').time() - _t0:.0f} s)")

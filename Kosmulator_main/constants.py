@@ -514,6 +514,9 @@ JLA_DIR_RELATIVE: str = "JLA"
 
 #: Relative path (inside OBSERVATIONS_BASE) to the default BBN grid
 BBN_GRID_RELATIVE: str = "BBN/bbn_grid.npz"
+#: md5 of the grid shipped with Kosmulator (AlterBBN v1.4, N_eff nodes 3.044 and 3.046; CT-39): the
+#: start-up line says "shipped" only for this file (a grid Kosmulator rebuilt replaces it)
+BBN_GRID_MD5: str = "185d6dbb5c804d821232c82f71054cbc"
 
 #: Base directory where plots are saved
 DEFAULT_PLOTS_BASE: str = "./Plots/Saved_Plots"

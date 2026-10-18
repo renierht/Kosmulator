@@ -922,14 +922,14 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
 
                 # Build prior boxes for grid-building from priors (with safe defaults)
                 pri_src = prior_limits or {}
+                _smp = set(config.get("bbn_sampled", {"N_eff", "tau_n"}) if isinstance(config, dict) else ())
+                _tau0 = observation_data[obs]["tau_n"]
                 priors = {
                     "Omega_bh^2": pri_src.get("Omega_bh^2", (0.019, 0.026)),
-                    "N_eff":      pri_src.get("N_eff",      (K.NU_N_EFF, K.NU_N_EFF)),     # CT-39
-                    "tau_n":      pri_src.get(
-                        "tau_n",
-                        (observation_data[obs]["tau_n"],
-                         observation_data[obs]["tau_n"]),
-                    ),
+                    # the run's N_eff (CT-39); the prior's range only when N_eff is sampled
+                    "N_eff":      (pri_src.get("N_eff", (K.NU_N_EFF, K.NU_N_EFF)) if "N_eff" in _smp
+                                   else (K.NU_N_EFF, K.NU_N_EFF)),
+                    "tau_n":      (pri_src.get("tau_n", (_tau0, _tau0)) if "tau_n" in _smp else (_tau0, _tau0)),
                 }
 
                 try:
@@ -950,13 +950,20 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 if _eff == "alterbbn_grid":
                     _g = cfg["bbn_grid"]
                     _p = os.path.abspath(str(cfg.get("bbn_grid_path") or ""))
-                    _ship = _p == os.path.abspath(os.path.join(K.OBSERVATIONS_BASE, K.BBN_GRID_RELATIVE))
+                    try:
+                        import hashlib
+                        with open(_p, "rb") as _fh:
+                            _ship = hashlib.md5(_fh.read()).hexdigest() == K.BBN_GRID_MD5
+                    except OSError:
+                        _ship = False
                     _nn = cfg.get("bbn_grid_neff_nodes") or []
                     _neff = ("N_eff sampled within %.3f - %.3f" % (_g["neff"][0], _g["neff"][-1]) if "neff" in _g
                              else ("N_eff %.3f" % _nn[0] if _nn else "N_eff fixed"))
-                    logger.info("BBN_DH_AlterBBN: D/H from %s (%s; Omega_bh^2 %.4f - %.4f, %s); AlterBBN itself is "
-                                "not needed", "the AlterBBN grid shipped with Kosmulator" if _ship else "an AlterBBN grid",
-                                os.path.relpath(_p), float(_g["obh2"][0]), float(_g["obh2"][-1]), _neff)
+                    _src = ("an AlterBBN grid built now with AlterBBN" if cfg.get("bbn_grid_built_now") else
+                            "the AlterBBN grid shipped with Kosmulator" if _ship else "an AlterBBN grid built earlier")
+                    logger.info("BBN_DH_AlterBBN: D/H from %s (%s; Omega_bh^2 %.4f - %.4f, %s)%s", _src,
+                                os.path.relpath(_p), float(_g["obh2"][0]), float(_g["obh2"][-1]), _neff,
+                                "" if cfg.get("bbn_grid_built_now") else "; AlterBBN itself is not needed")
                 elif _eff == "alterbbn":
                     logger.info("BBN_DH_AlterBBN: D/H from AlterBBN, called at each point")
                 elif _eff == "approx":
@@ -1592,10 +1599,16 @@ def create_config(
     # ----------------------------------------------------------------------
     # 8. Load data once (based on the observation list)
     # ----------------------------------------------------------------------
+    # BBN's N_eff and tau_n axes follow prior_limits only when a BBN group samples them (audit 19 Oct:
+    # a range in prior_limits alone samples nothing, and BBN then used the grid's lowest node)
+    _bbn_sampled = {p for mod in config for g, pl in zip(config[mod].get("observations", []),
+                                                          config[mod].get("parameters", []))
+                    if any(str(o).startswith("BBN_DH") for o in g) for p in pl if p in ("N_eff", "tau_n")}
     data = load_all_data(
         {
             'observations': observation,
             'prior_limits': prior_limits,
+            'bbn_sampled': _bbn_sampled,
         },
         prior_limits=prior_limits,
         logger=logger,

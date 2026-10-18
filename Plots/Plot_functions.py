@@ -825,7 +825,8 @@ def _obs_col_width_from_names(names, base=30, wmin=28, wmax=72, pad=2):
     
 def _table_width(out) -> int:
     """Line width of the parameter table: the terminal's (read from /dev/tty, since the console output
-    usually goes through tee) on the console, else 160; 160 in a file (CT-43)."""
+    usually goes through tee), else 160 (CT-43). Kosmulator passes the console's width to the file too,
+    so both have the same blocks (decision A8); 160 for a file when no width is given."""
     if out is not None:
         return 160
     try:

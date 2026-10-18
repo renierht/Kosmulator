@@ -826,7 +826,8 @@ def waic_tension_note(p_waic: float, p_D: float):
         return None
     return (f"WAIC well above DIC: p_WAIC = {pw:.1f} against p_D = {pd:.1f}. Data sets with a full covariance "
             "(and BBN) are one WAIC term each, so when the group's data sets pull the parameters apart "
-            "(tension) WAIC rises; compare with DIC and AIC as well")
+            "(tension) WAIC rises (a chain that has not converged can do the same); compare with DIC "
+            "and AIC as well")
 
 
 def statistical_analysis(best_fit_values, data, CONFIG, reference_model):

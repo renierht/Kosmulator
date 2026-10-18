@@ -966,13 +966,17 @@ class BufferedHDFBackend(emcee.backends.Backend):
 _OPEN_BACKENDS: List["BufferedHDFBackend"] = []
 
 
-def _flush_backends() -> None:
-    """Write every buffered emcee chain of this process to its file (CT-19)."""
+def _flush_backends(strict: bool = False) -> None:
+    """Write every buffered emcee chain of this process to its file (CT-19). strict (the normal end of a
+    group): a failed write stops the run, as emcee's own per-step write did; otherwise (after an error or
+    Ctrl-C) it is logged."""
     while _OPEN_BACKENDS:
         b = _OPEN_BACKENDS.pop()
         try:
             b.flush()
         except Exception as e:
+            if strict:
+                raise
             log.warning("Could not write the last steps of %s: %s", getattr(b, "filename", "?"), e)
 
 
@@ -1075,9 +1079,11 @@ def _pool_logprob(fn: Callable, args: tuple, near: str) -> _PoolLogProb:
     # CT-05: files left in the chain folder by a run that was killed (Ctrl-C removes them, a kill
     # does not). This run holds the output suffix's lock, so no other run uses them; not with
     # KOSM_IGNORE_LOCK=1 (another run may) or in the shared temporary folder.
-    if near and os.environ.get("KOSM_IGNORE_LOCK", "0") != "1":
+    # (only when this process holds the lock; the folder is escaped: brackets in an output suffix
+    # are glob patterns, audit 19 Oct)
+    if near and os.environ.get("KOSM_IGNORE_LOCK", "0") != "1" and getattr(utils, "_RUN_LOCK_HANDLE", None) is not None:
         import glob
-        for old in glob.glob(os.path.join(folder, ".kosm_pool_args_*.pkl")):
+        for old in glob.glob(os.path.join(glob.escape(folder), ".kosm_pool_args_*.pkl")):
             if old not in _SHARED_FILES:
                 try:
                     os.remove(old)
@@ -1833,7 +1839,7 @@ def _run_mcmc_impl(
                          utils.format_elapsed_time(time.time() - _t_resume))
                 #Extract and write log_prob + loglike on resume
                 if saveChains:
-                    _flush_backends()                           # CT-19: every step in the file first
+                    _flush_backends(strict=True)                # CT-19: every step in the file first
                     flat_log_prob = sampler.get_log_prob(discard = burn, flat = True)
                     blobs = sampler.get_blobs(discard = burn, flat = True)
                     with h5py.File(chain_path, "a") as h5f:
@@ -1944,7 +1950,7 @@ def _run_mcmc_impl(
                  utils.format_elapsed_time(time.time() - start))
 
         if saveChains:
-            _flush_backends()                                   # CT-19: every step in the file first
+            _flush_backends(strict=True)                        # CT-19: every step in the file first
             # Flag the chain only if the autocorrelation rule was actually met
             # (previously every finished run was flagged converged).
             with h5py.File(chain_path, "a") as h5f:

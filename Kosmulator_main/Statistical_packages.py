@@ -2017,6 +2017,8 @@ def ensure_bbn_backend(
                 grid = {"obh2": g_obh2, "DH": G, "logspace": bool(logspace)}
                 if g_neff.size > 1:
                     grid["neff"] = g_neff
+                else:
+                    grid["neff_fixed"] = float(g_neff[0])      # the node used (audit 19 Oct)
                 if g_tau.size > 1:
                     grid["tau"] = g_tau
 
@@ -2087,6 +2089,10 @@ def ensure_bbn_backend(
         grid = {"obh2": obh2_nodes, "DH": logDH, "logspace": True}
         if neff_nodes.size > 1:
             grid["neff"] = neff_nodes
+        else:
+            grid["neff_fixed"] = float(neff_nodes[0])
+        out["bbn_grid_neff_nodes"] = [float(x) for x in neff_nodes]
+        out["bbn_grid_built_now"] = True
         if tau_nodes.size > 1:
             grid["tau"] = tau_nodes
         out["bbn_grid"] = grid
@@ -2132,7 +2138,11 @@ def bbn_predict_grid(param_dict: Dict[str, float], obs: dict) -> float:
     vals_raw = np.asarray(grid["DH"], float)  # log(D/H) if logspace True
     logspace = bool(grid.get("logspace", True))
 
-    neff_nodes = np.asarray(grid["neff"], float) if "neff" in grid else np.array([3.046], float)
+    # the grid's N_eff node when its N_eff axis was collapsed (it was a hard-coded 3.046, which made
+    # every point with N_eff = 3.044 in its parameters fall back to the approximation; audit 19 Oct)
+    from Kosmulator_main import constants as _Kg
+    neff_nodes = (np.asarray(grid["neff"], float) if "neff" in grid
+                  else np.array([float(grid.get("neff_fixed", _Kg.NU_N_EFF))], float))
     tau_nodes = (
         np.asarray(grid["tau"], float)
         if "tau" in grid
@@ -2140,7 +2150,10 @@ def bbn_predict_grid(param_dict: Dict[str, float], obs: dict) -> float:
     )
 
     obh2 = float(param_dict["Omega_bh^2"])
-    Neff = float(param_dict.get("N_eff", neff_nodes[0]))
+    # not sampled: the run's N_eff on an N_eff axis (it was the axis's lowest node), else the node
+    Neff = float(param_dict.get("N_eff", _Kg.NU_N_EFF if neff_nodes.size > 1 else neff_nodes[0]))
+    if neff_nodes.size == 1 and abs(Neff - neff_nodes[0]) < 1e-6:
+        Neff = float(neff_nodes[0])
     tau = float(param_dict.get("tau_n", tau_nodes[0]))
 
     if not (obh2_nodes[0] <= obh2 <= obh2_nodes[-1]):

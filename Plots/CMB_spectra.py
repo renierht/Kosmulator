@@ -54,7 +54,10 @@ def _data_colours(labels) -> Dict[str, str]:
     (constants.OBS_COLOR_ORDER), without colours close to the model's (constants.MODEL_COLOR)."""
     import matplotlib.colors as mc
     m = np.array(mc.to_rgb(K.MODEL_COLOR))
-    pal = [c for c in K.OBS_COLOR_ORDER if np.linalg.norm(np.array(mc.to_rgb(c)) - m) > 0.35] or ["b"]
+    # (and none too light to see on white, e.g. yellow)
+    lum = lambda c: float(np.dot(mc.to_rgb(c), (0.299, 0.587, 0.114)))
+    pal = [c for c in K.OBS_COLOR_ORDER
+           if np.linalg.norm(np.array(mc.to_rgb(c)) - m) > 0.35 and lum(c) < 0.8] or ["b"]
     out: Dict[str, str] = {}
     for lab in labels:
         out.setdefault(lab, pal[len(out) % len(pal)])
@@ -95,7 +98,9 @@ def cmb_spectra_figure(model_name: str, obs_key: str, group: Sequence[str], para
         try:
             entries += GC.band_powers(tag, cl, params_med, group)
         except Exception as e:                      # one missing data set must not stop the plots
-            print(f"[CMB spectra] {tag}: band powers not drawn ({e})")
+            need = (" (Planck's high-l band powers are read from Observations/plik_lite_v22_TTTEEE.clik, "
+                    "also when the run uses full plik)") if tag in ("CMB_hil", "CMB_hil_TT") else ""
+            print(f"[CMB spectra] {tag}: band powers not drawn ({e}){need}")
     specs = [s for s in SPEC_ORDER if any(e["spec"] == s for e in entries)]
     if not specs:
         return None

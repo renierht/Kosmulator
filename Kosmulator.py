@@ -162,8 +162,8 @@ waic_include_cmb: bool = False
 # Neutrinos in every CLASS call (CMB spectra, r_d) and in the late-time expansion. "massive"
 # (default): one massive neutrino of nu_mass_eV plus massless ones, nu_N_eff in total, as in
 # Planck 2018 (0.06 eV, N_eff 3.046) and DESI DR2 (sum 0.06 eV, N_eff 3.044). "massless": all
-# nu_N_eff massless (Kosmulator before October 2026). BBN uses nu_N_eff too (prior_limits "N_eff";
-# a range there samples N_eff for BBN and CLASS alike).
+# nu_N_eff massless (Kosmulator before October 2026). BBN uses nu_N_eff too (CT-39); N_eff is sampled
+# only by a model that has it among its parameters, within prior_limits["N_eff"].
 neutrinos: str = "massive"
 nu_mass_eV: float = 0.06
 nu_N_eff: float = 3.044

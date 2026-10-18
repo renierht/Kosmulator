@@ -73,7 +73,8 @@ def write_run_settings(suffix: str, settings: Dict[str, Any]) -> Optional[str]:
 #: Run settings that change the likelihood: chains made with other values must not be reused
 LIKELIHOOD_SETTINGS = ("neutrinos", "nu_mass_eV", "nu_N_eff", "growth_model", "cmb_nonlinear",
                        "hmcode_version", "cmb_nuisance", "sample_H0_uncalibrated_SNe", "rd_background",
-                       "lensing_only_priors")
+                       "lensing_only_priors", "PANTHEON_SYS_COV", "CC_SYS_COV", "FS8_WIGGLEZ_COV",
+                       "FS8_AP_CORRECTION")
 
 
 def check_run_settings(suffix: str, settings: Dict[str, Any], overwrite: bool = False) -> None:
@@ -106,6 +107,7 @@ def check_run_settings(suffix: str, settings: Dict[str, Any], overwrite: bool = 
     if "rd_background" not in old:
         old["rd_background"] = "lcdm"     # runs before item 12: flat-LCDM r_d for every model
     old.setdefault("lensing_only_priors", False)   # runs before item 62 sampled n_s and tau freely
+    old.setdefault("PANTHEON_SYS_COV", None)       # runs before CT-14: Pantheon without its systematics
     for k in LIKELIHOOD_SETTINGS:
         if k not in old or k not in settings:
             continue
