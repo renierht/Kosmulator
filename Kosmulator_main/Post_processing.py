@@ -724,7 +724,7 @@ WAIC_CMB_OFF_NOTE = ("WAIC n/a: the CMB likelihoods (Planck, ACT, SPT) give one 
 
 
 def group_waic(obs_entry, obs_types, data, samples, MODEL_func, CONFIG_model, obs_index,
-               model_name, S=None, include_cmb=None):
+               model_name, S=None, include_cmb=None, info=None):
     """
     WAIC of one group from S posterior draws (seeded), and a note (or None).
 
@@ -736,6 +736,7 @@ def group_waic(obs_entry, obs_types, data, samples, MODEL_func, CONFIG_model, ob
     (constants.WAIC_INCLUDE_CMB) a group with Planck data gets nan and a note, not a
     WAIC of its other datasets only, which could not be compared with other groups.
     Draws at which a term cannot be computed are left out and counted in the note.
+    info: a dict, given p_WAIC (CT-25).
     """
     include_cmb = K.WAIC_INCLUDE_CMB if include_cmb is None else bool(include_cmb)
     types = [str(t[0] if isinstance(t, (list, tuple)) else t) for t in obs_types]
@@ -752,11 +753,21 @@ def group_waic(obs_entry, obs_types, data, samples, MODEL_func, CONFIG_model, ob
     for single_obs, single_type in zip(obs_entry, types):
         if single_type == "CMB" or single_obs not in data:
             continue
-        matrix = SP.build_log_like_matrix(
-            flat_samples=samples, obs_data=data[single_obs], obs_type=single_type,
-            obs_name=single_obs, Model_func=MODEL_func, CONFIG=CONFIG_model,
-            obs_index=obs_index, S=S, idx=idx, model_name=model_name,
-        )
+        if U._POST_POOL is not None and len(idx) > 1 and SP.pickled_size_small(data[single_obs]):
+            # CT-27: the draws in chunks through the worker pool (r_d from CLASS at each draw for
+            # BAO/DESI with BBN or CMB); the same draws in the same order, so the same matrix
+            task = SP.LogLikeRowsTask(data[single_obs], single_type, single_obs, CONFIG_model, obs_index,
+                                      model_name, group_has_cmb=bool(cmb))
+            chunks = np.array_split(samples[idx], max(1, min(len(idx) // 50, 48)))
+            parts = [np.asarray(p, dtype=float) for p in U.post_map(task, chunks)]
+            matrix = (np.concatenate(parts, axis=0) if parts and all(p.ndim == 2 and p.shape[0] for p in parts)
+                      else np.empty((0, 0)))
+        else:
+            matrix = SP.build_log_like_matrix(
+                flat_samples=samples, obs_data=data[single_obs], obs_type=single_type,
+                obs_name=single_obs, Model_func=MODEL_func, CONFIG=CONFIG_model,
+                obs_index=obs_index, S=S, idx=idx, model_name=model_name,
+            )
         if matrix.size > 0:
             cols.append(matrix)
 
@@ -794,7 +805,28 @@ def group_waic(obs_entry, obs_types, data, samples, MODEL_func, CONFIG_model, ob
         notes.append(f"WAIC from {int(ok.sum())} of {ok.size} draws (a term could not be computed at the others)")
     if ok.sum() < 2:
         return float("nan"), " | ".join(notes) or None
+    if info is not None:
+        info["p_WAIC"] = float(compute_p_waic(full[ok]))
     return float(compute_waic(full[ok])), (" | ".join(notes) or None)
+
+
+def waic_tension_note(p_waic: float, p_D: float):
+    """
+    CT-25: when p_WAIC exceeds twice p_D. A data set with a full covariance (DESI, Pantheon+, ...) or
+    BBN is one WAIC term, so when the group's data sets pull the parameters apart each term's
+    log-likelihood swings across the posterior and p_WAIC, and WAIC, rise (T10, LCDM_v / BBN + DESI_DR2
+    + Pantheon+SH0ES: p_WAIC 13.2, p_D about 4). Not a computing error. (The pointwise warning of
+    Vehtari, Gelman & Gabry 2017, p_WAIC per term > 0.4, does not fit whole data sets.)
+    """
+    try:
+        pw, pd = float(p_waic), float(p_D)
+    except (TypeError, ValueError):
+        return None
+    if not (np.isfinite(pw) and np.isfinite(pd) and pd > 0 and pw > 2.0 * pd):
+        return None
+    return (f"WAIC well above DIC: p_WAIC = {pw:.1f} against p_D = {pd:.1f}. Data sets with a full covariance "
+            "(and BBN) are one WAIC term each, so when the group's data sets pull the parameters apart "
+            "(tension) WAIC rises; compare with DIC and AIC as well")
 
 
 def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
@@ -1154,11 +1186,15 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             # per likelihood with waic_include_cmb, otherwise n/a with a note; item 53)
             if obs_samples_for_waic is not None:
                 try:
+                    _winfo: dict = {}
                     waic, waic_note = group_waic(
                         obs_entry, obs_types, data, obs_samples_for_waic, MODEL_func,
-                        CONFIG[model_name], obs_index, model_name)
+                        CONFIG[model_name], obs_index, model_name, info=_winfo)
                     if waic_note:
                         notes.append(waic_note)
+                    _tn = waic_tension_note(_winfo.get("p_WAIC"), p_D)            # CT-25
+                    if _tn:
+                        notes.append(_tn)
                     logger.debug("[WAIC] %s %s: %.4f", model_name, obs_name, waic)
                 except Exception as e:
                     print(f"[WAIC WARNING] {model_name} {obs_name}: {e}")

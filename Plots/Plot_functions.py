@@ -1252,11 +1252,12 @@ def extract_observation_data(
         units = obs_data.get("units", "absolute")
         scale = 1e-6 if units == "scaled1e6" else 1.0
         mode  = obs_data.get("mode", "mean")
+        from Kosmulator_main import constants as _Kc        # the run's N_eff, read now (CT-39)
         # meta passes backend + constants (and grid if present) to the evaluator
         meta = {
             "bbn_backend": obs_data.get("bbn_backend", "approx"),
             # Fall back to global defaults when the dataset itself does not specify Neff / tau_n
-            "Neff":  float(obs_data.get("Neff",  N_EFF_DEFAULT)),
+            "Neff":  float(obs_data.get("Neff",  _Kc.NU_N_EFF)),
             "tau_n": float(obs_data.get("tau_n", TAU_N_DEFAULT)),
             "bbn_grid":   obs_data.get("bbn_grid", None),
         }

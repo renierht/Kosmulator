@@ -1189,10 +1189,18 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         # Full draws (the model's own parameters too): r_d from rd_Class for models other than
         # LCDM, as in the likelihood (item 12)
         _draws = np.asarray(obs_samples, dtype=float)[sel]
-        rd_src = [rd_for_report({**{n: float(v) for n, v in zip(names, row)},
-                                 "H_0": float(h0), "Omega_m": float(om), "Omega_bh^2": float(ob)},
-                                model_name)
-                  for row, h0, om, ob in zip(_draws, H0s, Oms, obhs)]
+        _pts = [{**{n: float(v) for n, v in zip(names, row)},
+                 "H_0": float(h0), "Omega_m": float(om), "Omega_bh^2": float(ob)}
+                for row, h0, om, ob in zip(_draws, H0s, Oms, obhs)]
+        # CT-27: through the worker pool kept open after sampling (one CLASS r_d per draw), in chunks
+        from Kosmulator_main import utils as _Up, rd_helpers as _RDh
+        if _Up._POST_POOL is not None and len(_pts) > 1:
+            _n = max(1, min(len(_pts) // 25, 48))
+            _bounds = np.linspace(0, len(_pts), _n + 1).astype(int)
+            _ch = [_pts[a:b] for a, b in zip(_bounds[:-1], _bounds[1:]) if b > a]
+            rd_src = [x for part in _Up.post_map(_RDh.RdReportTask(model_name), _ch) for x in part]
+        else:
+            rd_src = [rd_for_report(p, model_name) for p in _pts]
         rds = np.array([r for r, _ in rd_src], dtype=float)
         n_eh98 = sum(1 for _, s in rd_src if s != "CLASS")
         if n_eh98:

@@ -17,7 +17,7 @@ Kosmulator includes every data set it supports, with its source and the papers t
 | `OHD` | H(z) compilation (31 chronometer + 20 BAO points) | `OHD.dat` | the compilation of Sharov & Vasiliev (2018), taken from that paper | values compiled from the published papers |
 | `JLA` | SDSS-II/SNLS3 Joint Light-curve Analysis (740 SNe) | `JLA/` | CosmoMC/Cobaya distribution, github.com/CobayaSampler/sn_data (JLA/, commit 61d9643); release page https://supernovae.in2p3.fr/sdss_snls_jla/ReadMe.html | no licence file at the source |
 | `JLA_legacy` | Old 359-SN distance moduli (kept to reproduce earlier runs) | `JLA_legacy.dat` | taken from the papers cited | values compiled from the published papers |
-| `Pantheon` | Pantheon SNe Ia (1048) | `Pantheon.dat` | the Pantheon sample of Scolnic et al. (2018), taken from that paper's release (github.com/dscolnic/Pantheon) | no licence file at the source |
+| `Pantheon` | Pantheon SNe Ia (1048) | `Pantheon.dat`, `Pantheon_release/` | the Pantheon sample of Scolnic et al. (2018), taken from that paper's release (github.com/dscolnic/Pantheon; Pantheon_release/: its lcparam_full_long.txt and sys_full_long.txt, unchanged) | no licence file at the source |
 | `PantheonP`, `PantheonPS` | Pantheon+ (PantheonPS: with the SH0ES Cepheid calibration) | `PantheonP.dat`, `PantheonP.cov` | Pantheon+ release, github.com/PantheonPlusSH0ES/DataRelease (Pantheon+SH0ES.dat and its STAT+SYS covariance; Kosmulator's copy: format matches) | no licence file at the source |
 | `DESY5` | DES-SN5YR Hubble diagram | `DESY5.dat`, `DESY5_covsys_000.txt` | DES-SN5YR, taken from the release of the papers cited, github.com/des-science/DES-SN5YR (DES-SN5YR_HD.csv and covsys_000) | no licence file at the source |
 | `Union3` | Union3 / UNITY1.5 binned distance moduli | `Union3.txt`, `Union3_mag_covmat.txt` | Union3 of Rubin et al. (2025), taken from that paper's release, github.com/rubind/union3_release | MIT (github.com/rubind/union3_release) |
@@ -79,6 +79,7 @@ Combinations: `CMB_PACT` = `CMB_lowl_TT` + `CMB_lowl_sroll2` + `CMB_planck_ACTcu
 ### Pantheon: Pantheon SNe Ia (1048)
 
 - D. M. Scolnic et al. (2018), The Complete Light-curve Sample of Spectroscopically Confirmed SNe Ia from Pan-STARRS1 and Cosmological Constraints from the Combined Pantheon Sample, ApJ 859, 101, arXiv:1710.00845, doi:10.3847/1538-4357/aab9bb [`scolnic18`]
+- Note: Errors of Pantheon.dat only (the paper's statistical-only analysis) unless PANTHEON_SYS_COV = "full" in constants.py, which adds the release's systematic covariance.
 
 ### PantheonP, PantheonPS: Pantheon+ (PantheonPS: with the SH0ES Cepheid calibration)
 

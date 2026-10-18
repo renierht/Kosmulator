@@ -90,7 +90,7 @@ while others are required only when specific observational datasets are used.
 
 - **AlterBBN**  
   Optional backend for Big Bang Nucleosynthesis (BBN) D/H likelihoods.  
-  Kosmulator supports approximate BBN likelihoods without AlterBBN, as well as physically motivated predictions using live AlterBBN calls or precomputed grids. The AlterBBN grid `BBN_DH_AlterBBN` uses by default is included (`Observations/BBN/bbn_grid.npz`), so AlterBBN itself is only needed for live calls or a new grid.
+  Kosmulator supports approximate BBN likelihoods without AlterBBN, as well as physically motivated predictions using live AlterBBN calls or precomputed grids. The AlterBBN grid `BBN_DH_AlterBBN` uses by default is included (`Observations/BBN/bbn_grid.npz`, made with AlterBBN v1.4: Omega_bh^2 0.0150 - 0.0310, N_eff 3.044 and 3.046, tau_n 879.4 s), so AlterBBN itself is only needed for live calls or a new grid. BBN uses the run's `nu_N_eff` (the same N_eff as CLASS); the start-up summary says where D/H comes from ("D/H from the AlterBBN grid shipped with Kosmulator ..."). Priors outside the grid (another N_eff, a sampled N_eff or tau_n, a wider Omega_bh^2 range) make Kosmulator build a new grid with AlterBBN, which replaces that file (`git checkout Observations/BBN/bbn_grid.npz` restores it); without AlterBBN it falls back to the approximation and says so.
 
 - **mpi4py** and **schwimmbad**  
   For MPI runs (`--use_mpi`, clusters).
@@ -444,6 +444,12 @@ Kosmulator/
    https://doi.org/10.1088/0067-0049/192/1/1
 
 #### Pantheon
+`Observations/Pantheon.dat` has the release's distances and their statistical errors only, as in the
+paper's statistical-only analysis (flat LCDM, Pantheon alone: Omega_m = 0.284 +- 0.012). With
+`PANTHEON_SYS_COV = "full"` in `Kosmulator_main/constants.py` (default None) the release's systematic
+covariance (`Observations/Pantheon_release/sys_full_long.txt`) is added, as in the published analysis
+(Omega_m = 0.298 +- 0.022, Scolnic et al. 2018, Sect. 6.1).
+
 1. Scolnic, D. M., Jones, D. O., Rest, A., et al. (2018).  
    *The Complete Light-curve Sample of Spectroscopically Confirmed SNe Ia from Pan-STARRS1 and Cosmological Constraints from the Combined Pantheon Sample*.  
    ApJ, 859(2), 101.  
@@ -490,7 +496,8 @@ Kosmulator/
 against its paper; where a paper gives statistical and systematic errors separately they are
 combined in quadrature. The three DESI points of Loubser (2025) are correlated, and the
 correlations are read from `Observations/CC_corr.txt` and used in the CC chi^2. The SPS-model
-systematic covariance of the D4000 points (Moresco et al. 2020) is not included.
+systematic covariance of the D4000 points (Moresco et al. 2020) is added with `CC_SYS_COV = "full"`
+(or `"ooo"`) in `Kosmulator_main/constants.py`; by default (None) it is not included.
 
 1. Moresco, M., Jimenez, R., Verde, L., et al. (2020).  
    *Setting the Stage for Cosmic Chronometers II*.  
@@ -947,7 +954,8 @@ PY
 
 #### 6) Optional: AlterBBN Installation
 Note:
-  AlterBBN is required ONLY for the BBN_DH_AlterBBN likelihood.
+  AlterBBN is required ONLY for the BBN_DH_AlterBBN likelihood, and only when its priors go beyond the
+  grid shipped in Observations/BBN/bbn_grid.npz (see Optional Dependencies above).
   Other BBN-related options (e.g. BBN_DH approx, BBN_PryMordial) do NOT require AlterBBN.
   Kosmulator does NOT use AlterBBN's standalone executable (primary.x).
 

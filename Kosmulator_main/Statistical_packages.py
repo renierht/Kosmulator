@@ -1637,7 +1637,8 @@ def bbn_predict_alterbbn(p: Dict[str, float], data: Optional[dict] = None) -> fl
     """
     data = data or {}
     obh2 = round(float(p["Omega_bh^2"]), 6)
-    neff = round(float(p.get("N_eff", data.get("Neff", N_EFF_DEFAULT))), 6)
+    from Kosmulator_main import constants as _Kc            # read at call time (set_neutrinos, CT-39)
+    neff = round(float(p.get("N_eff", data.get("Neff", _Kc.NU_N_EFF))), 6)
     tau = round(float(p.get("tau_n", data.get("tau_n", TAU_N_DEFAULT))), 3)
     return _bbn_call_cached(obh2, neff, tau)
 
@@ -1862,7 +1863,8 @@ def ensure_bbn_backend(
         return (min(lo, hi), max(lo, hi))
 
     obh2_lo, obh2_hi = _span("Omega_bh^2", (0.0200, 0.0240))
-    neff_lo, neff_hi = _span("N_eff", (N_EFF_DEFAULT, N_EFF_DEFAULT))
+    from Kosmulator_main import constants as _Kc            # read at call time (set_neutrinos, CT-39)
+    neff_lo, neff_hi = _span("N_eff", (_Kc.NU_N_EFF, _Kc.NU_N_EFF))
     tau_lo, tau_hi = _span("tau_n", (out.get("tau_n", TAU_N_DEFAULT), out.get("tau_n", TAU_N_DEFAULT)))
 
     neff_fixed = np.isclose(neff_hi, neff_lo, atol=1e-12)
@@ -1972,7 +1974,8 @@ def ensure_bbn_backend(
                         "Grid %s does not cover priors "
                         "[obh2 %.6f..%.6f vs %.6f..%.6f, "
                         "Neff %.3f..%.3f vs %.3f..%.3f, "
-                        "tau %.2f..%.2f vs %.2f..%.2f]; rebuilding.",
+                        "tau %.2f..%.2f vs %.2f..%.2f]; building a new grid with AlterBBN, which "
+                        "replaces this file (git checkout restores the grid shipped with Kosmulator).",
                         path,
                         g_obh2.min(),
                         g_obh2.max(),
@@ -1990,7 +1993,10 @@ def ensure_bbn_backend(
                 if neff_fixed and g_neff.size > 1:
                     j = int(np.abs(g_neff - neff_lo).argmin())
                     if log:
-                        log.info("BBN grid: collapsing Neff to nearest node %.3f", g_neff[j])
+                        log.debug("BBN grid: collapsing Neff to nearest node %.3f", g_neff[j])
+                        if abs(float(g_neff[j]) - float(neff_lo)) > 1e-6:
+                            log.warning("BBN grid: N_eff = %.4f requested, the grid's nearest node %.4f is used "
+                                        "(D/H changes by about 0.0135%% per 0.001 in N_eff)", neff_lo, g_neff[j])
                     G = G[:, j, :]
                     g_neff = np.array([g_neff[j]], float)
 
@@ -2005,7 +2011,8 @@ def ensure_bbn_backend(
 
                 if log:
                     dims = (g_obh2.size, g_neff.size, g_tau.size)
-                    log.info("Loaded BBN grid %s: shape=%s, effective dims=%s, logspace=%s", path, G.shape, dims, logspace)
+                    log.debug("Loaded BBN grid %s: shape=%s, effective dims=%s, logspace=%s", path, G.shape, dims, logspace)
+                out["bbn_grid_neff_nodes"] = [float(x) for x in g_neff]          # D1: for the data line
 
                 grid = {"obh2": g_obh2, "DH": G, "logspace": bool(logspace)}
                 if g_neff.size > 1:
@@ -2353,8 +2360,41 @@ def pointwise_log_like_PantP(obs_data, model, param_dict):
     )
     return np.array([-0.5 * chi2])                    # shape (1,)
 
+class LogLikeRowsTask:
+    """
+    CT-27: build_log_like_matrix for a chunk of WAIC draws in a pool worker (picklable; the model
+    function by name). With CMB data in the group the model's CLASS build is loaded first, as in
+    log_likelihood_all, so BAO's r_d comes from the same build as in the sampler.
+    """
+
+    def __init__(self, obs_data, obs_type, obs_name, CONFIG, obs_index, model_name, group_has_cmb=False):
+        self.obs_data, self.obs_type, self.obs_name = obs_data, obs_type, obs_name
+        self.CONFIG, self.obs_index, self.model_name = CONFIG, obs_index, model_name
+        self.group_has_cmb = bool(group_has_cmb)
+
+    def __call__(self, draws):
+        import User_defined_modules as UDM
+        if self.group_has_cmb:
+            from Kosmulator_main import Class_run as _CR
+            _CR.ensure_class_ready(self.model_name)
+        draws = np.atleast_2d(np.asarray(draws, dtype=float))
+        return build_log_like_matrix(draws, self.obs_data, self.obs_type, self.obs_name,
+                                     UDM.Get_model_function(self.model_name), self.CONFIG, self.obs_index,
+                                     S=len(draws), idx=np.arange(len(draws)), model_name=self.model_name)
+
+
+def pickled_size_small(obj, limit_mb: float = 8.0) -> bool:
+    """True when the arrays in obj (a dict of a data set) total less than limit_mb (CT-27: such a
+    data set travels with each chunk of draws; a larger one, e.g. Pantheon+'s 23 MB covariance, is
+    evaluated in the main process, where its cost is the covariance solve, not CLASS)."""
+    tot = 0
+    for v in (obj.values() if isinstance(obj, dict) else [obj]):
+        tot += int(getattr(v, "nbytes", 0) or 0)
+    return tot < limit_mb * 1024 * 1024
+
+
 def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
-                           Model_func, CONFIG, obs_index, S=1000, idx=None, model_name=None):
+                          Model_func, CONFIG, obs_index, S=1000, idx=None, model_name=None):
     from Kosmulator_main import utils
 
     N_total = flat_samples.shape[0]

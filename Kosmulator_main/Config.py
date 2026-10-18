@@ -165,6 +165,52 @@ def _attach_cc_systematics(d: Dict[str, np.ndarray], mode, logger=None) -> Dict[
     return d
 
 
+def pantheon_sys_covariance(z, mu, dmu) -> np.ndarray:
+    """
+    The Pantheon release's systematic covariance (Observations/Pantheon_release/sys_full_long.txt,
+    release order) in Pantheon.dat's order (CT-14). Each Pantheon.dat row (zcmb, mb + 19.3, dmb) is
+    matched to exactly one row of the release's lcparam_full_long.txt.
+    """
+    folder = os.path.join(K.OBSERVATIONS_BASE, "Pantheon_release")
+    lc = np.loadtxt(os.path.join(folder, "lcparam_full_long.txt"), usecols=(1, 4, 5), skiprows=1, ndmin=2)
+    with open(os.path.join(folder, "sys_full_long.txt"), "r") as fh:
+        n = int(fh.readline().split()[0])
+        S = np.array(fh.read().split(), dtype=float)
+    if n != lc.shape[0] or S.size != n * n:
+        raise ValueError(f"Pantheon_release: {lc.shape[0]} SNe in lcparam_full_long.txt, sys_full_long.txt "
+                         f"says {n} with {S.size} values")
+    S = S.reshape(n, n)
+    z, mu, dmu = (np.asarray(a, dtype=float) for a in (z, mu, dmu))
+    hit = ((np.abs(z[:, None] - lc[None, :, 0]) < 1e-6) & (np.abs(mu[:, None] - (lc[None, :, 1] + 19.3)) < 1e-4)
+           & (np.abs(dmu[:, None] - lc[None, :, 2]) < 1e-6))
+    counts = hit.sum(axis=1)
+    if np.any(counts != 1):
+        raise ValueError(f"Pantheon.dat: {int(np.sum(counts == 0))} row(s) without and {int(np.sum(counts > 1))} "
+                         "with several matches in the release's lcparam_full_long.txt")
+    idx = np.argmax(hit, axis=1)
+    if np.unique(idx).size != idx.size:
+        raise ValueError("Pantheon.dat: two rows match the same release row")
+    return S[np.ix_(idx, idx)]
+
+
+def _attach_pantheon_systematics(d: Dict[str, np.ndarray], mode, logger=None) -> Dict[str, np.ndarray]:
+    """Pantheon with constants.PANTHEON_SYS_COV = "full": C = diag(dmb^2) + the release's systematic
+    covariance (CT-14), as the release's CosmoMC set-up."""
+    if not mode:
+        return d
+    if mode != "full":
+        raise ValueError(f"PANTHEON_SYS_COV must be None or 'full', not {mode!r}")
+    s = np.asarray(d["type_data_error"], dtype=float)
+    C = np.diag(s ** 2) + pantheon_sys_covariance(d["redshift"], d["type_data"], s)
+    np.linalg.cholesky(C)
+    d["cov"] = C
+    d["inv_cov"] = np.linalg.inv(C)
+    if logger:
+        logger.info("Pantheon: systematic covariance added (the release's sys_full_long.txt, Scolnic et al. "
+                    "2018; PANTHEON_SYS_COV = \"full\")")
+    return d
+
+
 def _attach_fs8_extras(d: Dict[str, np.ndarray], file_path, logger=None) -> Dict[str, np.ndarray]:
     """
     f_sigma_8: the fiducial Omega_m of each row (4th column, for the AP-type
@@ -878,7 +924,7 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 pri_src = prior_limits or {}
                 priors = {
                     "Omega_bh^2": pri_src.get("Omega_bh^2", (0.019, 0.026)),
-                    "N_eff":      pri_src.get("N_eff",      (K.N_EFF_DEFAULT, K.N_EFF_DEFAULT)),
+                    "N_eff":      pri_src.get("N_eff",      (K.NU_N_EFF, K.NU_N_EFF)),     # CT-39
                     "tau_n":      pri_src.get(
                         "tau_n",
                         (observation_data[obs]["tau_n"],
@@ -897,12 +943,28 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     priors=priors,
                 )
 
-                # Nice logging for visibility
+                # What D/H comes from, in one line (D1: the grid in git is used without AlterBBN)
                 cfg = observation_data['BBN_DH_AlterBBN']
-                logger.info("BBN resolved backend: %s", cfg.get("bbn_model_effective"))
-                if cfg.get("bbn_model_effective") == "alterbbn_grid":
+                _eff = cfg.get("bbn_model_effective")
+                logger.debug("BBN resolved backend: %s", _eff)
+                if _eff == "alterbbn_grid":
+                    _g = cfg["bbn_grid"]
+                    _p = os.path.abspath(str(cfg.get("bbn_grid_path") or ""))
+                    _ship = _p == os.path.abspath(os.path.join(K.OBSERVATIONS_BASE, K.BBN_GRID_RELATIVE))
+                    _nn = cfg.get("bbn_grid_neff_nodes") or []
+                    _neff = ("N_eff sampled within %.3f - %.3f" % (_g["neff"][0], _g["neff"][-1]) if "neff" in _g
+                             else ("N_eff %.3f" % _nn[0] if _nn else "N_eff fixed"))
+                    logger.info("BBN_DH_AlterBBN: D/H from %s (%s; Omega_bh^2 %.4f - %.4f, %s); AlterBBN itself is "
+                                "not needed", "the AlterBBN grid shipped with Kosmulator" if _ship else "an AlterBBN grid",
+                                os.path.relpath(_p), float(_g["obh2"][0]), float(_g["obh2"][-1]), _neff)
+                elif _eff == "alterbbn":
+                    logger.info("BBN_DH_AlterBBN: D/H from AlterBBN, called at each point")
+                elif _eff == "approx":
+                    logger.info("BBN_DH_AlterBBN: D/H from the approximation (power law fitted to PRyMordial), "
+                                "not AlterBBN")
+                if _eff == "alterbbn_grid":
                     g = cfg["bbn_grid"]
-                    logger.info(
+                    logger.debug(
                         "Grid: obh2[%d]=[%.6f..%.6f], neff[%d]=%s, tau[%d]=%s, "
                         "logspace=%s, DH.shape=%s",
                         len(g["obh2"]), g["obh2"][0], g["obh2"][-1],
@@ -997,6 +1059,9 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                         observation_data[obs], os.path.join(K.OBSERVATIONS_BASE, "CC_corr.txt"), logger
                     )
                     _attach_cc_systematics(observation_data[obs], getattr(K, "CC_SYS_COV", None), logger)
+                if obs == "Pantheon":
+                    _attach_pantheon_systematics(observation_data[obs], getattr(K, "PANTHEON_SYS_COV", None),
+                                                 logger)                                    # CT-14
                 if obs == "f_sigma_8":
                     _attach_fs8_extras(observation_data[obs], file_path, logger)
                 if obs == "JLA_legacy":

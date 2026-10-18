@@ -26,7 +26,8 @@ C_KM_S: float = 299_792.458
 #: CMB monopole temperature [K] (Planck 2018)
 T_CMB_DEFAULT: float = 2.7255
 
-#: Standard-model effective number of relativistic species
+#: N_eff of a BBN grid file without an N_eff axis (the grids before October 2026). BBN itself uses the
+#: run's NU_N_EFF when N_eff is not sampled (CT-39), as CLASS does.
 N_EFF_DEFAULT: float = 3.046
 
 #: Radiation in the late-time E(z) of the built-in models (LCDM, w0waCDM,
@@ -42,7 +43,8 @@ LATE_TIME_RADIATION: bool = True
 #: 0.06 eV and two massless ones), one massive eigenstate of NU_MASS_EV = 0.06 eV (in Omega_m at
 #: late times) plus massless species, N_eff = NU_N_EFF = 3.044 in total (CLASS v3.3's default;
 #: Planck 2018 used 3.046). "massless": all NU_N_EFF massless
-#: (Kosmulator before item 27). BBN keeps N_EFF_DEFAULT (its grids).
+#: (Kosmulator before item 27). BBN uses the same N_eff (CT-39; Observations/BBN/bbn_grid.npz has
+#: nodes at 3.044 and 3.046, so both load without AlterBBN).
 #: Set per run in Kosmulator.py (neutrinos, nu_mass_eV, nu_N_eff) through set_neutrinos(); the
 #: values below are the defaults, or those of the run that started this process (KOSM_* variables).
 NEUTRINO_MODES: Tuple[str, ...] = ("massive", "massless")
@@ -458,6 +460,13 @@ CC_D4000_Z: Tuple[float, ...] = (0.179, 0.199, 0.352, 0.3802, 0.4004, 0.4247, 0.
 #: None (diagonal errors and CC_corr.txt only), "full" (SPS column) or "ooo"
 #: (SPS without the most discordant model).
 CC_SYS_COV = None
+
+#: Pantheon (Scolnic et al. 2018, arXiv:1710.00845, CT-14): None (the errors of Pantheon.dat only, the
+#: paper's statistical-only analysis: flat LCDM Omega_m = 0.284 +- 0.012, Table 8; Kosmulator T02 0.285
+#: +- 0.013) or "full" (adds the release's systematic covariance, Observations/Pantheon_release/
+#: sys_full_long.txt, reordered to Pantheon.dat's rows: the published analysis, Omega_m = 0.298 +- 0.022,
+#: Sect. 6.1).
+PANTHEON_SYS_COV = None
 
 # ----------------------------------------------------------------------
 # Convergence rule (zeus and emcee, utils.ConvergenceMonitor)

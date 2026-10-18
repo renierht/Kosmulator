@@ -468,6 +468,16 @@ def _compute_r_d_from_bbn_and_background(p: dict, model_name=None) -> float:
     return float(compute_rd(p))
 
 
+class RdReportTask:
+    """CT-27: rd_for_report for a chunk of parameter dicts in a pool worker (picklable)."""
+
+    def __init__(self, model_name=None):
+        self.model_name = model_name
+
+    def __call__(self, dicts):
+        return [rd_for_report(p, self.model_name) for p in dicts]
+
+
 def rd_for_report(p: Mapping[str, float], model_name=None):
     """
     r_d [Mpc] for tables, plots and diagnostics, resolved the same way as the

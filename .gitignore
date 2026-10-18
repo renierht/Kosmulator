@@ -12,7 +12,7 @@ __pycache__/
 .cache/
 *.npy
 *.npz
-# ...except the AlterBBN D/H grid BBN_DH_AlterBBN reads (27 kB)
+# ...except the AlterBBN D/H grid BBN_DH_AlterBBN reads (41 kB; N_eff 3.044 and 3.046)
 !Observations/BBN/bbn_grid.npz
 
 # =========================

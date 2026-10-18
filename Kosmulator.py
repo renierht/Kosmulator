@@ -162,7 +162,8 @@ waic_include_cmb: bool = False
 # Neutrinos in every CLASS call (CMB spectra, r_d) and in the late-time expansion. "massive"
 # (default): one massive neutrino of nu_mass_eV plus massless ones, nu_N_eff in total, as in
 # Planck 2018 (0.06 eV, N_eff 3.046) and DESI DR2 (sum 0.06 eV, N_eff 3.044). "massless": all
-# nu_N_eff massless (Kosmulator before October 2026). BBN keeps its own N_eff (prior_limits).
+# nu_N_eff massless (Kosmulator before October 2026). BBN uses nu_N_eff too (prior_limits "N_eff";
+# a range there samples N_eff for BBN and CLASS alike).
 neutrinos: str = "massive"
 nu_mass_eV: float = 0.06
 nu_N_eff: float = 3.044
@@ -221,7 +222,7 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "ln10^10_As": (2.5, 3.5),
     "n_s": (0.9, 1.1),
     "100theta_s": (1.035, 1.047),
-    "N_eff": (K.N_EFF_DEFAULT, K.N_EFF_DEFAULT),
+    "N_eff": (nu_N_eff, nu_N_eff),       # BBN uses the N_eff of the CLASS calls (CT-39); a range samples it
     "tau_n": (K.TAU_N_DEFAULT, K.TAU_N_DEFAULT),
     "alpha": (0.00, 1.00),
     "B": (0.00, 0.333),
@@ -251,7 +252,7 @@ reference_values: Dict[str, float] = {
     "ln10^10_As": 3.045,
     "Omega_de": 0.69,
     "100theta_s": 1.04110,
-    "N_eff": K.N_EFF_DEFAULT,
+    "N_eff": nu_N_eff,
     "tau_n": K.TAU_N_DEFAULT,
     "Omega_b": 0.05,
     "w0": -1.0,

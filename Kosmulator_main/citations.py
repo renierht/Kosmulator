@@ -330,10 +330,14 @@ DATA: List[Dict[str, object]] = [
     dict(tags=("JLA_legacy",), name="Old 359-SN distance moduli (kept to reproduce earlier runs)",
          files=("JLA_legacy.dat",), licence="papers", source="taken from the papers cited",
          refs=("hicken09", "neill09", "conley11"), note="Prefer JLA."),
-    dict(tags=("Pantheon",), name="Pantheon SNe Ia (1048)", files=("Pantheon.dat",), licence="none_repo",
+    dict(tags=("Pantheon",), name="Pantheon SNe Ia (1048)", files=("Pantheon.dat", "Pantheon_release/"),
+         licence="none_repo",
          source="the Pantheon sample of Scolnic et al. (2018), taken from that paper's release "
-                "(github.com/dscolnic/Pantheon)",
-         refs=("scolnic18",)),
+                "(github.com/dscolnic/Pantheon; Pantheon_release/: its lcparam_full_long.txt and "
+                "sys_full_long.txt, unchanged)",
+         refs=("scolnic18",),
+         note="Errors of Pantheon.dat only (the paper's statistical-only analysis) unless "
+              "PANTHEON_SYS_COV = \"full\" in constants.py, which adds the release's systematic covariance."),
     dict(tags=("PantheonP", "PantheonPS"), name="Pantheon+ (PantheonPS: with the SH0ES Cepheid calibration)",
          files=("PantheonP.dat", "PantheonP.cov"), licence="none_repo",
          source="Pantheon+ release, github.com/PantheonPlusSH0ES/DataRelease (Pantheon+SH0ES.dat and its STAT+SYS "

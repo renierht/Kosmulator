@@ -201,6 +201,24 @@ def _copy_and_read(src: str, tmpdir: str, engine: str):
     raise RuntimeError(f"could not read a consistent copy of {src}: {last}")
 
 
+#: Per-group lists of a model's CONFIG (Config.create_config); dicts keyed by group index end in "_by_group"
+_PER_GROUP_LISTS = ("observations", "observation_types", "parameters", "reference_values", "prior_limits",
+                    "ndim", "nwalker_by_obs")
+
+
+def _subset_groups(cfg: dict, keep: List[int]) -> dict:
+    """A copy of a model's CONFIG with only the groups `keep` (per-group lists, and the dicts keyed by
+    group index renumbered), for a corner plot of the groups that have chains so far (CT-28)."""
+    n = len(cfg["observations"])
+    out = dict(cfg)
+    for k, v in cfg.items():
+        if k in _PER_GROUP_LISTS and isinstance(v, list) and len(v) == n:
+            out[k] = [v[j] for j in keep]
+        elif k.endswith("_by_group") and isinstance(v, dict):
+            out[k] = {i: v[j] for i, j in enumerate(keep) if j in v}
+    return out
+
+
 def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
          latex_enabled: bool = False) -> List[str]:
     """Corner plot, means and convergence so far of every chain of run <suffix>. Returns the plot paths."""
@@ -297,6 +315,12 @@ def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
                     log.debug("peek: convergence summary failed for %s: %s", key, e)
             if not Samples:
                 continue
+            # CT-28: groups without a chain yet (the run has not reached them) are left out of the
+            # corner plot; make_CornerPlot needs samples for every group of the CONFIG it gets
+            keep = [j for j, g in enumerate(c["observations"])
+                    if U.generate_label(g, config_model=c, obs_index=j) in Samples]
+            if len(keep) < len(c["observations"]):
+                c = _subset_groups(c, keep)
             if any(str(t) == "CMB" for ts in c["observation_types"] for t in ts):
                 with U.quiet_cstdio():
                     CR.ensure_class_ready(model)    # r_d column of the table, as in the run
