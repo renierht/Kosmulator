@@ -918,6 +918,19 @@ GROUND_NUISANCE_PARAMS: Dict[str, Tuple[str, ...]] = {
     "CMB_planck_ACTcut": ("A_planck",), "CMB_lowl_sroll2": ("A_planck",),
     "CMB_PACT": ("A_planck", "P_act"), "CMB_SPA": ("A_planck", "P_act", "Tcal", "Ecal"),
 }
+#: Nuisance parameters of the likelihoods (CT-15, CT-37): not drawn in the corner plots unless
+#: corner_show_nuisance (Kosmulator.py) or --corner-show-all-cmb-params; listed after a "nuisance" line
+#: in the parameter table (CT-43). The tables and statistics keep every parameter.
+#: CMB: every plik nuisance, A_planck, and the ACT and SPT calibrations.
+CMB_NUISANCE_PARAM_NAMES: Set[str] = (set(PLANCK_NUISANCE_ALL) | set(PLANCK_NUISANCE_FIXED)
+                                      | set(GROUND_NUISANCE_SAMPLED) | {"A_planck"})
+#: SN calibration and standardisation
+SN_NUISANCE_PARAM_NAMES: Set[str] = {"M_abs", "alpha_JLA", "beta_JLA"}
+#: Nuisance parameters drawn in the corner plots all the same (Renier, 18 Oct: A_planck, as before)
+CORNER_SHOWN_NUISANCE: Set[str] = {"A_planck"}
+#: corner_show_nuisance in Kosmulator.py (MCMC_setup.main sets it): True draws the nuisance parameters
+CORNER_SHOW_NUISANCE: bool = False
+
 #: tau prior for a group with ACT or SPT and no low-l EE likelihood: the one candl applies by
 #: default (SPT-lite: from the Planck PR4 maps, as in Camphuis et al. 2025; ACT-lite: ACT DR6)
 CMB_TAU_PRIORS: Dict[str, Tuple[float, float]] = {"CMB_SPT": (0.051, 0.006), "CMB_ACT": (0.0566, 0.0058)}

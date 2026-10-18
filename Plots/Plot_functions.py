@@ -8,7 +8,7 @@ Exports:
   • Console/UI helpers: phase_banner, section_banner, print_rule
   • Label helpers: greek_Symbols, format_for_latex, texify_label, pretty_obs_name
   • Table helpers: align_table_to_parameters, add_corner_table,
-                   print_aligned_latex_table, print_stats_table
+                   print_parameter_table, print_stats_table
   • Data helpers: extract_observation_data, fetch_best_fit_values,
                   partition_by_compatibility, residual_unit,
                   OBS_COLOR_ORDER, MODEL_COLOR
@@ -50,7 +50,7 @@ __all__ = [
     "greek_Symbols", "format_for_latex", "texify_label", "pretty_obs_name",
     # tables
     "align_table_to_parameters", "add_corner_table", "place_corner_legend",
-    "print_aligned_latex_table", "print_parameter_list_table", "print_cmb_summary_matrix", "print_stats_table",
+    "print_parameter_table", "print_parameter_list_table", "print_stats_table",
     # data helpers
     "extract_observation_data", "fetch_best_fit_values",
     "partition_by_compatibility", "residual_unit",
@@ -823,41 +823,90 @@ def _obs_col_width_from_names(names, base=30, wmin=28, wmax=72, pad=2):
         longest = base
     return max(wmin, min(wmax, max(base, longest)))
     
-def print_aligned_latex_table(
-    latex_table: List[List[str]],
+def _table_width(out) -> int:
+    """Line width of the parameter table: the terminal's (read from /dev/tty, since the console output
+    usually goes through tee) on the console, else 160; 160 in a file (CT-43)."""
+    if out is not None:
+        return 160
+    try:
+        with open("/dev/tty") as tty:
+            return max(80, int(os.get_terminal_size(tty.fileno()).columns))
+    except Exception:
+        pass
+    try:
+        return max(80, int(os.get_terminal_size(1).columns))
+    except Exception:
+        return 160
+
+
+def print_parameter_table(
+    table: List[List[str]],
     parameter_labels: Sequence[str],
-    observation_names: Sequence[str],
+    group_names: Sequence[str],
+    nuisance=(),
+    order: Optional[Sequence[str]] = None,
+    width: Optional[int] = None,
     out=None,
+    title: Optional[str] = None,
+    notes: Sequence[str] = (),
 ) -> None:
     """
-    Pretty-print an aligned LaTeX-style table.
-
-    If `out` is None, print to stdout with colour accents.
-    If `out` is a file-like object, write plain text to that file.
+    One table per model (CT-42, CT-43): parameters as rows (`order`, then any others), groups as
+    columns; `table` has one row per group, aligned to `parameter_labels`. Each column is as wide as
+    its longest entry, header included. When the table is wider than `width` (console: the terminal,
+    else 160; file: 160) the groups are split into blocks, each with the parameter column and a line
+    "(groups a - b of n)"; a block lists only the rows it has values for. The likelihoods' nuisance
+    parameters (`nuisance`) come after a "nuisance" line. `notes` are printed under the table.
     """
-    blue, red, reset = "\033[34m", "\033[31m", "\033[0m"
+    blue, reset = "\033[34m", "\033[0m"
+    emit = (lambda s="": print(s)) if out is None else (lambda s="": print(s, file=out))
+    labels = list(parameter_labels)
+    n = len(group_names)
+    cell = {p: [(str(table[g][j]).strip() if g < len(table) and j < len(table[g]) else "") for g in range(n)]
+            for j, p in enumerate(labels)}
+    rows = [p for p in (order or []) if p in cell] + [p for p in labels if p not in set(order or [])]
+    nuis = set(nuisance or ())
+    main = [p for p in rows if p not in nuis]
+    extra = [p for p in rows if p in nuis]
+    pw = max([len("Parameter"), len("nuisance")] + [len(p) for p in rows])
+    gw = [max([len(str(group_names[g]))] + [len(cell[p][g]) for p in rows]) for g in range(n)]
+    width = int(width or _table_width(out))
+    blocks, cur, used = [], [], pw
+    for g in range(n):
+        if cur and used + 3 + gw[g] > width:
+            blocks.append(cur)
+            cur, used = [], pw
+        cur.append(g)
+        used += 3 + gw[g]
+    if cur:
+        blocks.append(cur)
 
-    # Dynamic width for the Observation column
-    obs_w = _obs_col_width_from_names(observation_names, base=30, wmin=28, wmax=72, pad=2)
+    if title:
+        emit(title)
+    for b, gs in enumerate(blocks):
+        if b:
+            emit()
+        if len(blocks) > 1:
+            emit(f"(groups {gs[0] + 1} - {gs[-1] + 1} of {n})" if len(gs) > 1 else f"(group {gs[0] + 1} of {n})")
+        line = lambda first, cells: (first.ljust(pw) + " | "
+                                     + " | ".join(c.ljust(gw[g]) for c, g in zip(cells, gs))).rstrip()
+        head = line("Parameter", [str(group_names[g]) for g in gs])
+        emit(blue + head + reset if out is None else head)
+        emit("-" * len(head))
+        for p in main:
+            vals = [cell[p][g] for g in gs]
+            if any(vals):
+                emit(line(p, vals))
+        shown = [p for p in extra if any(cell[p][g] for g in gs)]
+        if shown:
+            emit("nuisance".ljust(pw) + " |")
+            for p in shown:
+                emit(line(p, [cell[p][g] for g in gs]))
+    if notes:
+        emit()
+    for note in notes or ():
+        emit(note)
 
-    header = ["Observation"] + list(parameter_labels)
-    head_str = f"{header[0]:<{obs_w}} | " + " | ".join(f"{c:<32}" for c in header[1:])
-
-    if out is None:
-        print(blue + head_str + reset)
-        print("-" * len(head_str))
-    else:
-        print(head_str, file=out)
-        print("-" * len(head_str), file=out)
-
-    for name, row in zip(observation_names, latex_table):
-        row_str = " | ".join(f"{c:<32}" for c in row)
-        if out is None:
-            obs_str = red + f"{name:<{obs_w}}" + reset
-            print(f"{obs_str} | {row_str}")
-        else:
-            obs_str = f"{name:<{obs_w}}"
-            print(f"{obs_str} | {row_str}", file=out)
 
 def print_parameter_list_table(
     row: Sequence[str],
@@ -876,7 +925,9 @@ def print_parameter_list_table(
     if title is None:
         title = f"Detailed parameter table for {observation_name}"
 
-    header = f"{'Parameter':<30} | {'Value':>30}"
+    # the value column as wide as the longest value (CT-42), at least 30
+    vw = max([30] + [len(str(v).strip()) for v in row])
+    header = f"{'Parameter':<30} | {'Value':>{vw}}"
 
     if out is None:
         print(title)
@@ -891,75 +942,12 @@ def print_parameter_list_table(
         v = str(val).strip()
         if not v:
             continue
-        line = f"{pname:<30} | {v:>30}"
+        line = f"{pname:<30} | {v:>{vw}}"
         if out is None:
             print(line)
         else:
             print(line, file=out)
 
-def print_cmb_summary_matrix(
-    aligned_table: List[List[str]],
-    parameter_labels: Sequence[str],
-    observation_names: Sequence[str],
-    cmb_param_names: Sequence[str],
-    title: str = "CMB parameter summary (rows = params, columns = CMB obs):",
-    out=None,
-) -> None:
-    """
-    Print a matrix:
-
-        CMB parameter | Obs1 | Obs2 | ...
-
-    where columns are all observation rows whose name contains 'CMB'.
-    Only parameters in `cmb_param_names` and present in `parameter_labels` are shown.
-    """
-    # Select CMB rows by name (simple and robust)
-    cmb_row_indices = [
-        i for i, name in enumerate(observation_names) if "CMB" in str(name)
-    ]
-    if not cmb_row_indices:
-        return
-
-    # Which parameters will form the rows?
-    params = [p for p in cmb_param_names if p in parameter_labels]
-    if not params:
-        return
-
-    # Column indices of those parameters
-    col_index = {p: parameter_labels.index(p) for p in params}
-
-    # Build header: 'CMB parameter' + CMB obs names
-    header = ["CMB parameter"] + [observation_names[i] for i in cmb_row_indices]
-    col_w = 26
-    val_w = 32
-
-    head_str = f"{header[0]:<{col_w}} | " + " | ".join(
-        f"{name:<{val_w}}" for name in header[1:]
-    )
-
-    if out is None:
-        print(title)
-        print(head_str)
-        print("-" * len(head_str))
-    else:
-        print(title, file=out)
-        print(head_str, file=out)
-        print("-" * len(head_str), file=out)
-
-    # Each row: one parameter
-    for p in params:
-        values = []
-        for ridx in cmb_row_indices:
-            row = aligned_table[ridx]
-            col = col_index[p]
-            values.append(str(row[col]).strip() if col < len(row) else " ")
-        row_str = f"{p:<{col_w}} | " + " | ".join(f"{v:<{val_w}}" for v in values)
-        if out is None:
-            print(row_str)
-        else:
-            print(row_str, file=out)
-
-        
 def _obs_col_width(stats_list, base=38, wmin=30, wmax=68, pad=2):
     """Pick a nice width for the Observation column.
     - Start from `base`
@@ -1596,8 +1584,9 @@ def model_curve_for_type(
         if zgrid.size == 0:
             return np.array([]), r"$D_{\ell}$ [$\mu K^2$]"
 
-        # Pick likelihood mode
-        mode = "lowl" if "lowl" in obs_type else "hil"
+        # the point's lensed CLASS run, as the likelihoods use (CT-35); the short "lowl" run
+        # (l_max 31, unlensed) is up to 45% low in TT near l = 29
+        mode = "hil"
 
         # Pick spectrum
         spec_key = "tt"
@@ -1607,8 +1596,8 @@ def model_curve_for_type(
             spec_key = "ee"
 
         # Compute up to what we need for the dense curve
-        l_req = int(np.nanmax(zgrid))
-        l_req = max(30, l_req + 5)
+        from Kosmulator_main import constants as _Kc
+        l_req = int(_Kc.CMB_CLASS_LMAX)                     # the likelihood's cache entry (CT-35)
 
         cls = SP._compute_cls_cached(param_dict, l_req, mode=mode)
         arr = np.asarray(cls.get(spec_key, []), dtype=float)
@@ -1676,9 +1665,10 @@ def evaluator_for_points(
         # 1. Determine l_max safely
         # We need the theory to cover at least the max ell in the data (z)
         data_max_l = int(np.max(z))
-        l_max_request = max(2500, data_max_l + 10) # Ensure at least 2500 or data max
-        
-        mode = "lowl" if "lowl" in obs_type else "hil"
+        from Kosmulator_main import constants as _Kc
+        l_max_request = max(int(_Kc.CMB_CLASS_LMAX), data_max_l + 10)   # the likelihood's run (CT-35)
+
+        mode = "hil"
         
         # 2. Compute Cls
         cls = SP._compute_cls_cached(param_dict, l_max_request, mode=mode)

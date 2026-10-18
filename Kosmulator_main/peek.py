@@ -280,6 +280,7 @@ def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
     PLOT_SETTINGS = U.build_plot_settings(observations, os.path.join("Peek", suffix), bool(latex_enabled), False)
     normalize_save_roots(PLOT_SETTINGS)
     PLOT_SETTINGS["corner_show_all_cmb_params"] = bool(all_params)
+    PLOT_SETTINGS["corner_show_nuisance"] = bool(all_params) or bool(st.get("corner_show_nuisance", False))
     rules = U.convergence_rules(PLOT_SETTINGS, st.get("convergence"))
 
     out_paths: List[str] = []

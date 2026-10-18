@@ -1,8 +1,7 @@
 """
-CMB band-power figure of the best-fit plots (item 57).
+CMB band-power figure of the best-fit plots (item 57; every CMB group since CT-34).
 
-For a group with ACT, SPT, the Planck + ACT (+ SPT) combinations or a CMB lensing likelihood,
-one figure with a panel per spectrum (TT, TE, EE and the lensing power spectrum), each with
+For every group with CMB data (Planck-only groups too), one figure with a panel per spectrum (TT, TE, EE and the lensing power spectrum), each with
 the band powers of every CMB likelihood of the group (Planck high- and low-l, ACT DR6,
 SPT-3G D1, ACT DR6 + Planck PR4, SPT-3G MUSE and Planck 2018 lensing), the median model, its
 68% band from posterior draws, and below it the residuals in units of each band power's error.
@@ -13,7 +12,12 @@ each multipole's chi^2 for the tabulated low-l EE (SimAll, SRoll2), and against 
 the model's side for Planck's low-l TT band powers. Residuals beyond the panel are drawn at
 its edge.
 
-Saved as best_fits/<group>/cmb_spectra.png next to bestfit.png.
+Colours (CT-41): one per likelihood of the group, in order, from the run's palette as in bestfit.png
+(constants.OBS_COLOR_ORDER, without colours close to the model's), the model in constants.MODEL_COLOR,
+its band with PLOT_SETTINGS["model_band_alpha"]. The y-range of TT, TE and EE covers the model and
+the band powers whose error bar is smaller than the model's range there (CT-34 c).
+
+Saved as best_fits/<group>/cmb_spectra.png; bestfit.png keeps the group's other data.
 """
 from __future__ import annotations
 
@@ -25,16 +29,14 @@ import matplotlib.pyplot as plt
 from Kosmulator_main import constants as K
 
 SPEC_ORDER = ("TT", "TE", "EE", "PP")
-#: Colours by experiment (first match on the band powers' label)
-EXPERIMENT_COLOURS = (("Planck low-l", "#17becf"), ("Planck PR4", "#9467bd"), ("Planck", "#1f77b4"),
-                      ("ACT", "#ff7f0e"), ("SPT", "#2ca02c"))
-#: Tags drawn in this figure (the best-fit figure keeps the Planck-only groups)
-FIGURE_TAGS = tuple(K.GROUND_CMB_TAGS) + tuple(K.LENSING_TAGS)
+#: Tags drawn in this figure: every CMB likelihood (CT-34; before, the Planck-only groups were in
+#: bestfit.png)
+FIGURE_TAGS = tuple(K.CMB_TAGS)
 
 
 def wants_figure(group: Sequence[str]) -> bool:
-    """True if the group has a CMB likelihood this figure draws (ground-based or lensing)."""
-    return any(str(t) in FIGURE_TAGS for t in group or ())
+    """True if the group has a CMB likelihood."""
+    return any(str(t) in FIGURE_TAGS or str(t).startswith("CMB_") for t in group or ())
 
 
 def _components(group: Sequence[str]) -> List[str]:
@@ -47,11 +49,16 @@ def _components(group: Sequence[str]) -> List[str]:
     return out
 
 
-def _colour(label: str) -> str:
-    for key, col in EXPERIMENT_COLOURS:
-        if label.startswith(key):
-            return col
-    return "#7f7f7f"
+def _data_colours(labels) -> Dict[str, str]:
+    """One colour per likelihood of the group, in order, from the run's palette as in bestfit.png
+    (constants.OBS_COLOR_ORDER), without colours close to the model's (constants.MODEL_COLOR)."""
+    import matplotlib.colors as mc
+    m = np.array(mc.to_rgb(K.MODEL_COLOR))
+    pal = [c for c in K.OBS_COLOR_ORDER if np.linalg.norm(np.array(mc.to_rgb(c)) - m) > 0.35] or ["b"]
+    out: Dict[str, str] = {}
+    for lab in labels:
+        out.setdefault(lab, pal[len(out) % len(pal)])
+    return out
 
 
 def _curves(cl: Dict[str, np.ndarray], ell_tt: np.ndarray, ell_pp: np.ndarray) -> Dict[str, np.ndarray]:
@@ -117,14 +124,16 @@ def cmb_spectra_figure(model_name: str, obs_key: str, group: Sequence[str], para
     label = model_label or model_name
     fig = plt.figure(figsize=(10.0, 3.6 * len(specs)))
     try:
-        _panels(fig, specs, entries, med, band, ell_tt, ell_pp, label)
+        _panels(fig, specs, entries, med, band, ell_tt, ell_pp, label,
+                band_alpha=float(PLOT_SETTINGS.get("model_band_alpha", 0.15)))
     except Exception:
         plt.close(fig)                       # the caller only reports the error
         raise
     return fig
 
 
-def _panels(fig, specs, entries, med, band, ell_tt, ell_pp, label) -> None:
+def _panels(fig, specs, entries, med, band, ell_tt, ell_pp, label, band_alpha=0.15) -> None:
+    colours = _data_colours([e["label"] for e in entries])
     outer = fig.add_gridspec(nrows=len(specs), ncols=1, hspace=0.32, top=1.0 - 0.05 / len(specs))
     off = 0
     legend: Dict[str, object] = {}
@@ -136,16 +145,16 @@ def _panels(fig, specs, entries, med, band, ell_tt, ell_pp, label) -> None:
         y = med[s]
         n = y.size
         if band is not None:
-            ax.fill_between(x[:n], band[0][off:off + n], band[1][off:off + n], color="k", alpha=0.15,
-                            linewidth=0, zorder=5, label="68% band")
+            ax.fill_between(x[:n], band[0][off:off + n], band[1][off:off + n], color=K.MODEL_COLOR,
+                            alpha=band_alpha, linewidth=0, zorder=5, label="68% band")
         off += n
-        ax.plot(x[:n], y, color="r", lw=1.6, zorder=6, label=f"{label} (median)")
+        ax.plot(x[:n], y, color=K.MODEL_COLOR, lw=1.6, zorder=6, label=f"{label} (median)")
         axr.axhline(0.0, color="0.4", lw=0.9)
         for h in (-2.0, 2.0):
             axr.axhline(h, color="0.7", lw=0.7, ls=":")
-        xs = []
+        xs, pts = [], []
         for e in (e for e in entries if e["spec"] == s):
-            col = _colour(e["label"])
+            col = colours[e["label"]]
             yerr = e.get("err_lohi", e["err"])
             ax.errorbar(e["ell"], e["y"], yerr=yerr, fmt="o", ms=2.6, lw=0.8, color=col, ecolor=col,
                         capsize=0, alpha=0.9, zorder=3, label=e["label"])
@@ -154,15 +163,28 @@ def _panels(fig, specs, entries, med, band, ell_tt, ell_pp, label) -> None:
                     (np.asarray(e["y"]) - np.asarray(e["model"])) / np.asarray(e["err"])
             axr.plot(e["ell"], np.clip(r, -4.8, 4.8), "o", ms=2.4, color=col, alpha=0.9)
             xs.append(np.asarray(e["ell"], float))
+            _err = np.asarray(e["err"], float)
+            pts.append((np.asarray(e["ell"], float), np.asarray(e["y"], float),
+                        _err if _err.ndim == 1 else np.max(_err, axis=0)))
         allx = np.concatenate(xs)
         ax.set_xscale("log")
         ax.set_xlim(max(1.5, 0.85 * allx.min()), 1.15 * allx.max())
         if s != "PP":
-            # y range from the model: the noisiest band powers (Planck EE at l > 1000) would
-            # otherwise set it; points outside are still in the residual panel
+            # y range from the model, extended to the band powers whose error bar is smaller than the
+            # model's range (CT-34 c: SRoll2 at l = 2 and low-l TT at l = 2, 5 were cut off); the noisiest
+            # ones (Planck EE at l > 1000) still do not set it and are in the residual panel
             inx = (x[:n] >= ax.get_xlim()[0]) & (x[:n] <= ax.get_xlim()[1])
             lo, hi = float(np.min(y[inx])), float(np.max(y[inx]))
-            pad = 0.25 * (hi - lo)
+            span = hi - lo
+            for ex, ey, ee in pts:
+                ok = np.isfinite(ey) & np.isfinite(ee) & (ee < span)
+                if ok.any():
+                    lo = min(lo, float(np.min(ey[ok] - ee[ok])))
+                    hi = max(hi, float(np.max(ey[ok] + ee[ok])))
+                low = np.isfinite(ey) & (ex <= 30)          # the low-l points themselves, always
+                if low.any():
+                    lo, hi = min(lo, float(np.min(ey[low]))), max(hi, float(np.max(ey[low])))
+            pad = 0.08 * (hi - lo) if (hi - lo) > span else 0.25 * span
             ax.set_ylim(lo - pad, hi + pad)
         ax.set_ylabel(r"$10^7\,[L(L+1)]^2 C_L^{\phi\phi}/2\pi$" if s == "PP" else rf"$D_\ell^{{{s}}}$ [$\mu$K$^2$]")
         axr.set_ylabel(r"$\Delta/\sigma$")

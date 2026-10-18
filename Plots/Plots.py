@@ -39,8 +39,8 @@ from Plots.Plot_functions import (
 
     # table + label helpers
     greek_Symbols, format_for_latex, add_corner_table, place_corner_legend, pretty_obs_name,
-    align_table_to_parameters, print_aligned_latex_table,
-    print_parameter_list_table, print_cmb_summary_matrix,
+    align_table_to_parameters, print_parameter_table,
+    print_parameter_list_table,
 
     # observation/model helpers
     partition_by_compatibility, residual_unit,
@@ -267,112 +267,51 @@ def _medval(d, k):
         except Exception:
             return None
             
-def _header_params_for_model(config_model: dict, PLOT_SETTINGS: dict) -> list[str]:
+def params_by_use(config_model: dict) -> list[str]:
     """
-    Decide which parameters appear in the 'core summary' header for tables.
-
-    Logic:
-      * Start from the union of all parameters in first–seen order.
-      * If CMB tracks are present and corner_show_all_cmb_params=False,
-        drop the 'extra' CMB parameters and keep only the core CMB set
-        (H_0, Omega_bh^2, Omega_dh^2).
+    The model's parameters over all its groups, those used by more groups first, ties in first-seen
+    order (CT-15): the corner plot's order and the rows of the parameter table (CT-43).
     """
-    # union of parameters in first–seen order
-    full_order, seen = [], set()
+    order, count = [], {}
     for plist in config_model.get("parameters", []):
         for p in plist:
-            if p not in seen:
-                seen.add(p)
-                full_order.append(p)
+            if p not in count:
+                order.append(p)
+                count[p] = 0
+            count[p] += 1
+    return sorted(order, key=lambda p: (-count[p], order.index(p)))
 
-    header = list(full_order)
+def _param_table_kwargs(config_model: dict, model_name: str, aligned_table, param_labels, obs_names) -> dict:
+    """
+    Arguments of print_parameter_table for one model (CT-43): the corner plot's order, the likelihoods'
+    nuisance parameters, the title, and the note on r_d derived for groups whose likelihood does not
+    use it (CT-24: no BAO/DESI; a prediction from Omega_b h^2 and Omega_m h^2, not a measurement).
+    """
+    notes = []
+    if "r_d" in param_labels:
+        j = param_labels.index("r_d")
+        derived = []
+        for i, obs in enumerate(config_model.get("observations", [])):
+            if i >= len(aligned_table) or i >= len(obs_names):
+                continue
+            pars = config_model.get("parameters", [[]] * (i + 1))[i]
+            has_val = j < len(aligned_table[i]) and str(aligned_table[i][j]).strip()
+            if has_val and "r_d" not in pars and not any(o in ("BAO", "DESI_DR1", "DESI_DR2") for o in obs):
+                derived.append(str(obs_names[i]))
+        if derived:
+            notes.append("r_d of " + ", ".join(derived) + ": derived from the posterior (CLASS rs_drag at the "
+                         "draws), not used by these groups' likelihoods.")
+    return dict(nuisance=set(K.CMB_NUISANCE_PARAM_NAMES) | set(K.SN_NUISANCE_PARAM_NAMES),
+                order=params_by_use(config_model),
+                title=f"Model: {model_name}, parameters (median and 68% interval):",
+                notes=notes)
 
-    # Detect CMB tracks
-    has_cmb = any(
-        any(str(tag).startswith("CMB_") or str(tag) == "CMB" for tag in obs_set)
-        for obs_set in config_model.get("observations", [])
-    )
-    show_all_cmb = bool(PLOT_SETTINGS.get("corner_show_all_cmb_params", False))
-
-    # CMB "core" set kept in the main summary
-    _cmb_core = {"H_0", "Omega_bh^2", "Omega_dh^2"}
-
-    if has_cmb and not show_all_cmb:
-        # union of all parameters that appear in CMB observation groups
-        cmb_param_union = set()
-        for obs_set, plist in zip(
-            config_model.get("observations", []),
-            config_model.get("parameters", []),
-        ):
-            if any(str(tag).startswith("CMB_") or str(tag) == "CMB" for tag in obs_set):
-                cmb_param_union.update(plist)
-
-        keep_from_cmb = _cmb_core & cmb_param_union
-        cmb_to_drop   = cmb_param_union - keep_from_cmb
-        header = [p for p in header if p not in cmb_to_drop]
-
-    return header
 
 def _is_cmb_obs_name(name: str) -> bool:
     """Heuristic: treat any obs whose name contains 'CMB' as a CMB dataset."""
     return "CMB" in str(name)
 
 
-def _main_table_parameters(config_model: dict, param_labels: list[str]) -> list[str]:
-    """
-    Decide which parameters should appear in the main aligned table.
-
-    Rules:
-      - Keep ALL parameters that are used with ANY non-CMB observation.
-      - Always keep the CMB core set:
-            H_0, Omega_bh^2, Omega_dh^2, Omega_m (derived)
-      - Drop parameters that are used *only* in purely-CMB groups
-        (i.e., groups whose obs list contains only CMB-tagged entries).
-    """
-    obs_groups   = config_model.get("observations", [])
-    param_groups = config_model.get("parameters", [])
-
-    core_cmb = {"H_0", "Omega_bh^2", "Omega_dh^2", "Omega_m (derived)"}
-
-    # Track where each parameter is used
-    usage = {p: {"cmb": False, "non_cmb": False} for p in param_labels}
-
-    for obs_set, plist in zip(obs_groups, param_groups):
-        has_cmb     = any(_is_cmb_obs_name(tag) for tag in obs_set)
-        has_non_cmb = any(not _is_cmb_obs_name(tag) for tag in obs_set)
-
-        for p in plist:
-            if p not in usage:
-                # parameter appears in CONFIG but not in the aligned table — ignore
-                continue
-            if has_cmb:
-                usage[p]["cmb"] = True
-            if has_non_cmb:
-                usage[p]["non_cmb"] = True
-
-    main_params: list[str] = []
-
-    for p in param_labels:
-        # 1) Always keep the CMB core, regardless
-        if p in core_cmb:
-            main_params.append(p)
-            continue
-
-        info = usage.get(p)
-        if info is None:
-            # Not seen in CONFIG at all (e.g. some derived/user param) → keep
-            main_params.append(p)
-            continue
-
-        # CMB-only nuisance: appears in CMB groups, never with non-CMB
-        cmb_only = info["cmb"] and not info["non_cmb"]
-
-        # Drop only true CMB-only nuisances; keep everything else
-        if not cmb_only:
-            main_params.append(p)
-
-    return main_params
-    
 def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
     """Run the full plotting pipeline in a clean, deterministic order.
 
@@ -420,57 +359,12 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
     # Collect “S lines” per model for BAO-like outputs
     bao_S_lines_by_model = defaultdict(list)
 
-    # Threshold for "high parameter" rows (CMB high-l etc.)
-    wide_row_threshold = int(PLOT_SETTINGS.get("wide_table_param_threshold", 10))
-
-    # CMB primary list for the matrix
-    CMB_PRIMARY_FOR_MATRIX = [
-        "H_0", "Omega_bh^2", "Omega_dh^2", "ln10^10_As", "n_s", "tau_reio", "A_planck"
-    ]
-
-    # 3a) Pretty-print main aligned table + detailed CMB parameter table
+    # 3a) One parameter table per model (CT-43): parameters as rows (the corner order, the likelihoods'
+    #     nuisance parameters after a "nuisance" line), groups as columns, in blocks that fit the line
     for model_name, (aligned_table, param_labels, obs_names) in all_tables.items():
         print_rule()
-        print(f"Model: {model_name} Aligned LaTeX Table:")
-
-        config_model = CONFIG[model_name]
-
-        # ---------- Main table: all non-CMB + CMB core params ----------
-        main_params = _main_table_parameters(config_model, list(param_labels))
-        main_indices = [param_labels.index(p) for p in main_params]
-        main_table   = [[row[i] for i in main_indices] for row in aligned_table]
-
-        # This is the table you showed (JLA, f_sigma_8, combos, CMB_* rows, etc.)
-        print_aligned_latex_table(main_table, main_params, obs_names)
-        print()
-
-        # ---------- Detailed CMB table: ONLY parameters used in CMB obs ----------
-        # Find which rows correspond to CMB datasets
-        cmb_row_indices = [
-            i for i, name in enumerate(obs_names)
-            if _is_cmb_obs_name(name) and i < len(aligned_table)
-        ]
-
-        if cmb_row_indices:
-            # Take ONLY parameters that have a non-empty value in at least one CMB row
-            cmb_param_names: list[str] = []
-            for j, pname in enumerate(param_labels):
-                if any(
-                    j < len(aligned_table[i])
-                    and str(aligned_table[i][j]).strip()
-                    for i in cmb_row_indices
-                ):
-                    cmb_param_names.append(pname)
-
-            if cmb_param_names:
-                print_cmb_summary_matrix(
-                    aligned_table=aligned_table,
-                    parameter_labels=param_labels,
-                    observation_names=obs_names,
-                    cmb_param_names=cmb_param_names,
-                    title="Detailed CMB parameter table (rows = params, columns = CMB obs):",
-                )
-
+        print_parameter_table(aligned_table, list(param_labels), obs_names, **_param_table_kwargs(
+            CONFIG[model_name], model_name, aligned_table, list(param_labels), obs_names))
         print_rule()
         print()
 
@@ -650,45 +544,13 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
         aligned_table, param_labels, obs_names = all_tables[model]
 
         with open(pretty_path, "w", encoding="utf-8") as out:
-            print(f"Model: {model} Aligned LaTeX Table:", file=out)
             if getattr(K, "RUN_SETTINGS", None):
                 from Kosmulator_main.utils import settings_header
                 print(settings_header(), file=out)          # CT-26
-            print(file=out)
-
-            # 1) Main aligned table: same core set as console
-            config_model = CONFIG[model]
-            main_params  = _main_table_parameters(config_model, list(param_labels))
-            idx          = [param_labels.index(p) for p in main_params]
-            main_table   = [[row[i] for i in idx] for row in aligned_table]
-
-            print_aligned_latex_table(main_table, main_params, obs_names, out=out)
-            print(file=out)
-
-            # 2) Detailed CMB parameter table (only if there ARE CMB observations)
-            cmb_row_indices = [
-                i for i, name in enumerate(obs_names)
-                if "CMB" in str(name) and i < len(aligned_table)
-            ]
-            if cmb_row_indices:
-                cmb_param_names: list[str] = []
-                for j, pname in enumerate(param_labels):
-                    if any(
-                        j < len(aligned_table[i])
-                        and str(aligned_table[i][j]).strip()
-                        for i in cmb_row_indices
-                    ):
-                        cmb_param_names.append(pname)
-
-                if cmb_param_names:
-                    print_cmb_summary_matrix(
-                        aligned_table=aligned_table,
-                        parameter_labels=param_labels,
-                        observation_names=obs_names,
-                        cmb_param_names=cmb_param_names,
-                        title="Detailed CMB parameter table (rows = params, columns = CMB obs):",
-                        out=out,
-                    )
+                print(file=out)
+            # the same table and blocks as the console (CT-43; 160 characters per line)
+            print_parameter_table(aligned_table, list(param_labels), obs_names, out=out, **_param_table_kwargs(
+                CONFIG[model], model, aligned_table, list(param_labels), obs_names))
 
             # 3) Append S-lines directly into the pretty file (no S_scale_summary.txt anymore)
             s_lines = bao_S_lines_by_model.get(model, [])
@@ -840,8 +702,11 @@ def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_
     for ax in (ax1, ax2):
         ax.axvline(burn, color="r", ls="--", lw=1.0, alpha=0.6, label="end of burn-in" if ax is ax1 else None)
         if monitor.earliest_stop > burn:
-            ax.axvline(monitor.earliest_stop, color="0.4", ls=":", lw=1.0,
-                       label="earliest stop" if ax is ax1 else None)
+            # CT-16: the buffer shaded and named, so a stop at its end is explained
+            ax.axvspan(burn, monitor.earliest_stop, color="C1", alpha=0.08, lw=0, zorder=0)
+            ax.axvline(monitor.earliest_stop, color="C1", ls="--", lw=1.2,
+                       label=(f"buffer (--autocorr-buffer {int(monitor.earliest_stop - burn)}):\n"
+                              f"no stop before step {int(monitor.earliest_stop)}") if ax is ax1 else None)
         if monitor.stopped_at is not None:
             ax.axvline(monitor.stopped_at, color="C2", ls="-", lw=1.5,
                        label="stopped (converged)" if ax is ax1 else None)
@@ -852,8 +717,13 @@ def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_
     # The title says what the stopping rule (ConvergenceMonitor.update) needs, not only the last check
     streak = int(getattr(monitor, "streak", 0) or 0)
     ended = getattr(monitor, "ended_at", None)
-    if monitor.stopped_at is not None or (ok.size and ok[-1] and streak >= need
-                                           and float(it[-1]) >= float(monitor.earliest_stop)):
+    _fm = monitor.first_met() if hasattr(monitor, "first_met") else None
+    if (monitor.stopped_at is not None and _fm is not None and _fm < monitor.stopped_at
+            and monitor.earliest_stop > burn and monitor.stopped_at <= monitor.earliest_stop + monitor.check_every):
+        status = (f"converged; conditions met from step {_fm}, stopped at the end of the buffer "
+                  f"(step {int(monitor.stopped_at)})")                                    # CT-16
+    elif monitor.stopped_at is not None or (ok.size and ok[-1] and streak >= need
+                                             and float(it[-1]) >= float(monitor.earliest_stop)):
         status = "converged"                 # stopped, or met the rule at the run's last check
     elif ended is not None:
         status = f"not converged in {int(ended)} steps"
@@ -891,14 +761,21 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     """
 
     
-    # 1) union of parameters across all observation groups (first-seen order)
-    full_param_order, _seen = [], set()
-    for plist in CONFIG["parameters"]:
-        for p in plist:
-            if p not in _seen:
-                _seen.add(p)
-                full_param_order.append(p)
-    num_params = len(full_param_order)
+    # 1) union of parameters across all observation groups, the ones used by more groups first
+    #    (CT-15: a parameter of one group, e.g. M_abs, no longer sits in the middle of the grid)
+    full_param_order = params_by_use(CONFIG)
+    # Nuisance parameters and, per group, parameters that are only their prior (CT-15, CT-30, CT-37):
+    # not drawn unless corner_show_nuisance (or --corner-show-all-cmb-params / --peek --all)
+    show_nuis = bool(PLOT_SETTINGS.get("corner_show_nuisance", False)
+                     or PLOT_SETTINGS.get("corner_show_all_cmb_params", False))
+    _hidden = set() if show_nuis else ((set(K.CMB_NUISANCE_PARAM_NAMES) | set(K.SN_NUISANCE_PARAM_NAMES))
+                                       - set(K.CORNER_SHOWN_NUISANCE))
+    _unc = {} if show_nuis else {int(k): set(v) for k, v in
+                                 (CONFIG.get("unconstrained_params_by_group") or {}).items()}
+    _drawn = set()
+    for _i, _pl in enumerate(CONFIG["parameters"]):
+        _drawn |= {p for p in _pl if p not in _hidden and p not in _unc.get(_i, set())}
+    num_params = len([p for p in full_param_order if p in _drawn])
 
     # 2) GetDist plotter + typography
     g = gd_plots.get_subplot_plotter(subplot_size=4, subplot_size_ratio=0.8)
@@ -1048,6 +925,17 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         plims = (CONFIG.get("prior_limits") or [{}] * (i + 1))[i] or {}
         ranges = {p: tuple(plims[p]) for p in names if p in plims}
 
+        # CT-30: a parameter that is only its prior in this group (H_0 of uncalibrated SNe) is left
+        # out of this group's distribution (GetDist's bandwidth warnings; the prior carries no
+        # information); other groups still draw it
+        _drop = [k for k, p in enumerate(names) if p in _unc.get(i, set())]
+        if _drop and len(_drop) < len(names):
+            _keep = [k for k in range(len(names)) if k not in _drop]
+            names = [names[k] for k in _keep]
+            labels = [labels[k] for k in _keep]
+            ranges = {p: r for p, r in ranges.items() if p in names}
+            chains = ([np.asarray(c)[:, _keep] for c in chains] if isinstance(chains, list)
+                      else np.asarray(chains)[:, _keep])
         ms = MCSamples(samples=chains, names=names, labels=labels, ranges=ranges)
         ms.plotColor = palette[i % len(palette)]
         distributions.append(ms)
@@ -1063,26 +951,10 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         any(str(tag).startswith("CMB_") or str(tag) == "CMB" for tag in obs_set)
         for obs_set in CONFIG.get("observations", [])
     )
-    show_all_cmb = bool(PLOT_SETTINGS.get("corner_show_all_cmb_params", False))
-
-    # Commonly reported CMB primary parameter set seen in the literature
-    _cmb_primary = {
-        "H_0", "Omega_bh^2", "Omega_dh^2", "ln10^10_As", "n_s", "tau_reio", "A_planck"
-    }
-
-    if has_cmb and not show_all_cmb:
-        # Build union of parameters that belong to any CMB_* observation group
-        cmb_param_union = set()
-        for obs_set, plist in zip(CONFIG.get("observations", []), CONFIG.get("parameters", [])):
-            if any(str(tag).startswith("CMB_") or str(tag) == "CMB" for tag in obs_set):
-                cmb_param_union.update(plist)
-
-        # Keep only the paper-standard subset from the CMB union; drop the rest from the *corner axes*
-        keep_from_cmb = _cmb_primary & cmb_param_union
-        cmb_to_drop = cmb_param_union - keep_from_cmb
-
-        # Rebuild header with CMB nuisances removed; non-CMB params remain intact
-        header_params = [p for p in header_params if p not in cmb_to_drop]
+    # CT-37: a drop-list of the likelihoods' nuisance parameters (constants), not a keep-list: the
+    # keep-list {H_0, Omega_bh^2, Omega_dh^2, ln10^10_As, n_s, tau_reio, A_planck} also dropped every
+    # model parameter a CMB group samples (w0, wa, n, ...). A_planck is drawn (CORNER_SHOWN_NUISANCE).
+    header_params = [p for p in header_params if p in _drawn]
     # ----------------------------------------------------------------
 
     # 4) pretty legend labels (LaTeX or plain depending on settings)
@@ -1565,20 +1437,19 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
             # Posterior draws for the shaded 68% bands
             band_draws = _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS)
 
-            # ACT, SPT, their combinations with Planck and CMB lensing are drawn in their own
-            # figure (cmb_spectra.png, item 57: each likelihood's own band powers); the
-            # best-fit figure keeps the other data of the group
+            # Every CMB likelihood of the group is drawn in its own figure (cmb_spectra.png, item 57:
+            # each likelihood's own band powers; CT-34: Planck-only groups too, all of a group's CMB in
+            # one figure); the best-fit figure keeps the other data of the group
             from Plots import CMB_spectra as _CS
-            _fig_tags = [t for t in obs_list_raw if t in _CS.FIGURE_TAGS]
-            obs_list_raw = [t for t in obs_list_raw if t not in _CS.FIGURE_TAGS]
+            _fig_tags = [t for t in obs_list_raw if str(t).startswith("CMB_")]
+            obs_list_raw = [t for t in obs_list_raw if not str(t).startswith("CMB_")]
 
             # CMB groups: one lensed CLASS run per draw. Compute them ahead through the
             # sampling pool (in this process without one) so the band loop reads them (item 52).
-            _cmb_names = [str(t) for t in obs_list_raw if str(t).startswith("CMB_")]
-            if (_cmb_names or _fig_tags) and band_draws:
+            if _fig_tags and band_draws:
                 from Kosmulator_main import Statistical_packages as _SP
-                _modes = sorted({"lowl" if t in ("CMB_lowl", "CMB_lowl_TT") else "hil" for t in _cmb_names}
-                                | ({"hil"} if _fig_tags else set()))
+                # the point's lensed CLASS run, as the likelihoods use (CT-35: not the short "lowl" run)
+                _modes = ["hil"]
                 _SP.clear_cls_prefetch()                    # the previous group's spectra
                 # CT-38 (b): say so before the runs (several minutes with HMcode and l_max 8500)
                 print(f"[CMB] {model_name} {obs_key}: computing up to {(len(band_draws) + 3) * len(_modes)} CLASS "
@@ -1594,7 +1465,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
                 try:
                     from Kosmulator_main import Statistical_packages as _SPc, constants as _Kc
                     _fig = _CS.cmb_spectra_figure(
-                        model_name, obs_key, list(_fig_tags) + [t for t in obs_list_raw if str(t).startswith("CMB_")],
+                        model_name, obs_key, list(_fig_tags),
                         params_med, band_draws, PLOT_SETTINGS,
                         lambda p: _SPc._compute_cls_cached(p, _Kc.CMB_CLASS_LMAX, mode="hil", model_name=model_name),
                         model_label=model_disp)

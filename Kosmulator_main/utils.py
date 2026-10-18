@@ -2108,6 +2108,16 @@ class ConvergenceMonitor:
         st["stopped_at"] = self.stopped_at
         return st
 
+    def first_met(self) -> Optional[int]:
+        """The first check at which the rule held (consecutive checks included), whether or not the
+        run could stop there (CT-16: before the end of --autocorr-buffer it could not)."""
+        streak = 0
+        for i_, ok in zip(self.hist["it"], self.hist["ok"]):
+            streak = streak + 1 if ok else 0
+            if streak >= self.consecutive:
+                return int(i_)
+        return None
+
     def steps_needed(self, st: Dict[str, Any]) -> Optional[int]:
         """Rough number of extra steps for the length and ESS conditions at the current tau_max."""
         tau, w = st.get("tau_max"), st.get("walkers") or self.walkers
@@ -2139,6 +2149,12 @@ class ConvergenceMonitor:
         if st.get("converged"):
             where = (f"stopped at step {st['stopped_at']}" if st.get("stopped_at")
                      else f"met the rule at the end ({st['it']} steps)")
+            fm = self.first_met()
+            if st.get("stopped_at") and fm is not None and fm < int(st["stopped_at"]) \
+                    and int(st["stopped_at"]) <= self.earliest_stop + self.check_every:
+                # CT-16: the conditions held earlier; the run went on to the end of the buffer
+                where += (f", the end of the --autocorr-buffer (no stop before step {self.earliest_stop}); "
+                          f"the conditions held from step {fm}")
             return f"[{model_name} | {group}] {engine} converged, {where}: " + "; ".join(parts) + "."
         more = self.steps_needed(st)
         extra = f" Roughly {more} more steps are needed at this tau_max." if more else ""

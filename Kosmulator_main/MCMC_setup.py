@@ -239,6 +239,7 @@ def main(
     zeus_light_mode: bool = True,
     rd_background: str = "model",
     lensing_only_priors: bool = True,
+    corner_show_nuisance: bool = False,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -280,6 +281,7 @@ def main(
     K.CMB_NUISANCE = _mode
     # WAIC of groups with Planck data: one term per Planck likelihood, or n/a (item 53)
     K.WAIC_INCLUDE_CMB = bool(waic_include_cmb)
+    K.CORNER_SHOW_NUISANCE = bool(corner_show_nuisance)          # CT-15
     # Neutrinos in every CLASS call and in the late-time E(z) (items 27, 13). Before any pool
     # exists: spawned workers inherit them through the KOSM_* variables set here.
     K.set_neutrinos(neutrinos, nu_mass_eV, nu_N_eff)
@@ -316,6 +318,7 @@ def main(
     PLOT_SETTINGS["corner_show_all_cmb_params"] = bool(
         getattr(args, "corner_show_all_cmb_params", False)
     )
+    PLOT_SETTINGS["corner_show_nuisance"] = bool(corner_show_nuisance)       # CT-15
     PLOT_SETTINGS["corner_table_full_params"] = bool(
         getattr(args, "corner_table_full", False)
     )

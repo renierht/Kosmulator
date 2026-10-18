@@ -203,6 +203,11 @@ rd_background: str = "model"
 # et al. 2024, arXiv:2304.05203). Add a BBN tag (e.g. BBN_DH) for Omega_b h^2; it also calibrates r_d.
 # False: n_s and tau_reio sampled within their top-hat priors (as before October 2026).
 lensing_only_priors: bool = True
+# Corner plots: the likelihoods' nuisance parameters (Planck's foregrounds and calibrations, the ACT and
+# SPT calibrations, the SN calibration M_abs and JLA's alpha and beta) and, per group, parameters that are
+# only their prior (H_0 of uncalibrated SNe with sample_H0_uncalibrated_SNe) are left out unless True
+# (A_planck is drawn either way). The tables and statistics list every parameter.
+corner_show_nuisance: bool = False
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -321,6 +326,7 @@ def main() -> None:
         zeus_light_mode=zeus_light_mode,
         rd_background=rd_background,
         lensing_only_priors=lensing_only_priors,
+        corner_show_nuisance=corner_show_nuisance,
     )
 
 
