@@ -267,6 +267,25 @@ def _medval(d, k):
         except Exception:
             return None
             
+def corner_parameters(config_model: dict, PLOT_SETTINGS: dict):
+    """
+    (the parameters the corner plot draws, in params_by_use order; {group index: parameters left out of
+    that group's distribution}). Left out unless PLOT_SETTINGS["corner_show_nuisance"] or
+    ["corner_show_all_cmb_params"]: the likelihoods' nuisance parameters (constants.CMB_NUISANCE_PARAM_NAMES,
+    SN_NUISANCE_PARAM_NAMES; CT-15, CT-37), except CORNER_SHOWN_NUISANCE (A_planck), and, per group, the
+    parameters that are only their prior there (unconstrained_params_by_group, CT-30).
+    """
+    show = bool(PLOT_SETTINGS.get("corner_show_nuisance", False)
+                or PLOT_SETTINGS.get("corner_show_all_cmb_params", False))
+    hidden = set() if show else ((set(K.CMB_NUISANCE_PARAM_NAMES) | set(K.SN_NUISANCE_PARAM_NAMES))
+                                 - set(K.CORNER_SHOWN_NUISANCE))
+    unc = {} if show else {int(k): set(v) for k, v in (config_model.get("unconstrained_params_by_group") or {}).items()}
+    drawn = set()
+    for i, pl in enumerate(config_model.get("parameters", [])):
+        drawn |= {p for p in pl if p not in hidden and p not in unc.get(i, set())}
+    return [p for p in params_by_use(config_model) if p in drawn], unc
+
+
 def params_by_use(config_model: dict) -> list[str]:
     """
     The model's parameters over all its groups, those used by more groups first, ties in first-seen
@@ -766,16 +785,9 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     full_param_order = params_by_use(CONFIG)
     # Nuisance parameters and, per group, parameters that are only their prior (CT-15, CT-30, CT-37):
     # not drawn unless corner_show_nuisance (or --corner-show-all-cmb-params / --peek --all)
-    show_nuis = bool(PLOT_SETTINGS.get("corner_show_nuisance", False)
-                     or PLOT_SETTINGS.get("corner_show_all_cmb_params", False))
-    _hidden = set() if show_nuis else ((set(K.CMB_NUISANCE_PARAM_NAMES) | set(K.SN_NUISANCE_PARAM_NAMES))
-                                       - set(K.CORNER_SHOWN_NUISANCE))
-    _unc = {} if show_nuis else {int(k): set(v) for k, v in
-                                 (CONFIG.get("unconstrained_params_by_group") or {}).items()}
-    _drawn = set()
-    for _i, _pl in enumerate(CONFIG["parameters"]):
-        _drawn |= {p for p in _pl if p not in _hidden and p not in _unc.get(_i, set())}
-    num_params = len([p for p in full_param_order if p in _drawn])
+    _drawn_list, _unc = corner_parameters(CONFIG, PLOT_SETTINGS)
+    _drawn = set(_drawn_list)
+    num_params = len(_drawn_list)
 
     # 2) GetDist plotter + typography
     g = gd_plots.get_subplot_plotter(subplot_size=4, subplot_size_ratio=0.8)

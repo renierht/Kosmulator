@@ -2243,7 +2243,8 @@ def emcee_autocorr_stopping(
         except Exception:
             pass
 
-    for sample in sampler.sample(pos, iterations=nsteps, progress=True):
+    for sample in sampler.sample(pos, iterations=nsteps, progress=True,
+                                 progress_kwargs={"desc": "Sampling progress "}):        # CT-09: as zeus's bar
         it_global = int(sampler.iteration)          # backend total (includes resumed steps)
 
         if (print_enabled and print_every > 0 and (it_global % print_every) == 0

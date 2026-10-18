@@ -1761,6 +1761,7 @@ def _run_mcmc_impl(
                 return backend.get_chain(discard=burn, flat=True)
 
             print(f"\nInitialising ensemble of {nwalker} walkers...")
+            _t_resume = time.time()
             try:
                 last_state = backend.get_chain(flat=False)[-1]
             except IndexError:
@@ -1807,7 +1808,8 @@ def _run_mcmc_impl(
                 else:
                     # Manual loop to allow step printing (Pool-safe)
                     for state in sampler.sample(
-                        last_state, iterations=nsteps - current, progress=True
+                        last_state, iterations=nsteps - current, progress=True,
+                        progress_kwargs={"desc": "Sampling progress "},          # CT-09: as zeus's bar
                     ):
                         it = sampler.iteration          # the backend holds the resumed steps too
                         if (
@@ -1827,6 +1829,8 @@ def _run_mcmc_impl(
                                 _show(it, state.coords, lp)                     # CT-29
 
                     flat_samples = sampler.get_chain(discard = burn, flat = True)
+                log.info("[%s | %s] emcee sampling took %s", model_name, _resolved_key,   # CT-09, resumed too
+                         utils.format_elapsed_time(time.time() - _t_resume))
                 #Extract and write log_prob + loglike on resume
                 if saveChains:
                     _flush_backends()                           # CT-19: every step in the file first
@@ -1913,7 +1917,8 @@ def _run_mcmc_impl(
             blobs = sampler.get_blobs(discard = burn, flat = True)
         else:
             # Manual loop to allow step printing (Pool-safe)
-            for state in sampler.sample(start_state, iterations=nsteps, progress=True):
+            for state in sampler.sample(start_state, iterations=nsteps, progress=True,
+                                        progress_kwargs={"desc": "Sampling progress "}):   # CT-09
                 it = sampler.iteration
                 if (
                     print_enabled
