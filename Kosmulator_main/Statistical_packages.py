@@ -2424,6 +2424,9 @@ def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
         param_dict = utils.ensure_background_params(param_dict)
 
         if obs_name in ("DESI_DR1", "DESI_DR2", "BAO"):
+            # CT-46: r_d as the sampler has it (rd_Class for a model other than LCDM with BBN or Planck)
+            from Kosmulator_main import rd_helpers as _RDw
+            _RDw._maybe_calibrate_rd(param_dict, CONFIG, obs_index)
             ll_i = pointwise_log_like_DESI(obs_data, Model_func, param_dict, obs_type)
 
         elif obs_name in ("PantheonP", "PantheonPS"):

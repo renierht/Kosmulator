@@ -951,7 +951,11 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
 
                     elif obs in ("BAO", "DESI_DR1", "DESI_DR2"):
                         type_tag = obs + ("+BBN" if bao_rd_calibrated(obs_entry) else "")
-                        chi_total += float(Calc_DESI_chi(obs_data, MODEL_func, dict(p_eval), type_tag))
+                        # CT-46: r_d as the sampler has it (_theta_params): with BBN or Planck in the group
+                        # from CLASS with the model's own E(z) (rd_Class); it was CLASS's flat-LCDM r_d here
+                        _pb = dict(p_eval)
+                        RD._maybe_calibrate_rd(_pb, CONFIG[model_name], obs_index)
+                        chi_total += float(Calc_DESI_chi(obs_data, MODEL_func, _pb, type_tag))
                         n_points += len(obs_data["redshift"])
 
                     elif obs_type == "SNe":
