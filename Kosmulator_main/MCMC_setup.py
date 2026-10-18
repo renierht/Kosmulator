@@ -1113,8 +1113,13 @@ def run_mcmc_for_all_models(
                     CR.ensure_class_ready(model_name, force=False, no_rebuild=False)
                 did_class_prep = True
 
-            # Work on a copy so per-obs modifications don't leak into the next set
-            data_work = deepcopy(data)
+            # Work on a copy so per-obs modifications don't leak into the next set. CT-06: only this
+            # group's data sets and the entries that are not data sets (the CMB lensing file paths):
+            # the pool file and every worker hold this dictionary (the JLA group's file held every
+            # data set of the run, 122 MB instead of 26 MB). The likelihoods read data[obs] only for
+            # the group's own obs (log_likelihood_all).
+            _run_obs = {o for _g in observations for o in _g} | set(obs_set)
+            data_work = deepcopy({k: v for k, v in data.items() if k in obs_set or k not in _run_obs})
             data_work = apply_pantheon_cov(data_work, obs_set, pantheon_cov)
 
             if "PantheonP" in data_work:

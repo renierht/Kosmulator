@@ -287,8 +287,9 @@ def parse_cli_args():
         const=1,       # user passed flag without value => print every call
         default=None,  # flag absent => printing disabled
         type=int,
-        help="Print likelihood diagnostics (components + TOTAL) for one walker. "
-             "Optional N prints every Nth likelihood call (default if flag is present: 1, Higher N = less printouts).",
+        help="Every N steps (default 1 when given without N), for the walker with the highest "
+             "log-posterior: each data set's chi^2, the log prior and the TOTAL log-posterior. Each "
+             "printed step evaluates the data sets once more in the main process (with CMB data a CLASS run).",
     )
     parser.add_argument(
         "--peek", action="store_true",
@@ -1582,6 +1583,25 @@ def cleanup_pantheon_cov(data: Dict[str, Any], obs_tag: str = "PantheonP"):
 # 7) Chain load-or-run orchestration
 # ───────────────────────────────────────────────────────────────────────────────
 
+def warn_unfinished_chain(model_name: str, group: str, path: str, steps: int, nsteps: int, converged) -> None:
+    """
+    CT-07: a chain loaded without --resume that did not end by the convergence rule. Fewer steps than
+    nsteps and no converged flag: the run was stopped or killed (the flag is written at the end).
+    The chain is loaded as it is, as before.
+    """
+    if converged is not None and bool(converged):
+        return
+    name = os.path.basename(path)
+    if int(steps) < int(nsteps):
+        log.warning("[%s | %s] %s has %d of %d steps and did not finish (stopped or killed): it is loaded "
+                    "as it is and its results are preliminary. --resume continues it.",
+                    model_name, group, name, int(steps), int(nsteps))
+    else:
+        log.warning("[%s | %s] %s reached nsteps (%d) without meeting the convergence rule: it is loaded as "
+                    "it is and its results are preliminary. --resume with a larger nsteps continues it.",
+                    model_name, group, name, int(steps))
+
+
 def _cite_engine(engine: str) -> None:
     """Record the sampler whose chain the run uses, also when it is loaded (the run's citations.md)."""
     try:
@@ -1667,6 +1687,9 @@ def load_or_run_chain(
         burn = int(CONFIG_model.get("burn", 0) or 0)
         with h5py.File(zeus_chain, "r") as f:
             all_samples = f["samples"][:]    # (nsteps, nwalker, ndim)
+            warn_unfinished_chain(model_name, other_kwargs.get("obs_key") or "+".join(map(str, other_kwargs.get("obs") or [])),
+                                  zeus_chain, all_samples.shape[0], CONFIG_model["nsteps"],
+                                  f.attrs.get("converged", None))                       # CT-07
             # Guard against silly values
             if burn >= all_samples.shape[0]:
                 burn = 0
@@ -1699,8 +1722,13 @@ def load_or_run_chain(
                 )
 
         # A1) Load without resuming
-        print(f"[INFO] Loading chain from: {chain_path}\n")
         if not resumeChains:
+            print(f"[INFO] Loading chain from: {chain_path}\n")
+            with h5py.File(chain_path, "r") as h5f:
+                _conv = h5f.attrs.get("converged", None)
+            warn_unfinished_chain(model_name, other_kwargs.get("obs_key") or "+".join(map(str, other_kwargs.get("obs") or [])),
+                                  chain_path, Kosmulator_MCMC._saved_steps(chain_path) or 0, CONFIG_model["nsteps"],
+                                  _conv)
             return Kosmulator_MCMC.load_mcmc_results(
                 output_path=output_dir,
                 file_name=chain_file,
@@ -1780,6 +1808,10 @@ def load_or_run_chain(
             f"       Re-using samples from {chain_path}.\n"
         )
         _cite_engine("emcee")
+        with h5py.File(chain_path, "r") as h5f:                                     # CT-07
+            _conv = h5f.attrs.get("converged", None)
+        warn_unfinished_chain(model_name, other_kwargs.get("obs_key") or "+".join(map(str, other_kwargs.get("obs") or [])),
+                              chain_path, Kosmulator_MCMC._saved_steps(chain_path) or 0, CONFIG_model["nsteps"], _conv)
         return Kosmulator_MCMC.load_mcmc_results(
             output_path=output_dir,
             file_name=chain_file,
@@ -2034,6 +2066,23 @@ class ConvergenceMonitor:
         self.last = st
         return st
 
+    def seed(self, it: int, chain) -> None:
+        """
+        CT-08: a resumed run's saved steps. The check at the last multiple of check_every in them is
+        made, as the run would have made it, so the resumed run's first check can judge tau's
+        stability against it (before, the first check after a resume could never stop the run).
+        It counts towards the consecutive checks as in an uninterrupted run; it never stops the run.
+        """
+        it = (int(it) // self.check_every) * self.check_every
+        if it <= 0:
+            return
+        try:
+            st = self._evaluate(it, chain)
+        except Exception:
+            return
+        if st is not None:
+            self.streak = self.streak + 1 if st["ok"] else 0
+
     def update(self, it: int, chain) -> bool:
         st = self._evaluate(it, chain)
         if st is None:
@@ -2100,6 +2149,24 @@ class ConvergenceMonitor:
                 + " Treat these results as preliminary; increase nsteps.")
 
 
+def _warn_trapped(window_chain, model_name: str, group: str, param_names, warned: set) -> None:
+    """CT-18: one warning per trapped emcee walker (trapped_walkers on the last 1000 steps)."""
+    tw = trapped_walkers(window_chain, window=len(window_chain), stride=len(window_chain))
+    x = np.asarray(window_chain[-1], dtype=float)
+    names = list(param_names or [f"p{i}" for i in range(x.shape[1])])
+    med, sd = np.median(x, axis=0), np.std(x, axis=0)
+    for k, (share, m, _) in sorted(tw.items()):
+        if k in warned:
+            continue
+        warned.add(k)
+        z = np.abs(x[k] - med) / np.where(sd > 0, sd, 1.0)
+        where = ", ".join(f"{names[i]} = {x[k, i]:.4g}" for i in np.argsort(-z)[:min(4, len(names))])
+        log.warning("[%s | %s] emcee walker %d has moved in %.0f%% of the last %d steps (median %.0f%%), at %s: "
+                    "it sits in a narrow part of the posterior, which slows convergence (diagnostic only; the "
+                    "chain is not changed). zeus handles such regions better (--force_zeus).",
+                    model_name, group, k, 100 * share, len(window_chain), 100 * m, where)
+
+
 def emcee_autocorr_stopping(
     pos: np.ndarray,
     sampler: "emcee.EnsembleSampler",
@@ -2117,6 +2184,7 @@ def emcee_autocorr_stopping(
     print_enabled: bool = False,
     print_every: int = 0,
     param_names: Optional[List[str]] = None,
+    components_fn=None,
 ) -> np.ndarray:
     """
     Run emcee for up to `nsteps` more steps, checking the convergence rule
@@ -2152,6 +2220,12 @@ def emcee_autocorr_stopping(
     )
     sampler.kosm_converged = False
     sampler.kosm_monitor = monitor
+    _warned_trapped: set = set()
+    if int(resume_offset or 0) > 0:
+        try:
+            monitor.seed(int(resume_offset), sampler.get_chain())   # CT-08: as for zeus
+        except Exception:
+            pass
 
     for sample in sampler.sample(pos, iterations=nsteps, progress=True):
         it_global = int(sampler.iteration)          # backend total (includes resumed steps)
@@ -2161,13 +2235,21 @@ def emcee_autocorr_stopping(
             lp = getattr(sample, "log_prob", None)
             if lp is not None:
                 lp = np.asarray(lp, dtype=float)
-                if lp.size:
+                if lp.size and components_fn is not None:
+                    components_fn(it_global, sample.coords, lp)                 # CT-29
+                elif lp.size:
                     print(f"[EMCEE Step {it_global}] Log-Post: Max={np.nanmax(lp):.4f} | "
                           f"Mean={np.nanmean(lp):.4f}", flush=True)
 
         if (it_global % check_every) != 0:
             continue
-        stop = monitor.update(it_global, sampler.get_chain())
+        _ch = sampler.get_chain()
+        if it_global >= 1000:                                   # CT-18: trapped walkers, once each
+            try:
+                _warn_trapped(_ch[-1000:], model_name, group, param_names, _warned_trapped)
+            except Exception:
+                pass
+        stop = monitor.update(it_global, _ch)
         try:
             MP.convergence_plot(monitor, plot_path, model_name, group, PLOT_SETTINGS)
         except Exception as e:
@@ -2199,8 +2281,9 @@ class ZeusConvergenceCallback:
 
     def __init__(self, monitor: "ConvergenceMonitor", ncheck: int, done: int = 0, prefix_chain=None,
                  plot_func=None, append_writer=None, precision_switch_iter: Optional[int] = None,
-                 fine_kwargs: Optional[dict] = None, debug: bool = False):
+                 fine_kwargs: Optional[dict] = None, debug: bool = False, components_fn=None):
         self.monitor = monitor
+        self.components_fn = components_fn
         self.ncheck = max(1, int(ncheck))
         self.done = int(done)
         self.prefix = None if prefix_chain is None else np.asarray(prefix_chain, dtype=float)
@@ -2222,7 +2305,15 @@ class ZeusConvergenceCallback:
                 if self.debug:
                     print(f"[Zeus] precision switch failed: {e}")
 
-        if K.print_loglike and (iteration % K.print_loglike_every == 0):
+        step = self.done + int(iteration)
+        if K.print_loglike and (step % K.print_loglike_every == 0) and self.components_fn is not None \
+                and log_prob is not None and len(log_prob):
+            try:
+                self.components_fn(step, np.asarray(chain)[-1], np.asarray(log_prob)[-1])     # CT-29
+            except Exception as e:
+                if self.debug:
+                    print(f"[Zeus] --print_loglike failed: {e}")
+        elif K.print_loglike and (iteration % K.print_loglike_every == 0):
             valid_lp = log_prob[np.isfinite(log_prob)] if log_prob is not None else np.array([])
             if valid_lp.size > 0:
                 print(f"[Zeus Step {iteration}] Log-Post: Max={np.max(valid_lp):.4f} | "
@@ -2249,10 +2340,10 @@ class ZeusConvergenceCallback:
 
 def make_zeus_callbacks(monitor: "ConvergenceMonitor", ncheck: int, done: int = 0, prefix_chain=None,
                         plot_func=None, append_writer=None, precision_switch_iter: Optional[int] = None,
-                        fine_kwargs: Optional[dict] = None, debug: bool = False):
+                        fine_kwargs: Optional[dict] = None, debug: bool = False, components_fn=None):
     """The zeus callback list used by Kosmulator (one ZeusConvergenceCallback)."""
     return [ZeusConvergenceCallback(monitor, ncheck, done, prefix_chain, plot_func, append_writer,
-                                    precision_switch_iter, fine_kwargs, debug)]
+                                    precision_switch_iter, fine_kwargs, debug, components_fn)]
 
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -2515,7 +2606,10 @@ CONVERGENCE_NOTE = (
     "walkers, including burn-in; zeus (slice sampling) has no rejection step. Converged: "
     "the stopping rule was met (N_post >= {tau_factor:g} tau_max, ESS >= {ess_min:g}, "
     "tau_max stable to {rtol_pct:g}% between checks, split-Rhat < {rhat_max:g}). Stuck: walkers "
-    "whose post-burn-in median log P lies beyond the chi2(ndim) 1 - 1e-6 point below the ensemble."
+    "whose post-burn-in median log P lies beyond the chi2(ndim) 1 - 1e-6 point below the ensemble. "
+    "Trapped (emcee): walkers that moved in less than a quarter of the median share of steps in a "
+    "window of 1000 steps after burn-in, i.e. sat in a narrow part of the posterior for a while "
+    "(diagnostic; they slow convergence, the chain is not changed)."
 )
 
 
@@ -2532,7 +2626,7 @@ def chain_convergence_summary(output_dir: str, key: str, burn: int, param_names:
         observation=key, engine="n/a", steps=0, walkers=0, burn=int(burn), retained=0,
         tau_max=float("nan"), tau_param="", tau_emcee=float("nan"), n_over_tau=float("nan"),
         ess_min=float("nan"), rhat=float("nan"), rhat_param="", acceptance=float("nan"),
-        converged=None, stuck=None,
+        converged=None, stuck=None, trapped=None,
     )
     paths = [(p, e) for p, e in ((os.path.join(output_dir, f"{key}_zeus.h5"), "zeus"),
                                   (os.path.join(output_dir, f"{key}.h5"), "emcee")) if os.path.exists(p)]
@@ -2573,6 +2667,8 @@ def chain_convergence_summary(output_dir: str, key: str, burn: int, param_names:
             pass
         finally:
             lg.setLevel(old)
+    if engine == "emcee" and post.shape[0] >= 200:
+        row["trapped"] = len(trapped_walkers(post))          # CT-18
     if stuck_attr is not None:
         row["stuck"] = int(np.size(stuck_attr))
     elif lp is not None and lp.shape[0] > b + 1:
@@ -2592,12 +2688,13 @@ def _fmt_conv_row(r: Dict[str, Any]) -> List[str]:
         ("n/a" if r["engine"] == "zeus" else num(r["acceptance"], ".3f")),
         ("n/a" if r["converged"] is None else ("yes" if r["converged"] else "no")),
         ("n/a" if r["stuck"] is None else str(r["stuck"])),
+        ("n/a" if r.get("trapped") is None else str(r["trapped"])),
     ]
 
 
 CONVERGENCE_HEADER = ["Observation", "Engine", "Steps", "Burn-in", "Retained samples", "tau_max (param)",
                       "tau_emcee", "N_post/tau_max", "ESS", "Split-Rhat (param)", "Acceptance", "Converged",
-                      "Stuck walkers"]
+                      "Stuck walkers", "Trapped walkers"]
 
 
 def convergence_note_text(rules: Optional[Dict[str, float]] = None) -> str:
@@ -2635,6 +2732,38 @@ def write_convergence_reports(model: str, rows: List[Dict[str, Any]], folder: st
         fh.write(format_convergence_table(model, rows, rules) + "\n")
     paths.append(p)
     return paths
+
+
+def trapped_walkers(chain, window: int = 1000, frac: float = 0.25, stride: Optional[int] = None) -> Dict[int, Tuple[float, float, int]]:
+    """
+    CT-18: emcee walkers that hardly move. In each window of `window` steps (every `stride` steps; one
+    window when the chain is shorter), each walker's share of steps in which it moved is compared
+    with the median over the walkers; a walker below frac x the median is trapped there (T09c: a
+    walker in a narrow corner of the posterior moved in 2 - 5% of the steps against 21 - 22%).
+    Returns {walker: (its share, the median share, the window's last step)} at its lowest share.
+    Diagnostic only. zeus (slice sampling) always moves, so this applies to emcee chains.
+    """
+    x = np.asarray(chain, dtype=float)
+    if x.ndim != 3 or x.shape[0] < 3:
+        return {}
+    moved = np.any(x[1:] != x[:-1], axis=2)            # (steps - 1, walkers)
+    n = moved.shape[0]
+    w = int(min(window, n))
+    stride = int(stride or max(1, w // 2))
+    out: Dict[int, Tuple[float, float, int]] = {}
+    ends = list(range(w, n + 1, stride))
+    if not ends or ends[-1] != n:
+        ends.append(n)
+    for e in ends:
+        share = moved[e - w:e].mean(axis=0)
+        med = float(np.median(share))
+        if med <= 0:
+            continue
+        for k in np.where(share < frac * med)[0]:
+            k = int(k)
+            if k not in out or share[k] < out[k][0]:
+                out[k] = (float(share[k]), med, int(e + 1))
+    return out
 
 
 def find_stuck_walkers(log_prob_chain, ndim: int, p_tail: float = 1e-6) -> np.ndarray:

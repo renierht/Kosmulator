@@ -270,7 +270,7 @@ region: the same numbers on the second half of the chain so far, shown only), an
 
 | Argument | Type | Default | Description |
 |---|---|---|---|
-| `--print_loglike [N]` | int (optional) | disabled | Print likelihood diagnostics (components + TOTAL) for one walker. If passed without `N`, defaults to `1` (prints every call). If `N` is provided, prints every `N`th likelihood call. |
+| `--print_loglike [N]` | int (optional) | disabled | Every `N` steps (`1` when given without `N`), for the walker with the highest log-posterior: each data set's chi^2, the log prior and the TOTAL log-posterior, e.g. `[LCDM_v \| CC+DESI_DR2] step 2000, best walker (7): CC chi2 = 14.62 \| DESI_DR2 chi2 = 10.29 \| log prior = 0.00 \| TOTAL log-post = -12.45`. Each printed step evaluates the data sets once more in the main process (with CMB data, a CLASS run), so use it to debug a likelihood. |
 
 ---
 

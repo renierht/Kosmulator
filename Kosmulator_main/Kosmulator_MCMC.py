@@ -863,6 +863,149 @@ def _saved_steps(chain_path: str) -> Optional[int]:
         return None
 
 
+class BufferedHDFBackend(emcee.backends.Backend):
+    """
+    CT-19: emcee's chain in memory (emcee.backends.Backend), appended to the chain file every
+    `every` steps and by flush() (end of the run, also after Ctrl-C or an error: run_mcmc). The file
+    is emcee's HDF5 layout (group "mcmc": chain, log_prob, blobs, accepted, random_state_*,
+    iteration), as emcee.backends.HDFBackend writes it, so load_mcmc_results, --resume and --peek
+    read it as before; an existing file's steps are loaded and continued. emcee's HDFBackend opened
+    and wrote the file at every step. The arrays grow in blocks of CHUNK steps, not by the run's
+    nsteps at once.
+    """
+    CHUNK = 1000
+
+    def __init__(self, filename: str, every: Optional[int] = None, name: str = "mcmc"):
+        super().__init__()
+        self.filename, self.name = filename, name
+        self.every = max(1, int(every if every is not None else getattr(K, "EMCEE_WRITE_EVERY", 100)))
+        self._written = 0
+        self._blob_dt = None
+        if (_saved_steps(filename) or 0) > 0:
+            self._load()
+        _OPEN_BACKENDS.append(self)
+
+    def _load(self) -> None:
+        with h5py.File(self.filename, "r") as f:
+            g = f[self.name]
+            n = int(g.attrs["iteration"])
+            self.nwalkers, self.ndim = int(g.attrs["nwalkers"]), int(g.attrs["ndim"])
+            self.dtype = g["chain"].dtype
+            self.chain = np.array(g["chain"][:n])
+            self.log_prob = np.array(g["log_prob"][:n])
+            self.blobs = (np.array(g["blobs"][:n]) if bool(g.attrs.get("has_blobs", False)) and "blobs" in g
+                          else None)
+            self.accepted = np.array(g["accepted"][...], dtype=self.dtype)
+            rs = [v for k, v in sorted(g.attrs.items()) if k.startswith("random_state_")]
+            self.random_state = rs if rs else None
+        if self.blobs is not None:
+            self._blob_dt = self.blobs.dtype
+        self.iteration = self._written = n
+        self.initialized = True
+
+    def reset(self, nwalkers, ndim):
+        super().reset(nwalkers, ndim)
+        self._written, self._blob_dt = 0, None
+        emcee.backends.HDFBackend(self.filename, name=self.name).reset(nwalkers, ndim)   # an empty chain file
+
+    def grow(self, ngrow, blobs):
+        # only the blobs' type here; the arrays grow as steps arrive (_ensure)
+        self._check_blobs(blobs)
+        if blobs is not None and self._blob_dt is None:
+            self._blob_dt = np.dtype((blobs.dtype, blobs.shape[1:]))
+            self.blobs = np.empty((len(self.chain), self.nwalkers), dtype=self._blob_dt)
+
+    def _ensure(self, n: int) -> None:
+        extra = n - len(self.chain)
+        if extra <= 0:
+            return
+        extra = max(extra, self.CHUNK)
+        self.chain = np.concatenate((self.chain, np.empty((extra, self.nwalkers, self.ndim), self.dtype)))
+        self.log_prob = np.concatenate((self.log_prob, np.empty((extra, self.nwalkers), self.dtype)))
+        if self.blobs is not None:
+            self.blobs = np.concatenate((self.blobs, np.empty((extra, self.nwalkers), self.blobs.dtype)))
+
+    def save_step(self, state, accepted):
+        self._ensure(self.iteration + 1)
+        super().save_step(state, accepted)
+        if self.iteration - self._written >= self.every:
+            self.flush()
+
+    def flush(self) -> None:
+        """Append the steps since the last write to the chain file."""
+        n0, n1 = self._written, int(getattr(self, "iteration", 0) or 0)
+        if not self.initialized or n1 <= n0:
+            return
+        fresh = True
+        if os.path.exists(self.filename):
+            with h5py.File(self.filename, "r") as f:
+                fresh = self.name not in f
+        if fresh:                                       # file removed or never made: write it all
+            emcee.backends.HDFBackend(self.filename, name=self.name).reset(self.nwalkers, self.ndim)
+            n0 = 0
+        with h5py.File(self.filename, "a") as f:
+            g = f[self.name]
+            for key, arr in (("chain", self.chain), ("log_prob", self.log_prob)):
+                g[key].resize(n1, axis=0)
+                g[key][n0:n1] = arr[n0:n1]
+            if self.blobs is not None:
+                if "blobs" not in g:
+                    g.create_dataset("blobs", (n1, self.nwalkers), maxshape=(None, self.nwalkers),
+                                     dtype=self.blobs.dtype)
+                else:
+                    g["blobs"].resize(n1, axis=0)
+                g["blobs"][n0:n1] = self.blobs[n0:n1]
+                g.attrs["has_blobs"] = True
+            g["accepted"][:] = self.accepted
+            for i, v in enumerate(self.random_state or ()):
+                g.attrs["random_state_{0}".format(i)] = v
+            g.attrs["iteration"] = n1                   # last: a reader never sees unwritten steps
+        self._written = n1
+
+
+_OPEN_BACKENDS: List["BufferedHDFBackend"] = []
+
+
+def _flush_backends() -> None:
+    """Write every buffered emcee chain of this process to its file (CT-19)."""
+    while _OPEN_BACKENDS:
+        b = _OPEN_BACKENDS.pop()
+        try:
+            b.flush()
+        except Exception as e:
+            log.warning("Could not write the last steps of %s: %s", getattr(b, "filename", "?"), e)
+
+
+def _components_printer(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index, label) -> Callable:
+    """
+    CT-29 (--print_loglike N): show(step, coords, log_prob) prints, for the walker with the highest
+    log-posterior, each data set's chi^2 (-2 ln L), the log prior and the TOTAL log-posterior (the
+    sampler's value). It evaluates each data set once more in this process (with CMB data that is a
+    CLASS run), so it is for debugging a likelihood.
+    """
+    def show(step, coords, log_prob) -> None:
+        lp = np.asarray(log_prob, dtype=float).ravel()
+        if lp.size == 0 or not np.isfinite(lp).any():
+            return
+        k = int(np.argmax(np.where(np.isfinite(lp), lp, -np.inf)))
+        theta = np.asarray(coords, dtype=float)[k]
+        parts = []
+        for o, t in zip(obs, Type):
+            try:
+                ll = float(model_likelihood(theta, data[o], t, CONFIG, MODEL_func, model_name, o, obs_index))
+                parts.append(f"{o} chi2 = {-2.0 * ll:.2f}")
+            except Exception as e:
+                parts.append(f"{o} chi2 = failed ({type(e).__name__})")
+        try:
+            prior = float(np.asarray(log_prior_all(np.atleast_2d(theta), CONFIG, obs_index), float).ravel()[0])
+            parts.append(f"log prior = {prior:.2f}")
+        except Exception:
+            parts.append("log prior = n/a")
+        tqdm.write(f"[{model_name} | {label}] step {int(step)}, best walker ({k}): " + " | ".join(parts)
+                   + f" | TOTAL log-post = {lp[k]:.2f}")
+    return show
+
+
 def _counting_pool(pool, vectorize: bool):
     """The pool to give the sampler: a counting map unless the sampler is vectorised
     (then it calls the log-probability itself and ignores the pool)."""
@@ -929,6 +1072,18 @@ def _pool_logprob(fn: Callable, args: tuple, near: str) -> _PoolLogProb:
     import tempfile
     folder = os.path.dirname(os.path.abspath(near)) if near else tempfile.gettempdir()
     os.makedirs(folder, exist_ok=True)
+    # CT-05: files left in the chain folder by a run that was killed (Ctrl-C removes them, a kill
+    # does not). This run holds the output suffix's lock, so no other run uses them; not with
+    # KOSM_IGNORE_LOCK=1 (another run may) or in the shared temporary folder.
+    if near and os.environ.get("KOSM_IGNORE_LOCK", "0") != "1":
+        import glob
+        for old in glob.glob(os.path.join(folder, ".kosm_pool_args_*.pkl")):
+            if old not in _SHARED_FILES:
+                try:
+                    os.remove(old)
+                    log.info("Removed %s, left by an earlier run that was stopped", os.path.basename(old))
+                except OSError:
+                    pass
     fd, path = tempfile.mkstemp(prefix=".kosm_pool_args_", suffix=".pkl", dir=folder)
     with os.fdopen(fd, "wb") as fh:
         pickle.dump(args, fh, protocol=pickle.HIGHEST_PROTOCOL)
@@ -936,6 +1091,17 @@ def _pool_logprob(fn: Callable, args: tuple, near: str) -> _PoolLogProb:
     _SHARED_ARGS.clear()
     _SHARED_ARGS[path] = args               # the main process needs no reload
     return _PoolLogProb(fn, path)
+
+
+def _drop_shared_file(path: str) -> None:
+    """Remove one pool file of this process (CT-06: the zeus ball's file once the sampler's exists)."""
+    if path in _SHARED_FILES:
+        _SHARED_FILES.remove(path)
+    _SHARED_ARGS.pop(path, None)
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def _remove_shared_files() -> None:
@@ -1017,6 +1183,7 @@ def run_mcmc(*args, **kwargs):
     try:
         return _run_mcmc_impl(*args, **kwargs)
     finally:
+        _flush_backends()                  # CT-19: also after Ctrl-C or an error
         _restore_main_blas()
         _remove_shared_files()
         label = kwargs.get("obs_key") or "+".join(map(str, kwargs.get("obs") or []))
@@ -1239,12 +1406,19 @@ def _run_mcmc_impl(
             print(f"[INFO] Zeus: loading chain from {zeus_chain}\n")
             with h5py.File(zeus_chain, "r") as f:
                 samples = f["samples"][:]  # (iters, nwalker, ndim)
+                conv = f.attrs.get("converged", None)
+            utils.warn_unfinished_chain(model_name, _resolved_key, zeus_chain, samples.shape[0], nsteps, conv)
             return samples[burn:, :, :].reshape(-1, ndim)
 
         # Determine fresh vs resume
         if do_resume and exists:
             with h5py.File(zeus_chain, "r") as f:
                 old = f["samples"][:]
+                flagged = bool(f.attrs.get("converged", False))
+            if flagged:
+                # CT-08: as for emcee (utils, block A0); before, the run sampled on from its last step
+                print(f"[INFO] Zeus chain flagged converged → loading: {zeus_chain}\n")
+                return old[burn:, :, :].reshape(-1, ndim)
             done = old.shape[0]
             log.info(f"[RESUME][Zeus] Loaded {done} steps from {zeus_chain}")
             if done >= nsteps:
@@ -1323,6 +1497,8 @@ def _run_mcmc_impl(
             consecutive=int(PLOT_SETTINGS.get("tau_consecutive", K.CONV_CONSECUTIVE)),
             param_names=list(param_names),
         )
+        if prefix_chain is not None:
+            monitor.seed(done, prefix_chain)          # CT-08: the resumed run's first check can stop
         plot_path = os.path.join(
             PLOT_SETTINGS["autocorr_save_path"], model_name, "auto_corr",
             f"{_resolved_label}.png",
@@ -1355,6 +1531,8 @@ def _run_mcmc_impl(
             if has_cmb
             else None,
             debug=bool(PLOT_SETTINGS.get("debug", False)),
+            components_fn=(_components_printer(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index,
+                                               _resolved_key) if K.print_loglike else None),     # CT-29
         )
 
         # Optional: τ probe for CMB (debug only)
@@ -1391,6 +1569,9 @@ def _run_mcmc_impl(
             # Pool: the arguments travel once per group (file), each task only theta
             logprob_fn = _pool_logprob(logprob_fn, zeus_args, zeus_chain)
             zeus_args = ()
+            # CT-06: the initial ball's file (other argument order) is not needed any more
+            if "fn" in ball_state and ball_state["fn"].path in _SHARED_FILES:
+                _drop_shared_file(ball_state["fn"].path)
 
         # Warm-up (fresh runs only, nothing saved): reset walkers that sit far
         # below the ensemble before the recorded chain starts. A zeus walker that
@@ -1546,7 +1727,7 @@ def _run_mcmc_impl(
                     os.remove(chain_path)
                 except FileNotFoundError:
                     pass
-            backend = emcee.backends.HDFBackend(chain_path)
+            backend = BufferedHDFBackend(chain_path)            # CT-19
             if os.path.exists(chain_path) and _saved_steps(chain_path) == 0:
                 # A chain file with no saved step (a run stopped before its first step, e.g.
                 # during the initial ball): nothing to resume or load, so the chain starts
@@ -1561,13 +1742,16 @@ def _run_mcmc_impl(
         print_enabled = bool(dbg.get("print_loglike", False))
         print_every = int(dbg.get("print_loglike_every", 1) or 1)
         print_every = max(1, print_every)
+        _show = _components_printer(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index,
+                                    _resolved_key)                                          # CT-29
 
         # ------------------------------------------------------------
         # Resume if requested and chain exists
         # ------------------------------------------------------------
         if (saveChains and resumeChains and os.path.exists(chain_path) and not overwrite
                 and _saved_steps(chain_path) != 0):
-            backend = emcee.backends.HDFBackend(chain_path)
+            if not isinstance(backend, BufferedHDFBackend):
+                backend = BufferedHDFBackend(chain_path)        # CT-19: loads the saved steps
             current = backend.iteration
             print(
                 f"[RESUME] Found existing chain with {current} steps. Resuming to {nsteps}."
@@ -1617,6 +1801,7 @@ def _run_mcmc_impl(
                         print_enabled=print_enabled,
                         print_every=print_every,
                         param_names=list(param_names),
+                        components_fn=_show,
                     )
                     flat_samples = res[0] if isinstance(res, tuple) else res
                 else:
@@ -1624,7 +1809,7 @@ def _run_mcmc_impl(
                     for state in sampler.sample(
                         last_state, iterations=nsteps - current, progress=True
                     ):
-                        it = current + sampler.iteration
+                        it = sampler.iteration          # the backend holds the resumed steps too
                         if (
                             print_enabled
                             and (it % print_every) == 0
@@ -1639,16 +1824,12 @@ def _run_mcmc_impl(
                                 except Exception:
                                     lp = None
                             if lp is not None:
-                                lp = np.asarray(lp, dtype=float)
-                                if lp.size:
-                                    tqdm.write(
-                                        f"[EMCEE Step {it}] Log-Post: "
-                                        f"Max={np.nanmax(lp):.4f} | Mean={np.nanmean(lp):.4f}"
-                                    )
+                                _show(it, state.coords, lp)                     # CT-29
 
                     flat_samples = sampler.get_chain(discard = burn, flat = True)
                 #Extract and write log_prob + loglike on resume
                 if saveChains:
+                    _flush_backends()                           # CT-19: every step in the file first
                     flat_log_prob = sampler.get_log_prob(discard = burn, flat = True)
                     blobs = sampler.get_blobs(discard = burn, flat = True)
                     with h5py.File(chain_path, "a") as h5f:
@@ -1725,6 +1906,7 @@ def _run_mcmc_impl(
                 print_enabled=print_enabled,
                 print_every=print_every,
                 param_names=list(param_names),
+                components_fn=_show,
             )
             flat_samples = res[0] if isinstance(res, tuple) else res
             flat_log_prob = sampler.get_log_prob(discard = burn, flat = True)
@@ -1747,12 +1929,7 @@ def _run_mcmc_impl(
                         except Exception:
                             lp = None
                     if lp is not None:
-                        lp = np.asarray(lp, dtype=float)
-                        if lp.size:
-                            tqdm.write(
-                                f"[EMCEE Step {it}] Log-Post: "
-                                f"Max={np.nanmax(lp):.4f} | Mean={np.nanmean(lp):.4f}"
-                            )
+                        _show(it, state.coords, lp)                             # CT-29
 
             flat_samples = sampler.get_chain(discard=burn, flat=True)
             flat_log_prob = sampler.get_log_prob(discard=burn, flat=True)
@@ -1762,6 +1939,7 @@ def _run_mcmc_impl(
                  utils.format_elapsed_time(time.time() - start))
 
         if saveChains:
+            _flush_backends()                                   # CT-19: every step in the file first
             # Flag the chain only if the autocorrelation rule was actually met
             # (previously every finished run was flagged converged).
             with h5py.File(chain_path, "a") as h5f:

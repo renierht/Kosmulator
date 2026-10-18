@@ -409,6 +409,11 @@ RUN_SETTINGS: Dict[str, Any] = {}
 #: saturated from 2 on), so 2: the fewest threads per process for the gain.
 CLASS_THREADS_SUGGEST_MAX: int = 2
 
+#: emcee keeps its chain in memory and appends it to the chain file every this many steps and at
+#: the end (CT-19; emcee's HDFBackend opened and wrote the file at every step). A killed run loses
+#: at most this many steps; Ctrl-C none.
+EMCEE_WRITE_EVERY: int = 100
+
 #: {model: {group label: "zeus" or "emcee"}}, set at start-up (MCMC_setup step 10, CT-31); the
 #: model banners use it (CT-17)
 GROUP_ENGINES: dict = {}
