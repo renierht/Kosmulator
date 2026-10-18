@@ -324,6 +324,48 @@ def _wait_for_artifact(model_name: str, sig_hash: str, timeout_s: int = 180) -> 
 # ---------------------------------------------------------------------------
 
 
+_BUILD_ENV: Optional[dict] = None
+_BUILD_ENV_DONE = False
+
+
+def _build_env() -> Optional[dict]:
+    """Environment for the CLASS build commands (make, python setup.py build_ext), or None for
+    this process's own environment.
+
+    CLASS's Makefile and python/setup.py call the tools by name (gcc, g++, ar). A conda environment
+    with conda-forge's compilers may have them only under their own names, in $CC, $CXX and $AR
+    (x86_64-conda-linux-gnu-cc, ...). Only then a private folder with gcc, g++ and ar that call those
+    goes first on PATH for the build (removed at exit); with gcc, g++ and ar on PATH nothing changes.
+    (On macOS /usr/bin/gcc always exists; it needs the Xcode Command Line Tools.)"""
+    global _BUILD_ENV, _BUILD_ENV_DONE
+    if not _BUILD_ENV_DONE:
+        import shutil as _shutil
+        import tempfile as _tempfile
+        tools = {}
+        for name, var in (("gcc", "CC"), ("g++", "CXX"), ("ar", "AR")):
+            if _shutil.which(name) is None:
+                cmd = shlex.split(os.environ.get(var) or sysconfig.get_config_var(var) or "")
+                if cmd and _shutil.which(cmd[0]):
+                    tools[name] = [_shutil.which(cmd[0])] + cmd[1:]
+        if tools:
+            import atexit
+            shim = _tempfile.mkdtemp(prefix="kosmulator_cc_")
+            atexit.register(_shutil.rmtree, shim, True)
+            for name, cmd in tools.items():
+                dst = os.path.join(shim, name)
+                if len(cmd) == 1:
+                    os.symlink(cmd[0], dst)          # gcc finds its own tools through the link
+                else:                                # e.g. CC="ccache gcc"
+                    with open(dst, "w") as f:
+                        f.write("#!/bin/sh\nexec " + " ".join(shlex.quote(c) for c in cmd) + ' "$@"\n')
+                    os.chmod(dst, 0o755)
+            _BUILD_ENV = dict(os.environ)
+            _BUILD_ENV["PATH"] = shim + os.pathsep + _BUILD_ENV.get("PATH", "")
+            logger.info("[CLASS] build uses %s", ", ".join(f"{n} -> {' '.join(c)}" for n, c in tools.items()))
+        _BUILD_ENV_DONE = True
+    return _BUILD_ENV
+
+
 def find_classy_so(model_name: str) -> str:
     """
     Search under ./Class/<model_name> for a built classy .so.
@@ -358,10 +400,10 @@ def _ensure_libclass(model_dir: str) -> None:
     Many CLASS Makefiles already provide a 'libclass.a' target.
     """
     try:
-        subprocess.run(["make", "-C", model_dir, "libclass.a"], check=True)
+        subprocess.run(["make", "-C", model_dir, "libclass.a"], check=True, env=_build_env())
     except subprocess.CalledProcessError:
         # Fallback: try a minimal build that may produce libclass.a
-        subprocess.run(["make", "-C", model_dir, "class", "-k"], check=False)
+        subprocess.run(["make", "-C", model_dir, "class", "-k"], check=False, env=_build_env())
         if not os.path.exists(os.path.join(model_dir, "libclass.a")):
             raise
 
@@ -394,7 +436,7 @@ def _build_python_extension(model_dir: str) -> None:
     """Build the Python extension for CLASS in model_dir/python."""
     model_dir_path = Path(model_dir)
     _ensure_libclass(str(model_dir_path))
-    subprocess.run(["make", "-C", str(model_dir_path), "libclass.a"], check=True)
+    subprocess.run(["make", "-C", str(model_dir_path), "libclass.a"], check=True, env=_build_env())
     _strip_mvec_from_setup(str(model_dir_path / "python"))
     # --force: classy links libclass.a, which setup.py does not list as a dependency, so
     # without it build_ext sees classy.pyx unchanged, keeps the old in-place classy*.so and
@@ -403,10 +445,11 @@ def _build_python_extension(model_dir: str) -> None:
         [sys.executable, "setup.py", "build_ext", "--inplace", "--force"],
         cwd=str(model_dir_path / "python"),
         check=True,
+        env=_build_env(),
     )
     subprocess.run([sys.executable, "setup.py", "build_ext", "--inplace"],
                    cwd=str(model_dir_path / "python"),
-                   check=True)
+                   check=True, env=_build_env())
     _ensure_python_external_symlink(model_dir)
 
 
@@ -420,14 +463,14 @@ def run_model(model_name: str) -> None:
     built = False
     for target in ["libclass.a", "lib"]:
         try:
-            subprocess.run(["make", "-C", str(model_dir), target], check=True)
+            subprocess.run(["make", "-C", str(model_dir), target], check=True, env=_build_env())
             built = True
             break
         except subprocess.CalledProcessError:
             continue
 
     if not built:
-        subprocess.run(["make", "-C", str(model_dir)], check=True)
+        subprocess.run(["make", "-C", str(model_dir)], check=True, env=_build_env())
 
     _build_python_extension(str(model_dir))
 

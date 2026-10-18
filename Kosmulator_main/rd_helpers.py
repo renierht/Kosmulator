@@ -34,14 +34,40 @@ logger = logging.getLogger("Kosmulator.rd_helpers")
 from Kosmulator_main import constants as _K   # neutrino settings (item 27), read at call time
 
 
+#: Kosmulator's own LCDM CLASS build (Class/LCDM_v, also rd_Class's source): the flat-LCDM r_d
+#: when no classy is loaded or installed, so that no separately installed CLASS is needed
+OWN_CLASS_MODEL = "LCDM_v"
+_OWN_CLASS_FAILED = False
+
+
+def _own_classy():
+    """Kosmulator's LCDM_v build from its cache (Class/.cache), loaded as sys.modules["classy"], or
+    None. Never compiles here (MCMC_setup builds it before any worker pool) and gives up for the
+    process after a miss, so that r_d calls do not hash the CLASS sources again."""
+    global _OWN_CLASS_FAILED
+    if _OWN_CLASS_FAILED:
+        return None
+    try:
+        from Kosmulator_main import Class_run as _CR
+        if _CR.ensure_class_ready(OWN_CLASS_MODEL, no_rebuild=True):
+            return sys.modules.get("classy")
+    except Exception as e:
+        logger.debug("own CLASS build for r_d not available: %s", e)
+    _OWN_CLASS_FAILED = True
+    return None
+
+
 def _classy_module():
-    """The classy Kosmulator has loaded (sys.modules), else an installed one, else None."""
+    """The classy Kosmulator has loaded (sys.modules), else an installed one, else Kosmulator's
+    own LCDM_v build (cached), else None."""
     mod = sys.modules.get("classy")
     if mod is None:
         try:
             import classy as mod  # noqa: F811
         except Exception:
-            return None
+            mod = _own_classy()
+            if mod is None:
+                return None
     return mod if hasattr(mod, "Class") else None
 
 def classy_import_problem():
@@ -52,7 +78,10 @@ def classy_import_problem():
     try:
         import classy as mod  # noqa: F811
     except Exception as e:
-        return f"import classy failed: {type(e).__name__}: {e}"
+        if _own_classy() is not None:
+            return None
+        return (f"import classy failed ({type(e).__name__}: {e}) and Kosmulator's own CLASS build "
+                f"for {OWN_CLASS_MODEL} is not available")
     return None if hasattr(mod, "Class") else "the module 'classy' has no Class"
 
 

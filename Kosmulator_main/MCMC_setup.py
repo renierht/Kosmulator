@@ -561,6 +561,18 @@ def main(
                      for g in CONFIG[m].get("observations", [])
                      if set(g) & _bao and any(str(o).startswith("BBN") for o in g)
                      and not set(g) & set(K.CMB_TAGS)]
+        if rd_groups and RDH.classy_import_problem():
+            # No classy loaded or installed: Kosmulator's own LCDM_v build (compiled once, then
+            # cached) gives the flat-LCDM r_d; built here, before any worker pool exists, and only
+            # with a compiler (without one every run would try and fail)
+            import shutil as _sh
+            _path = (CR._build_env() or os.environ).get("PATH")
+            if all(_sh.which(t, path=_path) for t in ("gcc", "g++", "make", "ar")):
+                try:
+                    CR.ensure_class_ready(RDH.OWN_CLASS_MODEL, announce=True)
+                    RDH._OWN_CLASS_FAILED = False
+                except Exception as e:
+                    log.warning("CLASS for %s could not be built or loaded: %s", RDH.OWN_CLASS_MODEL, e)
         _rd_problem = RDH.classy_import_problem() if rd_groups else None
         if _rd_problem:
             bar = "#" * 78
@@ -569,8 +581,9 @@ def main(
             log.warning("  Reason: %s.", _rd_problem)
             log.warning("  Effect: %s. The run continues; the statistics notes repeat this.",
                         RDH.EH98_EFFECT)
-            log.warning("  Fix: make `import classy` work in this environment (CLASS with its Python "
-                        "wrapper) and rerun.")
+            log.warning("  Fix: Kosmulator builds its own CLASS (Class/%s) when a C compiler is there; "
+                        "kosmulator-doctor --build-class %s shows what is missing. Then rerun.",
+                        RDH.OWN_CLASS_MODEL, RDH.OWN_CLASS_MODEL)
             log.warning(bar)
 
         log.info("────────────────────────────────────────────────────────")
