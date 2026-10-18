@@ -662,7 +662,13 @@ def _zeus_warmup(
         k = min(segment, n_steps - done_w)
         s = _zeus_ensemble(nwalker, ndim, logprob_fn, args=args, pool=pool,
                            vectorize=vectorize, verbose=False)
-        s.run_mcmc(X, k, progress=False)
+        root = logging.getLogger()
+        level = root.level
+        root.setLevel(logging.WARNING)     # zeus logs "Initialising ensemble ..." at INFO on every call (CT-01)
+        try:
+            s.run_mcmc(X, k, progress=False)
+        finally:
+            root.setLevel(level)
         X = np.array(s.get_chain()[-1], float)
         lp = np.asarray(s.get_log_prob()[-1], float)
         done_w += k
@@ -976,9 +982,9 @@ def _limit_main_blas(uses_pool: bool, engine: str = "", vectorised: bool = True,
     main = getattr(K, "MAIN_THREADS", None)
     n = (min(int(cap), int(main)) if cap else int(main)) if main else cap
     if uses_pool:
-        log.info("[%s] %s: likelihood evaluated by the worker pool", label, engine)
+        log.debug("[%s] %s: likelihood evaluated by the worker pool", label, engine)
         return
-    log.info("[%s] %s: runs in this process (%s), BLAS threads: %s", label, engine,
+    log.debug("[%s] %s: runs in this process (%s), BLAS threads: %s", label, engine,
              "vectorised" if vectorised else "one walker per call", n if n else "library default")
     if not n or _BLAS_LIMITER is not None:
         return
@@ -1069,42 +1075,12 @@ def _run_mcmc_impl(
         has_bbn: bool,
     ) -> str:
         """
-        Decide which MCMC engine to use for THIS observation group.
-
-        Modes:
-          - 'single'  : one engine per model, from K.engine_for_model.
-          - 'mixed'   : same, but cross-engine chain reuse is allowed.
-          - 'fastest' : per-observation choice (Zeus for simple LSS; EMCEE for CMB/BBN).
+        Decide which MCMC engine to use for THIS observation group (utils.engine_for_group,
+        the one rule for every module). Modes: 'single': one engine per model
+        (K.engine_for_model); 'mixed' (default) and 'fastest': per group, zeus for groups
+        without CMB/BBN when the model is vectorised, emcee for CMB/BBN groups (CT-31).
         """
-        mode = getattr(K, "engine_mode", "mixed")
-
-        # Hard CLI overrides always win
-        if getattr(K, "force_emcee", False):
-            return "emcee"
-        
-        if getattr(K, "force_zeus", False) and zeus is not None:
-            return "zeus"
-
-        # In 'single' or 'mixed', we obey the per-model main engine decided in MCMC_setup.
-        if mode in ("single", "mixed"):
-            eng_map = getattr(K, "engine_for_model", {})
-            eng = eng_map.get(model_name)
-            if eng in ("zeus", "emcee"):
-                return eng
-            # Fallback if somehow not set (shouldn't happen)
-            return "zeus" if (can_vec and zeus is not None) else "emcee"
-
-        if mode == "fastest":
-            # Fastest logic (unchanged):
-            #   - If model can vectorise AND this obs-set has no CMB/BBN → Zeus
-            #   - Otherwise → EMCEE
-            if (not has_cmb) and (not has_bbn) and can_vec and (zeus is not None):
-                return "zeus"
-            else:
-                return "emcee"
-
-        # Unknown mode → behave like a 'mixed' fallback
-        return "zeus" if (can_vec and zeus is not None) else "emcee"
+        return utils.engine_for_group(model_name, can_vec, obs, Type)
     
     # Resolved observation label (prefer the precomputed key from caller)
     try:
@@ -1241,7 +1217,7 @@ def _run_mcmc_impl(
                  "(zeus's differential move is unreliable in one dimension)", model_name, _resolved_key)
         engine = "emcee"
     use_zeus = (engine == "zeus" and zeus is not None)
-    log.info("[%s | %s] moves: %s", model_name, _resolved_key, SM.describe("zeus" if use_zeus else "emcee"))
+    log.debug("[%s | %s] moves: %s", model_name, _resolved_key, SM.describe("zeus" if use_zeus else "emcee"))
     from Kosmulator_main import citations as _CIT        # the run's citations.md lists the samplers used
     _CIT.ENGINES_USED.add("zeus" if use_zeus else "emcee")
     
@@ -1449,7 +1425,7 @@ def _run_mcmc_impl(
         try:
             sampler.run_mcmc(pos0, steps_to_run, callbacks=callbacks)
         finally:
-            log.info("Zeus took %s", utils.format_elapsed_time(time.time() - start))
+            zeus_seconds = time.time() - start
             try:
                 if writer is not None:
                     writer(
@@ -1509,6 +1485,8 @@ def _run_mcmc_impl(
         (log.info if converged else log.warning)(
             monitor.message(st, model_name, _resolved_key, "zeus")
         )
+        log.info("[%s | %s] zeus sampling took %s", model_name, _resolved_key,   # CT-09: as for emcee
+                 utils.format_elapsed_time(zeus_seconds))
         # Stuck-walker check on the recorded post-burn-in chain
         stuck = []
         try:
@@ -1780,7 +1758,8 @@ def _run_mcmc_impl(
             flat_log_prob = sampler.get_log_prob(discard=burn, flat=True)
             blobs = sampler.get_blobs(discard = burn, flat = True)
 
-        print(f"Emcee sampling took {utils.format_elapsed_time(time.time() - start)}\n")
+        log.info("[%s | %s] emcee sampling took %s", model_name, _resolved_key,     # CT-09: as for zeus
+                 utils.format_elapsed_time(time.time() - start))
 
         if saveChains:
             # Flag the chain only if the autocorrelation rule was actually met

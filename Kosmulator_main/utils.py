@@ -79,6 +79,7 @@ INIT_COLLAPSE_KEYS = (
     "BAO/DESI combo",
     "BAO/DESI uncalibrated",
     "H_0 is not constrained by",
+    "Uncalibrated SNe ",                       # CT-03: the wording since 99f76cb
     "r_d calibrated by early-time dataset(s)",
     "fσ8 singleton",
     "fσ₈ singleton",
@@ -96,7 +97,47 @@ INIT_COLLAPSE_KEYS = (
     "Pantheon+ (uncal) run solo",
     "Union3 run solo",
     "DESY5 run solo",
+) + (
+    # data settings, printed once in a "Data settings" block instead of once per group that
+    # loads the data (CT-13, CT-23)
+    "correlated pairs from",
+    "SPS-model covariance added",
+    "f_sigma_8: WiggleZ covariance",
+    "BBN resolved backend",
+    "Grid: obh2",
+    "Loaded BBN grid",
+    "BBN grid not found",
+    "BBN_DH_AlterBBN: D/H from",
+    "Pantheon: systematic covariance",
 )
+
+#: Start-up lines that go to the "Data settings" block (CT-13)
+INIT_DATA_KEYS = (
+    "correlated pairs from", "SPS-model covariance added", "f_sigma_8: WiggleZ covariance",
+    "BBN resolved backend", "Grid: obh2", "Loaded BBN grid", "BBN grid not found",
+    "BBN_DH_AlterBBN: D/H from", "Pantheon: systematic covariance",
+)
+
+
+def merge_group_lists(lines: List[str]) -> List[str]:
+    """Lines that differ only in their first group list ("... ['BAO'] ..." and "... ['DESI_DR1'] ...")
+    become one line with the groups listed, in order of first appearance (CT-03 b)."""
+    pat = re.compile(r"\[[^\[\]]*\]")
+    out: Dict[str, List[str]] = {}
+    order: List[str] = []
+    for ln in lines:
+        m = pat.search(ln)
+        key = (ln[:m.start()] + "\0" + ln[m.end():]) if m else ln
+        if key not in out:
+            out[key] = []
+            order.append(key)
+        if m and m.group(0) not in out[key]:
+            out[key].append(m.group(0))
+    res = []
+    for key in order:
+        groups = out[key]
+        res.append(key.replace("\0", ", ".join(groups)) if "\0" in key else key)
+    return res
 
 # Stable observation ordering for canonicalisation
 _OBS_ORDER = [
@@ -343,17 +384,38 @@ def print_model_banner(
     *,
     single_engine_map: Optional[Dict[str, str]] = None,
     pool_kind: Optional[str] = None,
+    group_engines: Optional[Dict[str, str]] = None,
 ) -> None:
     """
     Big banner for each model. Reports the *actual* execution policy.
     pool_kind: "local" or "mpi" for the pool this model gets, "serial" when it gets
     none (--num_cores 1, native Windows); None keeps the plain word "pool".
+    group_engines: {group: engine} of the model (MCMC_setup, CT-31); with two engines (mixed
+    or fastest mode, CMB/BBN and late-time groups) the banner names both (CT-17: "unknown"
+    in fastest mode before).
     """
     import Kosmulator_main.constants as K
 
-    # Source of truth
+    # Where the likelihood runs when it does not run vectorised in this process (item 44)
+    pool_word = {"serial": "serial", "mpi": "MPI pool"}.get(pool_kind, "pool")
+    mode_label = engine_mode if engine_mode in ("mixed", "single", "fastest") else "auto"
+
+    used = sorted(set((group_engines or {}).values()))
+    if len(used) == 2:
+        zeus_part = "Zeus vectorised" if can_vec else f"Zeus scalar {pool_word}"
+        label = f"{zeus_part} and EMCEE ({pool_word} for CMB/BBN groups) ({mode_label})"
+        msg = f"Processing model: {model_name}  |  Engine: {label}"
+        bar = "#" * max(48, len(msg) + 6)
+        print(f"\n\033[33m{bar}\033[0m", flush=True)
+        print(f"\033[33m####\033[0m \033[1m{msg}\033[0m", flush=True)
+        print(f"\033[33m{bar}\033[0m", flush=True)
+        return
+
+    # Source of truth: the groups' engine, else the model's
     eng = None
-    if single_engine_map and model_name in single_engine_map:
+    if used:
+        eng = used[0]
+    elif single_engine_map and model_name in single_engine_map:
         eng = single_engine_map[model_name]
     else:
         eng = "unknown"
@@ -361,9 +423,6 @@ def print_model_banner(
     eng = str(eng).lower()
 
     parts = []
-
-    # Where the likelihood runs when it does not run vectorised in this process (item 44)
-    pool_word = {"serial": "serial", "mpi": "MPI pool"}.get(pool_kind, "pool")
 
     if eng == "zeus":
         parts.append("Zeus")
@@ -376,9 +435,6 @@ def print_model_banner(
         parts.append("vectorised" if (can_vec and not touches_cmb_bbn) else pool_word)
     else:
         parts.append(eng)
-
-    # Engine mode context
-    mode_label = engine_mode if engine_mode in ("mixed", "single", "fastest") else "auto"
 
     # Explicit overrides (read from K, never passed)
     if getattr(K, "force_zeus", False):
@@ -480,7 +536,7 @@ def acquire_run_lock(suffix: str = ""):
         except Exception:
             info = ""
         fh.close()
-        raise RuntimeError(
+        refuse(
             f"Another Kosmulator run is writing to '{d}'"
             f"{' (' + info + ')' if info else ''}. Use a different --output_suffix, "
             "wait for that run to finish, or set KOSM_IGNORE_LOCK=1."
@@ -522,6 +578,190 @@ _QUIET_MPI_POOL = None
 _USER_OMP_NUM_THREADS = os.environ.get("OMP_NUM_THREADS")
 
 
+class KosmulatorRefusal(SystemExit, RuntimeError):
+    """
+    A run Kosmulator refuses to start (another run's lock on the output suffix, chains made with
+    other settings): the message without a Python traceback, exit code 2 (CT-33: a 7-line
+    traceback came first). Still a RuntimeError for callers that catch one.
+    """
+
+    def __init__(self, message: str):
+        SystemExit.__init__(self, 2)
+        self.message = str(message)
+
+    def __str__(self) -> str:
+        return self.message
+
+
+def refuse(message: str) -> None:
+    """Print why the run does not start and end it (KosmulatorRefusal); under MPI with several
+    ranks the whole job ends (the others would wait for rank 0 forever)."""
+    print(f"\nKosmulator stopped: {message}\n", file=sys.stderr, flush=True)
+    try:
+        if "mpi4py" in sys.modules:
+            from mpi4py import MPI  # type: ignore
+            if MPI.COMM_WORLD.Get_size() > 1:
+                MPI.COMM_WORLD.Abort(2)
+    except Exception:
+        pass
+    raise KosmulatorRefusal(message)
+
+
+def _settings_items(run: Dict[str, Any]) -> List[Tuple[str, str, bool]]:
+    """(name, text, differs from the default) for every switch of the run (CT-26)."""
+    D = getattr(K, "SETTINGS_DEFAULTS", {})
+    g = lambda k: run.get(k, D.get(k))
+    nd = lambda *ks: any(k in run and run.get(k) != D.get(k) for k in ks)
+    items = []
+    if g("neutrinos") == "massive":
+        items.append(("neutrinos", f"neutrinos massive (one {g('nu_mass_eV'):g} eV, N_eff {g('nu_N_eff'):g})",
+                      nd("neutrinos", "nu_mass_eV", "nu_N_eff")))
+    else:
+        items.append(("neutrinos", f"neutrinos massless (N_eff {g('nu_N_eff'):g})", nd("neutrinos", "nu_N_eff")))
+    items.append(("rd_background", f"rd_background {g('rd_background')}", nd("rd_background")))
+    items.append(("growth_model", f"growth_model {g('growth_model')}", nd("growth_model")))
+    nl = g("cmb_nonlinear")
+    items.append(("cmb_nonlinear", "cmb_nonlinear " + (f"hmcode {g('hmcode_version')}" if nl == "hmcode" else str(nl)),
+                  nd("cmb_nonlinear") or (nl == "hmcode" and nd("hmcode_version"))))
+    for k in ("cmb_nuisance", "lensing_only_priors", "sample_H0_uncalibrated_SNe", "waic_include_cmb",
+              "CC_SYS_COV", "PANTHEON_SYS_COV"):
+        items.append((k, f"{k} {g(k)}", nd(k)))
+    items.append(("fsigma8", f"f_sigma_8 WiggleZ cov {'on' if g('FS8_WIGGLEZ_COV') else 'off'}, "
+                             f"AP {'on' if g('FS8_AP_CORRECTION') else 'off'}", nd("FS8_WIGGLEZ_COV", "FS8_AP_CORRECTION")))
+    for k in ("engine_mode", "emcee_moves", "zeus_light_mode"):
+        items.append((k, f"{k} {g(k)}", nd(k)))
+    items.append(("stop", f"stop after {g('tau_consecutive')} check(s), buffer {g('autocorr_buffer')}",
+                  nd("tau_consecutive", "autocorr_buffer")))
+    cores = run.get("num_cores")
+    items.append(("cores", (f"cores {cores}" if cores else "cores ?") + f", --class_threads {g('class_threads')}"
+                  + (" (MPI)" if run.get("use_mpi") else ""), nd("class_threads")))
+    items.append(("corner_show_nuisance", f"corner_show_nuisance {g('corner_show_nuisance')}", nd("corner_show_nuisance")))
+    return items
+
+
+def settings_summary(run: Optional[Dict[str, Any]] = None, width: int = 104) -> Tuple[List[str], List[str]]:
+    """(lines of the "Settings: ..." summary, wrapped; the switches that differ from their default)."""
+    run = run if run is not None else getattr(K, "RUN_SETTINGS", {})
+    items = _settings_items(run)
+    # an item is never split over two lines: its spaces are protected while wrapping
+    # (the separator stays at the end of a line, never at the start of the next)
+    toks = [(t + ("*" if d else "")).replace(" ", "\x00") for _, t, d in items]
+    text = "Settings: " + " ".join(tok + ("\x00|" if i < len(toks) - 1 else "") for i, tok in enumerate(toks))
+    lines = textwrap.wrap(text, width=width, subsequent_indent="  ", break_long_words=False)
+    return [ln.replace("\x00", " ") for ln in lines], [t for _, t, d in items if d]
+
+
+def settings_header(run: Optional[Dict[str, Any]] = None) -> str:
+    """One line with the physics settings for the results' files and the console (CT-26)."""
+    run = run if run is not None else getattr(K, "RUN_SETTINGS", {})
+    keep = ("neutrinos", "rd_background", "growth_model", "cmb_nonlinear", "cmb_nuisance", "lensing_only_priors",
+            "sample_H0_uncalibrated_SNe", "CC_SYS_COV", "PANTHEON_SYS_COV", "fsigma8")
+    return "Settings: " + "; ".join(t + ("*" if d else "") for k, t, d in _settings_items(run) if k in keep) + \
+        " (* not the default)"
+
+
+def group_flags(obs, Type) -> Tuple[bool, bool]:
+    """(has CMB data, has BBN data) of a group, from its data set names and types."""
+    toks = [str(x).lower() for x in list(obs or []) + list(Type or [])]
+    return any(t.startswith("cmb") for t in toks), any("bbn" in t for t in toks)
+
+
+def engine_for_group(model_name: str, can_vec: bool, obs, Type) -> str:
+    """
+    The sampler of one group; one rule for MCMC_setup, Kosmulator_MCMC and load_or_run_chain.
+    --force_emcee / --force_zeus first. Engine mode "single": the model's engine
+    (constants.engine_for_model: emcee if any group has CMB or BBN data). "mixed" (the default)
+    and "fastest" choose per group (CT-31): zeus for groups without CMB or BBN when the model's
+    likelihood is vectorised, emcee for CMB and BBN groups (CLASS per walker, through the pool).
+    Before, mixed mode ran every group of a model with CMB or BBN data with emcee, and emcee
+    did not converge on late-time wowaCDM groups where zeus did (T10, T16).
+    (Groups with one sampled parameter use emcee whatever this says; the callers apply that.)
+    """
+    if getattr(K, "force_emcee", False):
+        return "emcee"
+    if getattr(K, "force_zeus", False) and zeus is not None:
+        return "zeus"
+    if getattr(K, "engine_mode", "mixed") == "single":
+        eng = (getattr(K, "engine_for_model", {}) or {}).get(model_name)
+        if eng in ("zeus", "emcee"):
+            return eng
+    has_cmb, has_bbn = group_flags(obs, Type)
+    if not has_cmb and not has_bbn and can_vec and zeus is not None:
+        return "zeus"
+    return "emcee"
+
+
+def model_group_engines(CONFIG: Dict[str, Any], model_name: str, can_vec: bool) -> Dict[str, str]:
+    """{group label: engine} of a model (engine_for_group, one-parameter groups emcee)."""
+    cfg = CONFIG[model_name]
+    out = {}
+    for i, grp in enumerate(cfg.get("observations", [])):
+        types = (cfg.get("observation_types") or [[]] * (i + 1))[i]
+        eng = engine_for_group(model_name, can_vec, grp, types)
+        try:
+            if eng == "zeus" and int(cfg["ndim"][i]) == 1:
+                eng = "emcee"
+        except (KeyError, IndexError, TypeError, ValueError):
+            pass
+        out["+".join(map(str, grp))] = eng
+    return out
+
+
+def describe_group_engines(engines: Dict[str, str]) -> str:
+    """'engine zeus' / 'engine emcee', or for two engines how many groups use each."""
+    used = sorted(set(engines.values()))
+    if len(used) <= 1:
+        return f"engine {used[0] if used else 'none'}"
+    n = {e: sum(1 for v in engines.values() if v == e) for e in used}
+    return (f"engine per group: zeus for {n['zeus']} group(s), emcee for {n['emcee']} "
+            f"(CMB and BBN groups, and groups with one sampled parameter)")
+
+
+def cpu_topology() -> Tuple[int, int]:
+    """(logical CPUs this process may use, threads per physical core: 2 with hyperthreading/SMT,
+    else 1, also when unknown); from /proc/cpuinfo, else psutil (CT-44)."""
+    try:
+        logical = len(os.sched_getaffinity(0))
+    except Exception:
+        logical = os.cpu_count() or 1
+    smt = 1
+    try:
+        with open("/proc/cpuinfo") as fh:
+            info = fh.read()
+        sib = re.search(r"^siblings\s*:\s*(\d+)", info, re.M)
+        cores = re.search(r"^cpu cores\s*:\s*(\d+)", info, re.M)
+        if sib and cores and int(cores.group(1)) > 0:
+            smt = max(1, int(sib.group(1)) // int(cores.group(1)))
+    except Exception:
+        try:
+            import psutil  # type: ignore
+            phys = psutil.cpu_count(logical=False)
+            smt = max(1, int((psutil.cpu_count() or 1) // phys)) if phys else 1
+        except Exception:
+            smt = 1
+    return int(logical), int(smt)
+
+
+def suggest_pool_settings(n_cores: int, min_walkers: int, uses_class: bool, smt: int = 1,
+                          t_max: Optional[int] = None) -> Tuple[int, int, int, Tuple[int, int]]:
+    """
+    (class_threads, workers, rounds per half-step, (nwalkers low, high)) for n_cores (CT-44).
+    emcee and zeus evaluate half the walkers at a time, so a half-step takes
+    ceil((nwalkers/2) / workers) rounds of calls, and every nwalkers up to 2 x workers x rounds
+    needs the same number of rounds. Threads per worker: 1 without CMB groups (only CLASS's
+    spectra gain from them); with CMB groups the threads per core on machines with
+    hyperthreading (T35: 6 workers x 2 threads 21% faster than 12 x 1 on 12 CPUs), else the
+    cores per busy walker; at most constants.CLASS_THREADS_SUGGEST_MAX (T35c: no gain from 3
+    or 4 threads on a saturated machine).
+    """
+    t_max = int(t_max or getattr(K, "CLASS_THREADS_SUGGEST_MAX", 2) or 2)
+    half = (int(min_walkers) + 1) // 2
+    t = max(1, min(t_max, max(int(smt), int(n_cores) // max(1, half)))) if uses_class else 1
+    workers = max(1, int(n_cores) // t)
+    rounds = -(-half // workers)
+    return t, workers, rounds, (2 * half, 2 * workers * rounds)
+
+
 def class_threads_per_worker() -> int:
     """CLASS threads per pool worker or MPI worker rank (--class_threads, CT-40); 1 unless
     the run set constants.CLASS_THREADS_PER_WORKER."""
@@ -557,12 +797,16 @@ def set_main_threads(n: int) -> str:
     n = max(1, min(int(n), n_cpu))
     K.MAIN_THREADS = n                 # caps the BLAS threads of groups without a pool
     os.environ["OMP_NUM_THREADS"] = str(n)
+    # BLAS/OpenMP (clik, NumPy): at most MAIN_BLAS_THREADS_NO_POOL. On Renier's 12 CPUs a Planck
+    # call took 60 ms with 12 threads, 11 ms with 4 and 16 ms with 1 (CT-38); CLASS keeps n
+    # through OMP_NUM_THREADS (its own thread pool, which threadpoolctl does not reach).
+    nb = min(n, int(getattr(K, "MAIN_BLAS_THREADS_NO_POOL", n) or n))
     try:
         from threadpoolctl import threadpool_limits
-        threadpool_limits(n)          # BLAS/OpenMP libraries loaded already
+        threadpool_limits(nb)         # BLAS/OpenMP libraries loaded already
     except Exception:
         pass
-    return f"{n} (CLASS and BLAS)"
+    return f"{n} for CLASS, {nb} for BLAS (also for groups that run vectorised in this process)"
 
 
 def mpi_node_ranks(comm) -> int:
@@ -1165,8 +1409,11 @@ def detect_vectorisation(models, get_model_fn, config, data, sample_n: int = 10)
             else:
                 z_test = np.linspace(z_min, z_max, 20000)
 
-            names = config[mod]["parameters"][0]
-            tv = config[mod]["reference_values"][0]
+            # CT-45: the parameters of the group that holds the tested data set (the first group's
+            # were used: with a CMB group first, a CC group's E(z) got Omega_bh^2/Omega_dh^2 only)
+            _gi = next((i for i, g in enumerate(config[mod].get("observations", [])) if tested_obs in g), 0)
+            names = config[mod]["parameters"][_gi]
+            tv = config[mod]["reference_values"][_gi]
             params = dict(zip(names, tv))
 
             try:
@@ -1383,31 +1630,8 @@ def load_or_run_chain(
     obs_types  = [str(t) for t in (other_kwargs.get("Type") or [])]
     obs_lower  = [t.lower() for t in obs_types]
 
-    has_cmb = any(t.startswith("cmb_") for t in obs_lower)
-    has_bbn = any("bbn" in t for t in obs_lower)
-
-    # Reconstruct engine choice (mirrors Kosmulator_MCMC._choose_engine logic)
-    if force_emcee:
-        engine = "emcee"
-    elif getattr(K, "force_zeus", False) and zeus is not None:
-        engine = "zeus"
-    else:
-        if engine_mode in ("single", "mixed"):
-            eng_map = getattr(K, "engine_for_model", {})
-            eng = eng_map.get(model_name)
-            if eng in ("zeus", "emcee"):
-                engine = eng
-            else:
-                # Fallback: prefer Zeus if possible
-                engine = "zeus" if (can_vec and zeus is not None) else "emcee"
-        elif engine_mode == "fastest":
-            if (not has_cmb) and (not has_bbn) and can_vec and (zeus is not None):
-                engine = "zeus"
-            else:
-                engine = "emcee"
-        else:
-            # Unknown mode -> behave like mixed
-            engine = "zeus" if (can_vec and zeus is not None) else "emcee"
+    # The same rule as Kosmulator_MCMC (engine_for_group, CT-31)
+    engine = engine_for_group(model_name, can_vec, other_kwargs.get("obs"), obs_types)
 
     # One sampled parameter: Kosmulator_MCMC runs emcee instead of zeus (zeus's
     # differential move is unreliable in one dimension), so the chain is loaded or
@@ -2085,6 +2309,8 @@ def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float
 
     with open(file_path, "w") as f:
         f.write(f"Statistical Results for Model: {model}\n")
+        if getattr(K, "RUN_SETTINGS", None):
+            f.write(settings_header() + "\n")          # CT-26
         f.write(header + "\n")
         f.write("-" * len(header) + "\n")
         for s in stats_list:
@@ -2374,18 +2600,26 @@ CONVERGENCE_HEADER = ["Observation", "Engine", "Steps", "Burn-in", "Retained sam
                       "Stuck walkers"]
 
 
+def convergence_note_text(rules: Optional[Dict[str, float]] = None) -> str:
+    """The explanation printed under the convergence tables."""
+    rules = rules or convergence_rules()
+    note = CONVERGENCE_NOTE.format(tau_factor=rules["tau_factor"], ess_min=rules["ess_min"],
+                                   rtol_pct=100 * rules["rtol"], rhat_max=rules["rhat_max"])
+    return textwrap.fill(note, width=110)
+
+
 def format_convergence_table(model: str, rows: List[Dict[str, Any]],
-                             rules: Optional[Dict[str, float]] = None) -> str:
-    """Aligned plain-text convergence table for one model."""
+                             rules: Optional[Dict[str, float]] = None, note: bool = True) -> str:
+    """Aligned plain-text convergence table for one model; with `note` the explanation below it
+    (the file of each model keeps it; the console prints it once after all models, CT-12)."""
     rules = rules or convergence_rules()
     body = [_fmt_conv_row(r) for r in rows]
     widths = [max(len(h), *(len(b[i]) for b in body)) if body else len(h) for i, h in enumerate(CONVERGENCE_HEADER)]
     line = lambda cells: " | ".join(c.ljust(w) if i == 0 else c.rjust(w) for i, (c, w) in enumerate(zip(cells, widths)))
     out = [f"Convergence summary for model: {model}", line(CONVERGENCE_HEADER), "-" * len(line(CONVERGENCE_HEADER))]
     out += [line(b) for b in body]
-    note = CONVERGENCE_NOTE.format(tau_factor=rules["tau_factor"], ess_min=rules["ess_min"],
-                                   rtol_pct=100 * rules["rtol"], rhat_max=rules["rhat_max"])
-    out += ["", textwrap.fill(note, width=110)]
+    if note:
+        out += ["", convergence_note_text(rules)]
     return "\n".join(out)
 
 
@@ -2396,6 +2630,8 @@ def write_convergence_reports(model: str, rows: List[Dict[str, Any]], folder: st
     paths = []
     p = os.path.join(folder, "convergence_summary.txt")
     with open(p, "w", encoding="utf-8") as fh:
+        if getattr(K, "RUN_SETTINGS", None):
+            fh.write(settings_header() + "\n")          # CT-26
         fh.write(format_convergence_table(model, rows, rules) + "\n")
     paths.append(p)
     return paths
@@ -2471,6 +2707,7 @@ class InitSummaryHandler(logging.Handler):
         self.advisories = Counter()                                 # message -> count
         self.bump_nwalker = []                                      # list[str]
         self.preprocess = []                                        # list[str]
+        self.data_settings = {}                                     # message -> None (ordered, CT-13)
         self._already_rendered = False
 
     # ---------- helpers ----------
@@ -2526,6 +2763,16 @@ class InitSummaryHandler(logging.Handler):
         ):
             return
 
+        # data settings: each distinct line once (CT-13)
+        if any(k in msg for k in INIT_DATA_KEYS):
+            self.data_settings.setdefault(msg, None)
+            return
+
+        # "Auto-calibrating r_d ..." repeats the policy line "r_d calibrated by early-time
+        # dataset(s) ..." of the same group, once per model (CT-23): not printed
+        if msg.startswith("Auto-calibrating r_d"):
+            return
+
         # Route tokens to advisories (not policies)
         if self._is_fs8_solo(msg):
             self.advisories["fσ8 run solo"] += 1
@@ -2565,14 +2812,15 @@ class InitSummaryHandler(logging.Handler):
             self.bump_nwalker.append(msg)
             return
 
-        if msg.startswith("Observation f alone") or msg.startswith(
-            "Auto-calibrating r_d"
-        ):
+        if msg.startswith("Observation f alone"):
             self.advisories[msg] += 1
             return
 
         # policy-style lines (BAO singleton/combo; fσ8 singleton)
         self.policies[self._infer_model(msg)][msg] += 1
+
+    def _printable_advisories(self) -> bool:
+        return any(k != "SNe_solo_H0_Mabs" for k in self.advisories)
 
     def _infer_model(self, msg: str) -> str:
         # messages end with "(model XYZ)" → extract last token
@@ -2685,25 +2933,29 @@ class InitSummaryHandler(logging.Handler):
         if any(per_model_pols.values()):
             if policies_identical():
                 logger.info("Policy decisions (identical for all models)")
-                for pol, c in per_model_pols[all_models[0]].items():
-                    logger.warning(
-                        "  %s%s", pol, f" ×{c}" if c > 1 else ""
-                    )
+                for pol in merge_group_lists(list(per_model_pols[all_models[0]].keys())):
+                    logger.warning("  %s", pol)
                 printed_any_policy = True
             else:
                 for m in all_models:
                     if per_model_pols[m]:
                         logger.info("Model %s — policy decisions", m)
-                        for pol, c in per_model_pols[m].items():
-                            logger.warning(
-                                "  %s%s", pol, f" ×{c}" if c > 1 else ""
-                            )
+                        for pol in merge_group_lists(list(per_model_pols[m].keys())):
+                            logger.warning("  %s", pol)
                         printed_any_policy = True
-            if printed_any_policy and (self.advisories or self.bump_nwalker):
+            if printed_any_policy and (self._printable_advisories() or self.bump_nwalker or self.data_settings):
                 logger.info(divider)
 
-        # Advisories (compact wording; unique only)
-        if self.advisories:
+        # Data settings, each line once (CT-13)
+        if self.data_settings:
+            logger.info("Data settings")
+            for msg in self.data_settings:
+                logger.info("  %s", msg)
+            if self._printable_advisories() or self.bump_nwalker:
+                logger.info(divider)
+
+        # Advisories (compact wording; unique only); the internal token alone prints no header
+        if any(k != "SNe_solo_H0_Mabs" for k in self.advisories):
             logger.info("General advisories / notes")
             for msg in sorted(self.advisories.keys()):
                 if msg == "SNe_solo_H0_Mabs":
@@ -2727,7 +2979,7 @@ class InitSummaryHandler(logging.Handler):
 
         # nwalker adjustments
         if self.bump_nwalker:
-            if self.advisories:
+            if self._printable_advisories():
                 logger.info(divider)
             logger.info("nwalker adjustments")
             for m in self.bump_nwalker:

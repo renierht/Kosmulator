@@ -185,11 +185,12 @@ growth_model: str = "gamma"
 # the steps) plus a snooker move (20%, ter Braak & Vrugt 2008), or "stretch" (emcee's own move). Both
 # sample the same posterior; in Kosmulator's tests de_snooker needed 2 - 6 times fewer steps than
 # stretch (about 4.5 times on a 27-parameter target shaped like a Planck baseline chain; Planck lite:
-# 4900 against 11 600 steps, same posterior) at the same likelihood calls per step. zeus_light_mode: True skips zeus's interval expansions after its tuning
-# phase (fewer likelihood calls per step but more steps; about 1.0 - 1.5 times faster overall in the
-# tests, on near-Gaussian posteriors). Changing either between a run and its --resume is allowed.
+# 4900 against 11 600 steps, same posterior) at the same likelihood calls per step. zeus_light_mode: True
+# (default) skips zeus's interval expansions after its tuning phase: fewer likelihood calls per step but
+# more steps (Complete test T07: 1.1 - 1.9 times more steps, 1.3 - 2.3 times less time, same posteriors);
+# False gives zeus's full slice step. Changing either between a run and its --resume is allowed.
 emcee_moves: str = "de_snooker"
-zeus_light_mode: bool = False
+zeus_light_mode: bool = True
 # r_d of BAO/DESI groups calibrated by BBN or Planck. "model" (default): CLASS with the model's own
 # E(z) in place of the cosmological constant (rd_Class: compiled once, then cached), for every model
 # other than LCDM; this matters when the model's dark sector is not negligible before recombination

@@ -248,9 +248,8 @@ def ensure_ready(announce: bool = False, build: bool = True):
             with CR._with_lock(RD_CLASS_NAME, sig_hash, timeout_s=900):
                 so = CR._find_cached_so(RD_CLASS_NAME, sig_hash)
                 if so is None:
-                    msg = "[rd_Class] compiling CLASS with the tabulated E(z) hook (once; cached afterwards)"
-                    print(msg, flush=True) if announce else logger.info(msg)
-                    CR.run_model(RD_CLASS_NAME)
+                    CR.build_logged("[rd_Class] Building CLASS with the tabulated E(z) hook", RD_CLASS_NAME,
+                                    lambda: CR.run_model(RD_CLASS_NAME))
                     so = CR._copy_built_so_to_cache(RD_CLASS_NAME, sig_hash) or CR.find_classy_so(RD_CLASS_NAME)
                     CR._write_stamp(RD_CLASS_NAME, sig_hash, sig, so)
         else:

@@ -7,6 +7,7 @@ Main entry: `main(...)` — called by Kosmulator.py
 from __future__ import annotations
 
 import os
+import sys
 import logging
 import time
 from copy import deepcopy
@@ -48,6 +49,12 @@ from Kosmulator_main.utils import (
     load_or_run_chain,
     init_summary_context,
     issue_observation_warnings,   # moved from here into utils.py
+    model_group_engines,
+    describe_group_engines,
+    settings_summary,
+    group_flags,
+    cpu_topology,
+    suggest_pool_settings,
 )
 import Plots.Plots as MP
 from Kosmulator_main import Class_run as CR
@@ -141,6 +148,60 @@ def _log_parameter_injections(logger, obs_blocks: Iterable[Sequence[str]]) -> No
         # WARNING level so it stands out visually, like before
         logger.warning("  %s | %s", f"{block_str:<44}", params_str)
         
+def _rounds(n: int) -> str:
+    return f"{n} round{'s' if n != 1 else ''}"
+
+
+def suggestion_lines(CONFIG, model_names, vectorised, num_cores: int, use_mpi: bool, n_workers: int) -> List[str]:
+    """
+    CT-44: for every model with groups that use the worker pool, the --class_threads and nwalkers
+    that suit the CPUs given (utils.suggest_pool_settings), next to this run's setting. The
+    minimum walkers are Config's rule, 2 x the largest number of sampled parameters + 2, so the
+    CMB nuisance setting (lite, baseline, extended, full) and the ACT/SPT calibrations enter
+    through it. Under MPI only the walker range for the worker ranks (their threads depend on
+    how the ranks are launched).
+    """
+    logical, smt = cpu_topology()
+    ct = int(getattr(K, "CLASS_THREADS_PER_WORKER", 1) or 1)
+    out: List[str] = []
+    for m in model_names:
+        cfg = CONFIG[m]
+        can_vec = bool(vectorised.get(m, False))
+        groups = cfg.get("observations", []) or []
+        types = cfg.get("observation_types", []) or []
+        pool_idx = []
+        for i, g in enumerate(groups):
+            has_cmb, has_bbn = group_flags(g, types[i] if i < len(types) else [])
+            if has_cmb or has_bbn or not can_vec or any(
+                    o in getattr(K, "POOL_PREFERRED_DATASETS", set()) for o in g):
+                pool_idx.append(i)
+        if not pool_idx:
+            continue
+        ndims = [int(x) for x in (cfg.get("ndim") or [])]
+        min_w = 2 * max(ndims) + 2 if ndims else 2
+        half_min = (min_w + 1) // 2
+        nw = int(cfg.get("nwalker", 0) or 0)
+        half_run = (nw + 1) // 2
+        if use_mpi:
+            w = max(1, int(n_workers))
+            r = -(-half_min // w)
+            hi = 2 * w * r
+            out.append(f"Walkers for {m} (at least {min_w}) on {w} MPI worker ranks: nwalkers {2 * half_min} - {hi}: "
+                       f"{_rounds(r)} of calls per half-step ({hi + 2} - {2 * w * (r + 1)}: {r + 1}). "
+                       f"This run: nwalkers {nw}, {_rounds(-(-half_run // w))}.")
+            continue
+        uses_class = any(group_flags(groups[i], types[i] if i < len(types) else [])[0] for i in pool_idx)
+        t, w, r, (lo, hi) = suggest_pool_settings(int(num_cores), min_w, uses_class, smt)
+        w_run = max(1, int(num_cores) // ct)
+        smt_txt = f", {smt} threads per core" if smt > 1 else ""
+        out.append(f"Suggested for {m} (at least {min_w} walkers; {int(num_cores)} CPUs{smt_txt}): "
+                   f"--class_threads {t} ({w} workers) with nwalkers {lo if lo == hi else f'{lo} - {hi}'}: "
+                   f"{_rounds(r)} of calls per "
+                   f"half-step ({hi + 2} - {2 * w * (r + 1)}: {r + 1}). This run: --class_threads {ct}, "
+                   f"{w_run} workers, nwalkers {nw}, {_rounds(-(-half_run // w_run))}.")
+    return out
+
+
 def _model_has_any_cmb_or_bbn(CONFIG, model_name: str) -> bool:
     """
     Return True if *any* observation group for this model
@@ -175,7 +236,7 @@ def main(
     hmcode_version: str = "2020",
     growth_model: str = "gamma",
     emcee_moves: str = "de_snooker",
-    zeus_light_mode: bool = False,
+    zeus_light_mode: bool = True,
     rd_background: str = "model",
     lensing_only_priors: bool = True,
 ):
@@ -293,6 +354,11 @@ def main(
     # ------------------------------------------------------------------
     # 4) Master builds CONFIG & data
     # ------------------------------------------------------------------
+    if rank == 0 and int(nsteps) <= int(burn):
+        # CT-32: the run extends itself after sampling so that samples remain after the burn-in
+        log.warning("nsteps (%d) is not larger than burn (%d): after sampling, %d more steps will be run so "
+                    "that the chain has samples after the burn-in. Set nsteps above burn.",
+                    int(nsteps), int(burn), max(int(getattr(args, "autocorr_buffer", 0) or 0), 100))
     if rank == 0:
         style = getattr(args, "init_log", "terse")
         with init_summary_context(style=style):
@@ -459,14 +525,22 @@ def main(
                 force_emcee,
             )
 
+        # the engine of each group (CT-31); the model banners use them (CT-17)
+        K.GROUP_ENGINES = {m: model_group_engines(CONFIG, m, bool(vectorised.get(m, False)))
+                           for m in model_names}
         for m in model_names:
             log.info(
-                "  Model '%s': main engine=%s (vectorised=%s, touches CMB/BBN=%s)",
+                "  Model '%s': %s (vectorised=%s, touches CMB/BBN=%s)",
                 m,
-                K.engine_for_model.get(m, "auto"),
+                describe_group_engines(K.GROUP_ENGINES[m]),
                 bool(vectorised.get(m, False)),
                 _model_has_any_cmb_or_bbn(CONFIG, m),
             )
+        # the moves, once here instead of once per group (CT-01)
+        _used = sorted({e for d in K.GROUP_ENGINES.values() for e in d.values()})
+        if _used:
+            from Kosmulator_main import sampler_moves as _SM
+            log.info("  Moves: %s", "; ".join(_SM.describe(e) for e in _used))
 
         use_mpi   = bool(getattr(args, "use_mpi", False))
         num_cores = int(getattr(args, "num_cores", 1))
@@ -484,8 +558,9 @@ def main(
                              "the ranks with %d cores each, else the threads share one core.", _ct, _ct)
             else:
                 log.info(
-                    "Parallel plan: local multiprocessing Pool with up to %d workers "
-                    "for emcee / non-vectorised Zeus chains%s.",
+                    "Parallel plan: local multiprocessing Pool with up to %d workers for CMB, BBN and "
+                    "official JLA groups and non-vectorised models%s; the other groups run vectorised "
+                    "in this process.",
                     max(1, num_cores // _ct),
                     f", {_ct} CLASS threads each (--class_threads {_ct})" if _ct > 1 else "",
                 )
@@ -524,11 +599,9 @@ def main(
                     "%d workers for %d walkers: emcee and zeus move half the walkers at a time, "
                     "so only %d workers are busy and %d wait at each half-step.",
                     n_workers, nw, nw // 2, n_workers - nw // 2)
-                # CT-40: CMB groups can give the idle cores to CLASS
-                _fit = (n_workers * _ct) // max(1, nw // 2)
-                if cmb_groups and not use_mpi and _fit > _ct:
-                    log.info("For the CMB groups, --class_threads %d would let each busy worker run CLASS on "
-                             "%d threads (about %.1fx faster per point with 2 threads).", _fit, _fit, 1.9)
+            # CT-44: per model, the threads per worker and walker counts that suit the CPUs given
+            for line in suggestion_lines(CONFIG, model_names, vectorised, num_cores, use_mpi, n_workers):
+                log.info(line)
 
         # Item 12: r_d with the model's own E(z) (rd_Class, Kosmulator_main/rd_class.py) for
         # BAO/DESI groups calibrated by BBN or Planck, for models other than LCDM. Compiled once
@@ -611,18 +684,28 @@ def main(
             _check["lensing_only_priors"] = bool(K.LENSING_ONLY_PRIORS)
         check_run_settings((getattr(args, "output_suffix", "") or "").strip(), _check,
                            overwrite=bool(getattr(args, "overwrite", False)))
-        write_run_settings((getattr(args, "output_suffix", "") or "").strip(), {
+        _run = {
             "models": list(model_names), "observations": [list(g) for g in observations],
             "nwalkers": nwalkers, "nsteps": nsteps, "burn": burn, "convergence": convergence,
             "cmb_nuisance": K.CMB_NUISANCE, "sample_H0_uncalibrated_SNe": bool(sample_H0_uncalibrated_SNe),
             "waic_include_cmb": bool(K.WAIC_INCLUDE_CMB), "neutrinos": K.NEUTRINOS,
-            "nu_mass_eV": K.NU_MASS_EV, "nu_N_eff": K.NU_N_EFF, "growth_model": K.GROWTH_MODEL,
+            # a massless run has no neutrino mass (CT-26: 0.06 was recorded)
+            "nu_mass_eV": K.NU_MASS_EV if K.NEUTRINOS == "massive" else 0.0,
+            "nu_N_eff": K.NU_N_EFF, "growth_model": K.GROWTH_MODEL,
             "cmb_nonlinear": K.CMB_NONLINEAR, "hmcode_version": K.HMCODE_VERSION,
             "num_cores": int(getattr(args, "num_cores", 1)), "use_mpi": bool(getattr(args, "use_mpi", False)),
             "class_threads": int(K.CLASS_THREADS_PER_WORKER),
             "emcee_moves": K.EMCEE_MOVES, "zeus_light_mode": bool(K.ZEUS_LIGHT_MODE),
             "rd_background": K.RD_BACKGROUND, "lensing_only_priors": bool(K.LENSING_ONLY_PRIORS),
-        })
+            "CC_SYS_COV": K.CC_SYS_COV, "PANTHEON_SYS_COV": getattr(K, "PANTHEON_SYS_COV", None),
+            "FS8_WIGGLEZ_COV": bool(K.FS8_WIGGLEZ_COV), "FS8_AP_CORRECTION": bool(K.FS8_AP_CORRECTION),
+            "engine_mode": getattr(K, "engine_mode", "mixed"),
+            "tau_consecutive": int(PLOT_SETTINGS.get("tau_consecutive", K.CONV_CONSECUTIVE)),
+            "autocorr_buffer": int(PLOT_SETTINGS.get("autocorr_buffer_after_burn", 0) or 0),
+            "corner_show_nuisance": bool(getattr(K, "CORNER_SHOW_NUISANCE", False)),
+        }
+        K.RUN_SETTINGS = dict(_run)      # the "Settings" summary and the results' header (CT-26)
+        write_run_settings((getattr(args, "output_suffix", "") or "").strip(), _run)
 
     samples = run_mcmc_for_all_models(
         models=models,
@@ -779,9 +862,13 @@ def run_mcmc_for_all_models(
     # Planck likelihood code (clik, or clipy when clik is missing; see Class_run)
     if need_hil or need_hilTT or need_lowl or need_lowlTT or need_lensing:
         if CR.clik is None:
+            _env = os.environ.get("CONDA_DEFAULT_ENV") or os.environ.get("VIRTUAL_ENV") or ""
             raise ImportError(
                 "CMB likelihoods need clik or clipy. Easiest: pip install \"clipy-like>=0.15\" "
-                "(pure Python); or build CLIK as in the README's advanced installation."
+                "(pure Python); or build CLIK as in the README's advanced installation. "
+                f"(This Python: {sys.executable}"
+                + (f", environment '{os.path.basename(_env)}'" if _env else "")   # CT-32: the wrong env
+                + "; is this the environment Kosmulator was installed in?)"
             )
         if need_lowl:
             problem = CR.clipy_lowl_problem()
@@ -862,11 +949,29 @@ def run_mcmc_for_all_models(
     main_threads = set_main_threads(n_main)
     if rank == 0:
         log.info("Threads for CLASS and BLAS in the main process: %s", main_threads)
-        if K.NEUTRINOS == "massive":
-            log.info("Neutrinos: one massive of %g eV plus massless ones, N_eff = %g in total",
-                     K.NU_MASS_EV, K.NU_N_EFF)
-        else:
-            log.info("Neutrinos: all massless, N_eff = %g", K.NU_N_EFF)
+        # every switch of the run in one summary, the last lines before the runs (CT-26)
+        _lines, _nondef = settings_summary()
+        for _ln in _lines:
+            log.info(_ln)
+        if _nondef:
+            log.warning("Not the default (*): %s", "; ".join(_nondef))
+        # CT-38 (a): the nested best-fit search of groups with CMB nuisance parameters
+        try:
+            from Kosmulator_main import Post_processing as PP
+            _nuis = []
+            for _m in (list(models.keys()) if isinstance(models, dict) else list(models)):
+                _cm = CONFIG.get(_m, {})
+                for _g, _pl in zip(_cm.get("observations", []), _cm.get("parameters", [])):
+                    if len(PP._fast_cmb_params(_pl)) >= 2:
+                        _nuis.append(f"{_m}: {'+'.join(_g)}")
+            if _nuis:
+                log.warning("The statistics of %d group(s) with Planck/ACT/SPT nuisance parameters (%s) include a "
+                            "nested best-fit search: one CLASS run and about 1500 likelihood calls per point, up to "
+                            "%d points per group, one point after the other. It can take longer than a short run's "
+                            "sampling; KOSM_POLISH_NESTED_MAXFEV_CMB=N lowers the number of points.",
+                            len(_nuis), "; ".join(_nuis), PP._polish_nested_maxfev_cmb())
+        except Exception as _e:                      # a warning only; never stops the run
+            log.debug("nested-polish warning skipped: %s", _e)
 
     # Build the model list from either dict or list
     model_list = list(models.keys()) if isinstance(models, dict) else list(models)
@@ -885,7 +990,7 @@ def run_mcmc_for_all_models(
             eng = "zeus" if (cv and (zeus is not None)) else "emcee"
         touches = _model_has_any_cmb_or_bbn(CONFIG, m)
         return bool(
-            (touches and (eng == "emcee" or engine_mode == "fastest"))
+            (touches and (eng == "emcee" or engine_mode in ("fastest", "mixed")))
             or not cv
             or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set())
                    for grp in CONFIG[m].get("observations", []) for o in grp)
@@ -974,6 +1079,7 @@ def run_mcmc_for_all_models(
                 touches_cmb_bbn=_model_has_any_cmb_or_bbn(CONFIG, model_name),
                 single_engine_map=K.engine_for_model,
                 pool_kind=("serial" if pool_for_model is None else ("mpi" if use_mpi else "local")),
+                group_engines=(getattr(K, "GROUP_ENGINES", {}) or {}).get(model_name),
             )
             #print(bar, flush=True)
 

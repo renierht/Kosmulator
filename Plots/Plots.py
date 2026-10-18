@@ -24,6 +24,7 @@ _gd_chains.print_load_details = False
 
 from Kosmulator_main import Statistical_packages as SP
 from Kosmulator_main.constants import CODE_STYLE, C_KM_S, R_D_SINGLETON, GAMMA_FS8_SINGLETON
+from Kosmulator_main import constants as K
 from Kosmulator_main import Post_processing as PP
 from Kosmulator_main.utils import generate_label as cfg_generate_label
 from Kosmulator_main.utils import (
@@ -650,6 +651,9 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
 
         with open(pretty_path, "w", encoding="utf-8") as out:
             print(f"Model: {model} Aligned LaTeX Table:", file=out)
+            if getattr(K, "RUN_SETTINGS", None):
+                from Kosmulator_main.utils import settings_header
+                print(settings_header(), file=out)          # CT-26
             print(file=out)
 
             # 1) Main aligned table: same core set as console
@@ -705,6 +709,10 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
         print_stats_table(model, rows)
         print_rule()
         print()
+    if stats_dict and getattr(K, "RUN_SETTINGS", None):
+        from Kosmulator_main.utils import settings_header
+        print(settings_header())                          # CT-26
+        print()
 
     # ----- 5) Convergence report (console + convergence_summary.txt) ----
     _report_convergence(CONFIG, PLOT_SETTINGS, main_folder)
@@ -718,7 +726,7 @@ def _report_convergence(CONFIG, PLOT_SETTINGS, main_folder):
     stuck walkers, computed exactly as the stopping rule computes them."""
     from Kosmulator_main.utils import (
         chain_convergence_summary, format_convergence_table, write_convergence_reports,
-        convergence_rules,
+        convergence_rules, convergence_note_text,
     )
     rules = convergence_rules(PLOT_SETTINGS)
     index = PLOT_SETTINGS.get("chain_index") or {}
@@ -738,7 +746,11 @@ def _report_convergence(CONFIG, PLOT_SETTINGS, main_folder):
         except Exception as e:
             print(f"[warning] could not write the convergence summary for {model}: {e}")
         print_rule()
-        print(format_convergence_table(model, rows, rules))
+        print(format_convergence_table(model, rows, rules, note=False))
+        print_rule()
+        print()
+    if by_model:                     # the explanation once, after the last model (CT-12)
+        print(convergence_note_text(rules))
         print_rule()
         print()
 
@@ -1560,6 +1572,10 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
                 _modes = sorted({"lowl" if t in ("CMB_lowl", "CMB_lowl_TT") else "hil" for t in _cmb_names}
                                 | ({"hil"} if _fig_tags else set()))
                 _SP.clear_cls_prefetch()                    # the previous group's spectra
+                # CT-38 (b): say so before the runs (several minutes with HMcode and l_max 8500)
+                print(f"[CMB] {model_name} {obs_key}: computing up to {(len(band_draws) + 3) * len(_modes)} CLASS "
+                      f"runs for the 68% bands ({len(band_draws) + 3} points x {len(_modes)} l-range(s)) ...",
+                      flush=True)
                 _t0 = __import__("time").time()
                 _n = _SP.prefetch_cls(list(band_draws) + [params_med, params_lo, params_hi], model_name, _modes)
                 if _n:

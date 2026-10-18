@@ -234,6 +234,68 @@ def _sig_hash(sig_dict: dict) -> str:
     return hashlib.sha256(json.dumps(sig_dict, sort_keys=True).encode()).hexdigest()
 
 
+@contextmanager
+def output_to(path) -> None:
+    """Send everything written to stdout/stderr (this process and the build commands it starts)
+    to `path` for the duration of the block (file descriptors 1 and 2, so the compilers' output
+    goes there too)."""
+    path = Path(path)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        saved = os.dup(1), os.dup(2)
+        try:
+            os.dup2(f.fileno(), 1)
+            os.dup2(f.fileno(), 2)
+            yield
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.dup2(saved[0], 1)
+            os.dup2(saved[1], 2)
+            os.close(saved[0])
+            os.close(saved[1])
+
+
+def log_errors(log_path, n: int = 12) -> str:
+    """The compiler's first error lines (with the two lines after each), else the log's last lines."""
+    try:
+        lines = Path(log_path).read_text(errors="replace").splitlines()
+    except Exception:
+        return ""
+    out = []
+    for i, line in enumerate(lines):
+        if "error:" in line or "Error:" in line:
+            out += [x for x in lines[i:i + 3] if x not in out]
+        if len(out) >= n:
+            break
+    if out:
+        return "first errors in the log:\n" + "\n".join(out[:n])
+    return "last lines of the log:\n" + "\n".join(lines[-n:])
+
+
+def build_logged(label: str, model_name: str, fn):
+    """
+    Run the build function fn() with make's, the compilers' and Cython's output in
+    Class/<model_name>/build.log, and one line on the console (CT-22: 100 - 150 lines before).
+    KOSM_VERBOSE_BUILD=1 shows the output as before. A failed build prints the first errors and
+    the log's path, then raises as before.
+    """
+    if str(os.environ.get("KOSM_VERBOSE_BUILD", "")).strip().lower() in ("1", "true", "yes", "on"):
+        return fn()
+    log_path = Path("./Class") / model_name / "build.log"
+    print(f"{label} (once; about 1 - 3 minutes; log: Class/{model_name}/build.log)", flush=True)
+    try:
+        with output_to(log_path):
+            return fn()
+    except BaseException:
+        print(f"[CLASS] The build of {model_name} failed; {log_errors(log_path)}\n"
+              f"(full log: {log_path}; KOSM_VERBOSE_BUILD=1 shows the build output on the console)",
+              flush=True)
+        raise
+
+
 def _mpi_rank0() -> bool:
     """Return True on MPI rank 0, or always True if mpi4py is unavailable."""
     try:
@@ -682,12 +744,13 @@ def ensure_class_ready(
             if cached2 and not force:
                 path = cached2
             else:
-                try:
-                    subprocess.run(["make", "clean", "-C", model_dir], check=False)
-                except Exception:
-                    pass
-
-                run_model(model_name)
+                def _build():
+                    try:
+                        subprocess.run(["make", "clean", "-C", model_dir], check=False)
+                    except Exception:
+                        pass
+                    run_model(model_name)
+                build_logged(f"[CLASS] Building CLASS for {model_name}", model_name, _build)
                 built_cached = _copy_built_so_to_cache(model_name, sig_hash)
                 path = built_cached or find_classy_so(model_name)
                 _write_stamp(model_name, sig_hash, sig, path)
@@ -906,7 +969,11 @@ def get_clik_lensing():
         _clik_instance_lensing = clik.clik_lensing(path_raw)
 
     if not _DID_LOG_LENSING_RAW:
-        logger.info("Loaded lensing (RAW) clik from '%s'", path_raw)
+        import multiprocessing as mp
+        # once, from the main process (each pool worker loads it too: one line per worker
+        # before, CT-36), as get_clik_lensing_cmbmarg does
+        if mp.current_process().name == "MainProcess" and _mpi_rank0():
+            logger.info("Loaded Planck 2018 lensing (raw) %s", os.path.basename(path_raw))
         _DID_LOG_LENSING_RAW = True
 
     return _clik_instance_lensing
@@ -933,8 +1000,8 @@ def get_clik_lensing_cmbmarg():
     if not _DID_LOG_LENSING_CMBMARG:
         import multiprocessing as mp
         # Check if this specific worker is the main coordinating process
-        if mp.current_process().name == "MainProcess":
-            logger.info("Loaded lensing (CMB-marged) clik from '%s'", path_marg)
+        if mp.current_process().name == "MainProcess" and _mpi_rank0():
+            logger.info("Loaded Planck 2018 lensing (CMB-marginalised) %s", os.path.basename(path_marg))
         
         # Set the flag to True for EVERY worker so they all stop trying
         _DID_LOG_LENSING_CMBMARG = True

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 
-from typing import Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 """
 Central place for global constants used throughout Kosmulator.
@@ -185,16 +185,18 @@ def set_growth_model(mode="gamma") -> None:
 # Proposal moves (Kosmulator.py: emcee_moves, zeus_light_mode; Kosmulator_main/sampler_moves.py).
 # emcee: "de_snooker" (default since 13 Oct, Renier: differential evolution 0.8 + snooker 0.2,
 # ter Braak & Vrugt 2008; t11 matched t9's stretch posterior in 4900 instead of 11 600 steps) or
-# "stretch" (emcee's own move). zeus: its DifferentialMove; light mode skips the expansions after tuning.
+# "stretch" (emcee's own move). zeus: its DifferentialMove; light mode (default since 18 Oct, CT-21:
+# T07 needed 1.1 - 1.9 times more steps but 1.3 - 2.3 times less time, same posteriors) skips the
+# expansions after tuning.
 # Only the process that runs the sampler uses these (rank 0 under MPI, which also calls
 # MCMC_setup.main), so pool workers need no KOSM_* variable.
 EMCEE_MOVES: str = "de_snooker"
 EMCEE_MOVES_OPTIONS: Tuple[str, ...] = ("stretch", "de_snooker")
 DE_SNOOKER_WEIGHTS: Tuple[float, float] = (0.8, 0.2)
-ZEUS_LIGHT_MODE: bool = False
+ZEUS_LIGHT_MODE: bool = True
 
 
-def set_sampler_moves(emcee_moves="de_snooker", zeus_light_mode=False) -> None:
+def set_sampler_moves(emcee_moves="de_snooker", zeus_light_mode=True) -> None:
     """Moves of this run (Kosmulator.py emcee_moves, zeus_light_mode), validated."""
     global EMCEE_MOVES, ZEUS_LIGHT_MODE
     m = str(emcee_moves).strip().lower()
@@ -386,6 +388,30 @@ MPI_NODE_RANKS: int = 1
 #: a time. The spectra do not depend on it (LCDM_v, l_max 8501, HMcode: bitwise identical with
 #: 1 and 2 threads; one call 24.5 s on 1 thread, 13.0 s on 2, cloud, 18 Oct 2026).
 CLASS_THREADS_PER_WORKER: int = 1
+
+#: Defaults of the run's switches (Kosmulator.py, constants.py data options and the command
+#: line), for the "Settings" summary at start-up and the results' header (CT-26); a switch
+#: that differs is marked "*".
+SETTINGS_DEFAULTS: Dict[str, Any] = {
+    "neutrinos": "massive", "nu_mass_eV": 0.06, "nu_N_eff": 3.044, "rd_background": "model",
+    "growth_model": "gamma", "cmb_nonlinear": None, "hmcode_version": "2020", "cmb_nuisance": "baseline",
+    "lensing_only_priors": True, "sample_H0_uncalibrated_SNe": False, "waic_include_cmb": False,
+    "CC_SYS_COV": None, "PANTHEON_SYS_COV": None, "FS8_WIGGLEZ_COV": False, "FS8_AP_CORRECTION": False,
+    "engine_mode": "mixed", "emcee_moves": "de_snooker", "zeus_light_mode": True,
+    "tau_consecutive": 1, "autocorr_buffer": 0, "class_threads": 1, "corner_show_nuisance": False,
+}
+
+#: The run's settings (MCMC_setup.main), for the summary and the results' header (CT-26)
+RUN_SETTINGS: Dict[str, Any] = {}
+
+#: Largest --class_threads the start-up suggestion proposes (CT-44). T35c on Renier's 12 CPUs:
+#: 2, 3 and 4 threads per worker all gave 58 - 60 s per step against 75 s with 1 (the CPUs were
+#: saturated from 2 on), so 2: the fewest threads per process for the gain.
+CLASS_THREADS_SUGGEST_MAX: int = 2
+
+#: {model: {group label: "zeus" or "emcee"}}, set at start-up (MCMC_setup step 10, CT-31); the
+#: model banners use it (CT-17)
+GROUP_ENGINES: dict = {}
 
 #: A finite log-posterior at or below this value is a point the likelihood could not
 #: compute: the CMB likelihoods return -1e10 when CLASS or clik fails. Counted during

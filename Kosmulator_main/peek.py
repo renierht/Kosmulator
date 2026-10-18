@@ -119,7 +119,8 @@ def check_run_settings(suffix: str, settings: Dict[str, Any], overwrite: bool = 
         if not same:
             diff.append(f"{k}: chains {a!r}, now {b!r}")
     if diff:
-        raise RuntimeError(
+        from Kosmulator_main.utils import refuse          # CT-33: no traceback
+        refuse(
             f"The chains in {root} were made with other settings ({'; '.join(diff)}), so reusing or "
             "resuming them would mix two likelihoods. Set these back in Kosmulator.py, or start new "
             "chains with --overwrite or another --output_suffix.")

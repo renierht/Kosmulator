@@ -1134,7 +1134,8 @@ def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None, 
 
     # -------- Part 2: gamma token for f_sigma_8 --------
     has_fs8 = any(("f_sigma_8" in L) or ("fσ8" in tags[i]) for i, L in enumerate(lower))
-    if has_fs8 and growth_is_geff():
+    has_f = any(L.strip() == "f" for L in lower)          # the growth rate f alone (CT-32: no tag)
+    if (has_fs8 or has_f) and growth_is_geff():
         from Kosmulator_main import constants as _K
         mname = str(model_name or "")
         if mname and UDM.get_geff_function(mname) is not None:

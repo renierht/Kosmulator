@@ -439,6 +439,7 @@ def find_polished_mle(
     fast_params: list[str] | None = None,
     scales: dict[str, float] | None = None,
     nested_maxfev: int | None = None,
+    label: str | None = None,
 ) -> tuple[dict[str, float], float]:
     """
     Find the Maximum Likelihood Estimate (MLE) by polishing a starting point with
@@ -457,6 +458,7 @@ def find_polished_mle(
     the CLASS spectra) the polish is nested (item 38, _nested_polish): Nelder-Mead over
     the other parameters, at most nested_maxfev of its points, each with the fast ones
     optimised by L-BFGS-B. scales: posterior sd per parameter (the search's unit).
+    label: with it the nested search logs its progress (CT-38 b).
     """
     p_names = list(params_dict_median.keys())
     x0 = np.array([params_dict_median[p] for p in p_names], dtype=float)
@@ -516,9 +518,21 @@ def find_polished_mle(
         sc = np.where(np.isfinite(sc) & (sc > 0), sc, np.maximum(np.abs(x0) * 1e-2, 1e-6))
         bnds = [tuple(prior_bounds[p]) if prior_bounds and p in prior_bounds else (-np.inf, np.inf)
                 for p in p_names]
+        n_out = int(nested_maxfev if nested_maxfev is not None else max_evals)
         for start in starts:
+            report = None
+            if label:
+                logger.info("[best fit] %s: nested search over %d parameters, %d nuisances fitted at each "
+                            "point, up to %d points", label, len(slow_idx), len(fast_idx), n_out)
+                report = _polish_reporter(label, n_out)
+            t_start = time.time()
             val, x = _nested_polish(objective, np.asarray(start, float), slow_idx, fast_idx, sc, bnds,
-                                    int(nested_maxfev if nested_maxfev is not None else max_evals))
+                                    n_out, report=report)
+            if label:
+                logger.info("[best fit] %s: done in %s (%d points): chi^2 %s -> %.1f", label,
+                            _fmt_duration(time.time() - t_start), report.state["n"],
+                            ("%.1f" % report.state["start"]) if report.state["start"] is not None
+                            and report.state["start"] < 1e11 else "n/a", val)
             if np.isfinite(val) and val < best_chi2:
                 best_chi2 = float(val)
                 best_p = {p: float(x[idx]) for idx, p in enumerate(p_names)}
@@ -561,7 +575,34 @@ def _polish_nested_maxfev_cmb() -> int:
     return n
 
 
-def _nested_polish(f, x0, slow_idx, fast_idx, scale, bounds, outer_maxfev, inner_maxiter=200):
+def _fmt_duration(s: float) -> str:
+    """60 s, 12 min, 1.5 h."""
+    s = float(s)
+    if s < 90:
+        return f"{s:.0f} s"
+    if s < 90 * 60:
+        return f"{s / 60:.0f} min"
+    return f"{s / 3600:.1f} h"
+
+
+def _polish_reporter(label: str, n_max: int):
+    """Progress lines of the nested polish (CT-38 b): after point 1 (with the estimate for the
+    group), at points 10, 20, ... ; find_polished_mle logs the end."""
+    state = {"n": 0, "start": None}
+
+    def report(n, best, start, seconds):
+        state["n"], state["start"] = n, start
+        if n == 1:
+            logger.info("[best fit] %s: point 1 of at most %d took %s: at most about %s for this group",
+                        label, n_max, _fmt_duration(seconds), _fmt_duration(seconds * n_max))
+        elif n % 10 == 0:
+            logger.info("[best fit] %s: point %d of at most %d: chi^2 %.1f (start %s), %s", label, n, n_max,
+                        best, ("%.1f" % start) if start < 1e11 else "n/a", _fmt_duration(seconds))
+    report.state = state
+    return report
+
+
+def _nested_polish(f, x0, slow_idx, fast_idx, scale, bounds, outer_maxfev, inner_maxiter=200, report=None):
     """
     Profile-likelihood polish for groups with many nuisance parameters (item 38).
 
@@ -575,12 +616,15 @@ def _nested_polish(f, x0, slow_idx, fast_idx, scale, bounds, outer_maxfev, inner
     run per outer point instead of a joint Nelder-Mead in 27 dimensions that stops far from it
     (t10: 2796.5 after 300 calls).
     Returns (objective, x) at the best point visited.
+    report(n, best, start, seconds), if given, is called after each outer point (CT-38 b).
     """
     from scipy.optimize import minimize as _min
     x0 = np.asarray(x0, float)
     slow_idx, fast_idx = np.asarray(slow_idx, int), np.asarray(fast_idx, int)
     ss, sf = scale[slow_idx], scale[fast_idx]
-    st = {"xf": x0[fast_idx].copy(), "best": (f(x0), x0.copy())}
+    t0 = time.time()
+    f0 = f(x0)
+    st = {"xf": x0[fast_idx].copy(), "best": (f0, x0.copy()), "n": 0}
 
     def profile(us):
         x = x0.copy()
@@ -602,6 +646,12 @@ def _nested_polish(f, x0, slow_idx, fast_idx, scale, bounds, outer_maxfev, inner
                 xb = x.copy()
                 xb[fast_idx] = st["xf"]
                 st["best"] = (val, xb)
+        st["n"] += 1
+        if report is not None:
+            try:
+                report(st["n"], float(st["best"][0]), float(f0), time.time() - t0)
+            except Exception:
+                pass
         return val
 
     ns = len(slow_idx)
@@ -1003,6 +1053,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 fast_params=(_fast_cmb_params(cand_param_names) if has_cmb_group else None),
                 scales=_posterior_sd(obs_samples_for_waic, cand_param_names),
                 nested_maxfev=_polish_nested_maxfev_cmb(),
+                label=f"{model_name} | {obs_name}",
             )
 
             # Re-evaluate once at the polished point: the data chi^2 (without the Planck

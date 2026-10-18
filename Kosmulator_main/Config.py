@@ -1285,7 +1285,8 @@ def create_config(
             if _has_early_calibrator(obs_grp):
                 if "r_d" in grp_params:
                     grp_params.remove("r_d")
-                if logger:
+                # only groups with BAO/DESI use r_d (CT-24: BBN_DH + CC got the line too)
+                if logger and any(x in {"BAO", "DESI_DR1", "DESI_DR2"} for x in obs_grp):
                     early = {
                         "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",
                         *K.CMB_PRIMARY_TAGS,

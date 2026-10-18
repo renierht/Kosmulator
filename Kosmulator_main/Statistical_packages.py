@@ -2017,6 +2017,9 @@ def ensure_bbn_backend(
                 set_backend("alterbbn_grid")
                 return out
 
+        except FileNotFoundError:
+            if log:
+                log.info("BBN grid not found: building it once (%s)", path)
         except Exception as e:
             if log:
                 log.warning("Failed to load BBN grid at %s; will attempt build. Reason: %s", path, e)

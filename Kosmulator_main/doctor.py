@@ -333,11 +333,18 @@ def build_class(rep: Report, root: Path, model: str, verbose: bool = False) -> b
     t0 = time.time()
     ok, err = False, ""
     ctx = contextlib.nullcontext() if verbose else _output_to(log)
+    saved = os.environ.get("KOSM_VERBOSE_BUILD")
+    os.environ["KOSM_VERBOSE_BUILD"] = "1"      # the doctor sends the whole build to its log itself
     try:
         with ctx:
             ok = bool(CR.ensure_class_ready(model, force=broken))
     except Exception as e:
         err = f"{type(e).__name__}: {e}"
+    finally:
+        if saved is None:
+            os.environ.pop("KOSM_VERBOSE_BUILD", None)
+        else:
+            os.environ["KOSM_VERBOSE_BUILD"] = saved
     if ok:
         rep.add("class", f"CLASS {model}", OK, f"built in {time.time() - t0:.0f} s")
         return True
@@ -373,11 +380,18 @@ def build_rd_class(rep: Report, root: Path, verbose: bool = False) -> bool:
     t0 = time.time()
     mod, err = None, ""
     ctx = contextlib.nullcontext() if verbose else _output_to(log)
+    saved = os.environ.get("KOSM_VERBOSE_BUILD")
+    os.environ["KOSM_VERBOSE_BUILD"] = "1"      # the doctor sends the whole build to its log itself
     try:
         with ctx:
             mod = RD.ensure_ready(build=True)
     except Exception as e:
         err = f"{type(e).__name__}: {e}"
+    finally:
+        if saved is None:
+            os.environ.pop("KOSM_VERBOSE_BUILD", None)
+        else:
+            os.environ["KOSM_VERBOSE_BUILD"] = saved
     if mod is not None:
         rep.add("class", "rd_Class (r_d with the model's E(z))", OK, f"built in {time.time() - t0:.0f} s")
         return True
