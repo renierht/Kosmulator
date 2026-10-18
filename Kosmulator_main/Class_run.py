@@ -700,12 +700,12 @@ def init_clik_worker(
     """
     Initialiser for worker processes that need Planck clik likelihoods.
 
-    - Forces single-threaded BLAS/OpenMP per worker.
+    - Forces single-threaded BLAS per worker; CLASS gets --class_threads threads (CT-40),
+      1 by default.
     - Optionally preloads paths for CMB high-ℓ, low-ℓ, TT-only, and lensing.
     """
-    # keep workers single-threaded
+    # keep workers single-threaded (BLAS)
     for var in (
-        "OMP_NUM_THREADS",
         "MKL_NUM_THREADS",
         "OPENBLAS_NUM_THREADS",
         "NUMEXPR_NUM_THREADS",
@@ -713,6 +713,9 @@ def init_clik_worker(
         "BLIS_NUM_THREADS",
     ):
         os.environ[var] = "1"
+    # CLASS's threads: --class_threads, passed by utils.get_pool (CT-40); CLASS reads
+    # OMP_NUM_THREADS at every call
+    os.environ["OMP_NUM_THREADS"] = str(max(1, int(os.environ.get("KOSM_CLASS_THREADS_PER_WORKER", "1") or 1)))
 
     if hil_path:
         preload_clik_hil(hil_path)

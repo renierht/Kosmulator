@@ -378,6 +378,15 @@ MAIN_THREADS = None
 #: own CLASS work (pre-fit, polish, bands) on this many threads while the others wait
 MPI_NODE_RANKS: int = 1
 
+#: CLASS threads per pool worker or MPI worker rank (--class_threads, CT-40); 1 by default.
+#: With t > 1 a local pool has num_cores // t workers, each running CLASS on t threads (CLASS
+#: v3 reads OMP_NUM_THREADS at every call; perturbations, transfer, lensing and harmonic are
+#: threaded, background, thermodynamics and HMcode are not); BLAS stays at one thread. It pays
+#: only when the cores outnumber nwalkers/2, since emcee and zeus evaluate half the walkers at
+#: a time. The spectra do not depend on it (LCDM_v, l_max 8501, HMcode: bitwise identical with
+#: 1 and 2 threads; one call 24.5 s on 1 thread, 13.0 s on 2, cloud, 18 Oct 2026).
+CLASS_THREADS_PER_WORKER: int = 1
+
 #: A finite log-posterior at or below this value is a point the likelihood could not
 #: compute: the CMB likelihoods return -1e10 when CLASS or clik fails. Counted during
 #: sampling and reported per group (item 47).

@@ -193,6 +193,8 @@ def main(
     # 1) CLI
     # ------------------------------------------------------------------
     args = parse_cli_args()
+    # CT-40: CLASS threads per pool worker / MPI worker rank, on every rank (get_pool reads it)
+    K.CLASS_THREADS_PER_WORKER = max(1, int(getattr(args, "class_threads", 1) or 1))
     if getattr(args, "peek", False):
         # Item 54: look at the run --output_suffix (while it goes on, or afterwards); no sampling
         from Kosmulator_main.peek import peek
@@ -471,17 +473,25 @@ def main(
         parallel_flag = get_parallel_flag(use_mpi=use_mpi, num_cores=num_cores)
 
         if any_needs_pool and parallel_flag:
+            _ct = int(K.CLASS_THREADS_PER_WORKER)
             if use_mpi:
                 log.info(
                     "Parallel plan: MPI Pool for emcee / non-vectorised Zeus. "
                     "Vectorised Zeus remains single-core."
                 )
+                if _ct > 1:
+                    log.info("Each MPI worker rank runs CLASS on %d threads (--class_threads): launch "
+                             "the ranks with %d cores each, else the threads share one core.", _ct, _ct)
             else:
                 log.info(
                     "Parallel plan: local multiprocessing Pool with up to %d workers "
-                    "for emcee / non-vectorised Zeus chains.",
-                    num_cores,
+                    "for emcee / non-vectorised Zeus chains%s.",
+                    max(1, num_cores // _ct),
+                    f", {_ct} CLASS threads each (--class_threads {_ct})" if _ct > 1 else "",
                 )
+                if _ct > 1 and num_cores % _ct:
+                    log.warning("--num_cores %d is not a multiple of --class_threads %d: %d core(s) stay "
+                                "unused by the pool.", num_cores, _ct, num_cores % _ct)
         elif any_needs_pool:
             log.info(
                 "Parallel plan: engines could use a Pool, but parallelism disabled → serial."
@@ -506,12 +516,19 @@ def main(
                 "--num_cores N (up to nwalker/2 = %d) or --use_mpi.",
                 why, "; ".join(cmb_groups), max(1, nw // 2))
         if any_needs_pool and parallel_flag:
-            n_workers = ((comm.Get_size() - 1) if comm is not None else 0) if use_mpi else num_cores
+            _ct = int(K.CLASS_THREADS_PER_WORKER)
+            n_workers = (((comm.Get_size() - 1) if comm is not None else 0) if use_mpi
+                         else max(1, num_cores // _ct))
             if n_workers > max(1, nw // 2):
                 log.info(
                     "%d workers for %d walkers: emcee and zeus move half the walkers at a time, "
                     "so only %d workers are busy and %d wait at each half-step.",
                     n_workers, nw, nw // 2, n_workers - nw // 2)
+                # CT-40: CMB groups can give the idle cores to CLASS
+                _fit = (n_workers * _ct) // max(1, nw // 2)
+                if cmb_groups and not use_mpi and _fit > _ct:
+                    log.info("For the CMB groups, --class_threads %d would let each busy worker run CLASS on "
+                             "%d threads (about %.1fx faster per point with 2 threads).", _fit, _fit, 1.9)
 
         # Item 12: r_d with the model's own E(z) (rd_Class, Kosmulator_main/rd_class.py) for
         # BAO/DESI groups calibrated by BBN or Planck, for models other than LCDM. Compiled once
@@ -589,6 +606,7 @@ def main(
             "nu_mass_eV": K.NU_MASS_EV, "nu_N_eff": K.NU_N_EFF, "growth_model": K.GROWTH_MODEL,
             "cmb_nonlinear": K.CMB_NONLINEAR, "hmcode_version": K.HMCODE_VERSION,
             "num_cores": int(getattr(args, "num_cores", 1)), "use_mpi": bool(getattr(args, "use_mpi", False)),
+            "class_threads": int(K.CLASS_THREADS_PER_WORKER),
             "emcee_moves": K.EMCEE_MOVES, "zeus_light_mode": bool(K.ZEUS_LIGHT_MODE),
             "rd_background": K.RD_BACKGROUND, "lensing_only_priors": bool(K.LENSING_ONLY_PRIORS),
         })
@@ -822,7 +840,8 @@ def run_mcmc_for_all_models(
     # this machine, which wait while the main process works: --num_cores with a local pool,
     # the ranks on rank 0's machine under MPI, 1 for a serial run
     if parallel_flag and use_mpi:
-        n_main = int(getattr(K, "MPI_NODE_RANKS", 1) or 1)
+        # each rank holds --class_threads cores (CT-40); set_main_threads caps at the CPUs available
+        n_main = int(getattr(K, "MPI_NODE_RANKS", 1) or 1) * int(K.CLASS_THREADS_PER_WORKER)
     elif parallel_flag:
         n_main = num_cores
     else:

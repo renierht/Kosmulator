@@ -143,6 +143,12 @@ def parse_cli_args():
         help="Number of cores (default 8)",
     )
     parser.add_argument(
+        "--class_threads", type=int, default=1,
+        help="CLASS threads per pool worker or MPI worker rank (default 1). A local pool then "
+             "has num_cores // class_threads workers. Worth 2 or more only when num_cores is "
+             "larger than nwalkers/2: emcee and zeus evaluate half the walkers at a time.",
+    )
+    parser.add_argument(
         "--use_mpi", action="store_true",
         help="Force use of MPI pool",
     )
@@ -516,6 +522,15 @@ _QUIET_MPI_POOL = None
 _USER_OMP_NUM_THREADS = os.environ.get("OMP_NUM_THREADS")
 
 
+def class_threads_per_worker() -> int:
+    """CLASS threads per pool worker or MPI worker rank (--class_threads, CT-40); 1 unless
+    the run set constants.CLASS_THREADS_PER_WORKER."""
+    try:
+        return max(1, int(getattr(K, "CLASS_THREADS_PER_WORKER", 1) or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
 def set_main_threads(n: int) -> str:
     """
     Threads for this process's own CLASS and BLAS/OpenMP work (item 45): the pre-fit,
@@ -789,13 +804,15 @@ def get_pool(use_mpi: bool = False, num_cores: int | None = None, **pool_kwargs)
             return None
 
         if rank != 0:
-            # Worker ranks: one BLAS/OpenMP/CLASS thread each, as the local pool's workers
-            # (M6). This must come before MPIPool(): a worker rank waits for tasks inside
-            # the constructor and exits from there. NumPy's BLAS is loaded already, so its
-            # thread pools are resized with threadpoolctl; CLASS reads OMP_NUM_THREADS at
-            # every call.
+            # Worker ranks: one BLAS/OpenMP thread each, as the local pool's workers (M6),
+            # and --class_threads CLASS threads (1 by default, CT-40). This must come before
+            # MPIPool(): a worker rank waits for tasks inside the constructor and exits from
+            # there. NumPy's BLAS is loaded already, so its thread pools are resized with
+            # threadpoolctl; CLASS reads OMP_NUM_THREADS at every call (its own std::thread
+            # pool, which threadpoolctl does not touch).
             for k in _POOL_THREAD_VARS:
                 os.environ[k] = "1"
+            os.environ["OMP_NUM_THREADS"] = str(class_threads_per_worker())
             try:
                 from threadpoolctl import threadpool_limits
                 threadpool_limits(1)
@@ -841,12 +858,18 @@ def get_pool(use_mpi: bool = False, num_cores: int | None = None, **pool_kwargs)
     # when NumPy loads, which happens while unpickling the initializer, so
     # setting them inside the initializer is too late. Set them in the parent
     # just for the pool start-up, then restore the parent's values.
-    _saved = {k: os.environ.get(k) for k in _POOL_THREAD_VARS}
+    # CT-40: with --class_threads t the pool has num_cores // t workers, each running CLASS
+    # on t threads (CLASS v3 reads OMP_NUM_THREADS at every call). BLAS stays at one thread:
+    # OpenBLAS and MKL read OPENBLAS_NUM_THREADS / MKL_NUM_THREADS before OMP_NUM_THREADS.
+    t = class_threads_per_worker()
+    _saved = {k: os.environ.get(k) for k in _POOL_THREAD_VARS + ("KOSM_CLASS_THREADS_PER_WORKER",)}
     try:
         for k in _POOL_THREAD_VARS:
             os.environ[k] = "1"
+        os.environ["OMP_NUM_THREADS"] = str(t)
+        os.environ["KOSM_CLASS_THREADS_PER_WORKER"] = str(t)   # for the workers' initialiser
         # Forward initializer/initargs/maxtasksperchild/etc.
-        return ctx.Pool(processes=num_cores, **pool_kwargs)
+        return ctx.Pool(processes=max(1, num_cores // t), **pool_kwargs)
     finally:
         for k, v in _saved.items():
             if v is None:
