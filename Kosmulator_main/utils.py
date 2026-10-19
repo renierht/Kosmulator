@@ -667,6 +667,18 @@ def group_flags(obs, Type) -> Tuple[bool, bool]:
     return any(t.startswith("cmb") for t in toks), any("bbn" in t for t in toks)
 
 
+def _warn_engine_switch(model_name: str, kw: dict, path: str, old: str, new: str, flag: str) -> None:
+    """--resume and a chain made by the other engine: it is not continued (a chain is continued only
+    with the engine that made it, Renier 19 Oct); a new chain starts and the old file stays."""
+    how = (f"; {flag} continues it" if flag else
+           "; one sampled parameter always runs emcee" if old == "zeus" else "")
+    log.warning("[%s | %s] --resume: this group now runs %s, but its chain %s was made with %s. A chain is "
+                "continued only with the engine that made it, so a new %s chain starts (the %s chain stays "
+                "in the folder%s).", model_name,
+                kw.get("obs_key") or "+".join(map(str, kw.get("obs") or [])), new, os.path.basename(path),
+                old, new, old, how)
+
+
 def engine_for_group(model_name: str, can_vec: bool, obs, Type) -> str:
     """
     The sampler of one group; one rule for MCMC_setup, Kosmulator_MCMC and load_or_run_chain.
@@ -1415,7 +1427,10 @@ def detect_vectorisation(models, get_model_fn, config, data, sample_n: int = 10)
             _gi = next((i for i, g in enumerate(config[mod].get("observations", [])) if tested_obs in g), 0)
             names = config[mod]["parameters"][_gi]
             tv = config[mod]["reference_values"][_gi]
-            params = dict(zip(names, tv))
+            # as the likelihoods have them: the group's fixed values, and Omega_m from Omega_bh^2 and
+            # Omega_dh^2 for a CMB-style group (CMB + DESI: the test failed on 'Omega_m', the model was
+            # taken as not vectorised and its late-time groups ran emcee through the pool; 19 Oct)
+            params = ensure_background_params(with_fixed_params(dict(zip(names, tv)), config[mod], _gi))
 
             try:
                 t0 = _time.time()
@@ -1704,6 +1719,18 @@ def load_or_run_chain(
         return {"samples": flat, "loglike": loglike}
 
         
+    # --resume: an emcee group with only a zeus chain starts a new emcee chain (run_mcmc below);
+    # say so (before, silently)
+    if (is_emcee_run and resumeChains and not overwrite and Kosmulator_MCMC._zeus_saved_steps(zeus_chain) > 0
+            and (not os.path.exists(chain_path) or Kosmulator_MCMC._saved_steps(chain_path) == 0)):
+        _one_d = False
+        try:
+            _one_d = int(CONFIG_model["ndim"][other_kwargs.get("obs_index")]) == 1
+        except (KeyError, IndexError, TypeError, ValueError):
+            pass
+        _warn_engine_switch(model_name, other_kwargs, zeus_chain, "zeus", "emcee",
+                            None if (_one_d or zeus is None) else "--force_zeus")
+
     # A) Existing chain, not overwriting (emcee only)
     # For vectorised/Zeus runs we *always* delegate loading/resume to
     # Kosmulator_MCMC.run_mcmc, which knows about "<name>_zeus.h5".
@@ -1792,26 +1819,15 @@ def load_or_run_chain(
     # ------------------------------------------------------------------
     # Cross-engine reuse II:
     #   Zeus run sees an existing EMCEE chain → reuse it instead of
-    #   recomputing, as long as we are not overwriting or resuming. With --resume an emcee chain
-    #   flagged converged is reused too (audit 19 Oct: groups that CT-31 moved from emcee to zeus
-    #   would otherwise start a new zeus chain from step 0); an unconverged one is said below.
+    #   recomputing, as long as we are not overwriting or resuming. --resume continues a chain
+    #   only with the engine that made it (Renier, 19 Oct): a zeus group with only an emcee chain
+    #   starts a new zeus chain, converged or not (the emcee chain stays; --force_emcee continues it).
     # ------------------------------------------------------------------
-    _emcee_ok = (is_zeus_run and engine_mode != "single" and not overwrite and os.path.exists(chain_path)
-                 and Kosmulator_MCMC._saved_steps(chain_path) != 0 and not os.path.exists(zeus_chain))
-    _emcee_conv = False
-    if _emcee_ok and resumeChains:
-        try:
-            with h5py.File(chain_path, "r") as h5f:
-                _emcee_conv = bool(h5f.attrs.get("converged", False))
-        except Exception:
-            _emcee_conv = False
-        if not _emcee_conv:
-            log.warning("[%s | %s] --resume: this group now runs zeus (engine per group, CT-31); its emcee chain "
-                        "%s did not converge and is not continued: a new zeus chain starts. To continue the "
-                        "emcee chain instead, resume with --force_emcee.", model_name,
-                        other_kwargs.get("obs_key") or "+".join(map(str, other_kwargs.get("obs") or [])),
-                        os.path.basename(chain_path))
-    if _emcee_ok and (not resumeChains or _emcee_conv):
+    _emcee_only = (is_zeus_run and not overwrite and os.path.exists(chain_path)
+                   and Kosmulator_MCMC._saved_steps(chain_path) != 0 and not os.path.exists(zeus_chain))
+    if _emcee_only and resumeChains:
+        _warn_engine_switch(model_name, other_kwargs, chain_path, "emcee", "zeus", "--force_emcee")
+    if _emcee_only and not resumeChains and engine_mode != "single":
         print(
             "[INFO] Zeus requested but found existing EMCEE chain.\n"
             f"       Re-using samples from {chain_path}.\n"
@@ -2650,11 +2666,12 @@ CONVERGENCE_NOTE = (
 
 
 def chain_convergence_summary(output_dir: str, key: str, burn: int, param_names: List[str],
-                              rules: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+                              rules: Optional[Dict[str, float]] = None, prefer: Optional[str] = None) -> Dict[str, Any]:
     """
     Convergence numbers for one chain file (zeus '<key>_zeus.h5' or emcee '<key>.h5'
-    in output_dir; the more recently written one if both exist), computed with
-    convergence_status, i.e. the same quantities as the stopping rule.
+    in output_dir; if both exist, the one of engine `prefer` (the group's engine, whose chain the
+    run used), else the more recently written one), computed with convergence_status, i.e. the
+    same quantities as the stopping rule.
     """
     import emcee as _emcee
     rules = rules or convergence_rules()
@@ -2668,7 +2685,8 @@ def chain_convergence_summary(output_dir: str, key: str, burn: int, param_names:
                                   (os.path.join(output_dir, f"{key}.h5"), "emcee")) if os.path.exists(p)]
     if not paths or h5py is None:
         return row
-    path, engine = max(paths, key=lambda pe: os.path.getmtime(pe[0]))
+    _pref = [pe for pe in paths if pe[1] == prefer]
+    path, engine = _pref[0] if _pref else max(paths, key=lambda pe: os.path.getmtime(pe[0]))
     lp = None
     with h5py.File(path, "r") as f:
         if engine == "zeus":
@@ -3988,6 +4006,10 @@ def integral_term_array(zs, param_dict, MODEL_func, gamma):
 # 14) Shared low-level helpers (CLASS/clik C-level noise control, etc.)
 # ---------------------------------------------------------------------
 
+#: The console's stdout of each open quiet_cstdio, outermost first (print_through_quiet)
+_QUIET_STDOUT: List[int] = []
+
+
 @contextmanager
 def quiet_cstdio():
     """
@@ -3995,19 +4017,46 @@ def quiet_cstdio():
 
     This redirects file descriptors 1 and 2 to /dev/null inside the context and
     restores them afterwards. Safe to nest, but don't use across MPI barriers.
+    print_through_quiet still reaches the console.
     """
+    try:
+        sys.stdout.flush()
+    except Exception:
+        pass
     dn = os.open(os.devnull, os.O_WRONLY)
     so, se = os.dup(1), os.dup(2)
+    _QUIET_STDOUT.append(so)
     try:
         os.dup2(dn, 1)
         os.dup2(dn, 2)
         yield
     finally:
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
+        _QUIET_STDOUT.remove(so)
         os.dup2(so, 1)
         os.dup2(se, 2)
         os.close(dn)
         os.close(so)
         os.close(se)
+
+
+def print_through_quiet(msg: str) -> None:
+    """Print msg on the console, also inside quiet_cstdio (the one-line CLASS build notice under
+    --peek, which runs its set-up quietly; Renier 19 Oct)."""
+    try:
+        sys.stdout.flush()
+    except Exception:
+        pass
+    if _QUIET_STDOUT:
+        try:
+            os.write(_QUIET_STDOUT[0], (msg + "\n").encode())
+            return
+        except OSError:
+            pass
+    print(msg, flush=True)
 
 
 def _tree_listing(root: Path) -> List[Tuple[str, int]]:

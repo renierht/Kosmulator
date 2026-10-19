@@ -738,6 +738,21 @@ def set_cmb_class_lmax(lmax: int) -> None:
     os.environ["KOSM_CMB_CLASS_LMAX"] = str(CMB_CLASS_LMAX)
 CMB_SPECTRA_CACHE_SIZE: int = 64
 
+#: Inner fit of the nested CMB best-fit polish (Post_processing._nested_polish): L-BFGS-B over the
+#: nuisance parameters at each outer point, stopping tolerances (scipy's ftol and gtol). Decision 12
+#: (CT-38 c, 19 Oct): 1e-8 and 1e-2 instead of 1e-12 and 1e-6 halve the likelihood calls (T26a's
+#: LCDM_v plik baseline group, 12 outer points: 5806 against 12714 calls) and the best chi^2 per
+#: outer point stays within 0.003 (2778.616 against 2778.615); gtol 1e-6 lies below the noise of the
+#: finite-difference gradient (step 1e-3 posterior sd), so the fit ran on until ftol stopped it.
+#: With strongly correlated nuisances an inner fit can stop up to about 1e-2 in chi^2 above its
+#: minimum, the outer search's own tolerance (fatol 1e-2); the chi^2 reported is the exact value
+#: at the point found.
+POLISH_INNER_FTOL: float = 1e-8
+POLISH_INNER_GTOL: float = 1e-2
+#: ... and the inner fit's gradient through the worker pool kept open after sampling (1 + 21 points
+#: per evaluation for plik baseline, in about two rounds of the workers; Post_processing._inner_pooled)
+POLISH_POOL_GRADIENT: bool = True
+
 # ======================================================================
 # 6. Planck CMB nuisance parameters (centralised here)
 # These give default true values and prior ranges for CMB runs.

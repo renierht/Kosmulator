@@ -1359,6 +1359,16 @@ def extract_observation_data(
     elif "sigma" in obs_data:             yerr = np.asarray(obs_data["sigma"])
     else:                                 yerr = np.zeros_like(y)
 
+    # A data set used with a covariance (Pantheon with PANTHEON_SYS_COV, CC with CC_SYS_COV, the
+    # WiggleZ rows of f_sigma_8): the error bars include its diagonal, i.e. the systematics the
+    # likelihood adds (Renier, 19 Oct; before, the statistical errors only). The correlations
+    # cannot be drawn. (A Cholesky factor stored as "cov" is not symmetric and is left out.)
+    cov = obs_data.get("cov") if isinstance(obs_data, Mapping) else None
+    if cov is not None:
+        cov = np.asarray(cov, dtype=float)
+        if cov.ndim == 2 and cov.shape == (y.size, y.size) and np.allclose(cov, cov.T):
+            yerr = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
+
     return z, y, yerr, None
 
 

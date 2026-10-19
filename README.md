@@ -212,7 +212,7 @@ python Kosmulator.py --help
 |---|---|---|---|
 | `--output_suffix` | str | `Test_run` | Suffix for output directories and files (chains, plots, tables). |
 | `--overwrite` | flag | `False` | Delete any existing `.h5` chains and run MCMC from scratch. |
-| `--resume` | flag | `False` | Resume incomplete chains (instead of only loading existing results). |
+| `--resume` | flag | `False` | Resume incomplete chains (instead of only loading existing results). A chain is continued only with the engine that made it: a group whose engine changed (e.g. `--force_emcee`, or the engine per group) starts a new chain and says so. |
 | `--init-log` | choice | `terse` | Initialisation logging style: `terse`, `normal`, or `verbose`. |
 
 #### Parallelism
@@ -448,7 +448,10 @@ Kosmulator/
 paper's statistical-only analysis (flat LCDM, Pantheon alone: Omega_m = 0.284 +- 0.012). With
 `PANTHEON_SYS_COV = "full"` in `Kosmulator_main/constants.py` (default None) the release's systematic
 covariance (`Observations/Pantheon_release/sys_full_long.txt`) is added, as in the published analysis
-(Omega_m = 0.298 +- 0.022, Scolnic et al. 2018, Sect. 6.1).
+(Omega_m = 0.298 +- 0.022, Scolnic et al. 2018, Sect. 6.1). The error bars in `bestfit.png` are then the
+square roots of the covariance's diagonal (on average 0.3% larger than the statistical errors; the
+systematics act mainly through the correlations, which error bars cannot show). The same holds for every
+data set used with a covariance (CC with `CC_SYS_COV`, DES-Y5, Union3, the WiggleZ rows of f_sigma_8).
 
 1. Scolnic, D. M., Jones, D. O., Rest, A., et al. (2018).  
    *The Complete Light-curve Sample of Spectroscopically Confirmed SNe Ia from Pan-STARRS1 and Cosmological Constraints from the Combined Pantheon Sample*.  
@@ -959,40 +962,37 @@ Note:
   Other BBN-related options (e.g. BBN_DH approx, BBN_PryMordial) do NOT require AlterBBN.
   Kosmulator does NOT use AlterBBN's standalone executable (primary.x).
 
-
+AlterBBN v1.4 next to the Kosmulator folder, and Kosmulator's interface library built into
+`Kosmulator/AlterBBN_files/`, where Kosmulator looks for it (no environment variable needed; `*.so` is
+ignored by git). Inside the conda environment `${CC:-gcc}` is conda's compiler, otherwise the system gcc.
 ```bash
-cd /mnt/d/Kosmulator_test/
-
-cp Kosmulator/AlterBBN_files/kosmo_bbn.c AlterBBN/
-cp Kosmulator/AlterBBN_files/alterbbn_ctypes.py AlterBBN/
-
-cd /mnt/d/Kosmulator_test/AlterBBN
-make
-
-file kosmo_bbn.c | grep -qi "C source" || { echo "ERROR: kosmo_bbn.c is not C source"; exit 1; }
-
-mkdir -p build
-gcc -O3 -fPIC -shared -o build/libkosmo_bbn.so kosmo_bbn.c -Isrc -Lsrc -lbbn -lm
-
-export KOSMO_BBN_LIB="/mnt/d/Kosmulator_test/AlterBBN/build/libkosmo_bbn.so"
+cd ~                                              # the folder that holds Kosmulator/
+git clone https://github.com/espensem/AlterBBN.git
+cd AlterBBN
+make CC="${CC:-gcc}" CFLAGS="-O3 -pipe -fPIC"
+"${CC:-gcc}" -O3 -fPIC -shared -o ../Kosmulator/AlterBBN_files/libkosmo_bbn.so \
+    ../Kosmulator/AlterBBN_files/kosmo_bbn.c -I. -Lsrc -lbbn -lm
 ```
+A library elsewhere is found through `export KOSMO_BBN_LIB=/full/path/to/libkosmo_bbn.so` (in a conda
+environment: `conda env config vars set KOSMO_BBN_LIB=...`, then reactivate it).
 
 ##### 6.1 Quick AlterBBN Sanity Test:
+From the Kosmulator folder: Kosmulator finds AlterBBN, and AlterBBN reproduces the shipped grid at
+N_eff = 3.044 (0.0 with gcc 13; anything below about 1e-8 is fine). `kosmulator-doctor` then reports
+"Live AlterBBN (optional) ... libkosmo_bbn.so found".
 ```bash
 python - <<'PY'
-from alterbbn_ctypes import run_bbn
-print("D/H =", run_bbn(0.022, 3.046, 879.4)['D_H'])
+import numpy as np
+from Kosmulator_main import Statistical_packages as SP
+run_bbn = SP._import_run_bbn()
+g = np.load("Observations/BBN/bbn_grid.npz")
+idx = np.linspace(0, g["obh2"].size - 1, 25).astype(int)
+d = [np.log(run_bbn(float(g["obh2"][i]), 3.044, 879.4)["D_H"]) - g["logDH"][i, 0, 0] for i in idx]
+print("AlterBBN found; largest |ln D/H - grid| at N_eff 3.044 over 25 nodes:", max(abs(x) for x in d))
 PY
 ```
 
-##### 6.2 Allow AlterBBN to persist through deactivation
-```bash
-echo 'export KOSMO_BBN_LIB="/mnt/d/Kosmulator_test/AlterBBN/build/libkosmo_bbn.so"' >> ~/.bashrc
-source ~/.bashrc
-```
-P.S. Remember to reactivate environment
-
-##### 6.3 Optional: AlterBBN standalone executable
+##### 6.2 Optional: AlterBBN standalone executable
 ```bash
 make primary.c 
 ./primary.x

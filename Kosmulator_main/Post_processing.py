@@ -313,6 +313,92 @@ def calculate_asymmetric_from_samples(samples, parameters, observations):
     return results, latex_table, structured_values
 
 
+def cmb_obs_chi2(obs: str, obs_entry, p_eval: dict, model_name: str):
+    """
+    -2 ln L of one CMB likelihood of a group at p_eval, its number of data points and a note (or
+    None); (None, 0, None) when the Planck lensing likelihood has no finite value (the term is left
+    out). The statistics' chi^2 (_compute_chi2_total) and the pooled gradient of the nested polish
+    (CMBNuisanceTask, decision 12) both use it.
+    N = the likelihood's data-vector size (constants.PLANCK_N_DATA), not the multipole count: plik
+    and plik_lite are binned (2289 / 613 for TT,TE,EE, where l_max - 1 per spectrum gave 7521),
+    low-l is l = 2 - 29.
+    """
+    if obs == "CMB_lowl":
+        return float(-2.0 * SP.cmb_lowl_loglike(p_eval, model_name)), K.planck_n_data("CMB_lowl"), None
+    if obs == "CMB_lowl_TT":
+        return float(-2.0 * SP.cmb_lowlTT_loglike(p_eval, model_name)), K.planck_n_data("CMB_lowl_TT"), None
+    if obs == "CMB_hil":
+        return float(-2.0 * SP.cmb_hil_loglike(p_eval, model_name)), K.planck_n_data("CMB_hil"), None
+    if obs == "CMB_hil_TT":
+        return (float(-2.0 * float(SP.cmb_hilTT_loglike(p_eval, model_name))),
+                K.planck_n_data("CMB_hil_TT"), None)
+    if obs == "CMB_lensing":
+        has_primary = any(x in K.CMB_PRIMARY_TAGS for x in obs_entry)
+        SP.set_lensing_mode("raw" if has_primary else "cmbmarged")
+        n_bins = K.planck_n_data("CMB_lensing", "raw" if has_primary else "cmbmarged")
+        logL, _, note = _stats_lensing_logL_safe(p_eval, model_name)
+        if not (isfinite(logL) and abs(logL) < 1e9):
+            return None, 0, None
+        return float(-2.0 * logL), n_bins, note
+    if obs in K.GROUND_CMB_TAGS:
+        # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57)
+        from Kosmulator_main import ground_cmb as GC
+        return float(-2.0 * GC.loglike(obs, p_eval, model_name)), GC.n_data(obs), None
+    if obs in K.EXT_LENSING_TAGS:
+        # ACT DR6 + Planck PR4 and SPT-3G MUSE lensing (item 61)
+        from Kosmulator_main import ground_cmb as GC
+        return (float(-2.0 * GC.lensing_loglike(obs, p_eval, model_name,
+                                                lens_only=not K.group_has_primary_cmb(obs_entry))),
+                GC.n_data(obs), None)
+    raise ValueError(f"Unsupported CMB observation: {obs}")
+
+
+class CMBNuisanceTask:
+    """
+    Pool task of the nested polish's pooled gradient (decision 12, CT-38 c): at points that differ
+    from each other only in the nuisance parameters, the group's CMB chi^2 plus its CMB prior
+    chi^2 (the only terms the nuisances change). The point's spectra travel with the task, so the
+    worker runs no CLASS. Picklable.
+    """
+
+    def __init__(self, model_name, cmb_obs, obs_entry, config_model, obs_index, spectra):
+        self.model_name, self.cmb_obs, self.obs_entry = model_name, list(cmb_obs), list(obs_entry)
+        self.config_model, self.obs_index = config_model, obs_index
+        self.spectra = spectra                        # [(cache key, spectra)]
+
+    def __call__(self, points):
+        for key, cl in self.spectra:
+            SP._CMB_SPECTRA[key] = cl
+            SP._CMB_SPECTRA.move_to_end(key)
+        while len(SP._CMB_SPECTRA) > max(1, int(K.CMB_SPECTRA_CACHE_SIZE)):   # as get_cmb_spectra keeps it
+            SP._CMB_SPECTRA.popitem(last=False)
+        out = []
+        for p in points:
+            try:
+                pe = U.with_fixed_params(dict(p), self.config_model, self.obs_index)
+                tot = 0.0
+                for obs in self.cmb_obs:
+                    c, _, _ = cmb_obs_chi2(obs, self.obs_entry, pe, self.model_name)
+                    if c is not None:
+                        tot += c
+                out.append(tot + float(SP.cmb_prior_chi2(dict(p), tuple(self.obs_entry))))
+            except Exception:              # (under MPI an exception here would end the job)
+                out.append(float("nan"))   # the main process then finishes the polish itself
+        return out
+
+
+def _pool_workers() -> int:
+    """Workers of the pool kept open after sampling (utils.post_map), 0 without one."""
+    pool = U._POST_POOL
+    if pool is None:
+        return 0
+    n = getattr(pool, "_processes", None) or getattr(pool, "size", None)
+    try:
+        return max(0, int(n() if callable(n) else n))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _stats_lensing_logL_safe(
     p0: dict, model_name: str
 ) -> tuple[float, dict, str | None]:
@@ -440,6 +526,7 @@ def find_polished_mle(
     scales: dict[str, float] | None = None,
     nested_maxfev: int | None = None,
     label: str | None = None,
+    fast_batch=None,
 ) -> tuple[dict[str, float], float]:
     """
     Find the Maximum Likelihood Estimate (MLE) by polishing a starting point with
@@ -459,6 +546,8 @@ def find_polished_mle(
     the other parameters, at most nested_maxfev of its points, each with the fast ones
     optimised by L-BFGS-B. scales: posterior sd per parameter (the search's unit).
     label: with it the nested search logs its progress (CT-38 b).
+    fast_batch(list of parameter dicts) -> values: the nuisance-dependent part of the objective
+    at many points through the worker pool (decision 12; _nested_polish's batch).
     """
     p_names = list(params_dict_median.keys())
     x0 = np.array([params_dict_median[p] for p in p_names], dtype=float)
@@ -526,8 +615,11 @@ def find_polished_mle(
                             "point, up to %d points", label, len(slow_idx), len(fast_idx), n_out)
                 report = _polish_reporter(label, n_out)
             t_start = time.time()
+            batch = None
+            if fast_batch is not None:
+                batch = (lambda xs: fast_batch([{p: float(xv[i]) for i, p in enumerate(p_names)} for xv in xs]))
             val, x = _nested_polish(objective, np.asarray(start, float), slow_idx, fast_idx, sc, bnds,
-                                    n_out, report=report)
+                                    n_out, report=report, batch=batch)
             if label:
                 logger.info("[best fit] %s: done in %s (%d points): chi^2 %s -> %.1f", label,
                             _fmt_duration(time.time() - t_start), report.state["n"],
@@ -602,7 +694,8 @@ def _polish_reporter(label: str, n_max: int):
     return report
 
 
-def _nested_polish(f, x0, slow_idx, fast_idx, scale, bounds, outer_maxfev, inner_maxiter=200, report=None):
+def _nested_polish(f, x0, slow_idx, fast_idx, scale, bounds, outer_maxfev, inner_maxiter=200, report=None,
+                   batch=None):
     """
     Profile-likelihood polish for groups with many nuisance parameters (item 38).
 
@@ -617,14 +710,25 @@ def _nested_polish(f, x0, slow_idx, fast_idx, scale, bounds, outer_maxfev, inner
     (t10: 2796.5 after 300 calls).
     Returns (objective, x) at the best point visited.
     report(n, best, start, seconds), if given, is called after each outer point (CT-38 b).
+    batch(list of x) -> values, if given, evaluates the nuisance-dependent part of f (the CMB
+    chi^2 and priors; the rest of f does not change in the inner fit) at many points at once
+    through the worker pool (decision 12): the inner fit's finite-difference gradient (1 + n_fast
+    points per L-BFGS-B evaluation, the same points and step as scipy's own 2-point gradient) then
+    costs about two rounds of the workers instead of 1 + n_fast calls in this process. f itself is
+    evaluated here at the start and end of each inner fit, so the outer search sees exact values.
+    Any failure of batch falls back to this process for the rest of the polish.
     """
     from scipy.optimize import minimize as _min
     x0 = np.asarray(x0, float)
     slow_idx, fast_idx = np.asarray(slow_idx, int), np.asarray(fast_idx, int)
     ss, sf = scale[slow_idx], scale[fast_idx]
+    # the nuisances' prior box: ref + u * sf is clipped to it, because rounding put a point on a
+    # bound (e.g. xi_sz_cib = 0) just outside it, where f is 1e12 (19 Oct, decision 12 tests)
+    lo_f = np.array([bounds[i][0] for i in fast_idx], dtype=float)
+    hi_f = np.array([bounds[i][1] for i in fast_idx], dtype=float)
     t0 = time.time()
     f0 = f(x0)
-    st = {"xf": x0[fast_idx].copy(), "best": (f0, x0.copy()), "n": 0}
+    st = {"xf": x0[fast_idx].copy(), "best": (f0, x0.copy()), "n": 0, "batch": batch}
 
     def profile(us):
         x = x0.copy()
@@ -634,14 +738,24 @@ def _nested_polish(f, x0, slow_idx, fast_idx, scale, bounds, outer_maxfev, inner
         ref = st["xf"].copy()
 
         def g(u):
-            x[fast_idx] = ref + u * sf
+            x[fast_idx] = np.clip(ref + u * sf, lo_f, hi_f)
             return f(x)
         bnds = [((bounds[i][0] - ref[k]) / sf[k], (bounds[i][1] - ref[k]) / sf[k]) for k, i in enumerate(fast_idx)]
-        r = _min(g, np.zeros(len(fast_idx)), method="L-BFGS-B", bounds=bnds,
-                 options={"maxiter": inner_maxiter, "ftol": 1e-12, "gtol": 1e-6, "eps": 1e-3, "maxcor": 30})
+        opts = {"maxiter": inner_maxiter, "ftol": float(K.POLISH_INNER_FTOL),
+                "gtol": float(K.POLISH_INNER_GTOL), "maxcor": 30}
+        r = None
+        if st.get("batch") is not None:
+            try:
+                r = _inner_pooled(g, ref, sf, x, fast_idx, bnds, opts, st["batch"], lo_f, hi_f)
+            except Exception as e:
+                logger.warning("[best fit] pooled gradient failed (%s: %s); the nested search goes on in this "
+                               "process", type(e).__name__, e)
+                st["batch"] = None
+        if r is None:
+            r = _min(g, np.zeros(len(fast_idx)), method="L-BFGS-B", bounds=bnds, options={**opts, "eps": 1e-3})
         val = float(r.fun)
         if np.isfinite(val) and val < 1e11:
-            st["xf"] = ref + r.x * sf
+            st["xf"] = np.clip(ref + r.x * sf, lo_f, hi_f)
             if val < st["best"][0]:
                 xb = x.copy()
                 xb[fast_idx] = st["xf"]
@@ -662,6 +776,47 @@ def _nested_polish(f, x0, slow_idx, fast_idx, scale, bounds, outer_maxfev, inner
     _min(profile, np.zeros(ns), method="Nelder-Mead",
          options={"maxfev": max(1, int(outer_maxfev)), "xatol": 1e-3, "fatol": 1e-2, "initial_simplex": init})
     return st["best"]
+
+
+def _inner_pooled(g, ref, sf, x, fast_idx, bnds, opts, batch, lo_f, hi_f, eps=1e-3):
+    """
+    The inner L-BFGS-B fit of _nested_polish with its gradient from the worker pool (decision 12).
+    g(u) is the exact objective (this process). The nuisance-dependent part w(u) comes from
+    batch at u and at u + h e_k (h = eps, or -eps where u + eps leaves the box, as scipy's 2-point
+    rule does); f(u) = c + w(u) with c = g(0) - w(0) (the terms that do not depend on the
+    nuisances). The result's fun is g at the optimum (exact).
+    """
+    from scipy.optimize import minimize as _min
+    n = len(fast_idx)
+    hi = np.array([b[1] for b in bnds], dtype=float)
+
+    def full(u):
+        xx = x.copy()
+        xx[fast_idx] = np.clip(ref + u * sf, lo_f, hi_f)
+        return xx
+
+    g0 = float(g(np.zeros(n)))                    # this process: the point's spectra and exact f
+    if not (np.isfinite(g0) and g0 < 1e11):
+        return None                               # (the serial fit handles a failing start)
+    w0 = float(batch([full(np.zeros(n))])[0])
+    if not np.isfinite(w0):
+        raise RuntimeError("the nuisance part could not be evaluated at the start point")
+    c = g0 - w0
+
+    def fg(u):
+        u = np.asarray(u, dtype=float)
+        h = np.where(u + eps > hi, -eps, eps)
+        pts = [full(u)] + [full(u + h[k] * np.eye(n)[k]) for k in range(n)]
+        w = np.asarray(batch(pts), dtype=float)
+        if not np.all(np.isfinite(w)):
+            raise RuntimeError("a worker could not evaluate the likelihood")   # -> this process
+        if abs(w[0]) >= 1e11:
+            return 1e12, np.zeros(n)
+        return float(c + w[0]), (w[1:] - w[0]) / h
+
+    r = _min(fg, np.zeros(n), jac=True, method="L-BFGS-B", bounds=bnds, options=opts)
+    r.fun = float(g(np.asarray(r.x, dtype=float)))  # exact value at the optimum
+    return r
 
 
 def _polish_maxfev_cmb() -> int:
@@ -1003,45 +1158,13 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                         chi_total += SP.bbn_prior_chi2(obs_data, p_eval)
 
                     elif obs_type == "CMB":
-                        # N = the likelihood's data-vector size (constants.PLANCK_N_DATA), not
-                        # the multipole count: plik and plik_lite are binned (2289 / 613 for
-                        # TT,TE,EE, where l_max - 1 per spectrum gave 7521), low-l is l = 2 - 29
-                        if obs == "CMB_lowl":
-                            chi_total += float(-2.0 * SP.cmb_lowl_loglike(p_eval, model_name))
-                            n_points += K.planck_n_data("CMB_lowl")
-                        elif obs == "CMB_lowl_TT":
-                            chi_total += float(-2.0 * SP.cmb_lowlTT_loglike(p_eval, model_name))
-                            n_points += K.planck_n_data("CMB_lowl_TT")
-                        elif obs == "CMB_hil":
-                            n_points += K.planck_n_data("CMB_hil")
-                            chi_total += float(-2.0 * SP.cmb_hil_loglike(p_eval, model_name))
-                        elif obs == "CMB_hil_TT":
-                            n_points += K.planck_n_data("CMB_hil_TT")
-                            chi_total += float(-2.0 * float(SP.cmb_hilTT_loglike(p_eval, model_name)))
-                        elif obs == "CMB_lensing":
-                            has_primary = any(x in K.CMB_PRIMARY_TAGS for x in obs_entry)
-                            SP.set_lensing_mode("raw" if has_primary else "cmbmarged")
-                            n_bins = K.planck_n_data("CMB_lensing", "raw" if has_primary else "cmbmarged")
-                            logL, _, note = _stats_lensing_logL_safe(p_eval, model_name)
-                            if not (isfinite(logL) and abs(logL) < 1e9):
-                                continue
-                            if note and (note not in notes):
-                                notes.append(note)
-                            chi_total += float(-2.0 * logL)
-                            n_points += n_bins
-                        elif obs in K.GROUND_CMB_TAGS:
-                            # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57)
-                            from Kosmulator_main import ground_cmb as GC
-                            chi_total += float(-2.0 * GC.loglike(obs, p_eval, model_name))
-                            n_points += GC.n_data(obs)
-                        elif obs in K.EXT_LENSING_TAGS:
-                            # ACT DR6 + Planck PR4 and SPT-3G MUSE lensing (item 61)
-                            from Kosmulator_main import ground_cmb as GC
-                            chi_total += float(-2.0 * GC.lensing_loglike(
-                                obs, p_eval, model_name, lens_only=not K.group_has_primary_cmb(obs_entry)))
-                            n_points += GC.n_data(obs)
-                        else:
-                            raise ValueError(f"Unsupported CMB observation: {obs}")
+                        _c, _n, _note = cmb_obs_chi2(obs, obs_entry, p_eval, model_name)
+                        if _c is None:                 # lensing without a finite value: left out
+                            continue
+                        if _note and (_note not in notes):
+                            notes.append(_note)
+                        chi_total += _c
+                        n_points += _n
                     else:
                         raise ValueError(f"Unsupported observation type: {obs_type}")
 
@@ -1073,6 +1196,30 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                     med = np.median(S, axis=0)
                     cmb_starts.append({p: float(med[i]) for i, p in enumerate(cand_param_names)})
             RD.reset_rd_fallback_counts()          # item 15: was r_d from EH98 for this group?
+            # Decision 12 (CT-38 c): the nested polish's gradient through the worker pool kept open
+            # after sampling, with the point's spectra sent along (none without a pool, or with
+            # constants.POLISH_POOL_GRADIENT False)
+            _fast_batch = None
+            _nw = _pool_workers()
+            if (has_cmb_group and _nw > 1 and bool(getattr(K, "POLISH_POOL_GRADIENT", True))
+                    and len(_fast_cmb_params(cand_param_names)) >= 2):
+                _cmb_obs = [o for o, t in zip(obs_entry, obs_types) if str(t) == "CMB"]
+
+                def _fast_batch(points, _cmb_obs=_cmb_obs, _nw=_nw):
+                    pe = U.with_fixed_params(dict(points[0]), CONFIG[model_name], obs_index)
+                    key = SP._spectra_key(pe, model_name)
+                    if key not in SP._CMB_SPECTRA:
+                        raise RuntimeError("the point's spectra are not in this process's cache")
+                    task = CMBNuisanceTask(model_name, _cmb_obs, obs_entry,
+                                           {"fixed_params_by_group": CONFIG[model_name].get("fixed_params_by_group") or {}},
+                                           obs_index, [(key, SP._CMB_SPECTRA[key])])
+                    if len(points) == 1:
+                        return task(points)
+                    chunks = [c for c in np.array_split(np.arange(len(points)), min(_nw, len(points))) if c.size]
+                    # the pool itself (not post_map, which would run every call here after an error):
+                    # an error stops the pooled gradient for the rest of the polish (_nested_polish)
+                    parts = U._POST_POOL.map(task, [[points[i] for i in c] for c in chunks])
+                    return [v for part in parts for v in part]
             param_dict, chi_squared_total = find_polished_mle(
                 compute_chi2_fn=_compute_chi2_total,
                 params_dict_median=param_dict,
@@ -1091,6 +1238,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 scales=_posterior_sd(obs_samples_for_waic, cand_param_names),
                 nested_maxfev=_polish_nested_maxfev_cmb(),
                 label=f"{model_name} | {obs_name}",
+                fast_batch=_fast_batch,
             )
 
             # Re-evaluate once at the polished point: the data chi^2 (without the Planck

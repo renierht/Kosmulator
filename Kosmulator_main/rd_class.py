@@ -344,8 +344,13 @@ def class_inputs(p: dict) -> dict:
 
 
 def rd_model(model_name: str, p: dict, model_func: Optional[Callable] = None) -> float:
-    """r_d [Mpc] from rd_Class with the model's E(z) at p (cached per point)."""
-    key = tuple(sorted((k, float(v)) for k, v in p.items() if isinstance(v, (int, float, np.floating))))
+    """r_d [Mpc] from rd_Class with the model's E(z) at p (cached per point). The CMB and SN
+    nuisance parameters are left out of the cache key: they do not change r_d, and with them
+    every inner step of the nested CMB polish (only nuisances change) was a new rd_Class run
+    for a model other than LCDM with BAO/DESI in the group (since CT-46)."""
+    skip = K.CMB_NUISANCE_PARAM_NAMES | K.SN_NUISANCE_PARAM_NAMES
+    key = tuple(sorted((k, float(v)) for k, v in p.items()
+                       if k not in skip and isinstance(v, (int, float, np.floating))))
     return _rd_model_cached(model_name, key, model_func)
 
 

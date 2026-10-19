@@ -51,6 +51,7 @@ from Kosmulator_main.utils import (
     issue_observation_warnings,   # moved from here into utils.py
     model_group_engines,
     describe_group_engines,
+    engine_for_group,
     settings_summary,
     group_flags,
     cpu_topology,
@@ -987,9 +988,10 @@ def run_mcmc_for_all_models(
                         _nuis.append(f"{_m}: {'+'.join(_g)}")
             if _nuis:
                 log.warning("The statistics of %d group(s) with Planck/ACT/SPT nuisance parameters (%s) include a "
-                            "nested best-fit search: one CLASS run and about 1500 likelihood calls per point, up to "
-                            "%d points per group, one point after the other. It can take longer than a short run's "
-                            "sampling; KOSM_POLISH_NESTED_MAXFEV_CMB=N lowers the number of points.",
+                            "nested best-fit search: one CLASS run and about 500 likelihood calls per point (these "
+                            "through the worker pool when there is one), up to %d points per group, one point after "
+                            "the other. It can take longer than a short run's sampling; "
+                            "KOSM_POLISH_NESTED_MAXFEV_CMB=N lowers the number of points.",
                             len(_nuis), "; ".join(_nuis), PP._polish_nested_maxfev_cmb())
         except Exception as _e:                      # a warning only; never stops the run
             log.debug("nested-polish warning skipped: %s", _e)
@@ -1215,8 +1217,11 @@ def run_mcmc_for_all_models(
                         f"run's group has {len(_pars)} ({', '.join(_pars)}). It was made with other settings "
                         "(for example growth_model). Use --overwrite or another --output_suffix.")
                 # Where this group's chain lives, for the convergence report
+                _eng = engine_for_group(model_name, can_vec, obs_set, CONFIG[model_name]["observation_types"][i])
+                if _eng == "zeus" and len(_pars) == 1:
+                    _eng = "emcee"
                 PLOT_SETTINGS.setdefault("chain_index", {})[(model_name, key)] = {
-                    "dir": output_dir, "key": key, "obs_index": i,
+                    "dir": output_dir, "key": key, "obs_index": i, "engine": _eng,
                 }
 
             if rank == 0:

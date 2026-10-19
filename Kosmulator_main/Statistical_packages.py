@@ -1783,6 +1783,10 @@ def Calc_BBN_DH_chi(
 # -----------------------------------------------------------------------------
 # BBN backend initialisation (approx / alterbbn / alterbbn_grid)
 # -----------------------------------------------------------------------------
+#: BBN grids built by this process (the start-up line says "built now" for them on every load)
+_BBN_GRIDS_BUILT: set = set()
+
+
 def _import_run_bbn():
     """
     Import run_bbn from alterbbn_ctypes.
@@ -2023,6 +2027,8 @@ def ensure_bbn_backend(
                     grid["tau"] = g_tau
 
                 out["bbn_grid"] = grid
+                if os.path.abspath(path) in _BBN_GRIDS_BUILT:   # built earlier in this run: say so again
+                    out["bbn_grid_built_now"] = True
                 set_backend("alterbbn_grid")
                 return out
 
@@ -2093,6 +2099,8 @@ def ensure_bbn_backend(
             grid["neff_fixed"] = float(neff_nodes[0])
         out["bbn_grid_neff_nodes"] = [float(x) for x in neff_nodes]
         out["bbn_grid_built_now"] = True
+        if path:
+            _BBN_GRIDS_BUILT.add(os.path.abspath(path))
         if tau_nodes.size > 1:
             grid["tau"] = tau_nodes
         out["bbn_grid"] = grid

@@ -289,16 +289,16 @@ def build_logged(label: str, model_name: str, fn):
         log_path.parent.mkdir(parents=True, exist_ok=True)
         open(log_path, "a").close()
     except OSError as e:
-        print(f"{label} (once; about 1 - 3 minutes; the log {log_path} cannot be written: {e})", flush=True)
+        U.print_through_quiet(f"{label} (once; about 1 - 3 minutes; the log {log_path} cannot be written: {e})")
         return fn()
-    print(f"{label} (once; about 1 - 3 minutes; log: Class/{model_name}/build.log)", flush=True)
+    # (shown also when the caller silences the console, e.g. --peek's set-up)
+    U.print_through_quiet(f"{label} (once; about 1 - 3 minutes; log: Class/{model_name}/build.log)")
     try:
         with output_to(log_path):
             return fn()
     except Exception:
-        print(f"[CLASS] The build of {model_name} failed; {log_errors(log_path)}\n"
-              f"(full log: {log_path}; KOSM_VERBOSE_BUILD=1 shows the build output on the console)",
-              flush=True)
+        U.print_through_quiet(f"[CLASS] The build of {model_name} failed; {log_errors(log_path)}\n"
+                              f"(full log: {log_path}; KOSM_VERBOSE_BUILD=1 shows the build output on the console)")
         raise                                  # (Ctrl-C and exits pass through without the message)
 
 

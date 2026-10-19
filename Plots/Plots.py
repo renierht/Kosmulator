@@ -621,7 +621,8 @@ def _report_convergence(CONFIG, PLOT_SETTINGS, main_folder):
         try:
             cfg = CONFIG[model]
             params = list(cfg["parameters"][info["obs_index"]])
-            row = chain_convergence_summary(info["dir"], key, int(cfg.get("burn", 0) or 0), params, rules)
+            row = chain_convergence_summary(info["dir"], key, int(cfg.get("burn", 0) or 0), params, rules,
+                                            prefer=info.get("engine"))
             row["observation"] = _displayize_key(key)
             by_model.setdefault(model, []).append(row)
         except Exception as e:
@@ -1172,6 +1173,10 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         trimmed_labels = [p for p in table_param_labels if p in header_params or p == "Omega_m (derived)"]
     else:
         trimmed_labels = list(table_param_labels)
+    # The table's columns in the order of the corner axes (parameters used by more groups first,
+    # CT-15), the others after them in their own order (Renier, 19 Oct; before, first-seen order)
+    _ax = {p: i for i, p in enumerate(header_params)}
+    trimmed_labels = sorted(trimmed_labels, key=lambda p: _ax.get(p, len(_ax)))
 
     # --- NEW: project the aligned table columns to exactly match `trimmed_labels`
     def _project_table(table, from_labels, to_labels):

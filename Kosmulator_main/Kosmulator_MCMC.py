@@ -848,6 +848,34 @@ class _CountingMap:
         return res
 
 
+def _prefit_needed(use_zeus: bool, saveChains: bool, resumeChains: bool, overwrite: bool, chain_path: str,
+                   Type) -> bool:
+    """
+    Whether a group needs the Nelder-Mead pre-fit and the initial ball. Not when its saved chain
+    is used as it is or continued from its last step: a zeus group with a saved zeus chain
+    (rerun or --resume; decision 10, 19 Oct), or an emcee CMB group resumed from its emcee chain.
+    A zeus group that has only an emcee chain starts a new chain (decision 4) and needs it.
+    """
+    if overwrite or not saveChains:
+        return True
+    if use_zeus:
+        return _zeus_saved_steps(chain_path.replace(".h5", "_zeus.h5")) == 0
+    return not (resumeChains and os.path.exists(chain_path)
+                and any(str(t).startswith("CMB") for t in (Type or []))
+                and _saved_steps(chain_path) != 0)       # an empty chain file starts afresh, with a ball
+
+
+def _zeus_saved_steps(path: str) -> int:
+    """Steps saved in a zeus chain file ('samples'), 0 when it is missing, empty or unreadable."""
+    if not os.path.exists(path):
+        return 0
+    try:
+        with h5py.File(path, "r") as f:
+            return int(f["samples"].shape[0]) if "samples" in f else 0
+    except Exception:
+        return 0
+
+
 def _saved_steps(chain_path: str) -> Optional[int]:
     """Steps saved in an emcee chain file: 0 for a file without steps (or without emcee's group),
     None when it cannot be read (missing, locked by another process, not HDF5). Only a confirmed 0
@@ -1294,15 +1322,27 @@ def _run_mcmc_impl(
         th, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index
     )
 
+    # Engine of this group (before the pre-fit: a zeus group whose chain is saved needs none)
+    engine   = _choose_engine(vectorised, model_name, has_cmb, has_bbn)
+    if engine == "zeus" and int(ndim) == 1:
+        # zeus moves a walker along the difference of two other walkers. With one
+        # parameter two walkers can be arbitrarily close, the slice then needs more
+        # than zeus's 10^4 expansions and the run stops ("Number of expansions
+        # exceeded"; 7 of 8 runs of 3000 steps on a 1-D Gaussian, zeus 2.5.4).
+        # One-parameter groups (e.g. LCDM with one uncalibrated SN set) use emcee.
+        log.info("[%s | %s] one sampled parameter: emcee instead of zeus "
+                 "(zeus's differential move is unreliable in one dimension)", model_name, _resolved_key)
+        engine = "emcee"
+    use_zeus = (engine == "zeus" and zeus is not None)
+    log.debug("[%s | %s] moves: %s", model_name, _resolved_key, SM.describe("zeus" if use_zeus else "emcee"))
+    from Kosmulator_main import citations as _CIT        # the run's citations.md lists the samplers used
+    _CIT.ENGINES_USED.add("zeus" if use_zeus else "emcee")
+    # A saved zeus chain is loaded (rerun), loaded (--resume, converged or complete) or continued
+    # from its last step (--resume): the pre-fit and the initial ball would be thrown away, so they
+    # are skipped (Renier, 19 Oct; before, they ran first: seconds for late-time groups, minutes
+    # for a CMB group under --force_zeus); _prefit_needed
     # 3) SciPy optimisation for IC (quiet)
-    do_ic = not (
-        saveChains
-        and resumeChains
-        and os.path.exists(chain_path)
-        and not overwrite
-        and any(str(t).startswith("CMB") for t in Type)
-        and _saved_steps(chain_path) != 0       # an empty chain file starts afresh, with a ball
-    )
+    do_ic = _prefit_needed(use_zeus, saveChains, resumeChains, overwrite, chain_path, Type)
     pos0     = None
     sol_diag = None
     ball_values: Dict[bytes, Tuple[float, float]] = {}   # item 60: walker -> (log_post, log_like)
@@ -1379,21 +1419,7 @@ def _run_mcmc_impl(
         )
 
     # ── Zeus branch ────────────────────────────────────────────────────────────
-    engine   = _choose_engine(vectorised, model_name, has_cmb, has_bbn)
-    if engine == "zeus" and int(ndim) == 1:
-        # zeus moves a walker along the difference of two other walkers. With one
-        # parameter two walkers can be arbitrarily close, the slice then needs more
-        # than zeus's 10^4 expansions and the run stops ("Number of expansions
-        # exceeded"; 7 of 8 runs of 3000 steps on a 1-D Gaussian, zeus 2.5.4).
-        # One-parameter groups (e.g. LCDM with one uncalibrated SN set) use emcee.
-        log.info("[%s | %s] one sampled parameter: emcee instead of zeus "
-                 "(zeus's differential move is unreliable in one dimension)", model_name, _resolved_key)
-        engine = "emcee"
-    use_zeus = (engine == "zeus" and zeus is not None)
-    log.debug("[%s | %s] moves: %s", model_name, _resolved_key, SM.describe("zeus" if use_zeus else "emcee"))
-    from Kosmulator_main import citations as _CIT        # the run's citations.md lists the samplers used
-    _CIT.ENGINES_USED.add("zeus" if use_zeus else "emcee")
-    
+    # (engine and use_zeus are chosen before the pre-fit, above)
     if use_zeus:
         zeus_chain = chain_path.replace(".h5", "_zeus.h5")
         exists     = os.path.exists(zeus_chain)
