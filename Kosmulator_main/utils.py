@@ -224,7 +224,7 @@ def parse_cli_args():
     )
     parser.add_argument(
         "--force_zeus", action="store_true",
-        help="Force the Zeus sampler",
+        help="Force the Zeus sampler (not for groups with CMB data: they always run emcee)",
     )
     parser.add_argument(
         "--tau-consecutive", "--consecutive-required",
@@ -671,7 +671,7 @@ def _warn_engine_switch(model_name: str, kw: dict, path: str, old: str, new: str
     """--resume and a chain made by the other engine: it is not continued (a chain is continued only
     with the engine that made it, Renier 19 Oct); a new chain starts and the old file stays."""
     how = (f"; {flag} continues it" if flag else
-           "; one sampled parameter always runs emcee" if old == "zeus" else "")
+           "; CMB groups and groups with one sampled parameter always run emcee" if old == "zeus" else "")
     log.warning("[%s | %s] --resume: this group now runs %s, but its chain %s was made with %s. A chain is "
                 "continued only with the engine that made it, so a new %s chain starts (the %s chain stays "
                 "in the folder%s).", model_name,
@@ -689,7 +689,12 @@ def engine_for_group(model_name: str, can_vec: bool, obs, Type) -> str:
     Before, mixed mode ran every group of a model with CMB or BBN data with emcee, and emcee
     did not converge on late-time wowaCDM groups where zeus did (T10, T16).
     (Groups with one sampled parameter use emcee whatever this says; the callers apply that.)
+    Groups with CMB data always run emcee, through the pool and never vectorised; --force_zeus
+    and engine mode "single" do not change that (Renier, 19 Oct).
     """
+    has_cmb, has_bbn = group_flags(obs, Type)
+    if has_cmb:
+        return "emcee"
     if getattr(K, "force_emcee", False):
         return "emcee"
     if getattr(K, "force_zeus", False) and zeus is not None:
@@ -698,7 +703,6 @@ def engine_for_group(model_name: str, can_vec: bool, obs, Type) -> str:
         eng = (getattr(K, "engine_for_model", {}) or {}).get(model_name)
         if eng in ("zeus", "emcee"):
             return eng
-    has_cmb, has_bbn = group_flags(obs, Type)
     if not has_cmb and not has_bbn and can_vec and zeus is not None:
         return "zeus"
     return "emcee"
@@ -1728,8 +1732,9 @@ def load_or_run_chain(
             _one_d = int(CONFIG_model["ndim"][other_kwargs.get("obs_index")]) == 1
         except (KeyError, IndexError, TypeError, ValueError):
             pass
+        _cmb_grp = group_flags(other_kwargs.get("obs"), other_kwargs.get("Type"))[0]
         _warn_engine_switch(model_name, other_kwargs, zeus_chain, "zeus", "emcee",
-                            None if (_one_d or zeus is None) else "--force_zeus")
+                            None if (_one_d or _cmb_grp or zeus is None) else "--force_zeus")
 
     # A) Existing chain, not overwriting (emcee only)
     # For vectorised/Zeus runs we *always* delegate loading/resume to

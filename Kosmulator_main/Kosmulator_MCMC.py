@@ -1486,6 +1486,8 @@ def _run_mcmc_impl(
                 o in getattr(K, "POOL_PREFERRED_DATASETS", set()) for o in obs
             ):
                 zeus_vectorize = False
+        if has_cmb:            # a CMB group is never vectorised (it runs emcee anyway: engine_for_group)
+            zeus_vectorize = False
 
         # Pool usage:
         # - zeus_vectorize=False  → use Pool (parallel across cores)

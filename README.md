@@ -227,7 +227,7 @@ python Kosmulator.py --help
 | Argument | Type | Default | Description |
 |---|---|---|---|
 | `--engine-mode` | choice | `mixed` | Sampler strategy: `mixed`, `single`, or `fastest`. |
-| `--force_zeus` | flag | `False` | Force the Zeus sampler. |
+| `--force_zeus` | flag | `False` | Force the Zeus sampler (not for groups with CMB data: they always run emcee, through the worker pool, never vectorised). |
 | `--force_emcee` | flag | `False` | Force the emcee sampler (ignore Zeus even if available). |
 | `--force_vectorisation` | flag | `False` | Treat all models as vectorised (overrides detection). |
 | `--disable_vectorisation` | flag | `False` | Disable vectorised likelihood evaluation even if available (forces scalar evaluation). |

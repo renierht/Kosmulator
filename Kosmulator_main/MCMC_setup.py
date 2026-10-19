@@ -536,6 +536,11 @@ def main(
                 force_zeus,
                 force_emcee,
             )
+        if force_zeus and any(group_flags(g, t)[0] for m in model_names
+                              for g, t in zip(CONFIG[m].get("observations", []),
+                                              CONFIG[m].get("observation_types", []))):
+            log.info("--force_zeus does not apply to groups with CMB data: they always run emcee, through the "
+                     "worker pool")
 
         # the engine of each group (CT-31); the model banners use them (CT-17)
         K.GROUP_ENGINES = {m: model_group_engines(CONFIG, m, bool(vectorised.get(m, False)))
