@@ -304,7 +304,7 @@ def LCDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
 def f1CDM_MODEL_vectorised(
     z: Number,
     p: Dict[str, float],
-    tol: float = 1e-8,
+    tol: float = 1e-8,          # relative: |Delta E| <= tol * E
     maxiter: int = 60,
 ) -> Number:
     r"""
@@ -333,8 +333,12 @@ def f1CDM_MODEL_vectorised(
         )
         step = f / np.where(df == 0.0, np.inf, df)
         E -= step
-        converged |= np.abs(step) < tol
-        if np.all(np.abs(step) < tol):
+        # Relative tolerance: E reaches ~1e12 at z = 1e7 (rd_Class's table of the model's E(z)), where
+        # float64 cannot resolve an absolute 1e-8, so an absolute test flagged ~13% of that table as
+        # failed although it had converged to machine precision (T5, 20 Oct 2026)
+        small = np.abs(step) <= tol * np.abs(E)
+        converged |= small
+        if np.all(small):
             break
 
     # Fallback for any bad points
