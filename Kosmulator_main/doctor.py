@@ -531,6 +531,16 @@ def check_cmb(rep: Report, root: Path, load: bool) -> None:
                 rep.add("planck", f"{tag}", MISSING, f"{folder} does not load: {type(e).__name__}: {e}")
         if not load:
             rep.add("planck", "Planck data", OK, "all six .clik folders present (loaded by --setup)")
+    # Planck PR4 CamSpec (CMB_hil_PR4): its data are not in git (509 MB covariance); a run downloads them
+    from Kosmulator_main import planck_pr4 as PR4
+    try:
+        d = PR4.data_dir()
+        rep.add("planck", "CMB_hil_PR4 data (Planck PR4 CamSpec)", OK,
+                os.path.relpath(d, root) if os.path.abspath(d).startswith(str(root)) else d)
+    except FileNotFoundError:
+        rep.add("planck", "CMB_hil_PR4 data (Planck PR4 CamSpec)", INFO,
+                f"not downloaded yet ({PR4.ZIP_MB} MB); the first run with CMB_hil_PR4 downloads them, or "
+                "python -m Kosmulator_main.planck_pr4 --get")
     # ACT DR6 and SPT-3G D1 through candl
     ver = _version("candl", "candl-like")
     if not ver:

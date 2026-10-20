@@ -34,7 +34,7 @@ The package is designed to be **modular**, **flexible**, and **user-friendly**, 
   - Cosmic Chronometers / OHD
   - Growth of structure (fσ₈ and f)
   - Cosmic Microwave Background (Planck 2018 via CLIK)
-    - `CMB_hil_PR4`: Planck PR4 (NPIPE) high-ℓ TT, TE, EE with CamSpec, DESI DR2's baseline, next to `CMB_hil` (PR3 plik). Data: `python -m Kosmulator_main.planck_pr4 --get`.
+    - `CMB_hil_PR4`: Planck PR4 (NPIPE) high-ℓ TT, TE, EE with CamSpec, DESI DR2's baseline, next to `CMB_hil` (PR3 plik). Its data (0.5 GB) are not in git: the first run that uses it downloads them, saying why and from where (`Observations/planck_NPIPE_CamSpec/README.md`).
     - `cmb_sample_theta = True` in `Kosmulator.py`: groups with primary CMB sample 100 θ_MC instead of H_0 (a flat prior in θ, as Planck and DESI); H_0 is solved at every point and reported.
   - `ThetaStar_CMB`: DESI DR2's compressed CMB, a Gaussian prior on (θ_*, ω_b, ω_m) from the Planck PR4 early-universe chains, with θ_* from each model's own background; it calibrates r_d like the BBN prior.
   - Big Bang Nucleosynthesis (D/H, BBN_PryMordial, including AlterBBN-based likelihoods)

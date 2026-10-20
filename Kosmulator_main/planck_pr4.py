@@ -26,10 +26,11 @@ calibrations A_planck (all spectra, as y_cal^2), calTE and calEE. The nuisance p
 Cobaya's (constants.GROUND_NUISANCE_SAMPLED). Checked against Cobaya's class at fixed spectra
 (kit section DESIDR2).
 
-Data: Cobaya's planck_native_data release v1, CamSpec_NPIPE.zip (81.5 MB, 0.5 GB unpacked),
-in Observations/planck_NPIPE_CamSpec/CamSpec_NPIPE/ (``python -m Kosmulator_main.planck_pr4
---get`` downloads and unpacks it there), or in a Cobaya packages folder (COBAYA_PACKAGES_PATH,
-filled by ``cobaya-install planck_NPIPE_highl_CamSpec.TTTEEE``), or KOSM_CAMSPEC_PR4_DIR. The
+Data: Cobaya's planck_native_data release v1, CamSpec_NPIPE.zip (85.4 MB, 0.5 GB unpacked), not in git
+(the covariance is 509 MB). A run with CMB_hil_PR4 that finds no data downloads them at start-up, saying why
+and from where (ensure_data), into Observations/planck_NPIPE_CamSpec/CamSpec_NPIPE/, and checks them (md5);
+``python -m Kosmulator_main.planck_pr4 --get`` does the same by hand. A copy elsewhere is used through
+KOSM_CAMSPEC_PR4_DIR or a Cobaya packages folder (COBAYA_PACKAGES_PATH). The
 inverse covariance (9915 x 9915) is computed once (about 1 GB of memory for a minute) and kept
 next to the data as a float64 .npy (786 MB), or in ~/.cache/kosmulator/camspec_pr4 (KOSM_CACHE_DIR)
 when that folder cannot be written; every process maps it read-only, so the pool workers share one
@@ -58,6 +59,15 @@ USE_CL = ("143x143", "217x217", "143x217", "TE", "EE")
 DATASET = "CamSpec_NPIPE_12_6_cl.dataset"
 SUBDIR = os.path.join("planck_NPIPE_CamSpec", "CamSpec_NPIPE")
 URL = "https://github.com/CobayaSampler/planck_native_data/releases/download/v1/CamSpec_NPIPE.zip"
+ZIP_MB, UNPACKED_GB = 85.4, 0.5                 # MB = 1e6 bytes
+#: md5 of the files CMB_hil_PR4 reads (planck_native_data v1, CamSpec_NPIPE.zip): checked after a download
+#: and by --check
+MD5 = {
+    "CamSpec_NPIPE_12_6_cl.dataset": "f95aac05fddcd93562ee0bfe43cf58df",
+    "like_NPIPE_12.6_unified_cov.bin": "843063c3ac30984fe4f2470d0ce38d8f",
+    "like_NPIPE_12.6_unified_spectra.txt": "e0e22a85436a399380a65e855520e2ae",
+    "like_NPIPE_12.6_unified_data_ranges.txt": "71607015ae0e6d0debc5d6d15e06373e",
+}
 #: Fixed inputs (Cobaya's params_TT_CamSpec.yaml): the 100x100 spectrum is not used
 _FIXED = {"use_fg_residual_model": 0, "cal0": 1.0, "cal2": 1.0, "amp_100": 0.0, "n_100": 1.0}
 _POWERLAW_PIVOT = 1500.0
@@ -81,10 +91,10 @@ def data_dir() -> str:
         if os.path.isfile(os.path.join(d, DATASET)):
             return d
     raise FileNotFoundError(
-        "CMB_hil_PR4 needs the CamSpec PR4 data (Cobaya's planck_native_data CamSpec_NPIPE.zip): "
-        "python -m Kosmulator_main.planck_pr4 --get (to Observations/" + SUBDIR.replace(os.sep, "/") +
-        "), or cobaya-install planck_NPIPE_highl_CamSpec.TTTEEE with COBAYA_PACKAGES_PATH set. "
-        "Looked in: " + ", ".join(_candidate_dirs()))
+        "CMB_hil_PR4 needs the CamSpec PR4 data (CamSpec_NPIPE.zip of Cobaya's planck_native_data release): "
+        "a run with CMB_hil_PR4 downloads them, or python -m Kosmulator_main.planck_pr4 --get (to Observations/"
+        + SUBDIR.replace(os.sep, "/") + "), or set KOSM_CAMSPEC_PR4_DIR (or COBAYA_PACKAGES_PATH) to a copy you "
+        "have. Looked in: " + ", ".join(_candidate_dirs()))
 
 
 def _read_ini(path: str) -> Dict[str, str]:
@@ -337,36 +347,115 @@ def camspec() -> CamSpecPR4:
     return _LIKE
 
 
+def download_notice(dest: str) -> str:
+    """Why the CamSpec PR4 data are downloaded, from where and to where (shown before every download)."""
+    return (
+        "CMB_hil_PR4 (the Planck PR4 CamSpec high-l TT, TE, EE likelihood of Rosenberg, Gratton & Efstathiou\n"
+        "2022) needs its data: the binned spectra and their 9915 x 9915 covariance. They are not part of\n"
+        "Kosmulator's repository, because the covariance alone is 509 MB (GitHub takes files up to 100 MB).\n"
+        f"Kosmulator downloads them once, {ZIP_MB} MB ({UNPACKED_GB} GB unpacked), from the release in which Cobaya's\n"
+        "authors publish the Planck likelihood data (no Cobaya installation is needed):\n"
+        f"    {URL}\n"
+        f"into {os.path.abspath(dest)}\n"
+        "and checks them (md5). If you already have these data (e.g. from Cobaya's packages), set\n"
+        "KOSM_CAMSPEC_PR4_DIR to their CamSpec_NPIPE folder instead.")
+
+
+def verify(folder: str) -> List[str]:
+    """Files of MD5 that are missing or differ in folder (empty when the data are the expected ones)."""
+    bad = []
+    for name, want in MD5.items():
+        path = os.path.join(folder, name)
+        if not os.path.isfile(path):
+            bad.append(f"{name} (missing)")
+            continue
+        h = hashlib.md5()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 22), b""):
+                h.update(chunk)
+        if h.hexdigest() != want:
+            bad.append(f"{name} (md5 {h.hexdigest()}, expected {want})")
+    return bad
+
+
 def get_data(dest: Optional[str] = None) -> str:
-    """Download and unpack CamSpec_NPIPE.zip into Observations/planck_NPIPE_CamSpec/."""
-    import io
+    """Download CamSpec_NPIPE.zip (with download_notice), unpack it into dest (Observations/planck_NPIPE_CamSpec/)
+    and check the files (md5). The zip and the unpacked files first go to temporary names in dest; only data
+    that pass the check are moved to dest/CamSpec_NPIPE, so a failed or broken download leaves nothing a
+    later run would use."""
+    import shutil
+    import tempfile
+    import time
     import urllib.request
     import zipfile
     dest = dest or os.path.join(K.OBSERVATIONS_BASE, "planck_NPIPE_CamSpec")
     os.makedirs(dest, exist_ok=True)
-    print(f"Downloading {URL} (81.5 MB) ...", flush=True)
-    with urllib.request.urlopen(URL) as r:
-        raw = r.read()
-    with zipfile.ZipFile(io.BytesIO(raw)) as z:
-        z.extractall(dest)
-    folder = os.path.join(dest, "CamSpec_NPIPE")
-    if not os.path.isfile(os.path.join(folder, DATASET)):
-        raise FileNotFoundError(f"{DATASET} not found under {dest} after unpacking")
-    print(f"CamSpec PR4 data in {folder}", flush=True)
+    print(download_notice(dest), flush=True)
+    fd, tmp = tempfile.mkstemp(dir=dest, prefix=".CamSpec_NPIPE_", suffix=".zip")
+    unpack = tempfile.mkdtemp(dir=dest, prefix=".CamSpec_NPIPE_unpack_")
+    try:
+        with os.fdopen(fd, "wb") as out, urllib.request.urlopen(URL, timeout=60) as r:
+            total = int(r.headers.get("Content-Length") or 0)
+            got, shown = 0, -1
+            for chunk in iter(lambda: r.read(1 << 20), b""):
+                out.write(chunk)
+                got += len(chunk)
+                pct = int(100 * got / total) if total else -1
+                if pct >= 0 and pct // 10 != shown:
+                    shown = pct // 10
+                    print(f"  downloaded {got / 1e6:5.1f} of {total / 1e6:.1f} MB ({pct}%)", flush=True)
+        with zipfile.ZipFile(tmp) as z:
+            z.extractall(unpack)
+        bad = verify(os.path.join(unpack, "CamSpec_NPIPE"))
+        if bad:
+            raise ValueError(f"the downloaded CamSpec PR4 data are not the expected ones: {'; '.join(bad)}")
+        folder = os.path.join(dest, "CamSpec_NPIPE")
+        if os.path.exists(folder):                    # an incomplete copy (no .dataset) is kept aside
+            os.rename(folder, f"{folder}.incomplete_{time.strftime('%Y%m%d_%H%M%S')}")
+        os.rename(os.path.join(unpack, "CamSpec_NPIPE"), folder)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        shutil.rmtree(unpack, ignore_errors=True)
+    print(f"CamSpec PR4 data in {folder} (md5 checked)", flush=True)
     return folder
+
+
+def ensure_data() -> str:
+    """The data folder (data_dir); when there is none, the data are downloaded with get_data, which says why
+    and from where. A failed download (no internet, e.g. on a cluster node) stops with what to do."""
+    try:
+        return data_dir()
+    except FileNotFoundError:
+        pass
+    dest = os.path.join(K.OBSERVATIONS_BASE, "planck_NPIPE_CamSpec")
+    try:
+        return get_data(dest)
+    except Exception as e:
+        raise FileNotFoundError(
+            f"CMB_hil_PR4: the CamSpec PR4 data could not be downloaded ({type(e).__name__}: {e}). Where there is "
+            f"internet (e.g. a cluster's login node) run: python -m Kosmulator_main.planck_pr4 --get, or download "
+            f"{URL} yourself, unpack it into {os.path.abspath(dest)} and run python -m Kosmulator_main.planck_pr4 "
+            "--check; or set KOSM_CAMSPEC_PR4_DIR to a CamSpec_NPIPE folder you already have.") from e
 
 
 def main(argv=None) -> int:
     import argparse
     ap = argparse.ArgumentParser(description="Planck PR4 CamSpec data for CMB_hil_PR4")
-    ap.add_argument("--get", action="store_true", help="download and unpack the data into Observations/")
-    ap.add_argument("--check", action="store_true", help="load the likelihood (and build its inverse covariance)")
+    ap.add_argument("--get", action="store_true", help="download, unpack and check the data (Observations/)")
+    ap.add_argument("--check", action="store_true", help="check the data (md5) and load the likelihood (and "
+                                                          "build its inverse covariance)")
     a = ap.parse_args(argv)
     if a.get:
         get_data()
     if a.check or not a.get:
+        folder = data_dir()
+        bad = verify(folder)
+        if bad:
+            print(f"CMB_hil_PR4 data in {folder} are not the expected ones: {'; '.join(bad)}")
+            return 1
         lk = camspec()
-        print(f"CMB_hil_PR4: {lk.n_data} multipoles, l_max {lk.lmax}, data in {lk.folder}")
+        print(f"CMB_hil_PR4: {lk.n_data} multipoles, l_max {lk.lmax}, data in {lk.folder} (md5 checked)")
     return 0
 
 

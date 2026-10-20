@@ -651,6 +651,7 @@ def check_available(tags) -> None:
             sroll2()
         elif c == "CMB_hil_PR4":
             from Kosmulator_main import planck_pr4
+            planck_pr4.ensure_data()      # not in git: downloaded once (says why and from where), md5-checked
             planck_pr4.camspec()          # builds the inverse covariance once (before any pool)
 
 

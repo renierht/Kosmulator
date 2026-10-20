@@ -114,5 +114,7 @@ Observations/act_dr6_lenslike/.cache/
 !Observations/act_dr6_lenslike/actplanck_baseline_corrections_v1.2.npz
 
 # Planck PR4 CamSpec data (CMB_hil_PR4): 0.5 GB with its covariance, and the inverse Kosmulator
-# caches next to it; python -m Kosmulator_main.planck_pr4 --get downloads them
-Observations/planck_NPIPE_CamSpec
+# caches next to it; downloaded by the first run with CMB_hil_PR4 (or python -m Kosmulator_main.planck_pr4
+# --get). Only the folder's README is in git
+Observations/planck_NPIPE_CamSpec/*
+!Observations/planck_NPIPE_CamSpec/README.md

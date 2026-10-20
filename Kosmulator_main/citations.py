@@ -407,8 +407,9 @@ DATA: List[Dict[str, object]] = [
     dict(tags=("CMB_hil_PR4",), name="Planck PR4 (NPIPE) high-l TT,TE,EE (CamSpec 12.6cl)",
          files=("planck_NPIPE_CamSpec/CamSpec_NPIPE/",), licence="none_repo",
          source="Cobaya's planck_native_data release v1 (CamSpec_NPIPE.zip), github.com/CobayaSampler/"
-                "planck_native_data; the likelihood code follows Cobaya's planck_NPIPE_highl_CamSpec "
-                "(LGPL-3.0-or-later)",
+                "planck_native_data; not in git (509 MB covariance): the first run with CMB_hil_PR4 downloads it "
+                "(Observations/planck_NPIPE_CamSpec/README.md); the likelihood code follows Cobaya's "
+                "planck_NPIPE_highl_CamSpec (LGPL-3.0-or-later)",
          refs=("rosenberg22", "planck20_LVII")),
     dict(tags=("CMB_lowl", "CMB_lowl_TT"), name="Planck 2018 low-l EE (SimAll) and TT (Commander)",
          files=("simall_100x143_offlike5_EE_Aplanck_B.clik", "commander_dx12_v3_2_29.clik"), licence="none_planck",
