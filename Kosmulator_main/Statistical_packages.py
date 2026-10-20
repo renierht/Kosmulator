@@ -1524,7 +1524,9 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
     DV = (DA * DA * (1.0 + z) * (1.0 + z) * (z * DH)) ** (1.0 / 3.0)
 
     if _must_calibrate(Type):
-        rs = _try_compute_rd(param_dict)
+        # r_d the caller calibrated (rd_helpers._maybe_calibrate_rd: rd_Class with the model's own E(z),
+        # as the sampler has it, CT-46) when given; otherwise CLASS's flat-LCDM r_d here
+        rs = float(param_dict["r_d"]) if "r_d" in param_dict else _try_compute_rd(param_dict)
         if rs is None:
             return 1e300
     else:
