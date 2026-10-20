@@ -45,6 +45,7 @@ from Kosmulator_main.constants import (
     BBN_DH_OMEGA_B_REF,
     BBN_DH_SLOPE,
     BBN_DH_THEORY_FRAC,
+    CMB_EARLY_TAG,
 )
 
 from . import Class_run as CR
@@ -2482,6 +2483,11 @@ def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
         elif obs_type == "BBN_prior":
             # BBN_PryMordial: the Gaussian on Omega_b h^2, one term (as in chi^2 and DIC)
             ll_i = np.array([-0.5 * bbn_prior_chi2(obs_data, param_dict)])
+
+        elif obs_name == CMB_EARLY_TAG:
+            # The compressed CMB prior (theta_*, omega_b, omega_bc): correlated, one term
+            from Kosmulator_main import cmb_early as _CE
+            ll_i = np.array([-0.5 * _CE.chi2(param_dict, Model_func)])
 
         else:
             continue  # Planck likelihoods: Post_processing adds them (item 53)

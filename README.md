@@ -34,6 +34,9 @@ The package is designed to be **modular**, **flexible**, and **user-friendly**, 
   - Cosmic Chronometers / OHD
   - Growth of structure (fσ₈ and f)
   - Cosmic Microwave Background (Planck 2018 via CLIK)
+    - `CMB_hil_PR4`: Planck PR4 (NPIPE) high-ℓ TT, TE, EE with CamSpec, DESI DR2's baseline, next to `CMB_hil` (PR3 plik). Data: `python -m Kosmulator_main.planck_pr4 --get`.
+    - `cmb_sample_theta = True` in `Kosmulator.py`: groups with primary CMB sample 100 θ_MC instead of H_0 (a flat prior in θ, as Planck and DESI); H_0 is solved at every point and reported.
+  - `ThetaStar_CMB`: DESI DR2's compressed CMB, a Gaussian prior on (θ_*, ω_b, ω_m) from the Planck PR4 early-universe chains, with θ_* from each model's own background; it calibrates r_d like the BBN prior.
   - Big Bang Nucleosynthesis (D/H, BBN_PryMordial, including AlterBBN-based likelihoods)
 
 - **Automatic Parameter Injection & Dataset Awareness**  
@@ -332,7 +335,8 @@ Kosmulator/
 │
 ├── setup.py                     # Packaging and installation
 ├── pyproject.toml               # Modern Python build configuration
-├── LICENSE                      # Project license
+├── LICENSE                      # Project license (MIT)
+├── LICENSES/                    # LGPL-3.0 and GPL-3.0 texts, for Kosmulator_main/planck_pr4.py
 └── README.md                    # Project documentation
 ```
 		
@@ -416,6 +420,18 @@ Kosmulator/
 6. **r_d without CLASS** (BAO with BBN or primary CMB, when CLASS cannot be imported)  
    Eisenstein, D. J., & Hu, W. (1998). *Baryonic Features in the Matter Transfer Function*. ApJ, 496, 605 (arXiv:astro-ph/9709112).  
    https://doi.org/10.1086/305424
+
+7. **Cobaya** (the CamSpec PR4 likelihood, `CMB_hil_PR4`, is derived from its Python CamSpec code; see Licence)  
+   Torrado, J., & Lewis, A. (2021). *Cobaya: Code for Bayesian Analysis of hierarchical physical models*. JCAP, 05, 057 (arXiv:2005.05290).  
+   https://doi.org/10.1088/1475-7516/2021/05/057
+
+8. **CAMB** (z_* and r_s(z_*) of the `ThetaStar_CMB` grid)  
+   Lewis, A., Challinor, A., & Lasenby, A. (2000). *Efficient Computation of CMB anisotropies in closed FRW models*. ApJ, 538, 473 (arXiv:astro-ph/9911177).  
+   https://doi.org/10.1086/309179
+
+9. **100 θ_MC** (`cmb_sample_theta`: CosmoMC's approximation, which takes z_* from the fit of)  
+   Hu, W., & Sugiyama, N. (1996). *Small-Scale Cosmological Perturbations: an Analytic Approach*. ApJ, 471, 542 (arXiv:astro-ph/9510117).  
+   https://doi.org/10.1086/177989
 	
 ---
 
@@ -615,6 +631,18 @@ library.
    A&A, **635**, A99 (arXiv:1908.09856).  
    https://doi.org/10.1051/0004-6361/201936630
 
+5. Planck PR4 CamSpec (`CMB_hil_PR4`): Rosenberg, E., Gratton, S., & Efstathiou, G. (2022).  
+   *CMB power spectra and cosmological parameters from Planck PR4 with CamSpec*.  
+   MNRAS, **517**, 4620 (arXiv:2205.10869).  
+   https://doi.org/10.1093/mnras/stac2744  
+   The PR4 (NPIPE) maps: Planck Collaboration (2020). *Planck intermediate results. LVII. Joint Planck LFI and HFI data processing*. A&A, **643**, A42 (arXiv:2007.04997).  
+   https://doi.org/10.1051/0004-6361/202038073
+
+6. Compressed CMB prior (`ThetaStar_CMB`): DESI Collaboration (2025), DESI DR2 Results II, Appendix A (arXiv:2503.14738), from the chains of Lemos, P., & Lewis, A. (2023).  
+   *CMB constraints on the early Universe independent of late-time cosmology*.  
+   Phys. Rev. D, **107**, 103505 (arXiv:2302.12911).  
+   https://doi.org/10.1103/PhysRevD.107.103505
+
 #### Ground-based CMB (ACT DR6, SPT-3G D1) and the P-ACT / CMB-SPA combinations
 `CMB_PACT` and `CMB_SPA` combine the Planck parts above with these.
 
@@ -700,6 +728,13 @@ archivePrefix = {arXiv},
       adsnote = {Provided by the SAO/NASA Astrophysics Data System}
 }
 ```
+
+## Licence
+Kosmulator is released under the MIT licence (`LICENSE`), except `Kosmulator_main/planck_pr4.py` (the Planck PR4
+CamSpec likelihood, `CMB_hil_PR4`). That file is derived from Cobaya's Python CamSpec code (copyright Jesus Torrado
+and Antony Lewis) and is therefore under the GNU Lesser General Public License, version 3 or later, as Cobaya is
+(texts in `LICENSES/`). Cobaya's licence also asks that publications using results of the code are submitted to
+arXiv no later than to a journal, and that bugs are reported. Kosmulator does not need Cobaya to run.
 
 ## Contributions
 Contributions are welcome.

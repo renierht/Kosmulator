@@ -527,7 +527,7 @@ def _maybe_calibrate_rd(theta_map: dict, CONFIG: dict, obs_index: int) -> None:
             return
         obs_set = CONFIG.get("observations", [])[obs_index]
         has_bbn = any(str(o).startswith(("BBN",)) for o in obs_set) or \
-            any(str(o) in _K.CMB_PRIMARY_TAGS for o in obs_set)
+            any(str(o) in _K.CMB_PRIMARY_TAGS or str(o) == _K.CMB_EARLY_TAG for o in obs_set)
         # Only BAO/DESI use r_d: skip the CLASS call (~50 ms) for groups such
         # as CC + BBN or SNe + BBN, where it was computed and never used.
         has_bao = any(str(o) in ("BAO", "DESI", "DESI_DR1", "DESI_DR2") for o in obs_set)

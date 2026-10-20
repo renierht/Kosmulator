@@ -255,6 +255,7 @@ def main(
     rd_background: str = "model",
     lensing_only_priors: bool = True,
     corner_show_nuisance: bool = False,
+    cmb_sample_theta: bool = False,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -313,6 +314,7 @@ def main(
     # Lensing without primary CMB (item 62): n_s prior and tau fixed. Before the config (tau is
     # then not sampled) and before any pool (workers read KOSM_LENSING_ONLY_PRIORS).
     K.set_lensing_only_priors(lensing_only_priors)
+    K.set_cmb_sample_theta(cmb_sample_theta)
     # l_max of the lensed CLASS spectra: 3000 for Planck, 8501 with ACT, 4095 with SPT (item 57).
     # One value for the run (every CMB group of it), before any pool: workers read KOSM_CMB_CLASS_LMAX.
     K.set_cmb_class_lmax(K.cmb_lmax_for_groups(observations))
@@ -627,7 +629,7 @@ def main(
         _bao = {"BAO", "DESI_DR1", "DESI_DR2"}
         _rdc_models = set()
         if K.RD_BACKGROUND == "model":
-            _early = set(K.CMB_PRIMARY_TAGS)
+            _early = set(K.CMB_PRIMARY_TAGS) | {K.CMB_EARLY_TAG}
             rdc_groups = [f"{m}: {'+'.join(g)}" for m in model_names if m not in K.RD_LCDM_MODELS
                           for g in CONFIG[m].get("observations", [])
                           if set(g) & _bao and (any(str(o).startswith("BBN") for o in g) or set(g) & _early)]
@@ -649,7 +651,7 @@ def main(
         _bao = {"BAO", "DESI_DR1", "DESI_DR2"}
         rd_groups = [f"{m}: {'+'.join(g)}" for m in model_names if m not in _rdc_models
                      for g in CONFIG[m].get("observations", [])
-                     if set(g) & _bao and any(str(o).startswith("BBN") for o in g)
+                     if set(g) & _bao and any(str(o).startswith("BBN") or o == K.CMB_EARLY_TAG for o in g)
                      and not set(g) & set(K.CMB_TAGS)]
         if rd_groups and RDH.classy_import_problem():
             # No classy loaded or installed: Kosmulator's own LCDM_v build (compiled once, then
@@ -699,6 +701,8 @@ def main(
             _check["rd_background"] = K.RD_BACKGROUND
         if any(K.group_is_lensing_only(g) for g in observations):    # item 62
             _check["lensing_only_priors"] = bool(K.LENSING_ONLY_PRIORS)
+        if any(K.group_has_primary_cmb(g) for g in observations):    # theta or H_0 sampled
+            _check["cmb_sample_theta"] = bool(K.CMB_SAMPLE_THETA)
         # data-set switches, when the run has that data set (audit 19 Oct: chains made without
         # Pantheon's systematics were reused after PANTHEON_SYS_COV = "full")
         _flat = {o for g in observations for o in g}
@@ -709,6 +713,8 @@ def main(
         if "f_sigma_8" in _flat:
             _check["FS8_WIGGLEZ_COV"] = bool(K.FS8_WIGGLEZ_COV)
             _check["FS8_AP_CORRECTION"] = bool(K.FS8_AP_CORRECTION)
+        if K.CMB_EARLY_TAG in _flat:
+            _check["CMB_EARLY_OMEGA"] = K.CMB_EARLY_OMEGA
         check_run_settings((getattr(args, "output_suffix", "") or "").strip(), _check,
                            overwrite=bool(getattr(args, "overwrite", False)))
         _run = {
@@ -724,6 +730,7 @@ def main(
             "class_threads": int(K.CLASS_THREADS_PER_WORKER),
             "emcee_moves": K.EMCEE_MOVES, "zeus_light_mode": bool(K.ZEUS_LIGHT_MODE),
             "rd_background": K.RD_BACKGROUND, "lensing_only_priors": bool(K.LENSING_ONLY_PRIORS),
+            "cmb_sample_theta": bool(K.CMB_SAMPLE_THETA),
             "CC_SYS_COV": K.CC_SYS_COV, "PANTHEON_SYS_COV": getattr(K, "PANTHEON_SYS_COV", None),
             "FS8_WIGGLEZ_COV": bool(K.FS8_WIGGLEZ_COV), "FS8_AP_CORRECTION": bool(K.FS8_AP_CORRECTION),
             "engine_mode": getattr(K, "engine_mode", "mixed"),
@@ -731,6 +738,8 @@ def main(
             "autocorr_buffer": int(PLOT_SETTINGS.get("autocorr_buffer_after_burn", 0) or 0),
             "corner_show_nuisance": bool(getattr(K, "CORNER_SHOW_NUISANCE", False)),
         }
+        if K.CMB_EARLY_TAG in _flat:
+            _run["CMB_EARLY_OMEGA"] = K.CMB_EARLY_OMEGA
         K.RUN_SETTINGS = dict(_run)      # the "Settings" summary and the results' header (CT-26)
         write_run_settings((getattr(args, "output_suffix", "") or "").strip(), _run)
 
@@ -765,6 +774,10 @@ def main(
                           "hmcode_version": K.HMCODE_VERSION},
                 bbn_backends={o: d.get("bbn_model_effective") for o, d in (data or {}).items()
                               if isinstance(d, dict) and d.get("bbn_model_effective")})
+            if K.CMB_SAMPLE_THETA:
+                # cmb_sample_theta: the chains' 100 theta_MC becomes H_0 before the statistics
+                from Kosmulator_main import theta_mc as TM
+                TM.convert_theta_runs(samples, CONFIG)
             MP.generate_plots(samples, CONFIG, PLOT_SETTINGS, data, reference_model)
             if _cite:
                 print(f"\nWhat to cite for this run (data, codes, acknowledgements): {_cite}")
@@ -838,6 +851,12 @@ def run_mcmc_for_all_models(
         )
 
     if rank == 0:
+        if any(K.CMB_EARLY_TAG in g for g in observations):
+            # The compressed CMB prior: its z_* grid read (or made, with CAMB) before any pool
+            from Kosmulator_main import cmb_early as CE
+            CE.check_available()
+            log.info("%s: Gaussian prior on (theta_*, omega_b, omega_bc), DESI DR2 Appendix A; theta_* with each "
+                     "model's own background, z_* and r_s(z_*) from a CAMB grid", K.CMB_EARLY_TAG)
         _ground = sorted({o for g in observations for o in g if o in K.GROUND_CMB_TAGS})
         if _ground:
             # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57): load them here, so a
@@ -846,18 +865,20 @@ def run_mcmc_for_all_models(
             GC.check_available(_ground)
             for t in _ground:
                 log.info("%s: %s (%d data points)", t, " + ".join(K.cmb_components(t)), GC.n_data(t))
-            log.info("CLASS spectra to l = %d for every CMB group of this run (ACT needs 8501, SPT 4095, "
-                     "Planck 3000): a CMB point costs more than with Planck alone", K.CMB_CLASS_LMAX)
+            _act_spt = [t for t in _ground if K.cmb_components(t) and set(K.cmb_components(t)) & {"CMB_ACT", "CMB_SPT"}]
+            if _act_spt:
+                log.info("CLASS spectra to l = %d for every CMB group of this run (ACT needs 8501, SPT 4095, "
+                         "Planck 3000): a CMB point costs more than with Planck alone", K.CMB_CLASS_LMAX)
             for grp in observations:
                 tp = K.cmb_tau_prior(grp)
                 if tp:
                     log.info("Group %s has no low-l EE likelihood: tau prior %.4f +- %.4f (the one of "
                              "%s's own likelihood)", grp, tp[0], tp[1],
                              "SPT-lite" if "CMB_SPT" in K.cmb_group_components(grp) else "ACT-lite")
-            if not K.CMB_NONLINEAR:
+            if not K.CMB_NONLINEAR and _act_spt:
                 log.warning("cmb_nonlinear = None with %s: ACT and SPT reach l = 8500 and 4000, where "
                             "non-linear lensing matters (ACT DR6 and SPT-3G D1 used HMcode 2020); set "
-                            "cmb_nonlinear = \"hmcode\" in Kosmulator.py", ", ".join(_ground))
+                            "cmb_nonlinear = \"hmcode\" in Kosmulator.py", ", ".join(_act_spt))
         _lens = sorted({o for g in observations for o in g if o in K.EXT_LENSING_TAGS})
         if _lens:
             # ACT DR6 + Planck PR4 and SPT-3G MUSE lensing (item 61): load the data now (ACT + Planck

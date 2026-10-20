@@ -1084,8 +1084,9 @@ def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None, 
     has_bao_desi = any(("bao" in L) or ("desi" in L) for L in lower)
     has_cc       = any(L == "cc" for L in lower)
     # calibrators as in Config: BBN or primary CMB (CMB lensing alone leaves r_d sampled, item 61)
-    from Kosmulator_main.constants import CMB_PRIMARY_TAGS
-    has_cal      = any(L.startswith("bbn") for L in lower) or any(t in CMB_PRIMARY_TAGS for t in tags)
+    from Kosmulator_main.constants import CMB_PRIMARY_TAGS, CMB_EARLY_TAG
+    has_cal      = (any(L.startswith("bbn") for L in lower) or any(t in CMB_PRIMARY_TAGS for t in tags)
+                    or CMB_EARLY_TAG in tags)
 
     # The group's sampled parameters decide when they are known: r_d sampled ->
     # free; not sampled and no calibrator -> fixed (singleton BAO, and BAO with
@@ -1232,7 +1233,7 @@ def extract_observation_data(
 
             return ell[mask], Dl[mask], yerr_masked, None
 
-    if obs_type in ("BBN_PryMordial", "BBN_prior"):
+    if obs_type in ("BBN_PryMordial", "BBN_prior", "ThetaStar_CMB"):   # priors: nothing to plot
         return np.array([]), np.array([]), np.array([]), {"is_prior": True}
     
     # --- BBN (D/H) ---

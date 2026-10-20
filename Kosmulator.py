@@ -203,6 +203,12 @@ rd_background: str = "model"
 # et al. 2024, arXiv:2304.05203). Add a BBN tag (e.g. BBN_DH) for Omega_b h^2; it also calibrates r_d.
 # False: n_s and tau_reio sampled within their top-hat priors (as before October 2026).
 lensing_only_priors: bool = True
+# Groups with primary CMB data (Planck, ACT, SPT): False (default) samples H_0 with a flat prior. True
+# samples 100 theta_MC (CosmoMC's approximation to the angular acoustic scale) with a flat prior instead,
+# as Planck and DESI DR2 do, and solves H_0 from it at every point (within its prior box, as CAMB's
+# solver); the statistics and figures show H_0 as usual. The two differ only in the prior on H_0, which
+# matters where the data leave H_0 broad (e.g. w0waCDM with CMB alone).
+cmb_sample_theta: bool = False
 # Corner plots: the likelihoods' nuisance parameters (Planck's foregrounds and calibrations, the ACT and
 # SPT calibrations, the SN calibration M_abs and JLA's alpha and beta) and, per group, parameters that are
 # only their prior (H_0 of uncalibrated SNe with sample_H0_uncalibrated_SNe) are left out unless True
@@ -227,6 +233,7 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "ln10^10_As": (2.5, 3.5),
     "n_s": (0.9, 1.1),
     "100theta_s": (1.035, 1.047),
+    "100theta_MC": (1.03, 1.05),     # cmb_sample_theta (DESI DR2: U[0.5, 10]; the data fix it to 0.03%)
     "N_eff": (nu_N_eff, nu_N_eff),       # BBN uses the N_eff of the CLASS calls (CT-39); a range samples it
     "tau_n": (K.TAU_N_DEFAULT, K.TAU_N_DEFAULT),
     "alpha": (0.00, 1.00),
@@ -257,6 +264,7 @@ reference_values: Dict[str, float] = {
     "ln10^10_As": 3.045,
     "Omega_de": 0.69,
     "100theta_s": 1.04110,
+    "100theta_MC": 1.04110,
     "N_eff": nu_N_eff,
     "tau_n": K.TAU_N_DEFAULT,
     "Omega_b": 0.05,
@@ -327,6 +335,7 @@ def main() -> None:
         rd_background=rd_background,
         lensing_only_priors=lensing_only_priors,
         corner_show_nuisance=corner_show_nuisance,
+        cmb_sample_theta=cmb_sample_theta,
     )
 
 

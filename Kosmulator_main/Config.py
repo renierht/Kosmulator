@@ -997,6 +997,14 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 }
 
             # ------------------
+            # Compressed CMB: Gaussian prior on (theta_*, omega_b, omega_bc), DESI DR2 App. A
+            # (cmb_early.py computes theta_* with the model's background; the z_* grid ships)
+            # ------------------
+            elif obs == K.CMB_EARLY_TAG:
+                from Kosmulator_main import cmb_early as _CE
+                observation_data[obs] = {"mean": _CE.MEAN.copy(), "cov": _CE.COV.copy()}
+
+            # ------------------
             # DESY5 / Union3 SNe Hubble diagrams
             # ------------------
             elif obs in ("DESY5", "Union3"):
@@ -1184,6 +1192,9 @@ def create_config(
         'BBN_DH_AlterBBN': 'BBN_DH',
         'BBN_PryMordial' : 'BBN_prior',
 
+        # --- Compressed CMB (a prior on theta_*, omega_b, omega_bc; not a CMB likelihood) ---
+        K.CMB_EARLY_TAG: K.CMB_EARLY_TAG,
+
         # --- CMB ---
         'CMB_hil':    'CMB',
         'CMB_hil_TT': 'CMB',
@@ -1312,7 +1323,7 @@ def create_config(
 
         def _has_early_calibrator(grp: list[str]) -> bool:
             early = {
-                "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",
+                "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial", K.CMB_EARLY_TAG,
                 *K.CMB_PRIMARY_TAGS,
             }  # note: CMB_lensing excluded by design
             return any(x in early for x in grp)
@@ -1330,7 +1341,7 @@ def create_config(
         _sn_offset_only = {"JLA", "JLA_legacy", "Pantheon", "PantheonP", "DESY5", "Union3"}
         _no_distance_scale = {"f", "f_sigma_8"}
         _h0_anchors = {
-            "CC", "OHD", "PantheonPS",
+            "CC", "OHD", "PantheonPS", K.CMB_EARLY_TAG,
             *K.CMB_TAGS,
         }
 
@@ -1360,7 +1371,7 @@ def create_config(
                 # only groups with BAO/DESI use r_d (CT-24: BBN_DH + CC got the line too)
                 if logger and any(x in {"BAO", "DESI_DR1", "DESI_DR2"} for x in obs_grp):
                     early = {
-                        "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",
+                        "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial", K.CMB_EARLY_TAG,
                         *K.CMB_PRIMARY_TAGS,
                     }
                     calibs = [x for x in obs_grp if x in early]
@@ -1464,6 +1475,13 @@ def create_config(
                         "fσ8 singleton: FIX gamma=%.3f for %s (model %s)",
                         gamma_fix, obs_grp, mod,
                     )
+
+            # cmb_sample_theta (DESI DR2, Planck): 100 theta_MC instead of H_0 in groups with primary
+            # CMB; H_0 is solved from it at every point (theta_mc) and replaces it before the statistics
+            if K.CMB_SAMPLE_THETA and K.group_has_primary_cmb(obs_grp) and "H_0" in grp_params:
+                grp_params[grp_params.index("H_0")] = K.THETA_MC_PARAM
+                prior_limits.setdefault(K.THETA_MC_PARAM, K.THETA_MC_BOX)
+                reference_values.setdefault(K.THETA_MC_PARAM, K.THETA_MC_REF)
 
             param_sets_policy.append(grp_params)
 
@@ -1668,6 +1686,8 @@ def Add_required_parameters(
         'BBN_DH': ['Omega_bh^2'],
         'BBN_DH_AlterBBN': ['Omega_bh^2'],
         'BBN_PryMordial': ['Omega_bh^2'],
+        # theta_* needs the distance to z_* (H_0 and the model) and omega_b; omega_m is the model's Omega_m h^2
+        K.CMB_EARLY_TAG: ['H_0', 'Omega_bh^2'],
 
         # CMB core + the Planck nuisances to sample (plik or plik_lite: constants.CMB_NUISANCE)
         "CMB_hil": [

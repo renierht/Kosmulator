@@ -76,6 +76,10 @@ REFS: Dict[str, str] = {
                      "lensing, A&A 641, A8, arXiv:1807.06210, doi:10.1051/0004-6361/201833886",
     "pagano20": "L. Pagano et al. (2020), Reionization optical depth determination from Planck HFI data with ten "
                 "percent accuracy, A&A 635, A99, arXiv:1908.09856, doi:10.1051/0004-6361/201936630",
+    "rosenberg22": "E. Rosenberg, S. Gratton, G. Efstathiou (2022), CMB power spectra and cosmological parameters "
+                   "from Planck PR4 with CamSpec, MNRAS 517, 4620, arXiv:2205.10869, doi:10.1093/mnras/stac2744",
+    "planck20_LVII": "Planck Collaboration, Y. Akrami et al. (2020), Planck intermediate results. LVII. Joint Planck "
+                     "LFI and HFI data processing, A&A 643, A42, arXiv:2007.04997, doi:10.1051/0004-6361/202038073",
     "carron22": "J. Carron, M. Mirmelstein, A. Lewis (2022), CMB lensing from Planck PR4 maps, JCAP 09 (2022) 039, "
                 "arXiv:2206.07773, doi:10.1088/1475-7516/2022/09/039",
     # ACT
@@ -107,6 +111,14 @@ REFS: Dict[str, str] = {
     "desi24_VI": "DESI Collaboration, A. G. Adame et al. (2025), DESI 2024 VI: Cosmological Constraints from the "
                  "Measurements of Baryon Acoustic Oscillations, JCAP 02 (2025) 021, arXiv:2404.03002, "
                  "doi:10.1088/1475-7516/2025/02/021",
+    "torrado21": "J. Torrado, A. Lewis (2021), Cobaya: code for Bayesian analysis of hierarchical physical models, "
+                 "JCAP 05 (2021) 057, arXiv:2005.05290, doi:10.1088/1475-7516/2021/05/057",
+    "lemos23": "P. Lemos, A. Lewis (2023), CMB constraints on the early Universe independent of late-time "
+               "cosmology, Phys. Rev. D 107, 103505, arXiv:2302.12911, doi:10.1103/PhysRevD.107.103505",
+    "lewis00": "A. Lewis, A. Challinor, A. Lasenby (2000), Efficient computation of CMB anisotropies in closed FRW "
+               "models, ApJ 538, 473, arXiv:astro-ph/9911177, doi:10.1086/309179",
+    "hu96": "W. Hu, N. Sugiyama (1996), Small-scale cosmological perturbations: an analytic approach, ApJ 471, 542, "
+            "arXiv:astro-ph/9510117, doi:10.1086/177989",
     "desi25_dr2": "DESI Collaboration, M. Abdul Karim et al. (2025), DESI DR2 Results II: Measurements of Baryon "
                   "Acoustic Oscillations and Cosmological Constraints, Phys. Rev. D 112, 083515, arXiv:2503.14738, "
                   "doi:10.1103/tr6y-kpc6",
@@ -383,10 +395,21 @@ DATA: List[Dict[str, object]] = [
          files=("Kosmulator_main/Config.py",), licence="papers",
          source="the value of Schoeneberg (2024) (PDG abundances, PRyMordial, conservative nuclear rates)",
          refs=("schoneberg24", "burns24")),
+    dict(tags=(K.CMB_EARLY_TAG,), name="Compressed CMB: Gaussian prior on (theta_*, omega_b, omega_bc)",
+         files=("Kosmulator_main/cmb_early.py", "CMB_early/zstar_rstar_camb.npz"), licence="papers",
+         source="DESI DR2 (2025), Appendix A, from the Planck PR4 CamSpec chains of Lemos & Lewis (2023); "
+                "z_* and r_s(z_*) on a grid made with CAMB",
+         refs=("desi25_dr2", "lemos23")),
     dict(tags=("CMB_hil", "CMB_hil_TT"), name="Planck 2018 high-l TT,TE,EE / TT (plik, plik_lite)",
          files=("plik_rd12_HM_v22b_TTTEEE.clik", "plik_rd12_HM_v22_TT.clik", "plik_lite_v22_TTTEEE.clik",
                 "plik_lite_v22_TT.clik"), licence="none_planck",
          source="Planck Legacy Archive, COM_Likelihood_Data-baseline_R3.00", refs=("planck18_V", "planck18_VI")),
+    dict(tags=("CMB_hil_PR4",), name="Planck PR4 (NPIPE) high-l TT,TE,EE (CamSpec 12.6cl)",
+         files=("planck_NPIPE_CamSpec/CamSpec_NPIPE/",), licence="none_repo",
+         source="Cobaya's planck_native_data release v1 (CamSpec_NPIPE.zip), github.com/CobayaSampler/"
+                "planck_native_data; the likelihood code follows Cobaya's planck_NPIPE_highl_CamSpec "
+                "(LGPL-3.0-or-later)",
+         refs=("rosenberg22", "planck20_LVII")),
     dict(tags=("CMB_lowl", "CMB_lowl_TT"), name="Planck 2018 low-l EE (SimAll) and TT (Commander)",
          files=("simall_100x143_offlike5_EE_Aplanck_B.clik", "commander_dx12_v3_2_29.clik"), licence="none_planck",
          source="Planck Legacy Archive, COM_Likelihood_Data-baseline_R3.00", refs=("planck18_V",)),
@@ -452,6 +475,12 @@ CODES: Dict[str, Dict[str, object]] = {
     "prymordial": dict(name="PRyMordial (the D/H table behind BBN_DH's power law)",
                        refs=("burns24",)),
     "getdist": dict(name="GetDist (corner plots, marginal statistics)", refs=("lewis19",)),
+    "camb": dict(name="CAMB (z_* and r_s(z_*) of the ThetaStar_CMB grid)", refs=("lewis00",)),
+    "cobaya_camspec": dict(name="Cobaya's Python CamSpec, from which CMB_hil_PR4's likelihood code is derived "
+                                "(LGPL-3.0-or-later; Cobaya's licence asks that publications using results of the "
+                                "code are on arXiv)", refs=("torrado21",)),
+    "theta_mc": dict(name="100 theta_MC sampled instead of H_0 (cmb_sample_theta): CosmoMC's approximation, "
+                          "z_* from the Hu & Sugiyama (1996) fit", refs=("hu96",)),
 }
 
 #: The samplers that ran in this process (Kosmulator_MCMC records them), for the run's citations
@@ -513,7 +542,8 @@ def cc_row_sources(path: Optional[str] = None) -> List[str]:
 
 def _rd_calibrated(group: Sequence[str]) -> bool:
     """BAO/DESI in this group take r_d from the cosmology (Post_processing.bao_rd_calibrated's rule)."""
-    return any(str(t).startswith("BBN") or str(t) in K.CMB_PRIMARY_TAGS or "THETA" in str(t) for t in group)
+    return any(str(t).startswith("BBN") or str(t) in K.CMB_PRIMARY_TAGS or str(t) == K.CMB_EARLY_TAG
+               or "THETA" in str(t) for t in group)
 
 
 def codes_used(observations: Sequence[Sequence[str]], engines: Iterable[str] = (), settings: Optional[dict] = None,
@@ -565,6 +595,13 @@ def codes_used(observations: Sequence[Sequence[str]], engines: Iterable[str] = (
                     else "prymordial")
     if "BBN_DH" in tags and "prymordial" not in used:
         used.append("prymordial")
+    if K.CMB_EARLY_TAG in tags:
+        used.append("camb")
+    if "CMB_hil_PR4" in tags:
+        used.append("cobaya_camspec")
+    if (settings.get("cmb_sample_theta", getattr(K, "CMB_SAMPLE_THETA", False))
+            and any(t in K.CMB_PRIMARY_TAGS for t in tags)):
+        used.append("theta_mc")
     used.append("getdist")
     return used
 

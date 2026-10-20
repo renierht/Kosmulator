@@ -52,7 +52,11 @@ def _theta_params(theta: np.ndarray, CONFIG: dict, obs_index: int) -> dict:
     for BBN groups without a sampled r_d, the calibrated r_d."""
     params = CONFIG["parameters"][obs_index]
     param_dict = {p: theta[i] for i, p in enumerate(params)}
-    # Derive background vars if using CMB params / 100theta_s
+    if K.THETA_MC_PARAM in param_dict and "H_0" not in param_dict:
+        # cmb_sample_theta: H_0 solved from 100 theta_MC (log_prior_all rejects points without one)
+        h = _theta_h(param_dict, CONFIG, obs_index)
+        param_dict["H_0"] = 100.0 * h if h is not None else float("nan")
+    # Derive background vars if using CMB params
     param_dict = utils.ensure_background_params(param_dict)
     # Values the configuration fixes for this group (e.g. H_0 for uncalibrated SNe)
     param_dict = utils.with_fixed_params(param_dict, CONFIG, obs_index)
@@ -60,6 +64,13 @@ def _theta_params(theta: np.ndarray, CONFIG: dict, obs_index: int) -> dict:
     # compute r_d from (Omega_bh^2, Omega_m, H_0[, N_eff]).
     RD._maybe_calibrate_rd(param_dict, CONFIG, obs_index)
     return param_dict
+
+
+def _theta_h(param_dict: dict, CONFIG: dict, obs_index: int):
+    """h solved from 100 theta_MC for one point (cached in theta_mc), or None outside the H_0 box."""
+    from Kosmulator_main import theta_mc as TM
+    pd = {**dict((CONFIG.get("fixed_params_by_group", {}) or {}).get(obs_index, {})), **param_dict}
+    return TM.h_for_point(CONFIG.get("model_name", ""), pd, TM.h_range_of(CONFIG))
 
 
 def _sn_batched(obs_data: dict, obs_type: str) -> bool:
@@ -201,6 +212,13 @@ def model_likelihood(
         # Gaussian prior on Omega_b h^2 (or 2D with N_eff); shared with the statistics step
         return -0.5 * SP.bbn_prior_chi2(obs_data, param_dict)
 
+    if obs == K.CMB_EARLY_TAG:
+        # Compressed CMB: (theta_*, omega_b, omega_bc) prior of DESI DR2 (cmb_early); the same
+        # function gives the statistics step its chi^2
+        from Kosmulator_main import cmb_early as CE
+        c2 = CE.chi2(param_dict, MODEL_func)
+        return -0.5 * c2 if np.isfinite(c2) else -np.inf
+
     # SN sets except the official JLA: the same code as the batched path (one row)
     if _sn_batched(obs_data, obs_type):
         r = _sn_residual(param_dict, obs_data, MODEL_func, obs)
@@ -319,6 +337,14 @@ def log_prior_all(theta_batch: np.ndarray, CONFIG: Dict[str, Any], obs_index: in
             for walker in range(nwalkers)
         ])
         lp[~valid] = -np.inf
+
+    # --- cmb_sample_theta: a theta with no H_0 in the H_0 prior box is outside the prior ---
+    if K.THETA_MC_PARAM in params and "H_0" not in params:
+        for w in range(nwalkers):
+            if np.isfinite(lp[w]):
+                pd = {name: float(theta_batch[w, i]) for i, name in enumerate(params)}
+                if _theta_h(pd, CONFIG, obs_index) is None:
+                    lp[w] = -np.inf
 
     # --- Coupled background consistency (always true physically) ---
     params = CONFIG["parameters"][obs_index]

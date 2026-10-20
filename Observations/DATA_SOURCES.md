@@ -28,7 +28,9 @@ Kosmulator includes every data set it supports, with its source and the papers t
 | `f_sigma_8` | f sigma_8(z) from redshift-space distortions (66 points) | `f_sigma_8.dat` | Skara & Perivolaropoulos (2020), Appendix B, Table VI, an update of Kazantzidis & Perivolaropoulos (2018), Table II (f_sigma_8.dat header) | values compiled from the published papers |
 | `BBN_DH`, `BBN_DH_AlterBBN` | Primordial deuterium D/H (the 12 quasar systems of the PDG 2025 review) | `constants.BBN_DH_PDG_SYSTEMS`, `BBN/ (AlterBBN grids made by Kosmulator)` | PDG BBN review (2025 update); predicted D/H(omega_b) from a power law fitted to the PRyMordial table (BBN_DH) or from AlterBBN (BBN_DH_AlterBBN) | values compiled from the published papers |
 | `BBN_PryMordial`, `BBN_prior` | BBN prior on Omega_b h^2 = 0.02218 +- 0.00055 (LCDM) | `Kosmulator_main/Config.py` | the value of Schoeneberg (2024) (PDG abundances, PRyMordial, conservative nuclear rates) | values compiled from the published papers |
+| `ThetaStar_CMB` | Compressed CMB: Gaussian prior on (theta_*, omega_b, omega_bc) | `Kosmulator_main/cmb_early.py`, `CMB_early/zstar_rstar_camb.npz` | DESI DR2 (2025), Appendix A, from the Planck PR4 CamSpec chains of Lemos & Lewis (2023); z_* and r_s(z_*) on a grid made with CAMB | values compiled from the published papers |
 | `CMB_hil`, `CMB_hil_TT` | Planck 2018 high-l TT,TE,EE / TT (plik, plik_lite) | `plik_rd12_HM_v22b_TTTEEE.clik`, `plik_rd12_HM_v22_TT.clik`, `plik_lite_v22_TTTEEE.clik`, `plik_lite_v22_TT.clik` | Planck Legacy Archive, COM_Likelihood_Data-baseline_R3.00 | no licence stated (ESA Planck Legacy Archive) |
+| `CMB_hil_PR4` | Planck PR4 (NPIPE) high-l TT,TE,EE (CamSpec 12.6cl) | `planck_NPIPE_CamSpec/CamSpec_NPIPE/` | Cobaya's planck_native_data release v1 (CamSpec_NPIPE.zip), github.com/CobayaSampler/planck_native_data; the likelihood code follows Cobaya's planck_NPIPE_highl_CamSpec (LGPL-3.0-or-later) | no licence file at the source |
 | `CMB_lowl`, `CMB_lowl_TT` | Planck 2018 low-l EE (SimAll) and TT (Commander) | `simall_100x143_offlike5_EE_Aplanck_B.clik`, `commander_dx12_v3_2_29.clik` | Planck Legacy Archive, COM_Likelihood_Data-baseline_R3.00 | no licence stated (ESA Planck Legacy Archive) |
 | `CMB_lensing` | Planck 2018 lensing (raw and CMB-marginalised) | `smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8.clik_lensing`, `smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing` | Planck Legacy Archive, COM_Likelihood_Data-baseline_R3.00 | no licence stated (ESA Planck Legacy Archive) |
 | `CMB_lowl_sroll2` | Planck low-l EE from the SRoll2 maps (probability table) | `sroll2_prob_table.txt` | Cobaya's planck_native_data release (planck_sroll2_lowE.zip), github.com/CobayaSampler/planck_native_data | no licence file at the source |
@@ -138,10 +140,20 @@ Combinations: `CMB_PACT` = `CMB_lowl_TT` + `CMB_lowl_sroll2` + `CMB_planck_ACTcu
 - N. Schoeneberg (2024), The 2024 BBN baryon abundance update, JCAP 06 (2024) 006, arXiv:2401.15054, doi:10.1088/1475-7516/2024/06/006 [`schoneberg24`]
 - A.-K. Burns, T. M. P. Tait, M. Valli (2024), PRyMordial: The First Three Minutes, Within and Beyond the Standard Model, Eur. Phys. J. C 84, 86, arXiv:2307.07061, doi:10.1140/epjc/s10052-024-12442-0 [`burns24`]
 
+### ThetaStar_CMB: Compressed CMB: Gaussian prior on (theta_*, omega_b, omega_bc)
+
+- DESI Collaboration, M. Abdul Karim et al. (2025), DESI DR2 Results II: Measurements of Baryon Acoustic Oscillations and Cosmological Constraints, Phys. Rev. D 112, 083515, arXiv:2503.14738, doi:10.1103/tr6y-kpc6 [`desi25_dr2`]
+- P. Lemos, A. Lewis (2023), CMB constraints on the early Universe independent of late-time cosmology, Phys. Rev. D 107, 103505, arXiv:2302.12911, doi:10.1103/PhysRevD.107.103505 [`lemos23`]
+
 ### CMB_hil, CMB_hil_TT: Planck 2018 high-l TT,TE,EE / TT (plik, plik_lite)
 
 - Planck Collaboration, N. Aghanim et al. (2020), Planck 2018 results. V. CMB power spectra and likelihoods, A&A 641, A5, arXiv:1907.12875, doi:10.1051/0004-6361/201936386 [`planck18_V`]
 - Planck Collaboration, N. Aghanim et al. (2020), Planck 2018 results. VI. Cosmological parameters, A&A 641, A6, arXiv:1807.06209, doi:10.1051/0004-6361/201833910 [`planck18_VI`]
+
+### CMB_hil_PR4: Planck PR4 (NPIPE) high-l TT,TE,EE (CamSpec 12.6cl)
+
+- E. Rosenberg, S. Gratton, G. Efstathiou (2022), CMB power spectra and cosmological parameters from Planck PR4 with CamSpec, MNRAS 517, 4620, arXiv:2205.10869, doi:10.1093/mnras/stac2744 [`rosenberg22`]
+- Planck Collaboration, Y. Akrami et al. (2020), Planck intermediate results. LVII. Joint Planck LFI and HFI data processing, A&A 643, A42, arXiv:2007.04997, doi:10.1051/0004-6361/202038073 [`planck20_LVII`]
 
 ### CMB_lowl, CMB_lowl_TT: Planck 2018 low-l EE (SimAll) and TT (Commander)
 
@@ -255,6 +267,18 @@ Combinations: `CMB_PACT` = `CMB_lowl_TT` + `CMB_lowl_sroll2` + `CMB_planck_ACTcu
 ### GetDist (corner plots, marginal statistics)
 
 - A. Lewis (2025), GetDist: a Python package for analysing Monte Carlo samples, JCAP 08 (2025) 025, arXiv:1910.13970, doi:10.1088/1475-7516/2025/08/025 [`lewis19`]
+
+### CAMB (z_* and r_s(z_*) of the ThetaStar_CMB grid)
+
+- A. Lewis, A. Challinor, A. Lasenby (2000), Efficient computation of CMB anisotropies in closed FRW models, ApJ 538, 473, arXiv:astro-ph/9911177, doi:10.1086/309179 [`lewis00`]
+
+### Cobaya's Python CamSpec, from which CMB_hil_PR4's likelihood code is derived (LGPL-3.0-or-later; Cobaya's licence asks that publications using results of the code are on arXiv)
+
+- J. Torrado, A. Lewis (2021), Cobaya: code for Bayesian analysis of hierarchical physical models, JCAP 05 (2021) 057, arXiv:2005.05290, doi:10.1088/1475-7516/2021/05/057 [`torrado21`]
+
+### 100 theta_MC sampled instead of H_0 (cmb_sample_theta): CosmoMC's approximation, z_* from the Hu & Sugiyama (1996) fit
+
+- W. Hu, N. Sugiyama (1996), Small-scale cosmological perturbations: an analytic approach, ApJ 471, 542, arXiv:astro-ph/9510117, doi:10.1086/177989 [`hu96`]
 
 ## Acknowledgements the data's licences ask for
 

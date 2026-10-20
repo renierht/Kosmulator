@@ -74,7 +74,7 @@ def write_run_settings(suffix: str, settings: Dict[str, Any]) -> Optional[str]:
 LIKELIHOOD_SETTINGS = ("neutrinos", "nu_mass_eV", "nu_N_eff", "growth_model", "cmb_nonlinear",
                        "hmcode_version", "cmb_nuisance", "sample_H0_uncalibrated_SNe", "rd_background",
                        "lensing_only_priors", "PANTHEON_SYS_COV", "CC_SYS_COV", "FS8_WIGGLEZ_COV",
-                       "FS8_AP_CORRECTION")
+                       "FS8_AP_CORRECTION", "cmb_sample_theta", "CMB_EARLY_OMEGA")
 
 
 def check_run_settings(suffix: str, settings: Dict[str, Any], overwrite: bool = False) -> None:
@@ -261,6 +261,8 @@ def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
         K.set_neutrinos(st["neutrinos"], st.get("nu_mass_eV", K.NU_MASS_EV), st.get("nu_N_eff", K.NU_N_EFF))
     # the run's growth model decides whether gamma is a parameter of its f / f_sigma_8 groups
     K.set_growth_model(st.get("growth_model", "gamma"))
+    # cmb_sample_theta: the chains of CMB groups hold 100theta_MC in place of H_0 (shown as it is here)
+    K.set_cmb_sample_theta(bool(st.get("cmb_sample_theta", False)))
     # runs whose settings file has no cmb_nonlinear were made with linear lensing
     K.set_cmb_nonlinear(st.get("cmb_nonlinear"), st.get("hmcode_version", K.HMCODE_VERSION))
     K.CMB_NUISANCE = str(st.get("cmb_nuisance", "baseline")).lower()

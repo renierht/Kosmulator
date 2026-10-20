@@ -147,6 +147,7 @@ _OBS_ORDER = [
     "BBN_PryMordial",
     "CC",
     "CMB_hil",
+    "CMB_hil_PR4",
     "CMB_hil_TT",
     "CMB_lensing",
     "CMB_lensing_ACTPlanck",
@@ -168,6 +169,7 @@ _OBS_ORDER = [
     "OHD",
     "Pantheon",
     "PantheonP",
+    "ThetaStar_CMB",
 ]
 _OBS_RANK = {name: i for i, name in enumerate(_OBS_ORDER)}
 
@@ -636,6 +638,11 @@ def _settings_items(run: Dict[str, Any]) -> List[Tuple[str, str, bool]]:
     cores = run.get("num_cores")
     items.append(("cores", (f"cores {cores}" if cores else "cores ?") + f", --class_threads {g('class_threads')}"
                   + (" (MPI)" if run.get("use_mpi") else ""), nd("class_threads")))
+    items.append(("cmb_sample_theta", f"cmb_sample_theta {g('cmb_sample_theta')}", nd("cmb_sample_theta")))
+    if "CMB_EARLY_OMEGA" in run:          # runs with ThetaStar_CMB only
+        v = run["CMB_EARLY_OMEGA"]
+        items.append(("CMB_EARLY_OMEGA", f"ThetaStar_CMB on {'omega_b + omega_c' if v == 'bc' else 'Omega_m h^2'}",
+                      nd("CMB_EARLY_OMEGA")))
     items.append(("corner_show_nuisance", f"corner_show_nuisance {g('corner_show_nuisance')}", nd("corner_show_nuisance")))
     return items
 
@@ -656,9 +663,24 @@ def settings_header(run: Optional[Dict[str, Any]] = None) -> str:
     """One line with the physics settings for the results' files and the console (CT-26)."""
     run = run if run is not None else getattr(K, "RUN_SETTINGS", {})
     keep = ("neutrinos", "rd_background", "growth_model", "cmb_nonlinear", "cmb_nuisance", "lensing_only_priors",
-            "sample_H0_uncalibrated_SNe", "CC_SYS_COV", "PANTHEON_SYS_COV", "fsigma8")
+            "sample_H0_uncalibrated_SNe", "CC_SYS_COV", "PANTHEON_SYS_COV", "fsigma8", "cmb_sample_theta",
+            "CMB_EARLY_OMEGA")
     return "Settings: " + "; ".join(t + ("*" if d else "") for k, t, d in _settings_items(run) if k in keep) + \
         " (* not the default)"
+
+
+def w0wa_pivot(w0, wa) -> Tuple[float, float, float]:
+    """
+    Pivot of a (w0, wa) posterior, w(a) = w0 + wa (1 - a): the scale factor a_p = 1 + C(w0, wa) / C(wa, wa)
+    at which w is best constrained and w_p = w(a_p) is uncorrelated with wa (DESI DR2, arXiv:2503.14738,
+    Sect. VII A). Returns (z_p, mean of w_p, standard deviation of w_p), w_p = w0 + wa (1 - a_p) per sample.
+    """
+    w0, wa = np.asarray(w0, float), np.asarray(wa, float)
+    C = np.cov(np.vstack([w0, wa]))
+    a_p = 1.0 + C[0, 1] / C[1, 1]
+    wp = w0 + wa * (1.0 - a_p)
+    z_p = 1.0 / a_p - 1.0 if a_p > 0 else float("nan")
+    return float(z_p), float(np.mean(wp)), float(np.std(wp, ddof=1))
 
 
 def group_flags(obs, Type) -> Tuple[bool, bool]:
@@ -3493,6 +3515,14 @@ def data_overlaps(group) -> List[str]:
             if dup:
                 out.append(f"{b} already contains {', '.join(K.cmb_components(b))}; "
                            f"{', '.join(dup)} in the same group repeat(s) its data")
+    # The compressed CMB prior is a summary of Planck PR4 high-l and low-l data (DESI DR2, App. A)
+    if K.CMB_EARLY_TAG in tags:
+        planck = ("CMB_hil", "CMB_hil_TT", "CMB_hil_PR4", "CMB_lowl", "CMB_lowl_TT", "CMB_lowl_sroll2",
+                  "CMB_planck_ACTcut") + tuple(K.CMB_BUNDLES)        # ACT or SPT alone are other data
+        prim = [t for t in planck if t in tags]
+        if prim:
+            out.append(f"{K.CMB_EARLY_TAG} is a compression of the Planck CMB (theta_*, omega_b, omega_bc); "
+                       f"with {', '.join(prim)} the CMB is counted twice; use one")
     return out
 
 

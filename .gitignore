@@ -14,6 +14,8 @@ __pycache__/
 *.npz
 # ...except the AlterBBN D/H grid BBN_DH_AlterBBN reads (41 kB; N_eff 3.044 and 3.046)
 !Observations/BBN/bbn_grid.npz
+# ...and the CAMB grid of z_* and r_s(z_*) ThetaStar_CMB reads (13 kB; cmb_early.make_grid)
+!Observations/CMB_early/zstar_rstar_camb.npz
 
 # =========================
 # Jupyter
@@ -110,3 +112,7 @@ Observations/act_dr6_lenslike/v1.2/like_corrs/N1*.txt
 Observations/act_dr6_lenslike/v1.2/like_corrs/*.npy
 Observations/act_dr6_lenslike/.cache/
 !Observations/act_dr6_lenslike/actplanck_baseline_corrections_v1.2.npz
+
+# Planck PR4 CamSpec data (CMB_hil_PR4): 0.5 GB with its covariance, and the inverse Kosmulator
+# caches next to it; python -m Kosmulator_main.planck_pr4 --get downloads them
+Observations/planck_NPIPE_CamSpec

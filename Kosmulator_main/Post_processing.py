@@ -58,7 +58,7 @@ def bao_rd_calibrated(obs_entry) -> bool:
     before, any tag containing "CMB" made the statistics compute r_d instead).
     """
     toks = [str(x) for x in obs_entry]
-    return any(t.startswith("BBN") or t in K.CMB_PRIMARY_TAGS or "THETA" in t for t in toks)
+    return any(t.startswith("BBN") or t in K.CMB_PRIMARY_TAGS or t == K.CMB_EARLY_TAG or "THETA" in t for t in toks)
 
 
 def _scalarize(x: Any) -> float:
@@ -1157,6 +1157,12 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                         # definition), but not as a data point: it is a prior.
                         chi_total += SP.bbn_prior_chi2(obs_data, p_eval)
 
+                    elif obs == K.CMB_EARLY_TAG:
+                        # Compressed CMB (theta_*, omega_b, omega_bc): a prior like the BBN one,
+                        # in chi^2 (as in the sampler's log_like) but not counted as data points
+                        from Kosmulator_main import cmb_early as _CE
+                        chi_total += _CE.chi2(p_eval, MODEL_func)
+
                     elif obs_type == "CMB":
                         _c, _n, _note = cmb_obs_chi2(obs, obs_entry, p_eval, model_name)
                         if _c is None:                 # lensing without a finite value: left out
@@ -1244,6 +1250,14 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             # Re-evaluate once at the polished point: the data chi^2 (without the Planck
             # nuisance priors used in the polish) and the exact N data points
             chi_squared_total, num_data_points_total = _compute_chi2_total(param_dict)
+            # A10: models are compared (dChi, sigma) with the chi^2 the polish minimised, the data plus
+            # the group's CMB nuisance priors: DESI's Delta chi^2_MAP is -2 Delta ln(posterior) at the
+            # MAP (arXiv:2503.14738, eq. 22). chi^2, chi^2/dof, AIC, BIC and DIC stay data-only.
+            chi_squared_map = chi_squared_total
+            if has_cmb_group:
+                chi_squared_map += float(SP.cmb_prior_chi2(dict(param_dict), tuple(obs_entry)))
+                notes.append(f"chi^2 with the CMB nuisance priors (MAP, used for dChi and sigma): "
+                             f"{chi_squared_map:.2f}")
             # item 12: r_d of this group from rd_Class (the model's own E(z)), or its fallback
             _rdc_fail = sum(v for k, v in RD.rd_fallback_counts().items() if k.startswith("rd_Class failed"))
             if _rdc_fail:
@@ -1251,7 +1265,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                              "r_d used there")
             elif (K.RD_BACKGROUND == "model" and model_name not in K.RD_LCDM_MODELS
                   and any(o in ("BAO", "DESI_DR1", "DESI_DR2") for o in obs_entry)
-                  and any(str(o).startswith("BBN") or o in K.CMB_PRIMARY_TAGS for o in obs_entry)):
+                  and bao_rd_calibrated(obs_entry)):
                 notes.append("r_d from CLASS with the model's own E(z) (rd_Class, rd_background = \"model\")")
             _eh98 = sum(v for k, v in RD.rd_fallback_counts().items() if "EH98 used" in k)
             if _eh98:
@@ -1292,7 +1306,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             # (H_0 alone enters only through the radiation term, Omega_r = omega_r / h^2)
             _bao = {"BAO", "DESI_DR1", "DESI_DR2"}
             if (any(o in _bao for o in obs_entry)
-                    and not any(str(o).startswith(("BBN", "CMB")) for o in obs_entry)
+                    and not bao_rd_calibrated(obs_entry)
                     and "r_d" not in param_dict and "H_0" in param_dict):
                 _rd_fid = float((CONFIG[model_name].get("rd_policy") or {}).get("fixed_value", K.R_D_SINGLETON))
                 notes.append(f"H_0 at the fiducial r_d = {_rd_fid:g} Mpc (no early-time calibrator): "
@@ -1359,6 +1373,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             results[model_name][obs_name] = {
                 "Log-Likelihood": log_likelihood,
                 "Chi_squared": chi_squared_total,
+                "Chi_squared_MAP": chi_squared_map,
                 "Reduced_Chi_squared": reduced_chi_squared,
                 "AIC": aic,
                 "BIC": bic,
@@ -1373,7 +1388,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 results[model_name][obs_name]["Note"] = " | ".join(notes)
 
             if model_name == reference_model:
-                reference_chi[obs_name] = chi_squared_total
+                reference_chi[obs_name] = chi_squared_map
                 reference_aic[obs_name] = aic
                 reference_bic[obs_name] = bic
                 reference_aicc[obs_name] = aicc
@@ -1390,7 +1405,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             stats["dAICc"] = stats["AICc"] - reference_aicc.get(obs_name, stats["AICc"])
             stats["dDIC"] = stats["DIC"] -reference_dic.get(obs_name, stats["DIC"])
             stats["dWAIC"] = stats["WAIC"] - reference_waic.get(obs_name, stats["WAIC"])
-            stats['dChi'] = stats['Chi_squared'] - reference_chi.get(obs_name, stats['Chi_squared'])
+            stats['dChi'] = stats['Chi_squared_MAP'] - reference_chi.get(obs_name, stats['Chi_squared_MAP'])
             # Degrees of freedom = extra free parameters relative to the reference
             # model (DESI DR2 Eq. 22), not the noisy difference in p_D.
             dk = stats["num_params"] - reference_k.get(obs_name, stats["num_params"])

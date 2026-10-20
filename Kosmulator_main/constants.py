@@ -291,6 +291,13 @@ DATA_OVERLAPS: Tuple[Tuple[frozenset, str], ...] = (
                                            "or CMB_PACT"),
     (frozenset({"CMB_planck_ACTcut", "CMB_hil"}), "both are Planck high-l TT,TE,EE (the cut one is a subset)"),
     (frozenset({"CMB_planck_ACTcut", "CMB_hil_TT"}), "both contain Planck high-l TT"),
+    # Planck PR4 (CamSpec) and PR3 high-l: two analyses of the same Planck sky
+    (frozenset({"CMB_hil_PR4", "CMB_hil"}), "CMB_hil_PR4 (PR4, CamSpec) and CMB_hil (PR3, plik) are two "
+                                            "analyses of the same Planck high-l data; use one"),
+    (frozenset({"CMB_hil_PR4", "CMB_hil_TT"}), "both contain Planck high-l TT (PR4 and PR3)"),
+    (frozenset({"CMB_hil_PR4", "CMB_planck_ACTcut"}), "both contain Planck high-l TT, TE, EE (PR4 and PR3)"),
+    (frozenset({"CMB_hil_PR4", "CMB_ACT"}), "ACT DR6 and full Planck overlap in sky and multipoles: ACT "
+                                            "recommends Planck cut at l = 1000 (TT) and 600 (TE, EE)"),
     # CMB lensing (item 61)
     (frozenset({"CMB_lensing", "CMB_lensing_ACTPlanck"}), "Planck 2018 (PR3) lensing and the Planck PR4 part of "
                                                           "CMB_lensing_ACTPlanck are two reconstructions from the same "
@@ -299,12 +306,21 @@ DATA_OVERLAPS: Tuple[Tuple[frozenset, str], ...] = (
 #: The Planck + ACT (+ SPT) combinations contain these tags; with any of them in the same
 #: group the data are counted twice (utils.data_overlaps)
 CMB_BUNDLE_CONFLICTS: Tuple[str, ...] = ("CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lowl_TT", "CMB_lowl_sroll2",
-                                         "CMB_planck_ACTcut", "CMB_ACT", "CMB_SPT", "CMB_PACT", "CMB_SPA")
+                                         "CMB_planck_ACTcut", "CMB_ACT", "CMB_SPT", "CMB_PACT", "CMB_SPA",
+                                         "CMB_hil_PR4")
 #: Supernova compilations: any two of them share supernovae
 SN_COMPILATIONS: Tuple[str, ...] = ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS", "DESY5", "Union3")
 #: BBN data: the D/H systems (two predictions of the same data) and the DESI DR2 BBN prior on
 #: Omega_b h^2, which is derived from primordial deuterium (and helium) measurements
 BBN_DATASETS: Tuple[str, ...] = ("BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial")
+#: The compressed CMB of DESI DR2 (arXiv:2503.14738, Appendix A): a Gaussian prior on
+#: (theta_*, omega_b, omega_bc), cmb_early.py. An early-time calibrator of r_d like the BBN
+#: prior, not a CMB likelihood (no CLASS spectra, no nuisances), so its name does not start
+#: with "CMB" (the CMB code paths recognise CMB data by that prefix)
+CMB_EARLY_TAG: str = "ThetaStar_CMB"
+#: Its third parameter: "bc" omega_b + omega_c, as DESI DR2 applied it (reproduces their Table VI), or
+#: "m" Omega_m h^2 with the massive neutrino, the quantity whose mean the source chains give (cmb_early)
+CMB_EARLY_OMEGA: str = os.environ.get("KOSM_CMB_EARLY_OMEGA", "bc")
 
 #: Official JLA likelihood (Betoule et al. 2014, arXiv:1401.4064), tag "JLA".
 #: Light-curve nuisance parameters sampled with JLA: (low, high, start). Priors
@@ -319,8 +335,11 @@ JLA_HOST_MASS_SPLIT: float = 10.0
 #: Late-time datasets whose likelihood is expensive (JLA rebuilds and factorises
 #: a 740 x 740 covariance for every alpha, beta: about 10 - 20 ms). For groups
 #: containing them zeus spreads the walkers over the worker pool instead of
-#: evaluating them in one vectorised call on a single core.
-POOL_PREFERRED_DATASETS: Set[str] = {"JLA"}
+#: evaluating them in one vectorised call on a single core. ThetaStar_CMB: its groups calibrate
+#: r_d with CLASS at every point (about 0.1 s, as BBN groups do), so zeus (vectorised models) uses the
+#: pool for them; BBN groups run emcee instead (engine_for_group), these keep zeus, which converged on
+#: the w0waCDM late-time groups where emcee did not (T10, T16).
+POOL_PREFERRED_DATASETS: Set[str] = {"JLA", CMB_EARLY_TAG}
 
 # ----------------------------------------------------------------------
 # BBN deuterium (BBN_DH likelihood)
@@ -401,6 +420,7 @@ SETTINGS_DEFAULTS: Dict[str, Any] = {
     "CC_SYS_COV": None, "PANTHEON_SYS_COV": None, "FS8_WIGGLEZ_COV": False, "FS8_AP_CORRECTION": False,
     "engine_mode": "mixed", "emcee_moves": "de_snooker", "zeus_light_mode": True,
     "tau_consecutive": 1, "autocorr_buffer": 0, "class_threads": 1, "corner_show_nuisance": False,
+    "cmb_sample_theta": False, "CMB_EARLY_OMEGA": "bc",
 }
 
 #: The run's settings (MCMC_setup.main), for the summary and the results' header (CT-26)
@@ -583,6 +603,7 @@ OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
     "CMB_lowl_TT":     (r"Planck low-$\ell$ TT",       "Planck low-ℓ TT"),
     "CMB_hil":         (r"Planck high-$\ell$ TTTEEE",  "Planck high-ℓ TTTEEE"),
     "CMB_hil_TT":      (r"Planck high-$\ell$ TT",      "Planck high-ℓ TT"),
+    "CMB_hil_PR4":     (r"Planck PR4 high-$\ell$ TTTEEE", "Planck PR4 high-ℓ TTTEEE"),
     "CMB_lensing":     (r"Planck lensing",             "Planck lensing"),
     "CMB_lensing_ACTPlanck": (r"ACT DR6 + Planck PR4 lensing", "ACT DR6 + Planck PR4 lensing"),
     "CMB_lensing_SPT": (r"SPT-3G MUSE lensing",         "SPT-3G MUSE lensing"),
@@ -602,6 +623,7 @@ OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
     
     #Big Bang Nucleosythesis
     "BBN_PryMordial":      (r"BBN (primordial)",             "BBN (primordial)"),
+    CMB_EARLY_TAG:         (r"$(\theta_*, \omega_b, \omega_{bc})_{\rm CMB}$", "(theta*, wb, wbc) CMB"),
     "BBN_DH":              (r"BBN D/H",                      "BBN D/H"),
     "BBN_DH_AlterBBN":     (r"BBN D/H (AlterBBN)",           "BBN D/H (AlterBBN)"),
 }
@@ -908,8 +930,14 @@ PLANCK_LOWL_FILES: Dict[str, str] = {
 #   CMB_lowl_sroll2    Planck low-l EE from the SRoll2 maps (Pagano et al. 2020, arXiv:1908.09856)
 #   CMB_PACT           P-ACT: CMB_lowl_TT + CMB_lowl_sroll2 + CMB_planck_ACTcut + CMB_ACT
 #   CMB_SPA            CMB-SPA: CMB_PACT + CMB_SPT, as the SPT collaboration's SPA-lite set-up
+# and, through the same machinery (a NumPy likelihood on the point's CLASS spectra, its own
+# nuisance parameters), Planck PR4:
+#   CMB_hil_PR4        Planck PR4 (NPIPE) high-l TT, TE, EE, the CamSpec 12.6cl likelihood (Rosenberg,
+#                      Gratton & Efstathiou 2022, arXiv:2205.10869; Kosmulator_main/planck_pr4.py), the
+#                      high-l likelihood of DESI DR2; an alternative to the PR3 plik one (CMB_hil).
+#                      Use it with CMB_lowl_TT and CMB_lowl, as DESI DR2 and Cobaya's CamSpec runs do.
 GROUND_CMB_TAGS: Tuple[str, ...] = ("CMB_ACT", "CMB_SPT", "CMB_planck_ACTcut", "CMB_lowl_sroll2",
-                                    "CMB_PACT", "CMB_SPA")
+                                    "CMB_PACT", "CMB_SPA", "CMB_hil_PR4")
 CMB_BUNDLES: Dict[str, Tuple[str, ...]] = {
     "CMB_PACT": ("CMB_lowl_TT", "CMB_lowl_sroll2", "CMB_planck_ACTcut", "CMB_ACT"),
     "CMB_SPA": ("CMB_lowl_TT", "CMB_lowl_sroll2", "CMB_planck_ACTcut", "CMB_ACT", "CMB_SPT"),
@@ -930,11 +958,25 @@ GROUND_NUISANCE_SAMPLED: Dict[str, Tuple[float, Tuple[float, float], Tuple[float
     "P_act": (1.0, (0.9, 1.1), None),
     "Tcal": (1.0, (0.982, 1.018), (1.0, 0.0036)),
     "Ecal": (1.0, (0.8, 1.2), None),
+    # CamSpec PR4 (CMB_hil_PR4), Cobaya 3.6.2's planck_NPIPE_highl_CamSpec: power-law residual
+    # amplitudes and tilts of the 143, 217 and 143x217 TT spectra (flat 0 - 50 and 0 - 5;
+    # reference values Cobaya's starting points) and the TE and EE calibrations (1 +- 0.01);
+    # A_planck is Planck's (1 +- 0.0025, as CamSpec's prior)
+    "amp_143": (10.0, (0.0, 50.0), None),
+    "amp_217": (20.0, (0.0, 50.0), None),
+    "amp_143x217": (10.0, (0.0, 50.0), None),
+    "n_143": (1.0, (0.0, 5.0), None),
+    "n_217": (1.0, (0.0, 5.0), None),
+    "n_143x217": (1.0, (0.0, 5.0), None),
+    "calTE": (1.0, (0.95, 1.05), (1.0, 0.01)),
+    "calEE": (1.0, (0.95, 1.05), (1.0, 0.01)),
 }
 GROUND_NUISANCE_PARAMS: Dict[str, Tuple[str, ...]] = {
     "CMB_ACT": ("A_act", "P_act"), "CMB_SPT": ("Tcal", "Ecal"),
     "CMB_planck_ACTcut": ("A_planck",), "CMB_lowl_sroll2": ("A_planck",),
     "CMB_PACT": ("A_planck", "P_act"), "CMB_SPA": ("A_planck", "P_act", "Tcal", "Ecal"),
+    "CMB_hil_PR4": ("A_planck", "amp_143", "amp_217", "amp_143x217", "n_143", "n_217", "n_143x217",
+                    "calTE", "calEE"),
 }
 #: Nuisance parameters of the likelihoods (CT-15, CT-37): not drawn in the corner plots unless
 #: corner_show_nuisance (Kosmulator.py) or --corner-show-all-cmb-params; listed after a "nuisance" line
@@ -1003,6 +1045,27 @@ LENSING_ONLY_NS_PRIOR: Tuple[float, float] = (0.96, 0.02)
 #: tau_reio of such a group when Kosmulator.py's reference_values has none (Planck 2018 TT,TE,EE+lowE)
 TAU_REIO_FALLBACK: float = 0.0544
 LENSING_ONLY_PRIORS: bool = os.environ.get("KOSM_LENSING_ONLY_PRIORS", "1") != "0"
+
+
+# Sampling the angular acoustic scale instead of H_0 (Kosmulator.py cmb_sample_theta; DESI DR2
+# arXiv:2503.14738 Sect. V, Planck 2018 VI): groups with primary CMB data sample 100 theta_MC (CosmoMC's
+# approximation, Kosmulator_main/theta_mc.py) with a flat prior, and H_0 is solved from it at every
+# point (within the H_0 prior box, like CAMB's solver); before the statistics the chain's theta
+# column is turned into H_0, so tables and figures show H_0. Default False: H_0 sampled with a flat
+# prior. KOSM_CMB_SAMPLE_THETA carries the switch to spawned pool workers.
+THETA_MC_PARAM: str = "100theta_MC"
+#: Prior box and starting value of 100 theta_MC when Kosmulator.py has none: DESI's is U[0.5, 10];
+#: the data fix it to 0.03%, so a narrower box changes nothing and keeps the solver for H_0 in range
+THETA_MC_BOX: Tuple[float, float] = (1.03, 1.05)
+THETA_MC_REF: float = 1.0411
+CMB_SAMPLE_THETA: bool = os.environ.get("KOSM_CMB_SAMPLE_THETA", "0") == "1"
+
+
+def set_cmb_sample_theta(on: bool = False) -> None:
+    """Kosmulator.py cmb_sample_theta for this run (and its pool workers)."""
+    global CMB_SAMPLE_THETA
+    CMB_SAMPLE_THETA = bool(on)
+    os.environ["KOSM_CMB_SAMPLE_THETA"] = "1" if CMB_SAMPLE_THETA else "0"
 
 
 def set_lensing_only_priors(on: bool = True) -> None:
@@ -1074,7 +1137,7 @@ def cmb_gaussian_priors(group) -> Dict[str, Tuple[float, float]]:
     out.update({n: v[2] for n, v in GROUND_NUISANCE_SAMPLED.items() if v[2] is not None})
     comps = cmb_group_components(group)
     if "CMB_ACT" in comps and comps & {"CMB_planck_ACTcut", "CMB_lowl_sroll2", "CMB_lowl_TT", "CMB_lowl",
-                                       "CMB_hil", "CMB_hil_TT", "CMB_lensing"}:
+                                       "CMB_hil", "CMB_hil_TT", "CMB_hil_PR4", "CMB_lensing"}:
         out["A_planck"] = GROUND_NUISANCE_SAMPLED["A_act"][2]
     tp = cmb_tau_prior(group)
     if tp is not None:

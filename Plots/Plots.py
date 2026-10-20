@@ -229,9 +229,10 @@ def _has_bbn(obs_list):
     return any(str(o).startswith("BBN") for o in obs_list)
         
 def _has_cmb(obs_list):
-    """Primary CMB in the group (it calibrates r_d; CMB lensing alone does not, item 61)."""
-    from Kosmulator_main.constants import CMB_PRIMARY_TAGS
-    return any(str(o) in CMB_PRIMARY_TAGS for o in obs_list)
+    """Primary CMB or the compressed CMB prior in the group (they calibrate r_d; CMB lensing alone
+    does not, item 61)."""
+    from Kosmulator_main.constants import CMB_PRIMARY_TAGS, CMB_EARLY_TAG
+    return any(str(o) in CMB_PRIMARY_TAGS or str(o) == CMB_EARLY_TAG for o in obs_list)
 
 def _S_pm_from_sample(sample: np.ndarray, names: list, CONFIG: dict):
     import numpy as np
@@ -300,6 +301,26 @@ def params_by_use(config_model: dict) -> list[str]:
             count[p] += 1
     return sorted(order, key=lambda p: (-count[p], order.index(p)))
 
+def _pivot_notes(Samples, config_model: dict) -> list[str]:
+    """One line per group that samples w0 and wa: the pivot redshift z_p and w_p = w(z_p) (utils.w0wa_pivot)."""
+    from Kosmulator_main.utils import w0wa_pivot
+    out = []
+    for gi, names in enumerate(config_model.get("parameters", [])):
+        if "w0" not in names or "wa" not in names:
+            continue
+        key = cfg_generate_label(config_model["observations"][gi], config_model=config_model, obs_index=gi)
+        entry = (Samples or {}).get(key)
+        if entry is None:
+            continue
+        arr = np.asarray(entry["samples"] if isinstance(entry, dict) else entry, float)
+        if arr.ndim != 2 or arr.shape[1] != len(names) or arr.shape[0] < 10:
+            continue
+        z_p, w_p, s_p = w0wa_pivot(arr[:, names.index("w0")], arr[:, names.index("wa")])
+        out.append(f"Pivot of {_displayize_key(key)}: z_p = {z_p:.2f}, w_p = {w_p:.3f} +- {s_p:.3f} "
+                   "(a_p = 1 + C(w0, wa) / C(wa, wa); mean and standard deviation).")
+    return out
+
+
 def _param_table_kwargs(config_model: dict, model_name: str, aligned_table, param_labels, obs_names) -> dict:
     """
     Arguments of print_parameter_table for one model (CT-43): the corner plot's order, the likelihoods'
@@ -320,6 +341,7 @@ def _param_table_kwargs(config_model: dict, model_name: str, aligned_table, para
         if derived:
             notes.append("r_d of " + ", ".join(derived) + ": derived from the posterior (CLASS rs_drag at the "
                          "draws), not used by these groups' likelihoods.")
+    notes += list(config_model.get("pivot_notes", []))
     return dict(nuisance=set(K.CMB_NUISANCE_PARAM_NAMES) | set(K.SN_NUISANCE_PARAM_NAMES),
                 order=params_by_use(config_model),
                 title=f"Model: {model_name}, parameters (median and 68% interval):",
@@ -362,6 +384,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
             Samples, CONFIG[model_name], model_name, model_name, PLOT_SETTINGS
         )
         obs_names = [_displayize_key(k) for k in obs_names]
+        CONFIG[model_name]["pivot_notes"] = _pivot_notes(Samples, CONFIG[model_name])
         all_best_fit[model_name] = best_struct         # medians etc. per obs_key
         all_tables[model_name]   = (aligned_table, param_labels, obs_names)
         print_rule()
@@ -621,6 +644,9 @@ def _report_convergence(CONFIG, PLOT_SETTINGS, main_folder):
         try:
             cfg = CONFIG[model]
             params = list(cfg["parameters"][info["obs_index"]])
+            if (cfg.get("theta_converted") or {}).get(info["obs_index"]) and "H_0" in params:
+                # cmb_sample_theta: the chain file holds 100 theta_MC where the statistics now have H_0
+                params[params.index("H_0")] = K.THETA_MC_PARAM
             row = chain_convergence_summary(info["dir"], key, int(cfg.get("burn", 0) or 0), params, rules,
                                             prefer=info.get("engine"))
             row["observation"] = _displayize_key(key)
@@ -1387,9 +1413,9 @@ def _rd_badge_policy(model_cfg: dict, obs_tokens) -> str:
     the group's sampled parameters as Config set them up. CMB lensing alone does not
     calibrate r_d (Config samples it), so it is not counted here (item 61).
     """
-    from Kosmulator_main.constants import CMB_PRIMARY_TAGS
+    from Kosmulator_main.constants import CMB_PRIMARY_TAGS, CMB_EARLY_TAG
     toks = [str(t) for t in obs_tokens]
-    if any(t.startswith("BBN") or t in CMB_PRIMARY_TAGS for t in toks):
+    if any(t.startswith("BBN") or t in CMB_PRIMARY_TAGS or t == CMB_EARLY_TAG for t in toks):
         return "calibrated"
     pars = _group_parameters(model_cfg, toks)
     if pars is not None:
@@ -1505,7 +1531,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples
 
             parts = partition_by_compatibility([t for t in obs_list_raw])
 
-            PRIOR_ONLY = ("BBN_PryMordial", "BBN_prior")
+            PRIOR_ONLY = ("BBN_PryMordial", "BBN_prior", "ThetaStar_CMB")
             BBN_ONLY = ("BBN_DH", "BBN_DH_AlterBBN") + PRIOR_ONLY
 
             # Strip priors from each part

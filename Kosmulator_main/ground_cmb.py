@@ -553,6 +553,9 @@ def n_data(tag: str) -> int:
         return sum(n_data(c) for c in K.cmb_components(tag))
     if tag == "CMB_planck_ACTcut":
         return planck_act_cut().n_data
+    if tag == "CMB_hil_PR4":
+        from Kosmulator_main import planck_pr4
+        return planck_pr4.camspec().n_data
     if tag in K.GROUND_N_DATA:
         return int(K.GROUND_N_DATA[tag])
     return int(K.planck_n_data(tag))
@@ -600,6 +603,9 @@ def component_loglike(tag: str, cl: Dict[str, np.ndarray], pd: Dict[str, float],
         return planck_act_cut().loglike(_dl(cl), float(pd.get("A_planck", 1.0)))
     if tag == "CMB_lowl_sroll2":
         return sroll2().loglike(_dl(cl)["EE"], float(pd.get("A_planck", 1.0)))
+    if tag == "CMB_hil_PR4":
+        from Kosmulator_main import planck_pr4
+        return planck_pr4.camspec().loglike(_dl(cl), pd)
     if tag == "CMB_lowl_TT":
         from Kosmulator_main import Statistical_packages as SP
         return float(SP.cmb_lowlTT_loglike(pd, model_name))
@@ -643,6 +649,9 @@ def check_available(tags) -> None:
             planck_act_cut()
         elif c == "CMB_lowl_sroll2":
             sroll2()
+        elif c == "CMB_hil_PR4":
+            from Kosmulator_main import planck_pr4
+            planck_pr4.camspec()          # builds the inverse covariance once (before any pool)
 
 
 def check_lensing(tag: str, lens_only: bool) -> None:
@@ -831,6 +840,9 @@ def band_powers(tag: str, cl: Dict[str, np.ndarray], pd: Dict[str, float], group
                                  ("TT",) if tag == "CMB_hil_TT" else ("TT", "TE", "EE"))
     if tag == "CMB_planck_ACTcut":
         return _plik_band_powers(planck_act_cut(), _dl(cl), A, "Planck 2018 (cut for ACT)", ("TT", "TE", "EE"))
+    if tag == "CMB_hil_PR4":
+        from Kosmulator_main import planck_pr4
+        return planck_pr4.camspec().band_powers(_dl(cl), pd)
     if tag == "CMB_lowl_TT":
         return _lowl_band_powers("TT", cl, "Planck low-l TT")
     if tag == "CMB_lowl":
