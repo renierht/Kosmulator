@@ -1,0 +1,27 @@
+Statistical Results for Model: wowaCDM_v
+Reference model: LCDM_v
+dX = X(model) - X(reference); negative dAIC/dBIC/dAICc/dDIC/dWAIC/dChi favours this model
+Sigma = Assumes the reference model is the null hypothesis, and calculates how much the user model improves the fit over the reference
+
+Statistic           | DESI+DR2+DESY5 [rd: free] | DESI+DR2 (BAO only) [rd: Gaussian prior, long name]
+-----------------------------------------------------------------------------------------------------
+Free parameters     |                         5 |                                                   3
+DOF                 |                      1837 |                                                1837
+Log-Likelihood      |                 -822.5229 |                                           -822.5229
+Chi-Squared         |                 1645.0457 |                                           1645.0457
+Reduced Chi-Squared |                    0.8955 |                                              0.8955
+-----------------------------------------------------------------------------------------------------
+AIC                 |                  1655.046 |                                            1655.046
+BIC                 |                  1682.639 |                                            1682.639
+AICc                |                  1655.078 |                                            1655.078
+DIC                 |                  1655.020 |                                                 nan
+WAIC                |                  1652.672 |                                                 nan
+-----------------------------------------------------------------------------------------------------
+dAIC                |                    -9.417 |                                              -9.417
+dBIC                |                    +1.620 |                                              +1.620
+dAICc               |                    -9.398 |                                              -9.398
+dDIC                |                    -9.526 |                                                 nan
+dWAIC               |                   -14.946 |                                                 nan
+dChi                |                   -13.417 |                                              +0.000
+Sigma               |                       3.2 |                                                 0.0
+

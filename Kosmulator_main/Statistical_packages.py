@@ -45,9 +45,12 @@ from . import Class_run as CR
 from Kosmulator_main import utils as U
 
 try:
-    import clik  # noqa: F401  # imported for side effects in some environments
+    import clipy as clik  # noqa: F401  # pure-Python clik replacement (preferred)
 except Exception:
-    clik = None
+    try:
+        import clik  # noqa: F401  # imported for side effects in some environments
+    except Exception:
+        clik = None
 
 # User-defined cosmology models (background + Cℓ wrappers)
 try:

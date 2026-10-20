@@ -1,0 +1,144 @@
+--- Kosmulator_main/utils.py	2026-10-07 13:17:14.236300756 +0200
++++ Claude_Code/utils.py	2026-10-09 12:26:56.301589609 +0200
+@@ -1526,18 +1526,21 @@
+     return max(wmin, min(wmax, max(base, maxlen)))
+ 
+ 
+-def save_stats_to_file(model: str, folder: str, stats_list: List[Dict[str, float]]) -> None:
+-    file_path = os.path.join(folder, "stats_summary.txt")
+-
+-    # Dynamic width
+-    obs_w = _obs_col_width(stats_list, base=38, wmin=30, wmax=68, pad=2)
+-
+-    header = (
+-        f"{'Observation':<{obs_w}} | {'Log-Likelihood':>18} | "
+-        f"{'Chi-Squared':>15} | {'Reduced Chi-Squared':>20} | "
+-        f"{'AIC':>11} | {'BIC':>11} | {'AICc':>11} | {'DIC':>11} | {'WAIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'dAICc':>11} | {'dDIC':>11} | {'dChi':>11} | {'Sigma':>11} | {'dWAIC':>11} |"
+-    )
+-
++def save_stats_to_file(
++    model: str,
++    folder: str,
++    stats_list: List[Dict[str, float]],
++    reference_model: Optional[str] = None,
++) -> None:
++    """
++    Write stats_summary.txt (transposed: one row per statistic, one column per
++    observation) and stats_summary.csv (one row per observation, full precision).
++
++    Convention: dX = X(model) - X(reference_model), so a negative dAIC, dBIC,
++    dAICc, dDIC, dWAIC or dChi favours this model. Sigma is the Wilks
++    significance of dChi for the extra free parameters (0 if there are none).
++    """
++    import csv
+     import numpy as _np
+ 
+     def _as_float(x):
+@@ -1558,35 +1561,83 @@
+             except Exception:
+                 return float("nan")
+ 
++    def _dof(s):
++        """DOF recovered from chi^2 / reduced chi^2 (exact by definition)."""
++        chi2, rchi = _as_float(s.get("Chi_squared", _np.nan)), _as_float(s.get("Reduced_Chi_squared", _np.nan))
++        return chi2 / rchi if _np.isfinite(chi2) and _np.isfinite(rchi) and rchi != 0 else float("nan")
++
++    # (label, key in stats dict, format); None marks a separator line
++    rows = [
++        ("Free parameters",     "n_params",            "{:.0f}"),
++        ("DOF",                 _dof,                  "{:.0f}"),
++        ("Log-Likelihood",      "Log-Likelihood",      "{:.4f}"),
++        ("Chi-Squared",         "Chi_squared",         "{:.4f}"),
++        ("Reduced Chi-Squared", "Reduced_Chi_squared", "{:.4f}"),
++        None,
++        ("AIC",                 "AIC",                 "{:.3f}"),
++        ("BIC",                 "BIC",                 "{:.3f}"),
++        ("AICc",                "AICc",                "{:.3f}"),
++        ("DIC",                 "DIC",                 "{:.3f}"),
++        ("WAIC",                "WAIC",                "{:.3f}"),
++        None,
++        ("dAIC",                "dAIC",                "{:+.3f}"),
++        ("dBIC",                "dBIC",                "{:+.3f}"),
++        ("dAICc",               "dAICc",               "{:+.3f}"),
++        ("dDIC",                "dDIC",                "{:+.3f}"),
++        ("dWAIC",               "dWAIC",               "{:+.3f}"),
++        ("dChi",                "dChi",                "{:+.3f}"),
++        ("Sigma",               "sigma",               "{:.1f}"),
++    ]
++
++    def _value(s, key):
++        return _dof(s) if callable(key) else _as_float(s.get(key, _np.nan))
++
++    def _fmt(v, fmt):
++        return "nan" if not _np.isfinite(v) else fmt.format(v)
++
++    obs_names = [str(s.get("Observation", "")) for s in stats_list]
++    label_w = max(len(r[0]) for r in rows if r)
++    col_w = [max(len(n), 12) for n in obs_names]
++
++    # Header block: states the reference and the sign convention
++    if reference_model is None:
++        ref_line = "Reference model: not passed to save_stats_to_file (see reference_model in the run script)"
++    elif model == reference_model:
++        ref_line = f"Reference model: {reference_model} (this model is the reference, so all d-values are 0)"
++    else:
++        ref_line = f"Reference model: {reference_model}"
++
++    header = f"{'Statistic':<{label_w}} | " + " | ".join(f"{n:>{w}}" for n, w in zip(obs_names, col_w))
++    rule = "-" * len(header)
++
++    file_path = os.path.join(folder, "stats_summary.txt")
+     with open(file_path, "w") as f:
+         f.write(f"Statistical Results for Model: {model}\n")
++        f.write(ref_line + "\n")
++        f.write("dX = X(model) - X(reference); negative dAIC/dBIC/dAICc/dDIC/dWAIC/dChi favours this model\n")
++        f.write("Sigma = Assumes the reference model is the null hypothesis, and calculates how much the user model improves the fit over the reference\n\n")
+         f.write(header + "\n")
+-        f.write("-" * len(header) + "\n")
+-        for s in stats_list:
+-            obs = str(s.get("Observation", ""))
+-            ll = _as_float(s.get("Log-Likelihood", _np.nan))
+-            chi2 = _as_float(s.get("Chi_squared", _np.nan))
+-            rchi = _as_float(s.get("Reduced_Chi_squared", _np.nan))
+-            aic = _as_float(s.get("AIC", _np.nan))
+-            bic = _as_float(s.get("BIC", _np.nan))
+-            aicc = _as_float(s.get("AICc",_np.nan))
+-            dic = _as_float(s.get("DIC",_np.nan))
+-            waic = _as_float(s.get('WAIC',_np.nan))
+-            dwaic = _as_float(s.get('dWAIC',_np.nan))
+-            daic = _as_float(s.get("dAIC", _np.nan))
+-            dbic = _as_float(s.get("dBIC", _np.nan))
+-            daicc = _as_float(s.get("dAICc",_np.nan))
+-            ddic = _as_float(s.get("dDIC",_np.nan))
+-            dchi = _as_float(s.get("dChi", _np.nan))
+-            sigma = _as_float(s.get('sigma', _np.nan))
+-            row = (
+-                f"{obs:<{obs_w}} | {ll:>18.4f} | {chi2:>15.4f} | "
+-                f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | {aicc:>11.3f} | {dic:>11.3f} | {waic:>11.3f} | "
+-                f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f} | {dchi:>11.3f} |{sigma:>11.3f} | {dwaic:>11.3f} | "
+-            )
+-            f.write(row + "\n")
++        f.write(rule + "\n")
++        for r in rows:
++            if r is None:
++                f.write(rule + "\n")
++                continue
++            label, key, fmt = r
++            cells = [f"{_fmt(_value(s, key), fmt):>{w}}" for s, w in zip(stats_list, col_w)]
++            f.write(f"{label:<{label_w}} | " + " | ".join(cells) + "\n")
+         f.write("\n")
+ 
++    # Machine-readable companion: one row per observation, full precision
++    csv_cols = [("Model", None), ("Reference_Model", None), ("Observation", None)] + [
++        (lab.replace(" ", "_"), key) for lab, key, _ in [r for r in rows if r]
++    ]
++    with open(os.path.join(folder, "stats_summary.csv"), "w", newline="") as f:
++        w = csv.writer(f)
++        w.writerow([c for c, _ in csv_cols])
++        for s, obs in zip(stats_list, obs_names):
++            w.writerow([model, reference_model or "", obs] + [repr(_value(s, k)) for _, k in csv_cols[3:]])
++
++
+ 
+ def save_interpretations_to_file(
+     model: str,

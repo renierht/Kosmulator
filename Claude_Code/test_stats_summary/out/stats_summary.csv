@@ -1,0 +1,3 @@
+Model,Reference_Model,Observation,Free_parameters,DOF,Log-Likelihood,Chi-Squared,Reduced_Chi-Squared,AIC,BIC,AICc,DIC,WAIC,dAIC,dBIC,dAICc,dDIC,dWAIC,dChi,Sigma
+wowaCDM_v,LCDM_v,DESI+DR2+DESY5 [rd: free],5.0,1837.0136236739252,-822.5229,1645.0457,0.8955,1655.046,1682.639,1655.078,1655.02,1652.672,-9.417,1.62,-9.398,-9.526,-14.946,-13.417,3.2
+wowaCDM_v,LCDM_v,"DESI+DR2 (BAO only) [rd: Gaussian prior, long name]",3.0,1837.0136236739252,-822.5229,1645.0457,0.8955,1655.046,1682.639,1655.078,nan,nan,-9.417,1.62,-9.398,nan,nan,0.0,0.0

@@ -838,11 +838,13 @@ def run_mcmc(
         do_resume  = saveChains and resumeChains
         do_overw   = saveChains and overwrite
 
-        if do_overw and exists:
-            try:
-                os.remove(zeus_chain)
-            except FileNotFoundError:
-                pass
+        if do_overw:
+            # Remove both engines' files so a stale emcee chain cannot be reused later
+            for stale in (zeus_chain, chain_path):
+                try:
+                    os.remove(stale)
+                except FileNotFoundError:
+                    pass
             exists = False
 
         # Fast load of completed chain when not resuming
@@ -1025,21 +1027,28 @@ def run_mcmc(
                 pass
             with h5py.File(zeus_chain, "r") as f:
                 all_samples = f["samples"][:]
-        # Save Blobs from Zeus if available
-        # Explicitly save log_prob and blobs from Zeus
+        # Save flat post-burn log_prob / log_like, aligned row-for-row with the
+        # samples returned below. Built from 'log_prob_2d' in the file, not from
+        # sampler.get_log_prob(flat=True), which zeus flattens walker-major.
         if saveChains:
             with h5py.File(zeus_chain, "a") as h5f:
                 try:
-                    # 1. Save log_prob
-                    flat_log_prob = sampler.get_log_prob(discard=burn, flat=True)
-                    if "log_prob" in h5f:
-                        del h5f["log_prob"]
-                    h5f.create_dataset("log_prob", data=flat_log_prob)
-
-                    # 2. Flat top-hat priors everywhere → log_prob == log_like exactly
-                    if "log_like" in h5f:
-                        del h5f["log_like"]
-                    h5f.create_dataset("log_like", data=flat_log_prob)
+                    flat_log_prob = utils.zeus_flat_loglike(
+                        h5f, burn, n_expected=all_samples[burn:].shape[0] * nwalker
+                    )
+                    for key in ("log_prob", "log_like"):
+                        if key in h5f:
+                            del h5f[key]
+                    if flat_log_prob is None:
+                        print(
+                            "\n[WARNING] Zeus log-probabilities incomplete; "
+                            "'log_prob'/'log_like' not saved (DIC/WAIC unavailable)."
+                        )
+                    else:
+                        h5f.create_dataset("log_prob", data=flat_log_prob)
+                        # Flat top-hat priors everywhere → log_prob == log_like exactly
+                        h5f.create_dataset("log_like", data=flat_log_prob)
+                        h5f.attrs["loglike_order"] = "C"
                 except Exception as e:
                     print(f"\n[WARNING] Could not save 'log_prob'/'log_like' from Zeus: {e}")
 
@@ -1053,11 +1062,13 @@ def run_mcmc(
         # Backend setup
         # ------------------------------------------------------------
         if saveChains:
-            if overwrite and os.path.exists(chain_path):
-                try:
-                    os.remove(chain_path)
-                except FileNotFoundError:
-                    pass
+            if overwrite:
+                # Remove both engines' files so a stale Zeus chain cannot be reused later
+                for stale in (chain_path, chain_path.replace(".h5", "_zeus.h5")):
+                    try:
+                        os.remove(stale)
+                    except FileNotFoundError:
+                        pass
             backend = emcee.backends.HDFBackend(chain_path)
 
         # ------------------------------------------------------------

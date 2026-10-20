@@ -106,7 +106,7 @@ from Kosmulator_main.Post_processing import (
     statistical_analysis,
     interpret_delta_IC,
 )
-from Kosmulator_main.utils import save_stats_to_file, generate_label
+from Kosmulator_main.utils import save_stats_to_file, generate_label, zeus_flat_loglike
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 log = logging.getLogger("Marcel_chain")
@@ -130,15 +130,9 @@ def load_chain(chain_dir: str, label: str, burn: int) -> dict | None:
     if os.path.exists(zeus_path):
         with h5py.File(zeus_path, "r") as f:
             all_samples = f["samples"][:]
-            if "log_like" in f:
-                loglike_raw = np.array(f["log_like"], dtype=float)
-            elif "log_prob" in f:
-                loglike_raw = np.array(f["log_prob"], dtype=float)
-            else:
-                loglike_raw = None
-
-        flat_samples = all_samples[burn:].reshape(-1, all_samples.shape[-1])
-        flat_loglike = loglike_raw[burn:].reshape(-1) if loglike_raw is not None else None
+            flat_samples = all_samples[burn:].reshape(-1, all_samples.shape[-1])
+            # Post-burn log_like in the same step-major order as flat_samples
+            flat_loglike = zeus_flat_loglike(f, burn, n_expected=flat_samples.shape[0])
         log.info("  [zeus]  %s  (%d samples after burn)", zeus_path, flat_samples.shape[0])
         return {"samples": flat_samples, "loglike": flat_loglike}
 

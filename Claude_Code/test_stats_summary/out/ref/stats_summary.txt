@@ -1,0 +1,27 @@
+Statistical Results for Model: LCDM_v
+Reference model: LCDM_v (this model is the reference, so all d-values are 0)
+dX = X(model) - X(reference); negative dAIC/dBIC/dAICc/dDIC/dWAIC/dChi favours this model
+Sigma = Assumes the reference model is the null hypothesis, and calculates how much the user model improves the fit over the reference
+
+Statistic           | DESI+DR2+DESY5 [rd: free]
+-----------------------------------------------
+Free parameters     |                         5
+DOF                 |                      1837
+Log-Likelihood      |                 -822.5229
+Chi-Squared         |                 1645.0457
+Reduced Chi-Squared |                    0.8955
+-----------------------------------------------
+AIC                 |                  1655.046
+BIC                 |                  1682.639
+AICc                |                  1655.078
+DIC                 |                  1655.020
+WAIC                |                  1652.672
+-----------------------------------------------
+dAIC                |                    -9.417
+dBIC                |                    +1.620
+dAICc               |                    -9.398
+dDIC                |                    -9.526
+dWAIC               |                   -14.946
+dChi                |                   -13.417
+Sigma               |                       3.2
+

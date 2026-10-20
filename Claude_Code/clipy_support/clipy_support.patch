@@ -1,0 +1,118 @@
+--- a/Kosmulator_main/Class_run.py
++++ b/Kosmulator_main/Class_run.py
+@@ -30,10 +30,15 @@
+ from pathlib import Path
+ from typing import Optional
+ 
++# Prefer clipy (pure-Python clik replacement, `pip install clipy-like`); fall back to the
++# compiled clik. clipy follows the clik API (clik.clik, clik.clik_lensing, ...).
+ try:
+-    import clik
++    import clipy as clik
+ except ImportError:
+-    clik = None
++    try:
++        import clik
++    except ImportError:
++        clik = None
+ 
+ import sysconfig 
+ 
+--- a/Kosmulator_main/Statistical_packages.py
++++ b/Kosmulator_main/Statistical_packages.py
+@@ -45,9 +45,12 @@
+ from Kosmulator_main import utils as U
+ 
+ try:
+-    import clik  # noqa: F401  # imported for side effects in some environments
++    import clipy as clik  # noqa: F401  # pure-Python clik replacement (preferred)
+ except Exception:
+-    clik = None
++    try:
++        import clik  # noqa: F401  # imported for side effects in some environments
++    except Exception:
++        clik = None
+ 
+ # User-defined cosmology models (background + Cℓ wrappers)
+ try:
+--- a/Kosmulator_main/__init__.py
++++ b/Kosmulator_main/__init__.py
+@@ -110,20 +110,24 @@
+     if not test_load:
+         return items
+ 
+-    ok_clik, d_clik = _try_import("clik")
++    backend = "clipy"
++    ok_clik, d_clik = _try_import("clipy")
++    if not ok_clik:
++        backend = "clik"
++        ok_clik, d_clik = _try_import("clik")
+     if not ok_clik:
+         items.append(
+             CheckItem(
+-                name="clik available for likelihood load test",
++                name="clipy/clik available for likelihood load test",
+                 ok=False,
+                 detail=d_clik,
+-                hint="Build/install CLIK and ensure conda activation sources clik_profile.sh.",
++                hint="Install clipy (`pip install clipy-like`) or build/install CLIK and source clik_profile.sh.",
+             )
+         )
+         return items
+ 
+     try:
+-        import clik as _clik  # type: ignore
++        _clik = importlib.import_module(backend)  # type: ignore
+     except Exception as e:
+         items.append(
+             CheckItem(
+@@ -138,7 +142,7 @@
+     if hi_l.exists():
+         try:
+             _clik.clik(str(hi_l))
+-            items.append(CheckItem(name="clik can load high-l likelihood", ok=True, detail=str(hi_l)))
++            items.append(CheckItem(name=f"{backend} can load high-l likelihood", ok=True, detail=str(hi_l)))
+         except Exception as e:
+             items.append(
+                 CheckItem(
+@@ -152,7 +156,7 @@
+     if low_l.exists():
+         try:
+             _clik.clik(str(low_l))
+-            items.append(CheckItem(name="clik can load low-l likelihood", ok=True, detail=str(low_l)))
++            items.append(CheckItem(name=f"{backend} can load low-l likelihood", ok=True, detail=str(low_l)))
+         except Exception as e:
+             items.append(
+                 CheckItem(
+@@ -217,17 +221,27 @@
+     # CLIK
+     clik_import_ok = True
+     if check_clik:
++        ok_clipy, d_clipy = _try_import("clipy")
++        items.append(
++            CheckItem(
++                name="import clipy (pure-Python Planck likelihood, preferred)",
++                ok=ok_clipy,
++                detail=d_clipy,
++                hint="Install with `pip install clipy-like` (not `clipy`, which is a different package).",
++            )
++        )
+         ok, detail = _try_import("clik")
+-        clik_import_ok = ok
++        # clipy replaces clik entirely, so a working clipy makes the compiled clik optional
++        clik_import_ok = ok or ok_clipy
+         items.append(
+             CheckItem(
+-                name="import clik (Planck/CLIK)",
+-                ok=ok,
++                name="import clik (Planck/CLIK)",  # name must match required_names below; passes if clipy works
++                ok=ok or ok_clipy,
+                 detail=detail,
+                 hint="Build/install CLIK and ensure activation sources `$CLIKROOT/bin/clik_profile.sh`.",
+             )
+         )
+-        if ok:
++        if ok and not ok_clipy:
+             ok_lkl, d_lkl = _try_import("clik.lkl")
+             ok_len, d_len = _try_import("clik.lkl_lensing")
+             items.append(CheckItem(name="import clik.lkl", ok=ok_lkl, detail=d_lkl,

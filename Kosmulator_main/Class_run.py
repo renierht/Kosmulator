@@ -30,10 +30,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
+# Prefer clipy (pure-Python clik replacement, `pip install clipy-like`); fall back to the
+# compiled clik. clipy follows the clik API (clik.clik, clik.clik_lensing, ...).
 try:
-    import clik
+    import clipy as clik
 except ImportError:
-    clik = None
+    try:
+        import clik
+    except ImportError:
+        clik = None
 
 import sysconfig 
 

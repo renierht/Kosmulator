@@ -24,6 +24,7 @@ from typing import Any  # Dict unused; drop if you like
 import logging
 
 import numpy as np
+rng = np.random.default_rng(42) #WAIC uses the same seed everytime
 from scipy.optimize import minimize
 from scipy.special import logsumexp #Required for WAIC
 from scipy.stats import chi2, norm #used by significance
@@ -475,6 +476,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
     reference_waic: dict[str, float] = {}
     reference_chi: dict[str, float] = {}
     reference_pD : dict[str, float] = {}
+    reference_npar: dict[str, int] = {}
     
 
     for model_name, obs_results in best_fit_values.items():
@@ -741,6 +743,11 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 D_hat = chi_squared_total
                 p_D = D_bar - D_hat       #Spiegelhalter: D_bar - D_hat   Gelman: D_var/2.0 (Effective parameters)
                 dic = D_hat + 2.0 * p_D  # Spiegelhalter: D_hat + 2.0*p_D
+                print(f"Reference model: {reference_model}")
+                print(f"D_bar: {D_bar}")
+                print(f"D_hat: {D_hat}")
+                print(f"p_D: {p_D}")
+                print(f"DIC: {dic}")
 
             #WAIC Implememtation
             if obs_samples_for_waic is not None:
@@ -748,7 +755,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                     all_rows = []
                     N_total = obs_samples_for_waic.shape[0]
                     S = 1000
-                    shared_idx = np.random.choice(N_total, size = min(S, N_total), replace = False)
+                    shared_idx = rng.choice(N_total, size = min(S, N_total), replace = False)
                     for single_obs, single_type in zip(obs_entry, obs_types):
                         if single_obs not in data:
                             continue
@@ -787,6 +794,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 "DIC": dic,
                 "WAIC": waic,
                 "p_D": p_D,
+                "n_params": num_params,
             }
             if notes:
                 results[model_name][obs_name]["Note"] = " | ".join(notes)
@@ -799,6 +807,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 reference_dic[obs_name] = dic
                 reference_waic[obs_name] = waic
                 reference_pD[obs_name] = p_D
+                reference_npar[obs_name] = num_params
 
     # Calculate delta values relative to the reference model.
     for model_name, obs_results in results.items():
@@ -809,7 +818,9 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             stats["dDIC"] = stats["DIC"] -reference_dic.get(obs_name, stats["DIC"])
             stats["dWAIC"] = stats["WAIC"] - reference_waic.get(obs_name, stats["WAIC"])
             stats['dChi'] = stats['Chi_squared'] - reference_chi.get(obs_name, stats['Chi_squared'])
-            stats['sigma'] = significance(stats['dChi'], (stats['p_D'] - reference_pD.get(obs_name, stats['p_D'])))
+            # Wilks: dof is the difference in the number of free parameters, not in p_D
+            d_npar = stats["n_params"] - reference_npar.get(obs_name, stats["n_params"])
+            stats['sigma'] = significance(stats['dChi'], d_npar) if d_npar > 0 else 0.0
 
     return results
 

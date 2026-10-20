@@ -1,0 +1,293 @@
+diff --git a/Kosmulator_main/Kosmulator_MCMC.py b/Kosmulator_main/Kosmulator_MCMC.py
+index 9a944a8..d99ba68 100644
+--- a/Kosmulator_main/Kosmulator_MCMC.py
++++ b/Kosmulator_main/Kosmulator_MCMC.py
+@@ -838,11 +838,13 @@ def run_mcmc(
+         do_resume  = saveChains and resumeChains
+         do_overw   = saveChains and overwrite
+ 
+-        if do_overw and exists:
+-            try:
+-                os.remove(zeus_chain)
+-            except FileNotFoundError:
+-                pass
++        if do_overw:
++            # Remove both engines' files so a stale emcee chain cannot be reused later
++            for stale in (zeus_chain, chain_path):
++                try:
++                    os.remove(stale)
++                except FileNotFoundError:
++                    pass
+             exists = False
+ 
+         # Fast load of completed chain when not resuming
+@@ -1025,21 +1027,28 @@ def run_mcmc(
+                 pass
+             with h5py.File(zeus_chain, "r") as f:
+                 all_samples = f["samples"][:]
+-        # Save Blobs from Zeus if available
+-        # Explicitly save log_prob and blobs from Zeus
++        # Save flat post-burn log_prob / log_like, aligned row-for-row with the
++        # samples returned below. Built from 'log_prob_2d' in the file, not from
++        # sampler.get_log_prob(flat=True), which zeus flattens walker-major.
+         if saveChains:
+             with h5py.File(zeus_chain, "a") as h5f:
+                 try:
+-                    # 1. Save log_prob
+-                    flat_log_prob = sampler.get_log_prob(discard=burn, flat=True)
+-                    if "log_prob" in h5f:
+-                        del h5f["log_prob"]
+-                    h5f.create_dataset("log_prob", data=flat_log_prob)
+-
+-                    # 2. Flat top-hat priors everywhere → log_prob == log_like exactly
+-                    if "log_like" in h5f:
+-                        del h5f["log_like"]
+-                    h5f.create_dataset("log_like", data=flat_log_prob)
++                    flat_log_prob = utils.zeus_flat_loglike(
++                        h5f, burn, n_expected=all_samples[burn:].shape[0] * nwalker
++                    )
++                    for key in ("log_prob", "log_like"):
++                        if key in h5f:
++                            del h5f[key]
++                    if flat_log_prob is None:
++                        print(
++                            "\n[WARNING] Zeus log-probabilities incomplete; "
++                            "'log_prob'/'log_like' not saved (DIC/WAIC unavailable)."
++                        )
++                    else:
++                        h5f.create_dataset("log_prob", data=flat_log_prob)
++                        # Flat top-hat priors everywhere → log_prob == log_like exactly
++                        h5f.create_dataset("log_like", data=flat_log_prob)
++                        h5f.attrs["loglike_order"] = "C"
+                 except Exception as e:
+                     print(f"\n[WARNING] Could not save 'log_prob'/'log_like' from Zeus: {e}")
+ 
+@@ -1053,11 +1062,13 @@ def run_mcmc(
+         # Backend setup
+         # ------------------------------------------------------------
+         if saveChains:
+-            if overwrite and os.path.exists(chain_path):
+-                try:
+-                    os.remove(chain_path)
+-                except FileNotFoundError:
+-                    pass
++            if overwrite:
++                # Remove both engines' files so a stale Zeus chain cannot be reused later
++                for stale in (chain_path, chain_path.replace(".h5", "_zeus.h5")):
++                    try:
++                        os.remove(stale)
++                    except FileNotFoundError:
++                        pass
+             backend = emcee.backends.HDFBackend(chain_path)
+ 
+         # ------------------------------------------------------------
+diff --git a/Kosmulator_main/utils.py b/Kosmulator_main/utils.py
+index 954fb85..002d4dd 100644
+--- a/Kosmulator_main/utils.py
++++ b/Kosmulator_main/utils.py
+@@ -983,26 +983,16 @@ def load_or_run_chain(
+             "[INFO] EMCEE requested but found existing Zeus chain.\n"
+             f"       Re-using samples from {zeus_chain}.\n"
+         )
++        burn = int(CONFIG_model.get("burn", 0) or 0)
+         with h5py.File(zeus_chain, "r") as f:
+             all_samples = f["samples"][:]    # (nsteps, nwalker, ndim)
+-            loglike = np.array(f["log_like"]) if "log_like" in f else (
+-                np.array(f["log_prob"]) if "log_prob" in f else None
+-            )
+-
+-        burn = int(CONFIG_model.get("burn", 0) or 0)
+-        # Guard against silly values
+-        if burn >= all_samples.shape[0]:
+-            burn = 0
++            # Guard against silly values
++            if burn >= all_samples.shape[0]:
++                burn = 0
++            flat = all_samples[burn:, :, :].reshape(-1, all_samples.shape[-1])
++            # Same step-major order as `flat` (None if unavailable)
++            loglike = zeus_flat_loglike(f, burn, n_expected=flat.shape[0])
+ 
+-        flat = all_samples[burn:, :, :].reshape(-1, all_samples.shape[-1])
+-        """
+-        NOTE: loglike above is unburned/unflattened relative to `flat` in this
+-        # particular reuse path (Zeus stores log_prob already burn-discarded at
+-        # save time in run_mcmc, so this is likely already aligned — verify
+-        # shapes match len(flat) before trusting it; fall back to None if not.
+-        """
+-        if loglike is not None and loglike.shape[0] != flat.shape[0]:
+-            loglike = None
+         return {"samples": flat, "loglike": loglike}
+ 
+         
+@@ -1133,12 +1123,22 @@ def load_or_run_chain(
+         if os.path.exists(saved_path):
+             try:
+                 with h5py.File(saved_path, "r") as h5f:
+-                    if "log_like" in h5f:
++                    if is_zeus_run:
++                        loglike = zeus_flat_loglike(
++                            h5f,
++                            int(CONFIG_model.get("burn", 0) or 0),
++                            n_expected=flat_samples.shape[0],
++                        )
++                    elif "log_like" in h5f:
+                         candidate = np.asarray(h5f["log_like"], dtype=float).reshape(-1)
+                         if candidate.size == flat_samples.shape[0]:
+                             loglike = candidate
+             except Exception as exc:
+                 print(f"[WARNING] Could not load saved log_like: {exc}")
++        print(
++            f"[INFO] Chain used for statistics: {saved_path} "
++            f"(log_like {'loaded' if loglike is not None else 'unavailable'})\n"
++        )
+         result = {"samples": flat_samples, "loglike": loglike}
+ 
+     if (
+@@ -1661,7 +1661,9 @@ def _obs_col_width_from_names(names, base=30, wmin=28, wmax=72, pad=2):
+ 
+ class AppendProgressCallback:
+     """
+-    Zeus callback that appends only new local samples to 'samples' dataset.
++    Zeus callback that appends only new local samples to 'samples' dataset,
++    and the matching log-probabilities to 'log_prob_2d' (steps, walkers), so
++    that both share the same (step, walker) layout.
+     """
+     def __init__(self, filename: str, ncheck: int):
+         self.filename = filename
+@@ -1679,6 +1681,10 @@ class AppendProgressCallback:
+         if new_local <= 0:
+             return False
+ 
++        lp = None if log_prob is None else np.asarray(log_prob, dtype=float)
++        if lp is not None and lp.shape != (local_n, nwalker):
++            lp = None  # unexpected layout: store nothing rather than misaligned values
++
+         new_block = chain[self._prev_local:local_n]
+         with h5py.File(self.filename, "a") as f:
+             if "samples" not in f:
+@@ -1688,17 +1694,93 @@ class AppendProgressCallback:
+                     maxshape=(None, nwalker, ndim),
+                     chunks=(1, nwalker, ndim),
+                 )
++                lp_block = lp
+             else:
+                 ds = f["samples"]
+                 old_n = ds.shape[0]
+                 new_n = old_n + new_local
+                 ds.resize((new_n, nwalker, ndim))
+                 ds[old_n:new_n, :, :] = new_block
++                lp_block = None if lp is None else lp[self._prev_local:local_n]
++
++            if lp_block is not None:
++                if "log_prob_2d" not in f:
++                    lds = f.create_dataset(
++                        "log_prob_2d",
++                        shape=(0, nwalker),
++                        maxshape=(None, nwalker),
++                        chunks=(1, nwalker),
++                        dtype="f8",
++                    )
++                else:
++                    lds = f["log_prob_2d"]
++                n_total = ds.shape[0]
++                n_lp = lds.shape[0]
++                start = n_total - lp_block.shape[0]
++                lds.resize((n_total, nwalker))
++                # Rows written before this file stored log-probs (e.g. a resumed
++                # older chain) are marked missing with NaN.
++                if start > n_lp:
++                    lds[n_lp:start, :] = np.nan
++                lds[start:n_total, :] = lp_block
+ 
+         self._prev_local = local_n
+         return False
+ 
+ 
++def zeus_flat_loglike(
++    h5f, burn: int, n_expected: Optional[int] = None
++) -> Optional[np.ndarray]:
++    """
++    Post-burn log-likelihoods from an open Zeus chain file, flattened step-major
++    (C order) so entry i pairs with row i of samples[burn:].reshape(-1, ndim).
++
++    zeus' own flat output (get_log_prob(flat=True)) is walker-major (order='F')
++    and must not be paired with the C-order flattened samples.
++
++    Sources, in order of preference:
++      1. 'log_prob_2d' (steps, walkers), written alongside 'samples';
++      2. flat 'log_like' (or 'log_prob') saved in C order (attr loglike_order == "C");
++      3. a legacy flat 'log_like' from before this fix (walker-major), re-ordered.
++    Returns None if nothing usable is found or the length does not match.
++    """
++    if "samples" not in h5f:
++        return None
++    nst, nw = h5f["samples"].shape[:2]
++    burn = int(burn) if 0 <= int(burn) < nst else 0
++    n_post = (nst - burn) * nw
++
++    out = None
++    if "log_prob_2d" in h5f and h5f["log_prob_2d"].shape == (nst, nw):
++        arr = np.asarray(h5f["log_prob_2d"][burn:], dtype=float)
++        if np.isnan(arr).any():
++            print(
++                f"[WARNING] {h5f.filename}: log-probabilities missing for part of the "
++                "post-burn chain; log_like not used (DIC/WAIC unavailable)."
++            )
++            return None
++        out = arr.reshape(-1)
++    else:
++        key = "log_like" if "log_like" in h5f else ("log_prob" if "log_prob" in h5f else None)
++        if key is None:
++            return None
++        flat = np.asarray(h5f[key], dtype=float).reshape(-1)
++        if flat.size != n_post:
++            return None
++        if h5f.attrs.get("loglike_order", "") == "C":
++            out = flat
++        else:
++            print(
++                f"[WARNING] {h5f.filename}: legacy walker-major '{key}' re-ordered "
++                "to match the samples (saved before the Zeus ordering fix)."
++            )
++            out = flat.reshape(nw, nst - burn).T.reshape(-1)
++
++    if n_expected is not None and out.size != int(n_expected):
++        return None
++    return out
++
++
+ # ───────────────────────────────────────────────────────────────────────────────
+ # 12) Init-time log collapsing (summary handler + filter)
+ # ───────────────────────────────────────────────────────────────────────────────
+diff --git a/Marcel_chain.py b/Marcel_chain.py
+index f38ee03..42f43f2 100644
+--- a/Marcel_chain.py
++++ b/Marcel_chain.py
+@@ -106,7 +106,7 @@ from Kosmulator_main.Post_processing import (
+     statistical_analysis,
+     interpret_delta_IC,
+ )
+-from Kosmulator_main.utils import save_stats_to_file, generate_label
++from Kosmulator_main.utils import save_stats_to_file, generate_label, zeus_flat_loglike
+ 
+ logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+ log = logging.getLogger("Marcel_chain")
+@@ -130,15 +130,9 @@ def load_chain(chain_dir: str, label: str, burn: int) -> dict | None:
+     if os.path.exists(zeus_path):
+         with h5py.File(zeus_path, "r") as f:
+             all_samples = f["samples"][:]
+-            if "log_like" in f:
+-                loglike_raw = np.array(f["log_like"], dtype=float)
+-            elif "log_prob" in f:
+-                loglike_raw = np.array(f["log_prob"], dtype=float)
+-            else:
+-                loglike_raw = None
+-
+-        flat_samples = all_samples[burn:].reshape(-1, all_samples.shape[-1])
+-        flat_loglike = loglike_raw[burn:].reshape(-1) if loglike_raw is not None else None
++            flat_samples = all_samples[burn:].reshape(-1, all_samples.shape[-1])
++            # Post-burn log_like in the same step-major order as flat_samples
++            flat_loglike = zeus_flat_loglike(f, burn, n_expected=flat_samples.shape[0])
+         log.info("  [zeus]  %s  (%d samples after burn)", zeus_path, flat_samples.shape[0])
+         return {"samples": flat_samples, "loglike": flat_loglike}
+ 

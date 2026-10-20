@@ -1,0 +1,11 @@
+--- a/Kosmulator_main/__init__.py
++++ b/Kosmulator_main/__init__.py
+@@ -235,7 +235,7 @@
+         clik_import_ok = ok or ok_clipy
+         items.append(
+             CheckItem(
+-                name="import clik (Planck/CLIK, optional if clipy works)",
++                name="import clik (Planck/CLIK)",  # name must match required_names below; passes if clipy works
+                 ok=ok or ok_clipy,
+                 detail=detail,
+                 hint="Build/install CLIK and ensure activation sources `$CLIKROOT/bin/clik_profile.sh`.",
