@@ -106,55 +106,58 @@ def main():
     print(json.dumps(settings, indent=2), flush=True)
     if args.plan:
         return
-    if args.mode == "sample" and (args.delta_prior is not None or args.omega_m_prior is not None):
-        run_dir = root / "MCMC_Chains" / suffix
-        manifest = run_dir / "prior_run_settings.json"
-        if manifest.exists():
-            previous = json.loads(manifest.read_text())
-            for key in ("priors", "models", "class_settings", "regime_switches", "walkers", "burn", "thin", "convergence_policy"):
-                if previous.get(key) != settings.get(key):
-                    parser.error("Saved run settings differ: " + key + "; use a fresh run name")
-        elif run_dir.exists() and any(run_dir.rglob("*.h5")):
-            parser.error("Cannot apply prior overrides to existing chains without matching run settings")
-        if run_dir.exists() and any(run_dir.rglob("*.h5")) and not args.resume:
-            parser.error("Run already has chains; use --resume with identical settings or a fresh name")
-        run_dir.mkdir(parents=True, exist_ok=True)
-        manifest.write_text(json.dumps(settings, indent=2))
-    os.environ.setdefault("MPLBACKEND", "Agg")
     sys.path.insert(0, str(root))
-    os.chdir(root)
-    import Kosmulator as kc
-    import User_defined_modules as udm
-    from Kosmulator_main import constants as K
-    kc.model_names = selected_models
-    udm.FREE_W, udm.FREE_W_DM = True, False
-    kc.true_model = config["reference_model"] if "LCDM_v" in selected_models else selected_models[0]
-    kc.observations = config["observations"]
-    kc.nwalkers, kc.burn = config["walkers"], args.burn
-    kc.nsteps, kc.convergence = args.max_steps, 0.05
-    kc.prior_limits = dict(kc.prior_limits, **{k: tuple(v) for k, v in config["prior_limits"].items()})
-    for key, value in config["class_settings"].items():
-        setattr(K, key, value)
-    for key, value in zip(
-        ("ALLOW_NEGATIVE_ENERGIES", "ALLOW_BIG_RIP", "ALLOW_DOOM_FACTOR_INSTABILITIES"),
-        config["regime_switches"][args.regime],
-    ):
-        setattr(udm, key, value)
-    sys.argv = [str(root / "Kosmulator.py"), "--force_emcee", "--num_cores", str(args.num_cores),
-                "--plot_table", "--output_suffix", suffix,
-                "--tau-consecutive", str(args.tau_consecutive)]
-    if args.resume:
-        sys.argv.append("--resume")
-    options = {
-        "postprocessing_options": dict(config["postprocessing"]),
-        "plot_settings_overrides": {
-            "init_jitter_frac": args.init_jitter_frac, "derived_rd_samples": args.derived_rd_samples,
-            "derived_rd_seed": config["derived_rd_seed"],
-        },
-    }
-    if paths is not None:
-        options["existing_chain_paths"] = paths
-    kc.main(workflow_options=options)
+    from Kosmulator_main.run_lock import run_lock
+    with run_lock(root / "MCMC_Chains" / suffix):
+        if args.mode == "sample" and (args.delta_prior is not None or args.omega_m_prior is not None):
+            run_dir = root / "MCMC_Chains" / suffix
+            manifest = run_dir / "prior_run_settings.json"
+            if manifest.exists():
+                previous = json.loads(manifest.read_text())
+                for key in ("priors", "models", "class_settings", "regime_switches", "walkers", "burn", "thin", "convergence_policy"):
+                    if previous.get(key) != settings.get(key):
+                        parser.error("Saved run settings differ: " + key + "; use a fresh run name")
+            elif run_dir.exists() and any(run_dir.rglob("*.h5")):
+                parser.error("Cannot apply prior overrides to existing chains without matching run settings")
+            if run_dir.exists() and any(run_dir.rglob("*.h5")) and not args.resume:
+                parser.error("Run already has chains; use --resume with identical settings or a fresh name")
+            run_dir.mkdir(parents=True, exist_ok=True)
+            manifest.write_text(json.dumps(settings, indent=2))
+        os.environ.setdefault("MPLBACKEND", "Agg")
+        sys.path.insert(0, str(root))
+        os.chdir(root)
+        import Kosmulator as kc
+        import User_defined_modules as udm
+        from Kosmulator_main import constants as K
+        kc.model_names = selected_models
+        udm.FREE_W, udm.FREE_W_DM = True, False
+        kc.true_model = config["reference_model"] if "LCDM_v" in selected_models else selected_models[0]
+        kc.observations = config["observations"]
+        kc.nwalkers, kc.burn = config["walkers"], args.burn
+        kc.nsteps, kc.convergence = args.max_steps, 0.05
+        kc.prior_limits = dict(kc.prior_limits, **{k: tuple(v) for k, v in config["prior_limits"].items()})
+        for key, value in config["class_settings"].items():
+            setattr(K, key, value)
+        for key, value in zip(
+            ("ALLOW_NEGATIVE_ENERGIES", "ALLOW_BIG_RIP", "ALLOW_DOOM_FACTOR_INSTABILITIES"),
+            config["regime_switches"][args.regime],
+        ):
+            setattr(udm, key, value)
+        sys.argv = [str(root / "Kosmulator.py"), "--force_emcee", "--num_cores", str(args.num_cores),
+                    "--plot_table", "--output_suffix", suffix,
+                    "--tau-consecutive", str(args.tau_consecutive)]
+        if args.resume:
+            sys.argv.append("--resume")
+        options = {
+            "postprocessing_options": dict(config["postprocessing"]),
+            "plot_settings_overrides": {
+                "init_jitter_frac": args.init_jitter_frac, "derived_rd_samples": args.derived_rd_samples,
+                "derived_rd_seed": config["derived_rd_seed"],
+            },
+        }
+        if paths is not None:
+            options["existing_chain_paths"] = paths
+        kc.main(workflow_options=options)
 
 if __name__ == "__main__":
     main()
