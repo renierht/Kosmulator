@@ -6,6 +6,13 @@ project = "Kosmulator"
 author = "Renier T. Hough"
 copyright = "2026, Renier T. Hough"
 
+# The version shown on the site, read from Kosmulator_main/__init__.py (Kosmulator itself is not
+# imported: Read the Docs installs only the packages in docs/requirements.txt)
+import pathlib, re
+_init = pathlib.Path(__file__).resolve().parents[1] / "Kosmulator_main" / "__init__.py"
+release = re.search(r'^__version__ = "([^"]+)"', _init.read_text(encoding="utf-8"), re.M).group(1)
+version = ".".join(release.split(".")[:2])
+
 extensions = [
     "myst_parser",       # Markdown pages
     "sphinx_design",     # tabs and fold-out (dropdown) boxes
@@ -16,9 +23,11 @@ myst_enable_extensions = [
     "dollarmath",        # $...$ and $$...$$ maths
     "amsmath",
     "attrs_inline",
+    "substitution",      # {{ version }} in the pages
 ]
-myst_heading_anchors = 3
-mathjax_path = "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"   # links to sections, e.g. running.md#a-first-run
+myst_substitutions = {"version": version, "release": release}
+myst_heading_anchors = 3   # links to sections, e.g. running.md#a-first-run
+mathjax_path = "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"   # MathJax, pinned
 
 source_suffix = {".md": "markdown"}
 exclude_patterns = ["_build", "requirements.txt"]
@@ -28,7 +37,7 @@ html_logo = "_static/kosmulator_logo.png"
 html_favicon = "_static/favicon.png"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
-html_title = "Kosmulator documentation"
+html_title = f"Kosmulator {release} documentation"
 html_theme_options = {
     "logo_only": True,
     "style_nav_header_background": "#0b2233",   # the navy of the logo

@@ -35,6 +35,62 @@ Both may be changed between a run and its `--resume`.
 |---|---|---|
 | `corner_show_nuisance` | `False` | Draw the likelihoods' nuisance parameters (Planck foregrounds and calibrations, SN calibration, JLA's $\alpha$ and $\beta$) in the corner plots. The tables always list every parameter. |
 
+### Plot settings
+
+The look of the figures is changed with the `plot_settings` dictionary in `Kosmulator.py`. It is empty by default; every setting you put in it replaces Kosmulator's default, and a name that is not in the tables below is reported at start-up and ignored. `--peek` uses the plot settings of the run it looks at.
+
+```python
+plot_settings: Dict[str, Any] = {
+    "dpi": 300,
+    "color_schemes": ["b", "green", "red"],
+    "table_style": "grid",
+    "legend_font_size": 14,
+}
+```
+
+**Both kinds of figure**
+
+| Setting | Default | What it changes |
+|---|---|---|
+| `color_schemes` | `["b", "green", ...]` | One colour per observation group, in the order of `observations` (any Matplotlib colour name or hex code). With fewer colours than groups, further distinct colours are added. |
+| `line_styles` | `["-", "--", ":", "-."]` | Line style of each group in the corner plots |
+| `label_font_size` | `12` | Axis labels |
+| `tick_font_size` | `5` | Tick labels of the corner plots |
+| `dpi` | `200` | Resolution of every figure |
+
+**Corner plots**
+
+| Setting | Default | What it changes |
+|---|---|---|
+| `corner_max_pixels` | `8000` | Corner plots with many parameters are saved at a lower dpi so that their longer side stays near this many pixels; `0` keeps `dpi` |
+| `table_position` | `"auto"` | Where the posterior table goes (with `--plot_table`): `"auto"` (the empty upper-right triangle when it fits, otherwise above the plot), `"top"` or `"triangle"` |
+| `table_font_scale` | `1.0` | Table font size relative to the axis labels |
+| `table_display_pt`, `table_display_width_in` | `9.0`, `10.0` | Readability floor: the table font is at least `table_display_pt` points when the figure is shown `table_display_width_in` inches wide |
+| `table_min_font_frac` | `0.7` | Smallest table font (relative to that size) before a wide table is split into blocks |
+| `table_max_font_frac` | `1.4` | Largest table font, used when the plot leaves room |
+| `table_min_width_in` | `6.0` | Width allowed for a table above a narrow corner plot (one or two parameters) |
+| `table_style` | `"booktabs"` | `"booktabs"` (rules and shaded rows) or `"grid"` |
+| `table_keep_legend` | `False` | Keep GetDist's legend next to the table (the table rows carry the colours already) |
+| `corner_legend_layout` | `"auto"` | Legend placement without the table: `"auto"` or `"getdist"` (GetDist's own) |
+
+**Best-fit plots**
+
+| Setting | Default | What it changes |
+|---|---|---|
+| `legend_font_size` | `12` | Legends |
+| `legend_loc`, `legend_bbox_anchor` | `"upper left"`, `(0.02, 0.98)` | Legend position (Matplotlib's `loc` and `bbox_to_anchor`) |
+| `bestfit_hspace` | `0.0` | Gap between the data panel and the residual panel |
+| `bestfit_top`, `bestfit_bottom` | `0.985`, `0.08` | Top and bottom edges of the panels (fractions of the figure) |
+| `bestfit_height_ratio` | `(2.4, 1.0)` | Heights of the data panel and the residual panel |
+| `bestfit_panel_width_in` | `4.9` | Width of each panel (inches) |
+| `bestfit_column_gap_in` | `0.25` | Gap between the columns of a group with several data sets (inches) |
+| `xpad_frac`, `model_xpad_frac` | `0.15`, `0.12` | Room on the redshift axis beyond the data, and how far the model curve extends into it |
+| `z_dense_points` | `800` | Number of points of the model curve |
+| `overlay_model_for_bao_desi` | `False` | Also join the model's values at the BAO data points |
+| `model_band_alpha` | `0.15` | Opacity of the 68% band |
+| `band_draws` | `200` | Posterior draws behind the 68% band |
+| `model_latex_names` | `{}` | Model names in the legends, e.g. `{"wowaCDM_v": r"$w_0w_a$CDM"}` (with `--latex_enabled`) |
+
 ### Less-used data options: `Kosmulator_main/constants.py`
 
 A few data choices are made in `constants.py` rather than in `Kosmulator.py`, since they rarely change:
@@ -104,7 +160,7 @@ The convergence rule is described in [Configuring a run](running.md#sampler-sett
 | Argument | Type | Default | Description |
 |---|---|---|---|
 | `--latex_enabled` | flag | off | LaTeX rendering of the plot labels (needs LaTeX; see [Installation](getting_started.md)). |
-| `--plot_table` | flag | off | Draw the posterior summary table on the corner plot (in the empty upper-right triangle when it fits, otherwise above the grid). |
+| `--plot_table` | flag | off | Draw the posterior summary table on the corner plot (in the empty upper-right triangle when it fits, otherwise above the grid; its layout: [Plot settings](#plot-settings)). |
 | `--corner-show-all-cmb-params` | flag | off | Corner plot: show every CMB parameter, including the nuisances. |
 | `--corner-table-full` | flag | off | Corner plot table: keep the full parameter list, including CMB nuisances. |
 

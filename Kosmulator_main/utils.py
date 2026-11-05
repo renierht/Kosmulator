@@ -31,8 +31,6 @@ from Kosmulator_main.constants import (
     GAMMA_FS8_SINGLETON,
     DEFAULT_CMB_FILES,
     CMB_ELL_MAX_PLOT,
-    CMB_LENSING_LMIN,
-    CMB_LENSING_LMAX,
     PLANCK_NUISANCE_DEFAULTS,
     PLANCK_TT_ONLY_NUISANCE,
     PLANCK_TTTEEE_NUISANCE,
@@ -1259,6 +1257,48 @@ def group_colours(n: int, base=None) -> List[str]:
     return out[:n]
 
 
+#: The plot settings a user may change, with plot_settings in Kosmulator.py (defaults in
+#: build_plot_settings). Only settings that were tested to change the figures are listed.
+USER_PLOT_SETTINGS = (
+    "color_schemes", "line_styles", "label_font_size", "tick_font_size", "dpi", "corner_max_pixels",
+    "table_position", "table_font_scale", "table_display_pt", "table_display_width_in",
+    "table_min_font_frac", "table_max_font_frac", "table_min_width_in", "table_style",
+    "table_keep_legend", "corner_legend_layout",
+    "legend_font_size", "legend_loc", "legend_bbox_anchor", "bestfit_hspace", "bestfit_top",
+    "bestfit_bottom", "bestfit_height_ratio", "bestfit_panel_width_in", "bestfit_column_gap_in",
+    "xpad_frac", "model_xpad_frac", "z_dense_points", "overlay_model_for_bao_desi",
+    "model_band_alpha", "band_draws", "model_latex_names",
+)
+
+
+def apply_user_plot_settings(PLOT_SETTINGS: Dict[str, Any], user: Optional[Dict[str, Any]], n_groups: int) -> List[str]:
+    """
+    plot_settings of Kosmulator.py over the defaults of build_plot_settings. A key that is not in
+    USER_PLOT_SETTINGS is reported and ignored; colours are extended to one per group if there are
+    fewer than the groups. Returns the keys that were applied.
+    """
+    applied: List[str] = []
+    for key, value in (user or {}).items():
+        if key not in USER_PLOT_SETTINGS:
+            logging.warning("plot_settings: %r is not a plot setting and is ignored (the settings are "
+                            "listed in the documentation, Settings and command-line flags)", key)
+            continue
+        if key == "color_schemes":
+            import matplotlib.colors as mcolors
+            bad = [c for c in value if not mcolors.is_color_like(c)]
+            if bad or not value:
+                logging.warning("plot_settings: color_schemes %s are not colours; the default colours are used", bad)
+                continue
+            n = max(1, int(n_groups))
+            # the colours as given, one per group; more distinct colours are added if there are too few
+            value = list(value)[:n] if len(value) >= n else group_colours(n, list(value))
+        elif key in ("legend_bbox_anchor", "bestfit_height_ratio"):
+            value = tuple(value)
+        PLOT_SETTINGS[key] = value
+        applied.append(key)
+    return applied
+
+
 def build_plot_settings(
     observations,
     suffix: str,
@@ -1279,50 +1319,49 @@ def build_plot_settings(
     # further colours that differ from every colour already used (no repeats).
     color_schemes = group_colours(n_obs, colors)
 
+    # Every setting a user may change (plot_settings in Kosmulator.py, USER_PLOT_SETTINGS) is
+    # listed here with its default; each was tested to change the figures (5 Nov 2026).
     settings: Dict[str, Any] = {
-        # Style
-        "color_schemes": color_schemes,
+        # Both kinds of figure
+        "color_schemes": color_schemes,          # one colour per observation group
         "line_styles": ["-", "--", ":", "-."],
-        "marker_size": 4,
-        "legend_font_size": 12,
-        "title_font_size": 12,
         "label_font_size": 12,
         "tick_font_size": 5,
-        # LaTeX & DPI
+        "dpi": 200,
+        # LaTeX and the corner-plot table (command line: --latex_enabled, --plot_table)
         "latex_enabled": latex_enabled,
         "plot_table": plot_table,
-        "dpi": 200,
         # Corner plots with many parameters get a lower dpi so their longer side stays near
-        # this many pixels (item 33b); 0 keeps "dpi" whatever the size
+        # this many pixels; 0 keeps "dpi" whatever the size
         "corner_max_pixels": 8000,
-        # Table layout knobs (corner top band)
-        "corner_top": 0.88,
-        "table_vpad": 0.008,
-        "table_height_base": 0.012,
-        "table_height_per_row": 0.33,
-        "table_font_min": 9,
-        "table_font_max": 14,
-        "cell_height_factor": 4.5,
-        "table_max_band_fraction": 0.29,
-        "table_headroom_fraction": 0.10,
-        # Best-fit plot layout knobs
-        "bestfit_hspace": 0.00,
-        "bestfit_wspace": 0.15,
-        "bestfit_figwidth_percol": 6.1,
-        "bestfit_left_base": 0.15,
-        "bestfit_left_step": 0.05,
-        "bestfit_left_min": 0.03,
-        "bestfit_right": 0.97,
+        # Posterior table on the corner plot (Plot_functions.add_corner_table)
+        "table_position": "auto",                # "auto", "top" or "triangle"
+        "table_font_scale": 1.0,                 # relative to the axis labels
+        "table_display_pt": 9.0,                 # smallest font (pt) when the figure is shown
+        "table_display_width_in": 10.0,          # ... this many inches wide
+        "table_min_font_frac": 0.7,              # below this the table is split into blocks
+        "table_max_font_frac": 1.4,              # largest font when the plot leaves room
+        "table_min_width_in": 6.0,               # band table above a narrow corner plot
+        "table_style": "booktabs",               # or "grid"
+        "table_keep_legend": False,              # keep GetDist's legend next to the table
+        "corner_legend_layout": "auto",          # or "getdist" (GetDist's own legend placement)
+        # Best-fit plots
+        "legend_font_size": 12,
+        "legend_loc": "upper left",
+        "legend_bbox_anchor": (0.02, 0.98),
+        "bestfit_hspace": 0.00,                  # gap between the data and residual panels
         "bestfit_top": 0.985,
         "bestfit_bottom": 0.08,
-        # In-panel r_d badge
-        "rd_badge_pos": "upper right",
-        # X-axis limits and theory grid
-        "xpad_frac": 0.15,
-        "model_xpad_frac": 0.12,
-        "z_dense_points": 800,
-        # Optional: whether to overlay per-point model on BAO/DESI
-        "overlay_model_for_bao_desi": False,
+        "bestfit_height_ratio": (2.4, 1.0),      # data panel : residual panel
+        "bestfit_panel_width_in": 4.9,
+        "bestfit_column_gap_in": 0.25,
+        "xpad_frac": 0.15,                       # x-axis room beyond the data
+        "model_xpad_frac": 0.12,                 # model curve beyond the data
+        "z_dense_points": 800,                   # points of the model curve
+        "overlay_model_for_bao_desi": False,     # the model at the BAO data points as well
+        "model_band_alpha": 0.15,                # opacity of the 68% band
+        "band_draws": 200,                       # posterior draws for the 68% band
+        "model_latex_names": {},                 # model labels with LaTeX, e.g. {"wowaCDM_v": r"$w_0w_a$CDM"}
         # Save locations (model-specific subfolders added at use sites)
         "autocorr_save_path": (
             os.path.join(base_plots, suffix) if suffix else base_plots
@@ -1341,15 +1380,9 @@ def build_plot_settings(
         # Bandpower files (tweak if your local paths differ)
         **DEFAULT_CMB_FILES,
         "cmb_ell_max_plot": CMB_ELL_MAX_PLOT,
-        "cmb_lensing_Lmin": CMB_LENSING_LMIN,
-        "cmb_lensing_Lmax": CMB_LENSING_LMAX,
         # Autocorr
         "autocorr_check_every": 100,
         "autocorr_buffer_after_burn": 0,
-        # Misc plot options
-        "legend_loc": "upper left",
-        "legend_bbox_anchor": (0.02, 0.98),
-        "bbn_annotation_pos": "lower left",
     }
 
     settings["cmb_bandpower_files"] = {

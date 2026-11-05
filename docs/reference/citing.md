@@ -1,23 +1,20 @@
 # Citing Kosmulator
 
-Kosmulator is an actively developed research framework. If you use it in your work, please cite the software paper:
+Kosmulator is an actively developed research framework. If you use it in your work, please cite the software paper, published in the proceedings of the South African Gravity Society Conference 2025 ([doi:10.62869/001c.172550](https://doi.org/10.62869/001c.172550); [arXiv:2602.08424](https://arxiv.org/abs/2602.08424)):
 
 ```bibtex
-@ARTICLE{2026arXiv260208424H,
+@INPROCEEDINGS{Hough2026Kosmulator,
        author = {{Hough}, Renier T. and {Rugg}, Robert and {Sahlu}, Shambel and {Abebe}, Amare},
-        title = "{Kosmulator: A Python framework for cosmological inference with MCMC}",
-      journal = {arXiv e-prints},
-     keywords = {Cosmology and Nongalactic Astrophysics, General Relativity and Quantum Cosmology},
+        title = "{Kosmulator: A Python Framework for Cosmological Inference With MCMC}",
+    booktitle = {SAGS2025 Proceedings of the South African Gravity Society Conference 2025},
+    publisher = {Axiom Academic Publishers},
+      chapter = {2},
+        pages = {7--19},
          year = 2026,
-        month = feb,
-          eid = {arXiv:2602.08424},
-        pages = {arXiv:2602.08424},
-          doi = {10.48550/arXiv.2602.08424},
+          doi = {10.62869/001c.172550},
 archivePrefix = {arXiv},
        eprint = {2602.08424},
- primaryClass = {astro-ph.CO},
-       adsurl = {https://ui.adsabs.harvard.edu/abs/2026arXiv260208424H},
-      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+ primaryClass = {astro-ph.CO}
 }
 ```
 

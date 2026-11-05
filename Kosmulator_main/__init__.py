@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
 
 
 @dataclass

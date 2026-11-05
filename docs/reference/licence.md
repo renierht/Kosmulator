@@ -15,6 +15,7 @@ For questions or feedback, please contact:
 - Renier Hough, [25026097@mynwu.ac.za](mailto:25026097@mynwu.ac.za), main contributor
 - Robert Rugg, [31770312@mynwu.ac.za](mailto:31770312@mynwu.ac.za), for help with CLIK, CLASS and the CMB observations
 - Shambel Sahlu, [shambel.sahlu@nithecs.ac.za](mailto:shambel.sahlu@nithecs.ac.za), for help with the observations and the physics models
+- Christoffel Schoemann, [38655349@mynwu.ac.za](mailto:38655349@mynwu.ac.za), for help with the statistics
 
 ## Acknowledgements
 

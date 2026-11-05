@@ -34,7 +34,8 @@ from Kosmulator_main import constants as K
 REFS: Dict[str, str] = {
     # Kosmulator
     "hough26": "R. T. Hough, R. Rugg, S. Sahlu, A. Abebe (2026), Kosmulator: A Python framework for cosmological "
-               "inference with MCMC, arXiv:2602.08424",
+               "inference with MCMC, in SAGS2025 Proceedings of the South African Gravity Society Conference 2025 "
+               "(Axiom Academic Publishers), Chapter 2, pp. 7 - 19, arXiv:2602.08424, doi:10.62869/001c.172550",
     "hough20": "R. T. Hough, A. Abebe, S. E. S. Ferreira (2020), Viability tests of f(R)-gravity models with "
                "Supernovae Type 1A data, Eur. Phys. J. C 80, 787, arXiv:1911.05983, doi:10.1140/epjc/s10052-020-8342-7",
     # Samplers, analysis
@@ -211,6 +212,11 @@ _BIB_TITLES: Dict[str, str] = {          # titles with mathematics written in pl
 _BIB_NAMES: Dict[str, str] = {"Schoeneberg": r'Sch{\"o}neberg', "Sanchez": r"S{\'a}nchez",
                               "Troester": r'Tr{\"o}ster'}
 _BIB_FIXED: Dict[str, Dict[str, str]] = {   # entries whose REFS string has another form
+    "hough26": dict(author="Hough, R. T. and Rugg, R. and Sahlu, S. and Abebe, A.",
+                    title="Kosmulator: A Python Framework for Cosmological Inference With MCMC",
+                    journal="SAGS2025 Proceedings of the South African Gravity Society Conference 2025",
+                    pages="7--19", year="2026", eprint="2602.08424", doi="10.62869/001c.172550",
+                    note="Chapter 2, Axiom Academic Publishers"),
     "pdg_bbn": dict(author="Navas, S. and others", collaboration="Particle Data Group",
                     title="Review of Particle Physics", journal="Phys. Rev. D", volume="110", pages="030001",
                     year="2024", doi="10.1103/PhysRevD.110.030001",

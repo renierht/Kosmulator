@@ -28,6 +28,7 @@ from Kosmulator_main.utils import acquire_run_lock
 from Kosmulator_main.utils import (
     parse_cli_args,
     build_plot_settings,
+    apply_user_plot_settings,
     init_mpi,
     mpi_broadcast,
     compute_pantheon_cov,
@@ -256,6 +257,7 @@ def main(
     lensing_only_priors: bool = True,
     corner_show_nuisance: bool = False,
     cmb_sample_theta: bool = False,
+    plot_settings: Optional[Dict[str, Any]] = None,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -339,6 +341,10 @@ def main(
     PLOT_SETTINGS["corner_table_full_params"] = bool(
         getattr(args, "corner_table_full", False)
     )
+    # plot_settings in Kosmulator.py: the user's choices over the defaults of build_plot_settings
+    _user_plot = apply_user_plot_settings(PLOT_SETTINGS, plot_settings, len(observations))
+    if _user_plot:
+        log.info("Plot settings from Kosmulator.py: %s", ", ".join(_user_plot))
 
     # Same root as corner and best-fit plots (constants.DEFAULT_PLOTS_BASE);
     # "Saved_plots" here split the output into two folders on Linux/macOS.
@@ -737,6 +743,7 @@ def main(
             "tau_consecutive": int(PLOT_SETTINGS.get("tau_consecutive", K.CONV_CONSECUTIVE)),
             "autocorr_buffer": int(PLOT_SETTINGS.get("autocorr_buffer_after_burn", 0) or 0),
             "corner_show_nuisance": bool(getattr(K, "CORNER_SHOW_NUISANCE", False)),
+            "plot_settings": dict(plot_settings or {}),      # for --peek
         }
         if K.CMB_EARLY_TAG in _flat:
             _run["CMB_EARLY_OMEGA"] = K.CMB_EARLY_OMEGA

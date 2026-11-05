@@ -282,6 +282,7 @@ def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
             sample_H0_uncalibrated_SNe=bool(st.get("sample_H0_uncalibrated_SNe", False)))
 
     PLOT_SETTINGS = U.build_plot_settings(observations, os.path.join("Peek", suffix), bool(latex_enabled), False)
+    U.apply_user_plot_settings(PLOT_SETTINGS, st.get("plot_settings") or {}, len(observations))   # the run's own
     normalize_save_roots(PLOT_SETTINGS)
     PLOT_SETTINGS["corner_show_all_cmb_params"] = bool(all_params)
     PLOT_SETTINGS["corner_show_nuisance"] = bool(all_params) or bool(st.get("corner_show_nuisance", False))

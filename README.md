@@ -213,7 +213,7 @@ nsteps: int = 5000
 burn: int = 200
 convergence: float = 0.05  # Stability of tau_max between checks (relative) required by the convergence rule
 ```
-Every parameter needs a flat prior in `prior_limits` (and preferably a starting value in `reference_values`) in the same file. The other settings there (neutrinos, r_d, growth, CMB options) are explained in [Settings and command-line flags](https://kosmulator.readthedocs.io/en/latest/options.html).
+Every parameter needs a flat prior in `prior_limits` (and preferably a starting value in `reference_values`) in the same file. The look of the plots (colours, fonts, dpi, the corner-plot table) is set with `plot_settings` in the same file. The other settings there (neutrinos, r_d, growth, CMB options) are explained in [Settings and command-line flags](https://kosmulator.readthedocs.io/en/latest/options.html).
 
 #### Step 4. Execute your MCMC simulation
 Run the script in the terminal:
@@ -712,24 +712,21 @@ AlterBBN the predicted D/H(ω_b) is a power law fitted to the PRyMordial table
 ## Citation
 
 Kosmulator is an actively developed research framework.
-If you use Kosmulator in your work, please cite the dedicated software paper:
+If you use Kosmulator in your work, please cite the dedicated software paper, published in the proceedings of the South African Gravity Society Conference 2025 ([doi:10.62869/001c.172550](https://doi.org/10.62869/001c.172550); [arXiv:2602.08424](https://arxiv.org/abs/2602.08424)):
 
 ```bibtex
-@ARTICLE{2026arXiv260208424H,
+@INPROCEEDINGS{Hough2026Kosmulator,
        author = {{Hough}, Renier T. and {Rugg}, Robert and {Sahlu}, Shambel and {Abebe}, Amare},
-        title = "{Kosmulator: A Python framework for cosmological inference with MCMC}",
-      journal = {arXiv e-prints},
-     keywords = {Cosmology and Nongalactic Astrophysics, General Relativity and Quantum Cosmology},
+        title = "{Kosmulator: A Python Framework for Cosmological Inference With MCMC}",
+    booktitle = {SAGS2025 Proceedings of the South African Gravity Society Conference 2025},
+    publisher = {Axiom Academic Publishers},
+      chapter = {2},
+        pages = {7--19},
          year = 2026,
-        month = feb,
-          eid = {arXiv:2602.08424},
-        pages = {arXiv:2602.08424},
-          doi = {10.48550/arXiv.2602.08424},
+          doi = {10.62869/001c.172550},
 archivePrefix = {arXiv},
        eprint = {2602.08424},
- primaryClass = {astro-ph.CO},
-       adsurl = {https://ui.adsabs.harvard.edu/abs/2026arXiv260208424H},
-      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+ primaryClass = {astro-ph.CO}
 }
 ```
 
@@ -778,6 +775,8 @@ For questions or feedback, please contact:
 - Robert Rugg - [31770312@mynwu.ac.za] for help with CLIK, CLASS and the CMB observations.
 
 - Shambel Sahlu - [shambel.sahlu@nithecs.ac.za] for help with the observations and the physics models which were included.
+
+- Christoffel Schoemann - [38655349@mynwu.ac.za] for help with the statistics.
 
 ## Acknowledgements
 I would like to thank the **EMCEE: Hammer** and **Zeus-MCMC** groups for making their MCMC simulation software publically available. This code would not be possible without their hard work. 

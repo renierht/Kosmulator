@@ -6,6 +6,8 @@
 :align: center
 ```
 
+This is the documentation of Kosmulator {{ version }}.
+
 Kosmulator is a Python package that uses **zeus** and **emcee (the MCMC Hammer)** to run efficient, vectorised Markov chain Monte Carlo (MCMC) inference for **modified gravity** and **alternative cosmological models**.
 
 It is written so that a model can be tested against data with very little code: you write the expansion rate $E(z) = H(z)/H_0$ of your model in **one Python function**, give it a name and a list of parameters, choose the data sets, and run. For every model and every combination of data, Kosmulator then:
@@ -65,4 +67,4 @@ reference/licence
 
 ## Citing Kosmulator
 
-If you use Kosmulator in your work, please cite the software paper (Hough, Rugg, Sahlu & Abebe 2026, [arXiv:2602.08424](https://arxiv.org/abs/2602.08424)) and the original paper of the code (Hough, Abebe & Ferreira 2020, [EPJC 80, 787](https://doi.org/10.1140/epjc/s10052-020-8342-7)), together with the original papers of the data you use. Every run lists these for you; see [Citing Kosmulator](reference/citing.md).
+If you use Kosmulator in your work, please cite the software paper (Hough, Rugg, Sahlu & Abebe 2026, SAGS2025 Proceedings, pp. 7 - 19, [doi:10.62869/001c.172550](https://doi.org/10.62869/001c.172550); [arXiv:2602.08424](https://arxiv.org/abs/2602.08424)) and the original paper of the code (Hough, Abebe & Ferreira 2020, [EPJC 80, 787](https://doi.org/10.1140/epjc/s10052-020-8342-7)), together with the original papers of the data you use. Every run lists these for you; see [Citing Kosmulator](reference/citing.md).

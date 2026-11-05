@@ -6,7 +6,7 @@ Kosmulator includes every data set it supports, with its source and the papers t
 
 ## Kosmulator
 
-- R. T. Hough, R. Rugg, S. Sahlu, A. Abebe (2026), Kosmulator: A Python framework for cosmological inference with MCMC, arXiv:2602.08424 [`hough26`]
+- R. T. Hough, R. Rugg, S. Sahlu, A. Abebe (2026), Kosmulator: A Python framework for cosmological inference with MCMC, in SAGS2025 Proceedings of the South African Gravity Society Conference 2025 (Axiom Academic Publishers), Chapter 2, pp. 7 - 19, arXiv:2602.08424, doi:10.62869/001c.172550 [`hough26`]
 - R. T. Hough, A. Abebe, S. E. S. Ferreira (2020), Viability tests of f(R)-gravity models with Supernovae Type 1A data, Eur. Phys. J. C 80, 787, arXiv:1911.05983, doi:10.1140/epjc/s10052-020-8342-7 [`hough20`]
 
 ## Likelihood data
@@ -204,7 +204,7 @@ Combinations: `CMB_PACT` = `CMB_lowl_TT` + `CMB_lowl_sroll2` + `CMB_planck_ACTcu
 
 ### Kosmulator
 
-- R. T. Hough, R. Rugg, S. Sahlu, A. Abebe (2026), Kosmulator: A Python framework for cosmological inference with MCMC, arXiv:2602.08424 [`hough26`]
+- R. T. Hough, R. Rugg, S. Sahlu, A. Abebe (2026), Kosmulator: A Python framework for cosmological inference with MCMC, in SAGS2025 Proceedings of the South African Gravity Society Conference 2025 (Axiom Academic Publishers), Chapter 2, pp. 7 - 19, arXiv:2602.08424, doi:10.62869/001c.172550 [`hough26`]
 - R. T. Hough, A. Abebe, S. E. S. Ferreira (2020), Viability tests of f(R)-gravity models with Supernovae Type 1A data, Eur. Phys. J. C 80, 787, arXiv:1911.05983, doi:10.1140/epjc/s10052-020-8342-7 [`hough20`]
 
 ### emcee (ensemble sampler)

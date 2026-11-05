@@ -201,83 +201,8 @@ def pretty_obs_name(obs_key: str, latex_on: bool = True) -> str:
 
 
 # =============================================================================
-# Table helpers (autoscaling + top-band layout)
+# Table helpers
 # =============================================================================
-
-def _interp_piecewise(x, xs, ys):
-    """Linear interpolate across sorted xs with values ys; clamp outside."""
-    if x <= xs[0]:
-        return ys[0]
-    if x >= xs[-1]:
-        return ys[-1]
-    for i in range(len(xs) - 1):
-        if xs[i] <= x <= xs[i + 1]:
-            t = (x - xs[i]) / (xs[i + 1] - xs[i])
-            return ys[i] * (1 - t) + ys[i + 1] * t
-    return ys[-1]
-
-
-def autoscale_table_settings(n_params: int, n_obs: int, position: str = "top", overrides: dict | None = None) -> dict:
-    """
-    Compute PLOT_SETTINGS for the corner table by interpolating between
-    your hand-tuned anchor points.
-    """
-    # Vertical scaling vs number of observation combinations (6 parameters)
-    OBS_X = [2, 5, 8]
-    OBS_ANCH = {
-        "corner_top":           [0.94, 0.90, 0.86],
-        "table_pad":            [0.11, 0.12, 0.23],
-        "min_sidebar_width":    [0.30, 0.20, 0.16],
-        "table_width_per_col":  [0.04, 0.04, 0.03],
-        "table_height_per_row": [0.95, 0.55, 0.18],
-        "cell_height_factor":   [8.5,  5.5,  2.8],
-    }
-
-    # n_obs == 1 special: anchors vs number of params (4,3,2)
-    PARM_X = [2, 3, 4]
-    PARM_ANCH = {
-        "corner_top":          [0.90, 0.93, 0.94],
-        "table_width_per_col": [0.06, 0.04, 0.04],
-        "table_height_per_row":[0.95, 0.95, 0.95],
-        "cell_height_factor":  [8.5,  8.5,  8.5],
-    }
-
-    # Interpolate
-    S = {}
-    if n_obs == 1:
-        for k, ys in PARM_ANCH.items():
-            S[k] = _interp_piecewise(n_params, PARM_X, ys)
-        for k, ys in OBS_ANCH.items():
-            if k not in S:
-                S[k] = ys[0]   # borrow the "2 obs" line for the rest
-    else:
-        x = max(min(n_obs, OBS_X[-1]), OBS_X[0])
-        for k, ys in OBS_ANCH.items():
-            S[k] = _interp_piecewise(x, OBS_X, ys)
-
-    # Baselines
-    S.setdefault("table_width_base", 0.030)
-    S.setdefault("table_width_cap",  0.22)
-    S.setdefault("table_height_base", 0.012)
-    S.setdefault("table_fill_x", 0.98)
-    S.setdefault("table_fill_y", 0.55)
-    S.setdefault("table_font_min", 9)
-    S.setdefault("table_font_max", 14)
-
-    # gentle n_params dependence
-    S["table_width_per_col"] = float(S["table_width_per_col"] * (1.0 + 0.02 * max(0, n_params - 6)))
-
-    # clamp
-    S["corner_top"] = float(max(0.82, min(0.95, S["corner_top"])))
-    S["table_height_per_row"] = float(max(0.10, min(1.20, S["table_height_per_row"])))
-    S["cell_height_factor"]   = float(max(1.6,  min(9.5,  S["cell_height_factor"])))
-
-    S["table_position"] = position  # top preferred
-
-    if overrides:
-        S.update({k: overrides[k] for k in overrides if overrides[k] is not None})
-    return S
-
 
 def align_table_to_parameters(
     latex_table: List[List[str]],

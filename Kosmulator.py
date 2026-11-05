@@ -32,7 +32,7 @@ import logging
 import multiprocessing as mp
 from pathlib import Path
 import sys
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 # ----------------------------------------------------------------------
 # Import path setup
@@ -174,6 +174,13 @@ cmb_sample_theta: bool = False
 # only their prior (H_0 of uncalibrated SNe with sample_H0_uncalibrated_SNe) are left out unless True
 # (A_planck is drawn either way). The tables and statistics list every parameter.
 corner_show_nuisance: bool = False
+# Plot appearance (optional). Any setting listed in the documentation ("Settings and command-line flags",
+# Plot settings) overrides Kosmulator's default; unknown names are reported and ignored. Examples:
+#   "dpi": 300                                  resolution of every figure
+#   "color_schemes": ["b", "green", "red"]      one colour per observation group, in order
+#   "table_style": "grid"                       table on the corner plot (with --plot_table)
+#   "legend_font_size": 14                      legends of the best-fit plots
+plot_settings: Dict[str, Any] = {}
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -284,6 +291,7 @@ def main() -> None:
         lensing_only_priors=lensing_only_priors,
         corner_show_nuisance=corner_show_nuisance,
         cmb_sample_theta=cmb_sample_theta,
+        plot_settings=plot_settings,
     )
 
 
