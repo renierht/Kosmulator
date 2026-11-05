@@ -53,3 +53,30 @@ A seeded 48-walker, three-dimensional unit Gaussian smoke test (2500 steps,
 MCMC imports in Kosmulator_test and both emcee constructors expose moves.
 This is not an IDE performance benchmark or full distributional proof.
 The two run-manifest regressions also passed. No production chain was started.
+
+## Usage-limit handoff — benchmark in progress
+
+User requested checkpointing at 15% remaining usage.
+Active bounded benchmark script validation/benchmark_ide_moves.py runs 100 steps
+per proposal, stretch then de_snooker, 120 walkers, 8 fork workers, threads=1.
+Uses the same final saved DES Model 9 ensemble, opened read-only from the
+production followup worktree, and the actual DES-Dovekie + DESI DR2 likelihood.
+CLASS was compiled locally in the isolated worktree. Initial configuration needed
+the normal placeholder r_d prior before Config removes r_d in derived-CLASS mode.
+Production chain files are never opened for writing.
+
+Process was launched in persistent exec session 84018, Python PID 17969.
+Check process existence rather than trusting the old PID after reboot.
+Log is /tmp/ide-moves-benchmark.log.
+Result validation/ide_moves_benchmark.json is written after each segment.
+Only one result means the second segment is still pending or failed.
+Benchmark ends automatically after both segments.
+Do not launch a duplicate while it is active.
+
+100 steps is deliberately a pilot. Its estimated tau/ESS is unreliable relative
+to the production tau ~188; do not claim a convergence-speed improvement from it.
+Next action is inspect log/results and compare timing, acceptance and jump size.
+Before recommending new moves, perform a sufficiently long mixing comparison if
+needed and obtain agreement of numerical likelihoods against the original setup.
+Then continue pending live inspection, worker transport, environment tooling and
+likelihood-change review batches. No full production run has been launched.
