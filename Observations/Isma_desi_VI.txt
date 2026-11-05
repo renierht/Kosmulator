@@ -1,0 +1,49 @@
+# type (D_V/rs=3, Dv/Mpc=4, DA/rs=5, c/Hrs=6, rs/D_v=7, Dm/rs=8)
+#List of all (these ar not the use into the computation)
+#Exp    z_eff value      error          type
+#BGS
+#DESI   0.295  7.93       0.15            3
+#LRG1  
+#DESI   0.510  13.62      0.25            8
+#DESI   0.510  20.98      0.61            6 
+#LRG2 
+#DESI   0.706  16.85      0.32            8
+#DESI   0.706  20.08      0.60            6
+#LRG3+ELG1
+#DESI   0.930  21.71      0.28            8
+#DESI   0.930  17.88      0.35            6
+#ELG2
+#DESI   1.317  27.79      0.69            8        
+#DESI   1.317  13.82      0.42            6
+#QSO
+#DESI   1.491  26.07      0.67            3
+#Lya QSO
+#DESI   2.330  39.71      0.94            8
+#DESI   2.330   8.52      0.17            6
+#
+#
+#
+#Theese are the chosen one to compute: ordered as all_8+all_6
+#LRG1  
+DESI   0.510  13.62      0.25            8
+#LRG2 
+DESI   0.706  16.85      0.32            8
+#LRG3+ELG1
+DESI   0.930  21.71      0.28            8
+#ELG2
+DESI   1.317  27.79      0.69            8        
+#Lya QSO
+DESI   2.330  39.71      0.94            8
+#LRG1  
+DESI   0.510  20.98      0.61            6
+#LRG2 
+DESI   0.706  20.08      0.60            6 
+#LRG3+ELG1
+DESI   0.930  17.88      0.35            6
+#ELG2
+DESI   1.317  13.82      0.42            6
+#Lya QSO
+DESI   2.330   8.52      0.17            6
+
+
+

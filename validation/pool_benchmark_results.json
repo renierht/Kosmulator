@@ -1,0 +1,122 @@
+[
+  {
+    "model": "LCDM_v",
+    "workers": 1,
+    "evaluations": 32,
+    "seconds": 7.318385950999982,
+    "startup_warmup_seconds": 0.0,
+    "max_loglike_diff": 0.0,
+    "max_worker_rss_MiB": 349.09375,
+    "context_pickle_MiB": 21.029937744140625
+  },
+  {
+    "model": "LCDM_v",
+    "workers": 8,
+    "evaluations": 32,
+    "seconds": 1.8493152869996266,
+    "startup_warmup_seconds": 2.9632420959997035,
+    "max_loglike_diff": 0.0,
+    "max_worker_rss_MiB": 349.09375,
+    "context_pickle_MiB": 21.029937744140625
+  },
+  {
+    "model": "LCDM_v",
+    "workers": 16,
+    "evaluations": 32,
+    "seconds": 1.8272317579999253,
+    "startup_warmup_seconds": 4.161406728000202,
+    "max_loglike_diff": 0.0,
+    "max_worker_rss_MiB": 392.5546875,
+    "context_pickle_MiB": 21.029937744140625
+  },
+  {
+    "model": "LCDM_v",
+    "H_0": 60.0,
+    "omega_b": 0.01728,
+    "rd": 161.51672729600136
+  },
+  {
+    "model": "LCDM_v",
+    "H_0": 82.0,
+    "omega_b": 0.0322752,
+    "rd": 126.45885416621165
+  },
+  {
+    "model": "LCDM_v",
+    "H_0": 83.0,
+    "omega_b": 0.0330672,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.306720e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN"
+  },
+  {
+    "model": "LCDM_v",
+    "H_0": 87.71355,
+    "omega_b": 0.036929600897292,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.692960e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN"
+  },
+  {
+    "model": "LCDM_v",
+    "H_0": 90.0,
+    "omega_b": 0.038880000000000005,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN"
+  },
+  {
+    "model": "SignSwitch_IDE_1",
+    "workers": 1,
+    "evaluations": 32,
+    "seconds": 8.243937853000261,
+    "startup_warmup_seconds": 0.0,
+    "max_loglike_diff": 0.0,
+    "max_worker_rss_MiB": 435.52734375,
+    "context_pickle_MiB": 21.03001594543457
+  },
+  {
+    "model": "SignSwitch_IDE_1",
+    "workers": 8,
+    "evaluations": 32,
+    "seconds": 1.8818754630001422,
+    "startup_warmup_seconds": 3.240873259000182,
+    "max_loglike_diff": 0.0,
+    "max_worker_rss_MiB": 435.52734375,
+    "context_pickle_MiB": 21.03001594543457
+  },
+  {
+    "model": "SignSwitch_IDE_1",
+    "workers": 16,
+    "evaluations": 32,
+    "seconds": 1.8176658960001078,
+    "startup_warmup_seconds": 4.182703629999651,
+    "max_loglike_diff": 0.0,
+    "max_worker_rss_MiB": 477.77734375,
+    "context_pickle_MiB": 21.03001594543457
+  },
+  {
+    "model": "SignSwitch_IDE_1",
+    "H_0": 60.0,
+    "omega_b": 0.01728,
+    "rd": 166.99749105952162
+  },
+  {
+    "model": "SignSwitch_IDE_1",
+    "H_0": 82.0,
+    "omega_b": 0.0322752,
+    "rd": 131.83179280026673
+  },
+  {
+    "model": "SignSwitch_IDE_1",
+    "H_0": 83.0,
+    "omega_b": 0.0330672,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.306720e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN"
+  },
+  {
+    "model": "SignSwitch_IDE_1",
+    "H_0": 87.71355,
+    "omega_b": 0.036929600897292,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.692960e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN"
+  },
+  {
+    "model": "SignSwitch_IDE_1",
+    "H_0": 90.0,
+    "omega_b": 0.038880000000000005,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN"
+  }
+]

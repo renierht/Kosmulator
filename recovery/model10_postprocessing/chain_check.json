@@ -1,0 +1,14 @@
+{
+  "steps": 13600,
+  "retained_samples": 1512000,
+  "finite_samples": true,
+  "finite_logprob": true,
+  "acceptance_range": [
+    0.48205882352941176,
+    0.5122794117647059
+  ],
+  "postburn_movement_range": [
+    0.4800380982617668,
+    0.5156758472894675
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "baseline_commit": "c2bc139951067d78f5884742efda458b468dc933",
+  "python_cases": 128,
+  "python_H_max_relative": 2.6645352591003757e-15,
+  "class_models": [
+    {
+      "selector": 0,
+      "rd_relative": 0.0,
+      "H_relative": 0.0
+    },
+    {
+      "selector": 1,
+      "rd_relative": 6.3513374559676095e-09,
+      "H_relative": 5.551115123125783e-16
+    },
+    {
+      "selector": 2,
+      "rd_relative": 4.898170757883236e-09,
+      "H_relative": 7.771561172376096e-16
+    },
+    {
+      "selector": 3,
+      "rd_relative": 8.280706453867026e-09,
+      "H_relative": 6.661338147750939e-16
+    },
+    {
+      "selector": 4,
+      "rd_relative": 2.4734955417216042e-08,
+      "H_relative": 5.551115123125783e-16
+    },
+    {
+      "selector": 5,
+      "rd_relative": 1.2545790961659975e-08,
+      "H_relative": 3.3306690738754696e-16
+    },
+    {
+      "selector": 6,
+      "rd_relative": 2.593946502038591e-09,
+      "H_relative": 1.1102230246251565e-15
+    },
+    {
+      "selector": 7,
+      "rd_relative": 1.0818516749111495e-08,
+      "H_relative": 5.551115123125783e-16
+    },
+    {
+      "selector": 8,
+      "rd_relative": 2.6048783130505626e-09,
+      "H_relative": 1.4432899320127035e-15
+    }
+  ],
+  "selector_zero_all_columns_identical": true
+}

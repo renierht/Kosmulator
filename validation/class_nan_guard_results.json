@@ -1,0 +1,39 @@
+{
+  "successful_points": [
+    {
+      "w": -1.03,
+      "delta": 0.02,
+      "rd_before": 149.60172547220958,
+      "rd_after": 149.60172547810274,
+      "difference": 5.89315618526598e-09
+    },
+    {
+      "w": -0.93,
+      "delta": -0.01,
+      "rd_before": 141.1245022408277,
+      "rd_after": 141.1245022408277,
+      "difference": 0.0
+    },
+    {
+      "w": -1.15,
+      "delta": 0.04,
+      "rd_before": 154.56088199259085,
+      "rd_after": 154.5608822305712,
+      "difference": 2.379803447638551e-07
+    },
+    {
+      "w": -1.0,
+      "delta": 0.0,
+      "rd_before": 144.09808966912607,
+      "rd_after": 144.09808966912607,
+      "difference": 0.0
+    }
+  ],
+  "former_crash_outcomes": [
+    57.69170758032131,
+    57.69170758032131,
+    57.69170758032131
+  ],
+  "repeats": 3,
+  "good_point_after_failure": true
+}

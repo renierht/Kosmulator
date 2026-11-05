@@ -1,0 +1,246 @@
+{
+  "SignSwitch_IDE_2": {
+    "DESI_DR2+PantheonP_SH0ES": {
+      "D_bar": 1467.9304056829233,
+      "D_at_mean": 1464.1054413867882,
+      "p_D": 3.824964296135022,
+      "DIC": 1471.7553699790583,
+      "Posterior_mean": [
+        0.4195499771455627,
+        -1.0706484873987159,
+        -0.6287935107241411,
+        72.94800740868587,
+        -19.257225031557315
+      ],
+      "Retained_samples": 1512000,
+      "Finite_samples": 1512000,
+      "Excluded_samples": 0,
+      "N": 1670,
+      "k": 5,
+      "Data_counts": {
+        "DESI_DR2": 13,
+        "PantheonPS": 1657
+      },
+      "Log-Likelihood": -731.4553957399843,
+      "Chi_squared": 1462.9107914799686,
+      "Reduced_Chi_squared": 0.8786250999879691,
+      "Raw_chain_chi2": 1462.9193956206448,
+      "Stored_point_check_delta_chi2": 0.0,
+      "AIC": 1472.9107914799686,
+      "AICc": 1472.9468491722762,
+      "BIC": 1500.0136860070227,
+      "MLE_parameters": {
+        "Omega_m": 0.45688875793172223,
+        "w": -1.0929531550327503,
+        "delta": -0.8814377142700908,
+        "H_0": 72.96415404627346,
+        "M_abs": -19.251697677368846
+      },
+      "Parameter_names": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "MLE_note": "polished likelihood (interior search)",
+      "Fixed_parameters": {
+        "w_dm": 0.0
+      },
+      "EOS_policy": {
+        "free_w": true,
+        "free_w_dm": false
+      },
+      "Optimizer_runs": [
+        {
+          "stage": "interior start 1",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 435,
+          "chi2": 1462.9107914799686,
+          "parameters": {
+            "Omega_m": 0.45688875793172223,
+            "w": -1.0929531550327503,
+            "delta": -0.8814377142700908,
+            "H_0": 72.96415404627346,
+            "M_abs": -19.251697677368846
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 3.412639648647797e-08,
+            "w": 1.4325181574292856e-07,
+            "delta": 2.3978431706872527e-07,
+            "H_0": 9.824273661251937e-07,
+            "M_abs": 3.28839071528364e-08
+          },
+          "simplex_objective_spread": 3.6519219293040805e-06,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "interior start 2",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 711,
+          "chi2": 1462.910791893695,
+          "parameters": {
+            "Omega_m": 0.456863713885856,
+            "w": -1.092960688032434,
+            "delta": -0.8812232610441111,
+            "H_0": 72.96450368349811,
+            "M_abs": -19.251696690573297
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 1.1885292133806402e-07,
+            "w": 6.431892152214402e-08,
+            "delta": 9.131550926522181e-07,
+            "H_0": 4.179443067187094e-07,
+            "M_abs": 2.7200378838188044e-08
+          },
+          "simplex_objective_spread": 3.5175983157387236e-06,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        },
+        {
+          "stage": "interior start 3",
+          "success": true,
+          "optimizer_success": true,
+          "message": "Optimization terminated successfully.",
+          "nfev": 679,
+          "chi2": 1462.910791981198,
+          "parameters": {
+            "Omega_m": 0.456897688342203,
+            "w": -1.092993124135626,
+            "delta": -0.8814700841456021,
+            "H_0": 72.964745160629,
+            "M_abs": -19.251685547662174
+          },
+          "simplex_parameter_spreads": {
+            "Omega_m": 4.387135549288601e-08,
+            "w": 4.567469247263034e-08,
+            "delta": 3.2797629656577953e-07,
+            "H_0": 8.957531463238411e-07,
+            "M_abs": 2.325245063161674e-08
+          },
+          "simplex_objective_spread": 2.9219772841315717e-06,
+          "xatol": 1e-06,
+          "fatol": 2e-05,
+          "first_rejected_evaluation_exception": null
+        }
+      ],
+      "Likelihood_source": "saved likelihood blobs: /mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/MCMC_Chains/Model10_unrestricted_v1_iw/SignSwitch_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "Burn": 1000,
+      "Thin": 1,
+      "Physicality_switches": {
+        "ALLOW_NEGATIVE_ENERGIES": true,
+        "ALLOW_BIG_RIP": true,
+        "ALLOW_DOOM_FACTOR_INSTABILITIES": true
+      },
+      "Postprocessing_options": {
+        "polish": true,
+        "starts": 3,
+        "maxfev": 1500,
+        "xatol": 1e-06,
+        "fatol": 2e-05,
+        "boundary_eps": [
+          0.0001,
+          1e-06,
+          1e-08
+        ],
+        "stored_chi2_tolerance": 0.001,
+        "delta_boundary_eps": [
+          1e-06,
+          1e-08,
+          1e-10
+        ],
+        "delta_boundary_chi2_tolerance": 0.0005
+      },
+      "Posterior_preferences": {
+        "label": "Posterior reference checks; not detection significance or evidence",
+        "converged": true,
+        "parameters": {
+          "delta": {
+            "reference": 0.0,
+            "median": -0.65303023302461,
+            "interval68": [
+              -0.8779526420688312,
+              -0.3814863946823843
+            ],
+            "interval95": [
+              -0.9792516711968497,
+              -0.13172114947193156
+            ],
+            "interval99_7": [
+              -0.9986485655577354,
+              0.10459976086157063
+            ],
+            "probability_below": 0.9940548941798942,
+            "probability_above": 0.00594510582010582,
+            "probability_equal": 0.0,
+            "sigma": 2.5153860216048454,
+            "status": "provisional: no independent-ensemble confirmation",
+            "batch_mcse": {
+              "100": {
+                "blocks": 126,
+                "se": 0.000252609245577003
+              },
+              "200": {
+                "blocks": 63,
+                "se": 0.0002968384065232598
+              },
+              "500": {
+                "blocks": 25,
+                "se": 0.0003758392091188946
+              }
+            },
+            "favored_direction": "below"
+          },
+          "w": {
+            "reference": -1.0,
+            "median": -1.0692805705459973,
+            "interval68": [
+              -1.1044898466918425,
+              -1.0370172260093973
+            ],
+            "interval95": [
+              -1.1396382176754347,
+              -1.0091032633158539
+            ],
+            "interval99_7": [
+              -1.176452341771668,
+              -0.9825389960164161
+            ],
+            "probability_below": 0.9891329365079365,
+            "probability_above": 0.010867063492063492,
+            "probability_equal": 0.0,
+            "sigma": 2.2949825040813647,
+            "status": "provisional: no independent-ensemble confirmation",
+            "batch_mcse": {
+              "100": {
+                "blocks": 126,
+                "se": 0.000248162877068777
+              },
+              "200": {
+                "blocks": 63,
+                "se": 0.00027800467106843383
+              },
+              "500": {
+                "blocks": 25,
+                "se": 0.0002761069975101589
+              }
+            },
+            "favored_direction": "below"
+          },
+          "w_dm": {
+            "status": "fixed",
+            "value": 0.0,
+            "reference": 0.0
+          }
+        }
+      }
+    }
+  }
+}

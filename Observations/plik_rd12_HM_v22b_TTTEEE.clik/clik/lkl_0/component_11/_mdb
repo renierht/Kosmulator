@@ -1,0 +1,7 @@
+ndim int 10
+component_type str cnoise
+nrename int 36
+ndef int 36
+lmax int 2508
+lmin int 30
+component_name str subpixel
