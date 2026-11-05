@@ -39,9 +39,13 @@ from typing import Union, Dict, Callable, List, Tuple
 import logging
 import numpy as np
 from scipy.optimize import fsolve
-import classy
+try:
+    import classy
+except ImportError:
+    classy = None
 
 from Kosmulator_main.constants import C_KM_S
+from Kosmulator_main import constants as _K
 import logging
 logger = logging.getLogger(__name__)
 
@@ -82,22 +86,89 @@ __all__ = [
 # ============================================================================
 
 
+def radiation_density(p: Dict[str, float]) -> float:
+    """
+    Present-day radiation density Omega_r for the late-time E(z).
+
+    Omega_r h^2 = omega_gamma (1 + 0.22711 N_ur), omega_gamma = 2.4728e-5 (T_CMB/2.7255 K)^4.
+    Uses p["Omega_r"] when given; 0 when constants.LATE_TIME_RADIATION is False.
+    N_ur defaults to constants.N_UR_LATE; h comes from p["H_0"], or
+    constants.H0_RADIATION_FALLBACK when the group does not sample H_0.
+    """
+    if "Omega_r" in p:
+        return float(p["Omega_r"])
+    if not bool(getattr(_K, "LATE_TIME_RADIATION", False)):
+        return 0.0
+    h = float(p.get("H_0", getattr(_K, "H0_RADIATION_FALLBACK", 67.4))) / 100.0
+    t_cmb = float(p.get("T_CMB", _K.T_CMB_DEFAULT))
+    n_ur = float(p.get("N_ur", getattr(_K, "N_UR_LATE", _K.N_EFF_DEFAULT)))
+    omega_gamma = 2.4728e-5 * (t_cmb / 2.7255) ** 4
+    return omega_gamma * (1.0 + 0.22711 * n_ur) / (h * h)
+
+
 def LCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
     """
-    Flat ΛCDM:  E^2(z) = Ω_m (1+z)^3 + (1 - Ω_m)
+    Flat ΛCDM:  E^2(z) = Ω_m (1+z)^3 + Ω_r (1+z)^4 + (1 - Ω_m - Ω_r)
 
     Parameters in `p`:
       • Omega_m
+    Ω_r from radiation_density(p) (0 if constants.LATE_TIME_RADIATION is False).
     """
     z = _asarray(z)
     Om = float(p["Omega_m"])
-    E2 = Om * (1 + z) ** 3 + (1 - Om)
+    Or = radiation_density(p)
+    E2 = Om * (1 + z) ** 3 + Or * (1 + z) ** 4 + (1 - Om - Or)
 
     if (not np.isfinite(E2).all()) or (E2.min() <= 0):
         out = np.full_like(z, np.nan)
     else:
         out = np.sqrt(E2)
     return _scalar_or_array(out)
+
+"""
+The module below will replicate DESI data finding (DIC values specifically)
+"""
+
+def wowaCDM_MODEL_vectorised(z: Number, p: Dict[str, float]) -> Number:
+    r"""
+    Flat w0wa (CPL parametrization):
+
+    E^2(z) = \Omega_m (1+z)^3 + \Omega_r (1+z)^4
+             + (1 - \Omega_m - \Omega_r) (1+z)^{3(1+w0+wa)} \exp(-3 wa z / (1+z))
+
+    Parameters in `p`:
+      • Omega_m
+      • w0
+      • wa
+    Ω_r from radiation_density(p) (0 if constants.LATE_TIME_RADIATION is False).
+    """
+    z = _asarray(z)
+    Om = float(p["Omega_m"])
+    w0 = float(p["w0"])
+    wa = float(p["wa"])
+    Or = radiation_density(p)
+    
+
+    # --- Strict early matter domination cutoff from DESI DR2 paper ---
+    if (w0 + wa) >= 0.0:
+        return np.full_like(z, np.nan)
+    # ------------------------------------------------------------------
+
+    zp1 = 1.0 + z
+    a = 1.0 / zp1
+
+    #Dark energy density evolution ratio
+    rho_de_ratio = (zp1 ** (3.0 * (1.0 + w0 + wa))) * np.exp(-3.0 * wa * (1.0 - a))
+    E2 = Om * (zp1 ** 3) + Or * (zp1 ** 4) + (1.0 - Om - Or) * rho_de_ratio
+    #See DESI DR2 results for the equations
+
+    if(not np.isfinite(E2).all()) or (E2.min() <= 0):
+        out = np.full_like(z, np.nan)
+
+    else: 
+        out = np.sqrt(E2)
+    return _scalar_or_array(out)
+
 
 
 def LCDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
@@ -111,33 +182,41 @@ def LCDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
 def f1CDM_MODEL_vectorised(
     z: Number,
     p: Dict[str, float],
-    tol: float = 1e-8,
+    tol: float = 1e-8,          # relative: |Delta E| <= tol * E
     maxiter: int = 60,
 ) -> Number:
     r"""
-    f1CDM: E^2 = Ω_m (1+z)^3 + (1 - Ω_m) E^{2n}
+    f1CDM: E^2 = Ω_m (1+z)^3 + Ω_r (1+z)^4 + (1 - Ω_m - Ω_r) E^{2n}
 
     Parameters in `p`:
       • Omega_m
       • n          (f(T)-like exponent; constrained by `restrict_f1CDM_v`)
+    Ω_r from radiation_density(p) (0 if constants.LATE_TIME_RADIATION is False);
+    n = 0 gives LCDM_MODEL_vectorised exactly.
     """
     z = _asarray(z)
     Om = float(p["Omega_m"])
     n = float(p["n"])
+    Or = radiation_density(p)
+    Ode = 1.0 - Om - Or
 
     # Seed with ΛCDM
-    E = np.sqrt(Om * (1 + z) ** 3 + (1 - Om))
+    E = np.sqrt(Om * (1 + z) ** 3 + Or * (1 + z) ** 4 + Ode)
 
     converged = np.zeros_like(E, dtype=bool)
     for _ in range(maxiter):
-        f = E**2 - (Om * (1 + z) ** 3 + (1 - Om) * E ** (2.0 * n))
-        df = 2.0 * E - (1.0 - Om) * (2.0 * n) * np.where(
+        f = E**2 - (Om * (1 + z) ** 3 + Or * (1 + z) ** 4 + Ode * E ** (2.0 * n))
+        df = 2.0 * E - Ode * (2.0 * n) * np.where(
             E > 0, E ** (2.0 * n - 1.0), np.inf
         )
         step = f / np.where(df == 0.0, np.inf, df)
         E -= step
-        converged |= np.abs(step) < tol
-        if np.all(np.abs(step) < tol):
+        # Relative tolerance: E reaches ~1e12 at z = 1e7 (rd_Class's table of the model's E(z)), where
+        # float64 cannot resolve an absolute 1e-8, so an absolute test flagged ~13% of that table as
+        # failed although it had converged to machine precision (T5, 20 Oct 2026)
+        small = np.abs(step) <= tol * np.abs(E)
+        converged |= small
+        if np.all(small):
             break
 
     # Fallback for any bad points
@@ -151,9 +230,9 @@ def f1CDM_MODEL_vectorised(
         )
 
         def eq(Eval, zi):
-            return Eval**2 - (Om * (1 + zi) ** 3 + (1 - Om) * Eval ** (2.0 * n))
+            return Eval**2 - (Om * (1 + zi) ** 3 + Or * (1 + zi) ** 4 + Ode * Eval ** (2.0 * n))
 
-        seeds = np.maximum(1.0, np.sqrt(Om * (1 + z[bad]) ** 3 + (1 - Om)))
+        seeds = np.maximum(1.0, np.sqrt(Om * (1 + z[bad]) ** 3 + Or * (1 + z[bad]) ** 4 + Ode))
         try:
             E[bad] = np.array(
                 [fsolve(eq, x0=float(x0), args=(zi,))[0] for x0, zi in zip(seeds, z[bad])]
@@ -175,14 +254,157 @@ def f1CDM_MODEL_non_vectorised(z: Number, p: Dict[str, float]) -> Number:
 
 
 # ============================================================================
+#  Effective gravitational constant for the growth of structure
+#  ---------------------------------------------------------------------------
+#  With growth_model = "geff" in Kosmulator.py, f and f_sigma_8 come from the
+#  linear growth equation with G_eff/G of the model, read from a function
+#  named <model name>_Geff(z, p) here (vectorised in z, returns G_eff/G).
+#  A model without one is grown with G_eff = G (GR), and Kosmulator warns
+#  unless the model is in constants.GR_GRAVITY_MODELS. Scale-independent
+#  G_eff only (sub-horizon, quasi-static).
+# ============================================================================
+
+
+def f1CDM_v_Geff(z: Number, p: Dict[str, float]) -> Number:
+    r"""
+    f1CDM (power-law f(T) = alpha (-T)^n, action T + f(T), T = -6H^2):
+        G_eff / G = 1 / (1 + f_T),   f_T = n Omega_F E^{2n-2} / (1 - 2n),
+    with Omega_F = 1 - Omega_m - Omega_r and E from f1CDM_MODEL_vectorised. G_eff/G = 1/(1 + f_T)
+    is Eq. 32 of Nesseris, Basilakos, Saridakis & Perivolaropoulos 2013 (PRD 88, 103010,
+    arXiv:1308.6142), same action and sign of T; f_T follows from alpha = (6 H0^2)^(1-n)
+    Omega_F / (2n - 1) (Linder 2010, arXiv:1005.3039, Eq. 14). n = 0 gives 1 (GR); at z = 0 and
+    Omega_m = 0.31, n = -0.2 gives 1.11, n = 0.3 gives 0.66; G_eff -> G at early times (n < 1).
+    Note: the f1CDM CLASS build uses GR perturbations, so CMB spectra do not include this.
+    """
+    z = _asarray(z)
+    n = float(p["n"])
+    Om = float(p["Omega_m"])
+    Or = radiation_density(p)
+    E = np.asarray(f1CDM_MODEL_vectorised(z, p), dtype=float)
+    fT = n * (1.0 - Om - Or) * E ** (2.0 * n - 2.0) / (1.0 - 2.0 * n)
+    out = 1.0 / (1.0 + fT)
+    return _scalar_or_array(out)
+
+
+f1CDM_nv_Geff = f1CDM_v_Geff
+
+
+# ============================================================================
+#  Exact d ln E / d ln a for the growth equation
+#  ---------------------------------------------------------------------------
+#  growth_ode (growth_model = "geff") needs d ln E / d ln a on its grid. A model
+#  can give it exactly in a function named <model name>_dlnE(z, p) here
+#  (vectorised in z, same p as the model's E(z)); without one, growth_ode
+#  differentiates ln E numerically (second order, error ~5e-5 in d ln E/d ln a,
+#  ~4e-6 in f for LCDM with the default 300 steps).
+# ============================================================================
+
+
+def LCDM_v_dlnE(z: Number, p: Dict[str, float]) -> Number:
+    r"""
+    d ln E / d ln a of LCDM_MODEL_vectorised:
+        -[3 Omega_m (1+z)^3 + 4 Omega_r (1+z)^4] / (2 E^2),
+    with Omega_r from radiation_density(p), as in the model.
+    """
+    z = _asarray(z)
+    Om = float(p["Omega_m"])
+    Or = radiation_density(p)
+    m, r = Om * (1 + z) ** 3, Or * (1 + z) ** 4
+    out = -(3.0 * m + 4.0 * r) / (2.0 * (m + r + (1.0 - Om - Or)))
+    return _scalar_or_array(out)
+
+
+LCDM_nv_dlnE = LCDM_v_dlnE
+
+
+def wowaCDM_v_dlnE(z: Number, p: Dict[str, float]) -> Number:
+    r"""
+    d ln E / d ln a of wowaCDM_MODEL_vectorised:
+        -[3 Omega_m (1+z)^3 + 4 Omega_r (1+z)^4 + 3 (1 + w(a)) Omega_DE(z)] / (2 E^2),
+    w(a) = w0 + wa (1 - a), Omega_DE(z) = (1 - Omega_m - Omega_r) (1+z)^{3(1+w0+wa)} exp(-3 wa (1 - a)),
+    since d ln rho_DE / d ln a = -3 (1 + w(a)).
+    """
+    z = _asarray(z)
+    Om = float(p["Omega_m"])
+    w0 = float(p["w0"])
+    wa = float(p["wa"])
+    Or = radiation_density(p)
+    zp1 = 1.0 + z
+    a = 1.0 / zp1
+    m, r = Om * zp1 ** 3, Or * zp1 ** 4
+    de = (1.0 - Om - Or) * zp1 ** (3.0 * (1.0 + w0 + wa)) * np.exp(-3.0 * wa * (1.0 - a))
+    out = -(3.0 * m + 4.0 * r + 3.0 * (1.0 + w0 + wa * (1.0 - a)) * de) / (2.0 * (m + r + de))
+    return _scalar_or_array(out)
+
+
+def _companion_function(suffix: str, model_name: str = None, MODEL_func: Callable = None):
+    """
+    <model name>_<suffix> in this module, or None. Found by name when the name is given; otherwise
+    by the model's E(z) function, but only if exactly one registered model uses that function.
+    """
+    if model_name:
+        fn = globals().get(f"{model_name}_{suffix}")
+        return fn if callable(fn) else None
+    if MODEL_func is not None:
+        names = [k for k, v in _MODEL_REGISTRY.items() if v[0] is MODEL_func]
+        if len(names) == 1:
+            fn = globals().get(f"{names[0]}_{suffix}")
+            return fn if callable(fn) else None
+    return None
+
+
+def get_geff_function(model_name: str = None, MODEL_func: Callable = None):
+    """
+    The model's G_eff/G function (<model name>_Geff in this module), or None. Found by name when
+    the name is given; otherwise by the model's E(z) function, but only if exactly one registered
+    model uses that function (two models may share an E(z) and differ in G_eff).
+    """
+    return _companion_function("Geff", model_name, MODEL_func)
+
+
+def get_dlnE_function(model_name: str = None, MODEL_func: Callable = None):
+    """
+    The model's exact d ln E / d ln a (<model name>_dlnE in this module), or None (growth_ode then
+    differentiates ln E numerically). Found as in get_geff_function.
+    """
+    return _companion_function("dlnE", model_name, MODEL_func)
+
+
+# ============================================================================
 #  CMB wrappers (CLASS C_ℓ)
 #  ---------------------------------------------------------------------------
 #  These are used by the CMB likelihood. They take *full* cosmological
 #  parameter dicts (not just Omega_m, n, etc.) and return raw C_ℓ arrays.
 # ============================================================================
 
-# Internal cache for CLASS; defined here so the CMB wrappers can share it.
-_class_cache = None
+def _free_class(cosmo) -> None:
+    """Release a CLASS instance's memory once its spectra have been copied out."""
+    for fn in ("struct_cleanup", "empty"):
+        try:
+            getattr(cosmo, fn)()
+        except Exception:
+            pass
+
+def _class_standard(model_name: str, lensed: bool) -> dict:
+    """
+    CLASS input every CMB helper adds (constants, item 27): the neutrinos (one 0.06 eV
+    neutrino, N_eff = 3.044 by default) and, for lensed spectra, the non-linear correction
+    (constants.CMB_NONLINEAR: HMcode 2020 by default, the same for every model; Kosmulator.py
+    cmb_nonlinear).
+    Add **_class_standard("<your model>", lensed) to your own helper's CLASS input.
+    """
+    out = dict(_K.class_neutrino_params())
+    if lensed:
+        out.update(_K.class_nonlinear_params(model_name))
+    return out
+
+
+# The CMB helpers below create a new CLASS instance per call, from the build that
+# Class_run loaded for the model being run (sys.modules["classy"], hence the local
+# "import classy"). A single instance used to be shared by all helpers: after the
+# LCDM_v reference model ran, every f1CDM_v point failed with "Class did not read
+# input parameter(s): n_fT". A new instance costs nothing measurable (1.90 s per
+# lensed high-l call against 1.94 s reused).
 
 
 # User_defined_modules.py
@@ -212,11 +434,9 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
     if Om <= 0 or Ob <= 0 or Ob >= Om:
         return None
 
-    global _class_cache
-    if _class_cache is None:
-        _class_cache = classy.Class()  # <--- Now looks up the CURRENT binary
-    cosmo = _class_cache
-    
+    import classy
+    cosmo = classy.Class()
+
     # IMPORTANT:
     #   For low-ℓ SimAll EE we do NOT need lensing Cls at all.
     #   Requesting lCl in low-ℓ mode is unnecessary and can increase fragility.
@@ -229,7 +449,7 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
     else:
         output_str = "tCl,pCl,lCl"
         class_params = {
-            "l_max_scalars": 2509,  # enough for Planck high-ℓ
+            "l_max_scalars": _K.CMB_CLASS_LMAX,  # one run for Planck high-l, low-l and lensing
             "lensing": "yes",
         }
 
@@ -255,20 +475,9 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
         "output_verbose": 0,
     }
 
-    cosmo_params = {**base_params, **class_params, **VERBOSE_OFF_SAFE}
+    cosmo_params = {**base_params, **class_params, **_class_standard("LCDM_v", not is_lowl), **VERBOSE_OFF_SAFE}
 
     try:
-        # Hard-reset CLASS internal state between calls.
-        # This is CRITICAL when mixing low-ℓ and high-ℓ likelihoods in one run.
-        try:
-            cosmo.struct_cleanup()
-        except Exception:
-            pass
-        try:
-            cosmo.empty()
-        except Exception:
-            pass
-
         cosmo.set(cosmo_params)
         cosmo.compute()
 
@@ -277,36 +486,34 @@ def LCDM_v_CMB(p: dict, mode: str = "hil"):
         return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
 
     except classy.CosmoComputationError as e:
-        logger.error("CLASS CosmoComputationError: %s | cosmo_params=%s", e, cosmo_params)
+        # CLASS cannot compute this point: Kosmulator rejects it and counts it in the run's
+        # summary, so it is logged only at DEBUG level
+        logger.debug("CLASS CosmoComputationError: %s | cosmo_params=%s", e, cosmo_params)
         return None
     except Exception as e:
         logger.exception("Unexpected error in LCDM_v_CMB: %s | cosmo_params=%s", e, cosmo_params)
         return None
+    finally:
+        _free_class(cosmo)
 
 
 def f1CDM_v_CMB(p: dict, mode: str = "hil"):
     """
-    Simplified CMB helper for f1CDM_v. 
-    Fixes the 'unread parameter' error by mapping n -> n_fT directly.
+    CMB helper for f1CDM_v (Robert Rugg): the f1CDM CLASS build, with n -> n_fT.
     """
     import classy
     p = _ensure_background_params(p)
-    
+
     # Mode setup
     m = (mode or "").lower()
     is_lowl = m.startswith("low")
-    
-    global _class_cache
-    if _class_cache is None:
-        _class_cache = classy.Class()
-    cosmo = _class_cache
 
     # 1. BUILD THE PARAMS MANUALLY
     fT_value = p.get("n", p.get("n_fT", 0.0))
 
     class_params = {
         "output": "tCl,pCl,lCl" if not is_lowl else "tCl,pCl",
-        "l_max_scalars": 2509 if not is_lowl else 31,
+        "l_max_scalars": _K.CMB_CLASS_LMAX if not is_lowl else 31,
         "lensing": "yes" if not is_lowl else "no",
         "n_s": float(p["n_s"]),
         "h": float(p["H_0"]) / 100.0,
@@ -315,6 +522,7 @@ def f1CDM_v_CMB(p: dict, mode: str = "hil"):
         "tau_reio": float(p["tau_reio"]),
         "A_s": float(np.exp(p["ln10^10_As"]) * 1e-10),
         "n_fT": float(fT_value), 
+        **_class_standard("f1CDM_v", not is_lowl),
     }
 
     # 2. ADD VERBOSITY SILENCERS
@@ -324,19 +532,107 @@ def f1CDM_v_CMB(p: dict, mode: str = "hil"):
         "lensing_verbose": 0, "output_verbose": 0,
     })
 
+    cosmo = classy.Class()
     try:
-        cosmo.struct_cleanup()
-        cosmo.empty()
-        
         # 3. SET AND COMPUTE
         cosmo.set(class_params)
         cosmo.compute()
-        
+
         return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
     except Exception as e:
-        # If it still fails, we want to know why in the terminal
-        # print(f"DEBUG: CLASS failed with params {class_params}. Error: {e}")
+        logger.debug("f1CDM_v_CMB: CLASS failed (%s) for %s", e, class_params)
         return None
+    finally:
+        _free_class(cosmo)
+
+
+def wowaCDM_v_CMB(p: dict, mode: str = "hil"):
+    """
+    CMB helper for wowaCDM_v (CPL w0-wa dark energy).
+
+    Uses CLASS's native fluid dark energy (Omega_fld, w0_fld, wa_fld),
+    which is a stock, unmodified feature of the CLASS build shared with LCDM_v.
+    """
+    p = _ensure_background_params(p)
+    m = (mode or "").lower()
+    is_lowl  = m.startswith("low")
+
+    Om = float(p.get("Omega_m", 0.0))
+    Ob = float(p.get("Omega_b", 0.0))
+
+    if Om <= 0 or Ob <= 0 or Ob >= Om:
+        return None
+
+    #Safe extraction of w0 and wa with LCDM fallbakcs if called across models
+    w0 = float(p.get("w0", p.get("w_0", p.get("w0_fld", -1.0))))
+    wa = float(p.get("wa", p.get("w_a", p.get("wa_fld", 0.0))))
+
+    #w(a -> 0) = wa + w0 < 1/3 for early radiation domination
+
+    if(w0 + wa) >= 0.0:
+        return None
+
+    import classy
+    cosmo = classy.Class()
+
+    if is_lowl:
+        output_str = "tCl, pCl"
+        class_params = {
+            "l_max_scalars": 31,
+            "lensing": "no",
+        }
+    else:
+        output_str = "tCl,pCl,lCl"
+        class_params = {
+            "l_max_scalars": _K.CMB_CLASS_LMAX,
+            "lensing": "yes"
+        }
+
+    base_params = {
+        "output": output_str,
+        "n_s": float(p["n_s"]),
+        "h": float(p["H_0"])/100.0,
+        "omega_b": float(p["Omega_bh^2"]),
+        "omega_cdm": float(p['Omega_dh^2']),
+        "tau_reio": float(p['tau_reio']),
+        'A_s': float(np.exp(p['ln10^10_As'])*1e-10),
+        
+        #Dark Energy: turn off Lambda, turn on CPL fluid
+        "Omega_Lambda": 0.0,
+        'use_ppf': "yes",
+        "w0_fld": w0,
+        "wa_fld": wa,
+        "cs2_fld": 1.0,
+    }
+
+    VERBOSE_OFF_SAFE = {
+        "input_verbose": 0,
+        "background_verbose": 0,
+        "thermodynamics_verbose": 0,
+        "perturbations_verbose": 0,
+        "transfer_verbose": 0,
+        "primordial_verbose": 0,
+        "lensing_verbose": 0,
+        "output_verbose": 0,
+    }
+
+    cosmo_params = {**base_params, **class_params, **_class_standard("wowaCDM_v", not is_lowl), **VERBOSE_OFF_SAFE}
+
+    try:
+        cosmo.set(cosmo_params)
+        cosmo.compute()
+
+        return cosmo.raw_cl() if is_lowl else cosmo.lensed_cl()
+    except classy.CosmoComputationError as e:
+        # CLASS cannot compute this point: Kosmulator rejects it and counts it in the run's
+        # summary, so it is logged only at DEBUG level
+        logger.debug("CLASS CosmoComputationError: %s | cosmo_params=%s", e, cosmo_params)
+        return None
+    except Exception as e:
+        logger.exception("Unexpected error in wowaCDM_v_CMB: %s | cosmo_params=%s", e, cosmo_params)
+        return None
+    finally:
+        _free_class(cosmo)
 
 # ============================================================================
 #  Model registry / discovery
@@ -360,6 +656,7 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
     "LCDM_nv":  (LCDM_MODEL_non_vectorised,  ["Omega_m"]),
     "f1CDM_v":  (f1CDM_MODEL_vectorised,     ["Omega_m", "n"]),
     "f1CDM_nv": (f1CDM_MODEL_non_vectorised, ["Omega_m", "n"]),
+    "wowaCDM_v": (wowaCDM_MODEL_vectorised, ["Omega_m","w0","wa"]),
 
     # CMB-specific models for CLASS Cls (used by CMB likelihoods)
     "LCDM_v_CMB": (
@@ -369,6 +666,10 @@ _MODEL_REGISTRY: Dict[str, Tuple[Callable, List[str]]] = {
     "f1CDM_v_CMB": (
         f1CDM_v_CMB,
         ["Omega_m", "Omega_b", "H_0", "n_s", "tau_reio", "ln10^10_As", "n"],
+    ),
+    "wowaCDM_v_CMB":(
+        wowaCDM_v_CMB,
+        ["Omega_m", "Omega_b","H_0", "n_s", "tau_reio", "ln10^10_As", "w0", "wa"],
     ),
     # Example for a new MG model:
     # "MyMG_v": (MyMG_MODEL_vectorised, ["Omega_m", "my_param"]),
@@ -435,11 +736,26 @@ def restrict_LCDM_Omega_m(x: float) -> bool:
 
 def restrict_f1CDM_v(x: float) -> bool:
     """
-    Guard-rail prior for f1CDM exponent n.
-
-    Empirically, n < 0.5 keeps E(z) well-behaved and the root-finding stable.
+    f1CDM exponent n < 0.5: alpha = (6 H0^2)^(1-n) Omega_F / (2n - 1) (Linder 2010,
+    arXiv:1005.3039, Eq. 14) diverges at n = 1/2. Negative n is allowed: the
+    background has a unique root and, for z >= 0, 1 + f_T > 0 and the Hdot denominator
+    1 - n Omega_F E^(2n-2) > 1; the f(T) term then behaves like phantom dark energy.
     """
     return x < 0.5
+
+def restrict_wowa_sum(p: Dict[str, float]) -> bool:
+    w0 = float(p.get("w0", -1.0))
+    wa = float(p.get("wa", 0.0))
+
+    if w0 + wa >= 0.0:
+        return False
+
+    return True
+
+
+coupled_restrictions_map: Dict[str, List[Callable[[Dict[str, float]], bool]]] = {
+    "wowaCDM_v": [restrict_wowa_sum],
+}
 
 
 # Global map that Get_model_restrictions reads from.
@@ -448,6 +764,7 @@ restrictions_map: Dict[str, Dict[str, Callable[[float], bool]]] = {
     "LCDM_v":  {"Omega_m": restrict_LCDM_Omega_m},
     "LCDM_nv": {"Omega_m": restrict_LCDM_Omega_m},
     "f1CDM_v": {"n": restrict_f1CDM_v},
+    "wowaCDM_v": {"Omega_m": restrict_LCDM_Omega_m},
     # Example for a new model:
     # "MyMG_v": {"my_param": restrict_MyMG_param},
 }
@@ -467,6 +784,18 @@ def Get_model_restrictions(
     if isinstance(model_name, list):
         return {m: restrictions_map.get(m, {}) for m in model_name}
     return restrictions_map.get(model_name, {})
+
+
+def Get_model_coupled_restrictions(
+    model_name: Union[str, List[str]]
+) -> Union[
+    List[Callable[[Dict[str, float]], bool]],
+    Dict[str, List[Callable[[Dict[str, float]], bool]]],
+]:
+    """Return restrictions that depend on multiple sampled parameters."""
+    if isinstance(model_name, list):
+        return {m: coupled_restrictions_map.get(m, []) for m in model_name}
+    return coupled_restrictions_map.get(model_name, [])
 
 
 # ============================================================================
@@ -513,3 +842,4 @@ def integral_term_array(
     (compute_sigma8z), so we expose a single shared wrapper here.
     """
     return _integral_term_arr(z, param_dict, MODEL_func, float(gamma))
+

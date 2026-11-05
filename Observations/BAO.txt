@@ -1,3 +1,8 @@
+# BAO: the 10 anisotropic DESI DR1 BAO measurements (D_M/r_d and D_H/r_d for LRG1, LRG2,
+# LRG3+ELG1, ELG2 and Lya QSO; DESI 2024 VI, arXiv:2404.03002, values and errors to two decimals),
+# without the isotropic D_V/r_d points of BGS and QSO. Inverse covariance: BAO_invcov.txt.
+# The full 12-point DESI DR1 set is DESI_DR1.txt. (Before October 2026 this file was
+# Isma_desi_VI.txt and was read as DESI_DR1.)
 # type (D_V/rs=3, Dv/Mpc=4, DA/rs=5, c/Hrs=6, rs/D_v=7, Dm/rs=8)
 #List of all (these ar not the use into the computation)
 #Exp    z_eff value      error          type

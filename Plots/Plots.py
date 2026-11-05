@@ -8,15 +8,23 @@ Stat tables:
 from __future__ import annotations
 
 import io
+import logging
 import os
 import sys
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from contextlib import contextmanager
 from getdist import plots as gd_plots, MCSamples
+import getdist.chains as _gd_chains
+# Kosmulator removes the burn-in itself, so GetDist's load messages
+# ("Removed no burn in") carry no information here.
+_gd_chains.print_load_details = False
 
 from Kosmulator_main import Statistical_packages as SP
 from Kosmulator_main.constants import CODE_STYLE, C_KM_S, R_D_SINGLETON, GAMMA_FS8_SINGLETON
+from Kosmulator_main import constants as K
 from Kosmulator_main import Post_processing as PP
 from Kosmulator_main.utils import generate_label as cfg_generate_label
 from Kosmulator_main.utils import (
@@ -24,14 +32,15 @@ from Kosmulator_main.utils import (
     save_interpretations_to_file,
 )
 from Kosmulator_main.rd_helpers import compute_rd as compute_rd
+from Kosmulator_main.rd_helpers import rd_for_report
 from Plots.Plot_functions import (
     # console banners / rules
     phase_banner, section_banner, print_rule,
 
     # table + label helpers
-    greek_Symbols, format_for_latex, add_corner_table, pretty_obs_name,
-    align_table_to_parameters, print_aligned_latex_table,
-    print_parameter_list_table, print_cmb_summary_matrix,
+    greek_Symbols, format_for_latex, add_corner_table, place_corner_legend, pretty_obs_name,
+    align_table_to_parameters, print_parameter_table,
+    print_parameter_list_table,
 
     # observation/model helpers
     partition_by_compatibility, residual_unit,
@@ -53,7 +62,7 @@ from Plots.Plot_functions import (
 
 __all__ = [
     "generate_plots",
-    "autocorrPlot",
+    "convergence_plot",
     "make_CornerPlot",
     "best_fit_plots",
 ]
@@ -62,12 +71,18 @@ __all__ = [
 # Module-level constants
 # =============================================================================
 
+def _rd_like(p):
+    """r_d as the likelihood sees it: sampled r_d, else CLASS (EH98 only if CLASS fails).
+    Raises KeyError when r_d cannot be resolved, so callers fall back to the fixed r_d."""
+    return rd_for_report(p)[0]
+
+
 MODEL_FUNCS = {
     "E":       compute_E,
     "Dc":      compute_Dc,
     "DM":      compute_DM,
     "DV":      compute_DV,
-    "rd":      compute_rd,
+    "rd":      _rd_like,
     "f":       compute_f,
     "sigma8z": compute_sigma8z,
 }
@@ -89,6 +104,7 @@ QUALITY_ORDER = {
     "Pantheon":  2,
     "Union3":    3,
     "JLA":       4,
+    "JLA_legacy": 5,
     # H(z)
     "CC": 0, "OHD": 1,
     # Growth rate
@@ -100,35 +116,51 @@ QUALITY_ORDER = {
 # =============================================================================
 
 def _latex_model_name(name: str, latex_enabled: bool, settings: dict) -> str:
-    """Return a LaTeX-safe model label (consistent everywhere)."""
-    if not latex_enabled:
-        return name
-    # user override wins
-    custom = (settings or {}).get("model_latex_names", {})
-    if name in custom:
-        s = custom[name]
-        return s if s.startswith("$") else f"${s}$"
-    # already LaTeX-like
-    if "$" in name:
-        return name
-    # simple rule: first '_' starts a subscript with the remainder
-    if "_" in name:
-        head, tail = name.split("_", 1)
-        return rf"${head}_{{{tail}}}$"
-    return f"${name}$"
-    
+    """
+    Display label for a model (consistent everywhere): LCDM_v -> $\\Lambda$CDM,
+    wowaCDM_v -> $w_0w_a$CDM, f1CDM_v -> $f_1$CDM, other names as escaped text.
+    PLOT_SETTINGS["model_latex_names"] overrides per model.
+    """
+    from Plots.latex_labels import model_label
+    return model_label(name, latex_enabled, (settings or {}).get("model_latex_names", {}))
+
+
 def _displayize_key(key: str) -> str:
     """
     Turn internal keys into human-friendly *plain-text* obs labels
     (used for console + saved stats tables).
 
+    Groups are joined with "+". Dataset tags keep their own underscores
+    (DESI_DR2, f_sigma_8, JLA_legacy); only an old-style key whose "_"-separated
+    pieces are all known tags (CC_PantheonPS) is split on "_".
+
     Policy:
       PantheonPS / PantheonP_SH0ES  -> Pantheon++SH0ES
       PantheonP                    -> Pantheon+
     """
-    # Normalise separators so keys like CC_PantheonPS also behave
-    s = str(key).replace("_", "+")
-    parts = s.split("+")
+    from Kosmulator_main.constants import OBS_PRETTY_MAP as _OPM
+    known = set(_OPM) | {"PantheonPS", "PantheonP_SH0ES", "BBN_prior"}
+
+    def _split_part(p: str) -> list:
+        if p in known or "_" not in p:
+            return [p]
+        pieces = p.split("_")
+        # greedy re-join of pieces into known tags (DESI_DR2 inside CC_DESI_DR2)
+        out, i = [], 0
+        while i < len(pieces):
+            for j in range(len(pieces), i, -1):
+                cand = "_".join(pieces[i:j])
+                if cand in known:
+                    out.append(cand)
+                    i = j
+                    break
+            else:
+                return [p]          # not made of known tags: keep as is
+        return out
+
+    parts = []
+    for p in str(key).split("+"):
+        parts.extend(_split_part(p) if p else [])
     mapped = []
     for p in parts:
         if p in ("PantheonPS", "PantheonP_SH0ES", "Pantheon+SH0ES"):
@@ -197,7 +229,10 @@ def _has_bbn(obs_list):
     return any(str(o).startswith("BBN") for o in obs_list)
         
 def _has_cmb(obs_list):
-    return any(str(o).startswith("CMB") for o in obs_list)
+    """Primary CMB or the compressed CMB prior in the group (they calibrate r_d; CMB lensing alone
+    does not, item 61)."""
+    from Kosmulator_main.constants import CMB_PRIMARY_TAGS, CMB_EARLY_TAG
+    return any(str(o) in CMB_PRIMARY_TAGS or str(o) == CMB_EARLY_TAG for o in obs_list)
 
 def _S_pm_from_sample(sample: np.ndarray, names: list, CONFIG: dict):
     import numpy as np
@@ -215,10 +250,10 @@ def _S_pm_from_sample(sample: np.ndarray, names: list, CONFIG: dict):
     return PP._format_pm(p50, p50 - p16, p84 - p50), float(p50)
     
 def _is_uncalibrated(obs_list):
-    """BAO/DESI without calibrators (no BBN/CMB) → uncalibrated r_d."""
+    """BAO/DESI without calibrators (no BBN or primary CMB) → uncalibrated r_d."""
     tags = [str(o) for o in obs_list]
     has_bao = any(("BAO" in t) or ("DESI" in t) for t in tags)
-    has_cal = any(t.startswith("BBN") or t.startswith("CMB") for t in tags)
+    has_cal = _has_bbn(tags) or _has_cmb(tags)
     return has_bao and (not has_cal)
     
 def _medval(d, k):
@@ -233,113 +268,92 @@ def _medval(d, k):
         except Exception:
             return None
             
-def _header_params_for_model(config_model: dict, PLOT_SETTINGS: dict) -> list[str]:
+def corner_parameters(config_model: dict, PLOT_SETTINGS: dict):
     """
-    Decide which parameters appear in the 'core summary' header for tables.
+    (the parameters the corner plot draws, in params_by_use order; {group index: parameters left out of
+    that group's distribution}). Left out unless PLOT_SETTINGS["corner_show_nuisance"] or
+    ["corner_show_all_cmb_params"]: the likelihoods' nuisance parameters (constants.CMB_NUISANCE_PARAM_NAMES,
+    SN_NUISANCE_PARAM_NAMES; CT-15, CT-37), except CORNER_SHOWN_NUISANCE (A_planck), and, per group, the
+    parameters that are only their prior there (unconstrained_params_by_group, CT-30).
+    """
+    show = bool(PLOT_SETTINGS.get("corner_show_nuisance", False)
+                or PLOT_SETTINGS.get("corner_show_all_cmb_params", False))
+    hidden = set() if show else ((set(K.CMB_NUISANCE_PARAM_NAMES) | set(K.SN_NUISANCE_PARAM_NAMES))
+                                 - set(K.CORNER_SHOWN_NUISANCE))
+    unc = {} if show else {int(k): set(v) for k, v in (config_model.get("unconstrained_params_by_group") or {}).items()}
+    drawn = set()
+    for i, pl in enumerate(config_model.get("parameters", [])):
+        drawn |= {p for p in pl if p not in hidden and p not in unc.get(i, set())}
+    return [p for p in params_by_use(config_model) if p in drawn], unc
 
-    Logic:
-      * Start from the union of all parameters in first–seen order.
-      * If CMB tracks are present and corner_show_all_cmb_params=False,
-        drop the 'extra' CMB parameters and keep only the core CMB set
-        (H_0, Omega_bh^2, Omega_dh^2).
+
+def params_by_use(config_model: dict) -> list[str]:
     """
-    # union of parameters in first–seen order
-    full_order, seen = [], set()
+    The model's parameters over all its groups, those used by more groups first, ties in first-seen
+    order (CT-15): the corner plot's order and the rows of the parameter table (CT-43).
+    """
+    order, count = [], {}
     for plist in config_model.get("parameters", []):
         for p in plist:
-            if p not in seen:
-                seen.add(p)
-                full_order.append(p)
+            if p not in count:
+                order.append(p)
+                count[p] = 0
+            count[p] += 1
+    return sorted(order, key=lambda p: (-count[p], order.index(p)))
 
-    header = list(full_order)
+def _pivot_notes(Samples, config_model: dict) -> list[str]:
+    """One line per group that samples w0 and wa: the pivot redshift z_p and w_p = w(z_p) (utils.w0wa_pivot)."""
+    from Kosmulator_main.utils import w0wa_pivot
+    out = []
+    for gi, names in enumerate(config_model.get("parameters", [])):
+        if "w0" not in names or "wa" not in names:
+            continue
+        key = cfg_generate_label(config_model["observations"][gi], config_model=config_model, obs_index=gi)
+        entry = (Samples or {}).get(key)
+        if entry is None:
+            continue
+        arr = np.asarray(entry["samples"] if isinstance(entry, dict) else entry, float)
+        if arr.ndim != 2 or arr.shape[1] != len(names) or arr.shape[0] < 10:
+            continue
+        z_p, w_p, s_p = w0wa_pivot(arr[:, names.index("w0")], arr[:, names.index("wa")])
+        out.append(f"Pivot of {_displayize_key(key)}: z_p = {z_p:.2f}, w_p = {w_p:.3f} +- {s_p:.3f} "
+                   "(a_p = 1 + C(w0, wa) / C(wa, wa); mean and standard deviation).")
+    return out
 
-    # Detect CMB tracks
-    has_cmb = any(
-        any(str(tag).startswith("CMB_") or str(tag) == "CMB" for tag in obs_set)
-        for obs_set in config_model.get("observations", [])
-    )
-    show_all_cmb = bool(PLOT_SETTINGS.get("corner_show_all_cmb_params", False))
 
-    # CMB "core" set kept in the main summary
-    _cmb_core = {"H_0", "Omega_bh^2", "Omega_dh^2"}
+def _param_table_kwargs(config_model: dict, model_name: str, aligned_table, param_labels, obs_names) -> dict:
+    """
+    Arguments of print_parameter_table for one model (CT-43): the corner plot's order, the likelihoods'
+    nuisance parameters, the title, and the note on r_d derived for groups whose likelihood does not
+    use it (CT-24: no BAO/DESI; a prediction from Omega_b h^2 and Omega_m h^2, not a measurement).
+    """
+    notes = []
+    if "r_d" in param_labels:
+        j = param_labels.index("r_d")
+        derived = []
+        for i, obs in enumerate(config_model.get("observations", [])):
+            if i >= len(aligned_table) or i >= len(obs_names):
+                continue
+            pars = config_model.get("parameters", [[]] * (i + 1))[i]
+            has_val = j < len(aligned_table[i]) and str(aligned_table[i][j]).strip()
+            if has_val and "r_d" not in pars and not any(o in ("BAO", "DESI_DR1", "DESI_DR2") for o in obs):
+                derived.append(str(obs_names[i]))
+        if derived:
+            notes.append("r_d of " + ", ".join(derived) + ": derived from the posterior (CLASS rs_drag at the "
+                         "draws), not used by these groups' likelihoods.")
+    notes += list(config_model.get("pivot_notes", []))
+    return dict(nuisance=set(K.CMB_NUISANCE_PARAM_NAMES) | set(K.SN_NUISANCE_PARAM_NAMES),
+                order=params_by_use(config_model),
+                title=f"Model: {model_name}, parameters (median and 68% interval):",
+                notes=notes)
 
-    if has_cmb and not show_all_cmb:
-        # union of all parameters that appear in CMB observation groups
-        cmb_param_union = set()
-        for obs_set, plist in zip(
-            config_model.get("observations", []),
-            config_model.get("parameters", []),
-        ):
-            if any(str(tag).startswith("CMB_") or str(tag) == "CMB" for tag in obs_set):
-                cmb_param_union.update(plist)
-
-        keep_from_cmb = _cmb_core & cmb_param_union
-        cmb_to_drop   = cmb_param_union - keep_from_cmb
-        header = [p for p in header if p not in cmb_to_drop]
-
-    return header
 
 def _is_cmb_obs_name(name: str) -> bool:
     """Heuristic: treat any obs whose name contains 'CMB' as a CMB dataset."""
     return "CMB" in str(name)
 
 
-def _main_table_parameters(config_model: dict, param_labels: list[str]) -> list[str]:
-    """
-    Decide which parameters should appear in the main aligned table.
-
-    Rules:
-      - Keep ALL parameters that are used with ANY non-CMB observation.
-      - Always keep the CMB core set:
-            H_0, Omega_bh^2, Omega_dh^2, Omega_m (derived)
-      - Drop parameters that are used *only* in purely-CMB groups
-        (i.e., groups whose obs list contains only CMB-tagged entries).
-    """
-    obs_groups   = config_model.get("observations", [])
-    param_groups = config_model.get("parameters", [])
-
-    core_cmb = {"H_0", "Omega_bh^2", "Omega_dh^2", "Omega_m (derived)"}
-
-    # Track where each parameter is used
-    usage = {p: {"cmb": False, "non_cmb": False} for p in param_labels}
-
-    for obs_set, plist in zip(obs_groups, param_groups):
-        has_cmb     = any(_is_cmb_obs_name(tag) for tag in obs_set)
-        has_non_cmb = any(not _is_cmb_obs_name(tag) for tag in obs_set)
-
-        for p in plist:
-            if p not in usage:
-                # parameter appears in CONFIG but not in the aligned table — ignore
-                continue
-            if has_cmb:
-                usage[p]["cmb"] = True
-            if has_non_cmb:
-                usage[p]["non_cmb"] = True
-
-    main_params: list[str] = []
-
-    for p in param_labels:
-        # 1) Always keep the CMB core, regardless
-        if p in core_cmb:
-            main_params.append(p)
-            continue
-
-        info = usage.get(p)
-        if info is None:
-            # Not seen in CONFIG at all (e.g. some derived/user param) → keep
-            main_params.append(p)
-            continue
-
-        # CMB-only nuisance: appears in CMB groups, never with non-CMB
-        cmb_only = info["cmb"] and not info["non_cmb"]
-
-        # Drop only true CMB-only nuisances; keep everything else
-        if not cmb_only:
-            main_params.append(p)
-
-    return main_params
-    
-def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
+def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, reference_model):
     """Run the full plotting pipeline in a clean, deterministic order.
 
     Order:
@@ -351,6 +365,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
     import os
     from collections import defaultdict
 
+    
     # unify roots
     normalize_save_roots(PLOT_SETTINGS)
 
@@ -369,6 +384,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
             Samples, CONFIG[model_name], model_name, model_name, PLOT_SETTINGS
         )
         obs_names = [_displayize_key(k) for k in obs_names]
+        CONFIG[model_name]["pivot_notes"] = _pivot_notes(Samples, CONFIG[model_name])
         all_best_fit[model_name] = best_struct         # medians etc. per obs_key
         all_tables[model_name]   = (aligned_table, param_labels, obs_names)
         print_rule()
@@ -376,7 +392,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
     # ----- 2) Best-fit plots -------------------------------------------------
     section_banner("Creating best-fit plots for all models/observations...")
-    best_fit_plots(all_best_fit, CONFIG, data, PLOT_SETTINGS)
+    best_fit_plots(all_best_fit, CONFIG, data, PLOT_SETTINGS, All_Samples=All_Samples)
     print()
 
     # ----- 3) Tables banner + aligned LaTeX tables ---------------------------
@@ -385,52 +401,16 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
     # Collect “S lines” per model for BAO-like outputs
     bao_S_lines_by_model = defaultdict(list)
 
-    # Threshold for "high parameter" rows (CMB high-l etc.)
-    wide_row_threshold = int(PLOT_SETTINGS.get("wide_table_param_threshold", 10))
-
-    # CMB primary list for the matrix
-    CMB_PRIMARY_FOR_MATRIX = [
-        "H_0", "Omega_bh^2", "Omega_dh^2", "ln10^10_As", "n_s", "tau_reio", "A_planck"
-    ]
-
-    # 3a) Pretty-print main aligned table + detailed CMB parameter table
+    # 3a) One parameter table per model (CT-43): parameters as rows (the corner order, the likelihoods'
+    #     nuisance parameters after a "nuisance" line), groups as columns, in blocks that fit the line
+    # one width for the console and aligned_table_pretty.txt, so both have the same blocks (A8)
+    from Plots.Plot_functions import _table_width
+    table_width = _table_width(None)
     for model_name, (aligned_table, param_labels, obs_names) in all_tables.items():
         print_rule()
-        print(f"Model: {model_name} Aligned LaTeX Table:")
-
-        config_model = CONFIG[model_name]
-
-        # ---------- Main table: all non-CMB + CMB core params ----------
-        main_params = _main_table_parameters(config_model, list(param_labels))
-        main_indices = [param_labels.index(p) for p in main_params]
-        main_table   = [[row[i] for i in main_indices] for row in aligned_table]
-
-        # This is the table you showed (JLA, f_sigma_8, combos, CMB_* rows, etc.)
-        print_aligned_latex_table(main_table, main_params, obs_names)
-        print()
-
-        # ---------- Detailed CMB table: ONLY parameters used in CMB obs ----------
-        # Find which rows correspond to CMB datasets
-        cmb_row_indices = [
-            i for i, name in enumerate(obs_names) if _is_cmb_obs_name(name)
-        ]
-
-        if cmb_row_indices:
-            # Take ONLY parameters that have a non-empty value in at least one CMB row
-            cmb_param_names: list[str] = []
-            for j, pname in enumerate(param_labels):
-                if any(str(aligned_table[i][j]).strip() for i in cmb_row_indices):
-                    cmb_param_names.append(pname)
-
-            if cmb_param_names:
-                print_cmb_summary_matrix(
-                    aligned_table=aligned_table,
-                    parameter_labels=param_labels,
-                    observation_names=obs_names,
-                    cmb_param_names=cmb_param_names,
-                    title="Detailed CMB parameter table (rows = params, columns = CMB obs):",
-                )
-
+        print_parameter_table(aligned_table, list(param_labels), obs_names, width=table_width,
+                              **_param_table_kwargs(CONFIG[model_name], model_name, aligned_table,
+                                                    list(param_labels), obs_names))
         print_rule()
         print()
 
@@ -472,13 +452,15 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                     except Exception:
                         rd = float(R_D_SINGLETON)
                 if rd is None:
-                    from Kosmulator_main.rd_helpers import compute_rd as _rd
                     p = {}
-                    for k in ("H_0", "Omega_m", "Omega_bh^2", "N_eff", "T_CMB"):
+                    for k in ("H_0", "Omega_m", "Omega_bh^2", "Omega_dh^2", "N_eff", "T_CMB"):
                         v = _medval(med, k)
                         if v is not None:
                             p[k] = v
-                    rd = _rd(p) if all(k in p for k in ("H_0","Omega_m","Omega_bh^2")) else None
+                    try:
+                        rd = rd_for_report(p)[0]   # same r_d as the likelihood (CLASS first)
+                    except KeyError:
+                        rd = None
 
             if (H0 is not None) and (rd is not None) and (H0 > 0) and (rd > 0):
                 if not explanatory_note_printed:
@@ -501,12 +483,12 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
     # ----- 4) Statistical analysis ------------------------------------------
     print()
-    statistical_results = PP.statistical_analysis(all_best_fit, data, CONFIG, true_model)
+    statistical_results = PP.statistical_analysis(all_best_fit, data, CONFIG, reference_model)
 
     # Build reference chi^2 map (from true model) for diagnostics
     ref_chi2 = {}
-    if true_model in statistical_results:
-        for obs_key, stats in statistical_results[true_model].items():
+    if reference_model in statistical_results:
+        for obs_key, stats in statistical_results[reference_model].items():
             ref_chi2[obs_key] = stats["Reduced_Chi_squared"]
 
     # Collect per-model stats and interpretations
@@ -515,15 +497,25 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
         interp_dict[model] = []
         for obs_key, stats in obs_results.items():
             # Diagnostics vs reference
-            reference_chi2 = None if model == true_model else ref_chi2.get(obs_key)
+            reference_chi2 = None if model == reference_model else ref_chi2.get(obs_key)
+            _grp = next((o for o in CONFIG[model]["observations"]
+                         if "+".join(o) == obs_key or "_".join(o) == obs_key), None)
             diagnostics = PP.provide_model_diagnostics(
                 reduced_chi_squared=stats["Reduced_Chi_squared"],
                 model_name=model,
                 reference_chi_squared=reference_chi2,
+                dof=stats.get("dof"),
+                datasets=_grp if _grp is not None else obs_key.split("+"),
+                is_reference=(model == reference_model),
+                reference_name=reference_model,
             )
-            aic_bic_lines = PP.interpret_delta_aic_bic(stats["dAIC"], stats["dBIC"]).splitlines()
-            aic_text = aic_bic_lines[0].strip() if len(aic_bic_lines) > 0 else "No AIC interpretation available."
-            bic_text = aic_bic_lines[1].strip() if len(aic_bic_lines) > 1 else "No BIC interpretation available."
+            IC_lines = PP.interpret_delta_IC(stats['dAIC'], stats['dBIC'], stats['dAICc'], stats['dDIC'], stats['dWAIC'], stats['sigma']).splitlines()
+            aic_text = IC_lines[0].strip() if len(IC_lines) > 0 else "No AIC interpretation available."
+            bic_text = IC_lines[1].strip() if len(IC_lines) > 1 else "No BIC interpretation available."
+            aicc_text = IC_lines[2].strip() if len(IC_lines) > 2 else "No AICc interpretation available"
+            dic_text = IC_lines[3].strip() if len(IC_lines) > 3 else "No DIC interpretation available"
+            waic_text = IC_lines[4].strip() if len(IC_lines) > 3 else "No WAIC interpretation available"
+            sigma_text = IC_lines[5].strip() if len(IC_lines) > 3 else "No Sigma interpretation available"
 
             # Resolve the raw obs list for this obs_key  (FIX: use CONFIG[model], not CONFIG[model_name])
             obs_list, obs_idx = None, None
@@ -532,7 +524,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                     obs_list, obs_idx = o, i
                     break
 
-            label = rd_policy_label(obs_list, CONFIG[model], obs_index=obs_idx)
+            label = rd_policy_label(obs_list, CONFIG[model], obs_index=obs_idx, model_name=model)
             disp_key = _displayize_key(obs_key)
             obs_text = disp_key if not label else f"{disp_key} [{label}]"
 
@@ -546,17 +538,42 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 "AIC": stats["AIC"],
                 "BIC": stats["BIC"],
                 "dAIC": stats["dAIC"],
-                "dBIC": stats["dBIC"],
+                'dBIC':stats['dBIC'],
+                "AICc": stats["AICc"],
+                "dAICc": stats["dAICc"],
+                "DIC": stats["DIC"],
+                "dDIC": stats["dDIC"],
+                'WAIC': stats['WAIC'],
+                'dWAIC': stats['dWAIC'],
+                'dChi': stats['dChi'],
+                'sigma': stats['sigma'],
+                # per-group notes from statistical_analysis (offsets in k, H_0 fixed, ...)
+                "Note": stats.get("Note", ""),
             }
 
             # IMPORTANT: Do NOT include S in the stats row — it will be printed as a stand-alone line
             stats_dict[model].append(row)
 
+            _ref_stats = statistical_results.get(reference_model, {}).get(obs_key, {})
+            try:
+                _dk = int(stats.get("num_params")) - int(_ref_stats.get("num_params"))
+            except (TypeError, ValueError):
+                _dk = None
             interp_dict[model].append({
-                "Observation": _displayize_key(obs_key),
+                "Observation": obs_text,
+                "chi2": stats.get("Chi_squared"),
+                "dof": stats.get("dof"),
+                "chi2_nu": stats.get("Reduced_Chi_squared"),
+                "dChi": stats.get("dChi"), "sigma": stats.get("sigma"), "dk": _dk,
+                "dAIC": stats.get("dAIC"), "dBIC": stats.get("dBIC"), "dAICc": stats.get("dAICc"),
+                "dDIC": stats.get("dDIC"), "dWAIC": stats.get("dWAIC"),
                 "Reduced Chi2 Diagnostics": diagnostics.strip(),
                 "AIC Interpretation": aic_text,
                 "BIC Interpretation": bic_text,
+                "AICc Interpretation": aicc_text,
+                "DIC Interpretation": dic_text,
+                "WAIC Interpretation": waic_text,
+                'Significance Interpretation': sigma_text,
             })
 
         # Persist to disk
@@ -573,35 +590,14 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
         aligned_table, param_labels, obs_names = all_tables[model]
 
         with open(pretty_path, "w", encoding="utf-8") as out:
-            print(f"Model: {model} Aligned LaTeX Table:", file=out)
-            print(file=out)
-
-            # 1) Main aligned table: same core set as console
-            config_model = CONFIG[model]
-            main_params  = _main_table_parameters(config_model, list(param_labels))
-            idx          = [param_labels.index(p) for p in main_params]
-            main_table   = [[row[i] for i in idx] for row in aligned_table]
-
-            print_aligned_latex_table(main_table, main_params, obs_names, out=out)
-            print(file=out)
-
-            # 2) Detailed CMB parameter table (only if there ARE CMB observations)
-            cmb_row_indices = [i for i, name in enumerate(obs_names) if "CMB" in str(name)]
-            if cmb_row_indices:
-                cmb_param_names: list[str] = []
-                for j, pname in enumerate(param_labels):
-                    if any(str(aligned_table[i][j]).strip() for i in cmb_row_indices):
-                        cmb_param_names.append(pname)
-
-                if cmb_param_names:
-                    print_cmb_summary_matrix(
-                        aligned_table=aligned_table,
-                        parameter_labels=param_labels,
-                        observation_names=obs_names,
-                        cmb_param_names=cmb_param_names,
-                        title="Detailed CMB parameter table (rows = params, columns = CMB obs):",
-                        out=out,
-                    )
+            if getattr(K, "RUN_SETTINGS", None):
+                from Kosmulator_main.utils import settings_header
+                print(settings_header(), file=out)          # CT-26
+                print(file=out)
+            # the same table and blocks as the console (CT-43; 160 characters per line)
+            print_parameter_table(aligned_table, list(param_labels), obs_names, out=out, width=table_width,
+                                  **_param_table_kwargs(CONFIG[model], model, aligned_table,
+                                                        list(param_labels), obs_names))
 
             # 3) Append S-lines directly into the pretty file (no S_scale_summary.txt anymore)
             s_lines = bao_S_lines_by_model.get(model, [])
@@ -614,7 +610,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
 
         # 2) Then save stats & interpretations (unchanged)
         save_stats_to_file(model, model_folder, stats_dict[model])
-        save_interpretations_to_file(model, model_folder, interp_dict[model])
+        save_interpretations_to_file(model, model_folder, interp_dict[model], reference_model=reference_model)
 
     # Pretty-print to console (no duplicate headers)
     for model, rows in stats_dict.items():
@@ -622,103 +618,180 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
         print_stats_table(model, rows)
         print_rule()
         print()
+    if stats_dict and getattr(K, "RUN_SETTINGS", None):
+        from Kosmulator_main.utils import settings_header
+        print(settings_header())                          # CT-26
+        print()
+
+    # ----- 5) Convergence report (console + convergence_summary.txt) ----
+    _report_convergence(CONFIG, PLOT_SETTINGS, main_folder)
 
     return all_best_fit, all_tables, statistical_results
 
 
+def _report_convergence(CONFIG, PLOT_SETTINGS, main_folder):
+    """Per model and group: completed steps, retained samples, tau_max (and the emcee
+    estimate), N_post/tau_max, ESS, split-Rhat, acceptance (emcee), converged flag and
+    stuck walkers, computed exactly as the stopping rule computes them."""
+    from Kosmulator_main.utils import (
+        chain_convergence_summary, format_convergence_table, write_convergence_reports,
+        convergence_rules, convergence_note_text,
+    )
+    rules = convergence_rules(PLOT_SETTINGS)
+    index = PLOT_SETTINGS.get("chain_index") or {}
+    by_model = {}
+    for (model, key), info in index.items():
+        try:
+            cfg = CONFIG[model]
+            params = list(cfg["parameters"][info["obs_index"]])
+            if (cfg.get("theta_converted") or {}).get(info["obs_index"]) and "H_0" in params:
+                # cmb_sample_theta: the chain file holds 100 theta_MC where the statistics now have H_0
+                params[params.index("H_0")] = K.THETA_MC_PARAM
+            row = chain_convergence_summary(info["dir"], key, int(cfg.get("burn", 0) or 0), params, rules,
+                                            prefer=info.get("engine"))
+            row["observation"] = _displayize_key(key)
+            by_model.setdefault(model, []).append(row)
+        except Exception as e:
+            print(f"[warning] convergence summary failed for {model} {key}: {e}")
+    for model, rows in by_model.items():
+        try:
+            write_convergence_reports(model, rows, os.path.join(main_folder, model), rules)
+        except Exception as e:
+            print(f"[warning] could not write the convergence summary for {model}: {e}")
+        print_rule()
+        print(format_convergence_table(model, rows, rules, note=False))
+        print_rule()
+        print()
+    if by_model:                     # the explanation once, after the last model (CT-12)
+        print(convergence_note_text(rules))
+        print_rule()
+        print()
+
+
 
 # =============================================================================
-# Diagnostics plot: Autocorrelation (live)
+# Diagnostics plot: convergence (live, both engines)
 # =============================================================================
 
-def autocorrPlot(
-    autocorr: np.ndarray,
-    index: int,
-    model_name: str,
-    color: str,
-    obs: list,
-    PLOT_SETTINGS: dict,
-    plot_path: str | None = None,
-    close_plot: bool = False,
-    nsteps: int = 100,
-    resume_offset: int = 0,
-    check_every: int = 100,
-    global_burn: int | None = None,
-    convergence: float | None = None,
-):
-    """Live autocorrelation plot shown/saved during sampling."""
-    if close_plot:
-        plt.close()
+def convergence_plot(monitor, plot_path: str, model_name: str, group: str, PLOT_SETTINGS: dict) -> None:
+    """
+    Convergence diagnostics of one run (auto_corr/<group>.png), redrawn at every check.
+
+    Top: tau_max (largest autocorrelation time over the parameters, zeus estimator)
+    against the step, with the two limits it must stay below: the length limit
+    (N - burn)/CONV_TAU_FACTOR and the ESS limit (N - burn) x walkers / CONV_ESS_MIN.
+    Bottom (log scale): the relative change of tau_max since the previous check
+    and split-Rhat - 1, each with its tolerance. Grey open markers in the shaded
+    burn-in region: the same numbers on the second half of the chain so far
+    (shown only, never used to stop). Vertical lines: burn-in, the earliest step
+    at which the run may stop (if set) and the step where it stopped. Legends sit
+    to the right of the panels so they never cover the data.
+    """
+    h, pre = monitor.hist, getattr(monitor, "pre", None) or {"it": []}
+    it = np.asarray(h["it"], dtype=float)
+    it_pre = np.asarray(pre.get("it", []), dtype=float)
+    if it.size == 0 and it_pre.size == 0:
         return
-    if index <= 0 or autocorr.size == 0:
-        return  # nothing to draw yet
+    r = monitor.rules
+    burn = float(monitor.burn)
+    W = monitor.walkers or 0
+    tau = np.asarray(h["tau_max"], dtype=float)
+    rel = np.asarray(h["rel"], dtype=float)
+    rhat = np.asarray(h["rhat_max"], dtype=float)
+    ok = np.asarray(h["ok"], dtype=bool)
+    tau_pre = np.asarray(pre.get("tau_max", []), dtype=float)
+    rel_pre = np.asarray(pre.get("rel", []), dtype=float)
+    rhat_pre = np.asarray(pre.get("rhat_max", []), dtype=float)
+    grey = dict(color="0.55", mfc="white", ms=4, lw=0.8)
 
-    plt.clf()
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.2, 6.4), sharex=True,
+                                   gridspec_kw={"height_ratios": (1.5, 1.0), "hspace": 0.08})
+    last = max([float(x[-1]) for x in (it, it_pre) if x.size] + [burn])
+    x_hi = max(last, float(monitor.earliest_stop)) * 1.03
+    for ax in (ax1, ax2):
+        ax.axvspan(0, burn, color="0.94", lw=0, zorder=0)
 
-    # 1) Diagonal slope line
-    iterations = resume_offset + check_every * np.arange(0, int(nsteps / check_every) + 1)
-    diag_vals  = (iterations - resume_offset) / check_every
-    plt.plot(iterations, diag_vals, linestyle="--", color="k", label="slope = 1/check")
+    if it_pre.size:
+        ax1.plot(it_pre, tau_pre, "o-", label="burn-in phase (second half of\nthe chain so far; not used to stop)",
+                 **grey)
+    if it.size:
+        ax1.plot(it, tau, "o-", color="C0", ms=4, lw=1.4, label=r"$\tau_{\max}$ (largest over the parameters)")
+    xx = np.linspace(burn, x_hi, 300)
+    ax1.plot(xx, (xx - burn) / r["tau_factor"], "k--", lw=1.2,
+             label=rf"length limit $(N-N_{{\rm burn}})/{r['tau_factor']:g}$")
+    if W:
+        ax1.plot(xx, (xx - burn) * W / r["ess_min"], ":", color="C3", lw=1.6,
+                 label=rf"ESS limit $(N-N_{{\rm burn}})\times{W}/{r['ess_min']:g}$")
+    fin = np.concatenate([tau[np.isfinite(tau)], tau_pre[np.isfinite(tau_pre)]])
+    ax1.set_ylim(0, max(1.15 * float(fin.max()) if fin.size else 1.0, 1.0))
+    ax1.set_ylabel(r"$\tau_{\max}$ (steps)")
 
-    # 2) Autocorr points up to current index
-    its = resume_offset + check_every * np.arange(1, index + 1)
-    tau_hat = np.asarray(autocorr[:index], dtype=float)
-    # Keep non-finite as NaN so they don't collapse the y-scale
-    tau_hat[~np.isfinite(tau_hat)] = np.nan
-    obs_key = cfg_generate_label(obs)                  # e.g. "BAO+CC"
-    obs_label = obs_key.replace("+", "_")              # filename-safe
-    lbl = obs_key                                     # legend label (or pretty_obs_name(obs_key, latex_on))
+    good_pre = np.isfinite(rel_pre) & (rel_pre > 0)
+    if good_pre.any():
+        ax2.semilogy(it_pre[good_pre], rel_pre[good_pre], "o-", **grey)
+    goodr_pre = np.isfinite(rhat_pre) & (rhat_pre > 1.0)
+    if goodr_pre.any():
+        ax2.semilogy(it_pre[goodr_pre], rhat_pre[goodr_pre] - 1.0, "s-", **grey)
+    good = np.isfinite(rel) & (rel > 0)
+    ax2.semilogy(it[good], rel[good], "o-", color="C0", ms=4, lw=1.0,
+                 label=r"$|\Delta\tau_{\max}|/\tau_{\max}$ since the previous check")
+    ax2.axhline(r["rtol"], color="C0", ls="--", lw=1.0, alpha=0.8, label=f"tolerance {r['rtol']:g}")
+    goodr = np.isfinite(rhat) & (rhat > 1.0)
+    ax2.semilogy(it[goodr], rhat[goodr] - 1.0, "s-", color="C2", ms=4, lw=1.0,
+                 label=r"split-$\hat{R}-1$ (largest over the parameters)")
+    ax2.axhline(r["rhat_max"] - 1.0, color="C2", ls="--", lw=1.0, alpha=0.8,
+                label=rf"$\hat{{R}}-1$ limit {r['rhat_max'] - 1.0:g}")
+    need = int(getattr(monitor, "consecutive", 1) or 1)
+    if ok.any():
+        ymin = ax2.get_ylim()[0]
+        ax2.plot(it[ok], np.full(ok.sum(), ymin * 1.5), "|", color="C2", ms=10, mew=2,
+                 label=("all conditions met at this check" if need <= 1 else
+                        f"all conditions met at this check\n(the run stops after {need} in a row)"))
+    ax2.set_xlabel("Step")
+    ax2.set_ylabel("Relative change")
 
-    plt.plot(its, tau_hat, label=lbl, color=color)
-
-    latex_on = bool(PLOT_SETTINGS.get("latex_enabled", False))
-
-    # 3) Convergence target
-    if convergence is not None and np.isfinite(convergence):
-        if latex_on:
-            label_target = rf"target $\tau$ = {convergence:.3f}"
-        else:
-            label_target = f"target τ = {convergence:.3f}"
-        plt.axhline(convergence, linestyle=":", color="gray", label=label_target)
-
-    # 4) Global burn
-    if global_burn is not None:
-        plt.axvline(global_burn, linestyle=":", color="gray", label=f"burn = {global_burn}")
-
-    # 5) Axes/labels/legend
-    left  = resume_offset + check_every
-    right = resume_offset + nsteps
-    if not np.isfinite(left) or not np.isfinite(right) or left >= right:
-        plt.autoscale()              # or: right = left + 1; plt.xlim(left, right)
+    for ax in (ax1, ax2):
+        ax.axvline(burn, color="r", ls="--", lw=1.0, alpha=0.6, label="end of burn-in" if ax is ax1 else None)
+        if monitor.earliest_stop > burn:
+            # CT-16: the buffer shaded and named, so a stop at its end is explained
+            ax.axvspan(burn, monitor.earliest_stop, color="C1", alpha=0.08, lw=0, zorder=0)
+            ax.axvline(monitor.earliest_stop, color="C1", ls="--", lw=1.2,
+                       label=(f"buffer (--autocorr-buffer {int(monitor.earliest_stop - burn)}):\n"
+                              f"no stop before step {int(monitor.earliest_stop)}") if ax is ax1 else None)
+        if monitor.stopped_at is not None:
+            ax.axvline(monitor.stopped_at, color="C2", ls="-", lw=1.5,
+                       label="stopped (converged)" if ax is ax1 else None)
+        ax.set_xlim(0, x_hi)
+    leg = dict(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0, framealpha=0.9)
+    ax1.legend(fontsize=8, title=r"needs $\tau_{\max}$ below both limits", title_fontsize=8, **leg)
+    ax2.legend(fontsize=8, title="needs both below their limits", title_fontsize=8, **leg)
+    # The title says what the stopping rule (ConvergenceMonitor.update) needs, not only the last check
+    streak = int(getattr(monitor, "streak", 0) or 0)
+    ended = getattr(monitor, "ended_at", None)
+    _fm = monitor.first_met() if hasattr(monitor, "first_met") else None
+    if (monitor.stopped_at is not None and _fm is not None and _fm < monitor.stopped_at
+            and monitor.earliest_stop > burn and monitor.stopped_at <= monitor.earliest_stop + monitor.check_every):
+        status = (f"converged: conditions met from step {_fm}, stopped at the end of the buffer, "
+                  f"step {int(monitor.stopped_at)}")                                      # CT-16
+    elif monitor.stopped_at is not None or (ok.size and ok[-1] and streak >= need
+                                             and float(it[-1]) >= float(monitor.earliest_stop)):
+        status = "converged"                 # stopped, or met the rule at the run's last check
+    elif ended is not None:
+        status = f"not converged in {int(ended)} steps"
+    elif ok.size and ok[-1] and streak < need:
+        status = f"conditions met at {streak} of {need} checks in a row"
+    elif ok.size and ok[-1]:
+        status = f"conditions met; the run may stop from step {int(monitor.earliest_stop)}"
     else:
-        plt.xlim(left, right)
-    # Use finite tau for y-scaling (ignore NaNs/Infs)
-    tau_finite = tau_hat[np.isfinite(tau_hat)]
-    tau_max = float(np.max(tau_finite)) if tau_finite.size else 0.0
-    diag_max = float(np.max(diag_vals)) if diag_vals.size else 1.0
-    ymax_candidates = [diag_max, tau_max + 1.0]
-
-    if convergence is not None and np.isfinite(convergence):
-        ymax_candidates.append(1.1 * float(convergence))
-
-    ymax = max(ymax_candidates)
-    ymax = max(1.0, 1.05 * ymax)    # small headroom; keep non-trivial minimum
-    plt.ylim(0, ymax)
-
-    plt.title(f"Auto-Correlator: {model_name}")
-    plt.xlabel("Iteration", fontsize=PLOT_SETTINGS.get("label_font_size", 12))
-    plt.ylabel(r"Mean $\hat{\tau}$", fontsize=PLOT_SETTINGS.get("label_font_size", 12))
-    plt.legend(fontsize=PLOT_SETTINGS.get("legend_font_size", 10))
-
-    # 6) Save
-    if plot_path is None:
-        folder = os.path.join(base_dir(PLOT_SETTINGS), model_name, "auto_corr")
-        os.makedirs(folder, exist_ok=True)
-        obs_label = cfg_generate_label(obs).replace("+", "_")
-        plot_path = os.path.join(folder, f"{obs_label}.png")
-
-    plt.tight_layout()
-    plt.savefig(plot_path, dpi=PLOT_SETTINGS.get("dpi", 300))
+        status = "not converged yet"
+    title = f"Convergence: {model_name}, {group} ({status})"
+    if plt.rcParams.get("text.usetex", False):
+        from Plots.latex_labels import tex_escape_text
+        title = tex_escape_text(title)
+    ax1.set_title(title, fontsize=10)
+    os.makedirs(os.path.dirname(plot_path) or ".", exist_ok=True)
+    fig.savefig(plot_path, dpi=PLOT_SETTINGS.get("dpi", 200), bbox_inches="tight")
+    plt.close(fig)
 
 
 # =============================================================================
@@ -727,30 +800,35 @@ def autocorrPlot(
 
 def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
     """
-    Corner plot generator with optional reduction of CMB nuisance parameters on the PLOT ONLY.
+    Corner plot generator. The axes leave out the likelihoods' nuisance parameters and, per group,
+    parameters that are only their prior (corner_parameters; CT-15, CT-30, CT-37); the tables keep
+    every parameter.
 
     Switches (thread via CLI into PLOT_SETTINGS beforehand):
-      - PLOT_SETTINGS["corner_show_all_cmb_params"] : bool, default False
-          If False and any CMB_* obs present, only keep the commonly-reported CMB parameters
-          on the corner axes, dropping the rest of the CMB nuisance parameters.
+      - PLOT_SETTINGS["corner_show_nuisance"] (Kosmulator.py) or ["corner_show_all_cmb_params"]
+        (--corner-show-all-cmb-params): draw every parameter.
       - PLOT_SETTINGS["corner_table_full_params"]   : bool, default True
           If True, the printed/top table shows ALL parameters (recommended).
           If False, the printed/top table mirrors whatever appears on the corner axes.
     """
-    # 1) union of parameters across all observation groups (first-seen order)
-    full_param_order, _seen = [], set()
-    for plist in CONFIG["parameters"]:
-        for p in plist:
-            if p not in _seen:
-                _seen.add(p)
-                full_param_order.append(p)
-    num_params = len(full_param_order)
+
+    
+    # 1) union of parameters across all observation groups, the ones used by more groups first
+    #    (CT-15: a parameter of one group, e.g. M_abs, no longer sits in the middle of the grid)
+    full_param_order = params_by_use(CONFIG)
+    # Nuisance parameters and, per group, parameters that are only their prior (CT-15, CT-30, CT-37):
+    # not drawn unless corner_show_nuisance (or --corner-show-all-cmb-params / --peek --all)
+    _drawn_list, _unc = corner_parameters(CONFIG, PLOT_SETTINGS)
+    _drawn = set(_drawn_list)
+    num_params = len(_drawn_list)
 
     # 2) GetDist plotter + typography
     g = gd_plots.get_subplot_plotter(subplot_size=4, subplot_size_ratio=0.8)
     g.settings.figure_legend_frame = True
     plot_table_flag = bool(PLOT_SETTINGS.get("plot_table", False))
-    g.settings.tight_layout = not plot_table_flag
+    # The table is placed after the corner grid is laid out (it measures the
+    # finished grid), so the grid always uses GetDist's normal tight layout.
+    g.settings.tight_layout = True
     g.settings.alpha_filled_add = 0.4
     g.settings.solid_colors = list(reversed(PLOT_SETTINGS.get("color_schemes", ["r","b","g","c","m"])))
     base_leg = float(PLOT_SETTINGS.get("legend_font_size", 12))
@@ -867,11 +945,43 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
                 f"Available={list(Samples.keys())}"
             )
 
-        sample = Samples[found]
-        names  = CONFIG["parameters"][i]
-        labels = greek_Symbols(names) if use_latex else names
+        sample_data = Samples[found]
 
-        ms = MCSamples(samples=sample, names=names, labels=labels)
+        #Extract raw array from getdist without damaging the dictionary
+        sample_array = sample_data["samples"] if isinstance(sample_data, dict) else sample_data
+        names  = CONFIG["parameters"][i]
+        # GetDist draws axis labels in math mode, so raw names broke there ("A_planck" as
+        # A_p + "lanck", "tau_reio" as tau_r + "eio", and "galf_TE_A_217" stopped the plot).
+        # greek_Symbols' labels are test-compiled with the active renderer (matplotlib's
+        # mathtext without --latex_enabled, LaTeX with it), so they work either way (item 33).
+        labels = greek_Symbols(names)
+
+        # Give GetDist one chain per walker. The flat samples are step-major
+        # (walkers interleaved), so GetDist saw no autocorrelation, took every
+        # sample as independent and chose too narrow a smoothing kernel.
+        nw = int(CONFIG.get("nwalker", 0) or 0)
+        arr = np.asarray(sample_array)
+        if nw > 1 and arr.ndim == 2 and arr.shape[0] % nw == 0 and arr.shape[0] // nw > 1:
+            chains = list(arr.reshape(-1, nw, arr.shape[1]).transpose(1, 0, 2))
+        else:
+            chains = arr
+        # Prior edges, so densities are not smoothed past hard bounds
+        # (restrictions such as n < 0.5 are functions and are not passed).
+        plims = (CONFIG.get("prior_limits") or [{}] * (i + 1))[i] or {}
+        ranges = {p: tuple(plims[p]) for p in names if p in plims}
+
+        # CT-30: a parameter that is only its prior in this group (H_0 of uncalibrated SNe) is left
+        # out of this group's distribution (GetDist's bandwidth warnings; the prior carries no
+        # information); other groups still draw it
+        _drop = [k for k, p in enumerate(names) if p in _unc.get(i, set())]
+        if _drop and len(_drop) < len(names):
+            _keep = [k for k in range(len(names)) if k not in _drop]
+            names = [names[k] for k in _keep]
+            labels = [labels[k] for k in _keep]
+            ranges = {p: r for p, r in ranges.items() if p in names}
+            chains = ([np.asarray(c)[:, _keep] for c in chains] if isinstance(chains, list)
+                      else np.asarray(chains)[:, _keep])
+        ms = MCSamples(samples=chains, names=names, labels=labels, ranges=ranges)
         ms.plotColor = palette[i % len(palette)]
         distributions.append(ms)
 
@@ -886,26 +996,10 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         any(str(tag).startswith("CMB_") or str(tag) == "CMB" for tag in obs_set)
         for obs_set in CONFIG.get("observations", [])
     )
-    show_all_cmb = bool(PLOT_SETTINGS.get("corner_show_all_cmb_params", False))
-
-    # Commonly reported CMB primary parameter set seen in the literature
-    _cmb_primary = {
-        "H_0", "Omega_bh^2", "Omega_dh^2", "ln10^10_As", "n_s", "tau_reio", "A_planck"
-    }
-
-    if has_cmb and not show_all_cmb:
-        # Build union of parameters that belong to any CMB_* observation group
-        cmb_param_union = set()
-        for obs_set, plist in zip(CONFIG.get("observations", []), CONFIG.get("parameters", [])):
-            if any(str(tag).startswith("CMB_") or str(tag) == "CMB" for tag in obs_set):
-                cmb_param_union.update(plist)
-
-        # Keep only the paper-standard subset from the CMB union; drop the rest from the *corner axes*
-        keep_from_cmb = _cmb_primary & cmb_param_union
-        cmb_to_drop = cmb_param_union - keep_from_cmb
-
-        # Rebuild header with CMB nuisances removed; non-CMB params remain intact
-        header_params = [p for p in header_params if p not in cmb_to_drop]
+    # CT-37: a drop-list of the likelihoods' nuisance parameters (constants), not a keep-list: the
+    # keep-list {H_0, Omega_bh^2, Omega_dh^2, ln10^10_As, n_s, tau_reio, A_planck} also dropped every
+    # model parameter a CMB group samples (w0, wa, n, ...). A_planck is drawn (CORNER_SHOWN_NUISANCE).
+    header_params = [p for p in header_params if p in _drawn]
     # ----------------------------------------------------------------
 
     # 4) pretty legend labels (LaTeX or plain depending on settings)
@@ -958,6 +1052,10 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
             derived_rd_col.append("—")
             continue
 
+        #Extract array here too so numpy can slice it
+        if isinstance(obs_samples, dict) and "samples" in obs_samples:
+            obs_samples = obs_samples["samples"]
+
         names = CONFIG["parameters"][i]
 
         # If r_d is already sampled for this group, we don't need to derive it here.
@@ -985,23 +1083,46 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
             jdh = names.index("Omega_dh^2")
             odh = np.asarray(obs_samples[:, jdh], dtype=float)
             h   = np.maximum(H0, 1e-12) / 100.0
-            Om  = (obh + odh) / (h * h)
+            # Omega_dh^2 is CLASS's omega_cdm: the massive neutrino is in Omega_m as well
+            # (utils.ensure_background_params, item 27)
+            from Kosmulator_main import constants as _Kc
+            Om  = (obh + odh + _Kc.omega_nu()) / (h * h)
         else:
             derived_rd_col.append("—")
             continue
 
-        # Subsample if huge (keeps plotting snappy)
+        # Same r_d as the likelihood (CLASS rs_drag, ~50 ms per call), so use a
+        # subsample: PLOT_SETTINGS["rd_table_draws"] posterior draws (default 1000).
+        # Random (seeded) draws rather than a stride: the flat chain interleaves
+        # walkers, so a fixed stride can visit only a few of them.
         N = H0.size
-        stride = max(1, N // 50000)
-        H0s  = H0[::stride]
-        obhs = obh[::stride]
-        Oms  = Om[::stride]
+        n_draws = max(1, int(PLOT_SETTINGS.get("rd_table_draws", 1000)))
+        sel = (np.sort(np.random.default_rng(12345).choice(N, size=n_draws, replace=False))
+               if N > n_draws else np.arange(N))
+        H0s  = H0[sel]
+        obhs = obh[sel]
+        Oms  = Om[sel]
 
-        rds = np.array(
-            [compute_rd({"H_0": float(h0), "Omega_m": float(om), "Omega_bh^2": float(ob)})
-             for h0, om, ob in zip(H0s, Oms, obhs)],
-            dtype=float
-        )
+        # Full draws (the model's own parameters too): r_d from rd_Class for models other than
+        # LCDM, as in the likelihood (item 12)
+        _draws = np.asarray(obs_samples, dtype=float)[sel]
+        _pts = [{**{n: float(v) for n, v in zip(names, row)},
+                 "H_0": float(h0), "Omega_m": float(om), "Omega_bh^2": float(ob)}
+                for row, h0, om, ob in zip(_draws, H0s, Oms, obhs)]
+        # CT-27: through the worker pool kept open after sampling (one CLASS r_d per draw), in chunks
+        from Kosmulator_main import utils as _Up, rd_helpers as _RDh
+        if _Up._POST_POOL is not None and len(_pts) > 1:
+            _n = max(1, min(len(_pts) // 25, 48))
+            _bounds = np.linspace(0, len(_pts), _n + 1).astype(int)
+            _ch = [_pts[a:b] for a, b in zip(_bounds[:-1], _bounds[1:]) if b > a]
+            rd_src = [x for part in _Up.post_map(_RDh.RdReportTask(model_name), _ch) for x in part]
+        else:
+            rd_src = [rd_for_report(p, model_name) for p in _pts]
+        rds = np.array([r for r, _ in rd_src], dtype=float)
+        n_eh98 = sum(1 for _, s in rd_src if s != "CLASS")
+        if n_eh98:
+            print(f"[warning] Derived r_d for {obs_key}: CLASS unavailable for {n_eh98}/{len(rd_src)} "
+                  f"draws, EH98 used (~2% above CLASS).")
 
         p16, p50, p84 = np.percentile(rds, [16, 50, 84])
         lo, hi = p50 - p16, p84 - p50
@@ -1017,7 +1138,7 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         else:
             table_param_labels.append("r_d")
             for row, cell in zip(aligned_latex_table, derived_rd_col):
-                row.append(cell)
+                row.append(cell if cell != "—" else "")      # no value, not a dash (audit 19 Oct)
 
 
 
@@ -1078,6 +1199,10 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
         trimmed_labels = [p for p in table_param_labels if p in header_params or p == "Omega_m (derived)"]
     else:
         trimmed_labels = list(table_param_labels)
+    # The table's columns in the order of the corner axes (parameters used by more groups first,
+    # CT-15), the others after them in their own order (Renier, 19 Oct; before, first-seen order)
+    _ax = {p: i for i, p in enumerate(header_params)}
+    trimmed_labels = sorted(trimmed_labels, key=lambda p: _ax.get(p, len(_ax)))
 
     # --- NEW: project the aligned table columns to exactly match `trimmed_labels`
     def _project_table(table, from_labels, to_labels):
@@ -1099,19 +1224,42 @@ def make_CornerPlot(Samples, CONFIG, model_name, save_file_name, PLOT_SETTINGS):
             trimmed_labels,          # <-- header equals row width
             trimmed_labels,
             len(trimmed_labels),
+            line_args=line_args,     # colour/line key drawn in each row label
         )
     else:
         try:
-            fig.tight_layout()
+            import warnings as _w
+            with _w.catch_warnings():
+                # GetDist's legend axes are not tight_layout-compatible; the legend is
+                # placed by measurement below, so the warning carries no information.
+                _w.filterwarnings("ignore", message=".*not compatible with tight_layout.*")
+                fig.tight_layout()
         except Exception:
             pass
+        # Measured legend placement (triangle or band), same rules as the table
+        try:
+            place_corner_legend(g, PLOT_SETTINGS)
+        except Exception as exc:
+            print(f"[warning] corner legend layout skipped: {exc}")
 
     # Save figure
     root   = base_dir(PLOT_SETTINGS)
     folder = os.path.join(root, model_name, "corner_plots")
     os.makedirs(folder, exist_ok=True)
     out_path = os.path.join(folder, f"corner_{save_file_name}.png")
-    fig.savefig(out_path, dpi=int(PLOT_SETTINGS.get("dpi", 300)), bbox_inches="tight")
+    # About 4 inches per parameter: at 200 dpi a 27-parameter plot (Planck baseline) would be
+    # 21 600 pixels wide, about 1.9 GB of memory to draw. Lower the dpi so the longer side
+    # stays near corner_max_pixels (8000); plots up to 10 parameters keep "dpi" (item 33b).
+    dpi = int(PLOT_SETTINGS.get("dpi", 300))
+    max_px = int(PLOT_SETTINGS.get("corner_max_pixels", 8000) or 0)
+    side_in = float(max(fig.get_size_inches()))
+    if max_px > 0 and side_in * dpi > max_px:
+        dpi_new = max(40, int(max_px / side_in))
+        logging.getLogger(__name__).info(
+            "Corner plot %s: %.0f x %.0f in, saved at %d dpi instead of %d (corner_max_pixels = %d)",
+            save_file_name, *fig.get_size_inches(), dpi_new, dpi, max_px)
+        dpi = dpi_new
+    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
     # Return for later printing
@@ -1152,8 +1300,149 @@ def _adjust_bestfit_margins(fig, ncols: int, PLOT_SETTINGS: dict) -> None:
     left = max(left_min, base_left - left_step * (max(1, ncols) - 1))
     fig.subplots_adjust(left=left, right=right, top=top, bottom=bottom)
     
-def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
-    """Create multi-panel best-fit plots per model and observation group."""
+def _layout_bestfit(fig, axes, PLOT_SETTINGS: dict, n_pass: int = 3) -> None:
+    """
+    Measured horizontal layout for the best-fit figure. Every column keeps the
+    same panel width (PLOT_SETTINGS["bestfit_panel_width_in"], default 4.9 in);
+    the space to its left and right is what its own tick labels, axis labels and
+    residual label actually need (measured after drawing), plus a fixed gap.
+    The figure width follows, so columns can no longer run into each other,
+    whatever the number of columns or the length of the labels.
+    """
+    import numpy as _np
+    panel_w = float(PLOT_SETTINGS.get("bestfit_panel_width_in", 4.9))
+    gap = float(PLOT_SETTINGS.get("bestfit_column_gap_in", 0.25))
+    margin = float(PLOT_SETTINGS.get("bestfit_side_margin_in", 0.08))
+    axes = _np.atleast_2d(axes)
+    ncols = axes.shape[1]
+    for _ in range(max(1, n_pass)):
+        fig.canvas.draw()
+        r = fig.canvas.get_renderer()
+        W, H = fig.get_size_inches()
+        dpi = fig.dpi
+        left_need, right_need = [], []
+        for c in range(ncols):
+            col = [a for a in axes[:, c] if a.get_visible()]
+            pos_x0 = min(a.get_position().x0 for a in col) * W
+            pos_x1 = max(a.get_position().x1 for a in col) * W
+            tb = [a.get_tightbbox(r) for a in col]
+            t_x0 = min(b.x0 for b in tb if b is not None) / dpi
+            t_x1 = max(b.x1 for b in tb if b is not None) / dpi
+            left_need.append(max(0.0, pos_x0 - t_x0))
+            right_need.append(max(0.0, t_x1 - pos_x1))
+        new_W = 2 * margin + sum(left_need) + sum(right_need) + ncols * panel_w + gap * (ncols - 1)
+        x = margin
+        for c in range(ncols):
+            x0 = x + left_need[c]
+            for a in axes[:, c]:
+                p = a.get_position()
+                a.set_position([x0 / new_W, p.y0, panel_w / new_W, p.height])
+            x = x0 + panel_w + right_need[c] + gap
+        fig.set_size_inches(new_W, H, forward=True)
+
+
+def _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS):
+    """
+    Up to PLOT_SETTINGS["band_draws"] (default 200) random posterior draws for one
+    observation group, as parameter dicts. Returns None if the samples are not found.
+    Groups with Planck data take PLOT_SETTINGS["band_draws_cmb"] (default 100) draws:
+    each draw is a full lensed CLASS run in this process (seconds each, item 41).
+    """
+    if not All_Samples or model_name not in All_Samples:
+        return None
+    cfg = CONFIG[model_name]
+    S = All_Samples[model_name]
+
+    def _norm(k):
+        return str(k).replace("PantheonP_SH0ES", "PantheonPS").replace("Pantheon+SH0ES", "PantheonPS")
+
+    for i, toks in enumerate(cfg["observations"]):
+        if _norm("+".join(toks)) == _norm(obs_key):
+            break
+    else:
+        return None
+    names = cfg["parameters"][i]
+    obs_index = i
+    arr = None
+    for cand in ("+".join(toks), "_".join(toks), obs_key, obs_key.replace("+", "_")):
+        if cand in S:
+            entry = S[cand]
+            if isinstance(entry, dict):          # {"samples": ..., "log_like": ...}
+                entry = entry.get("samples")
+            arr = None if entry is None else np.asarray(entry, dtype=float)
+            break
+    if arr is None or arr.ndim != 2 or arr.shape[1] != len(names) or arr.shape[0] == 0:
+        return None
+    if any(str(t).startswith("CMB_") for t in toks):
+        n = max(1, int(PLOT_SETTINGS.get("band_draws_cmb", 100)))
+    else:
+        n = max(1, int(PLOT_SETTINGS.get("band_draws", 200)))
+    rng = np.random.default_rng(12345)
+    idx = rng.choice(arr.shape[0], size=min(n, arr.shape[0]), replace=False)
+    from Kosmulator_main.utils import with_fixed_params
+    return [with_fixed_params(dict(zip(names, map(float, arr[j]))), cfg, obs_index) for j in idx]
+
+
+def _posterior_band(draws, curve_fn):
+    """
+    Pointwise 16th and 84th percentiles of curve_fn(p) over posterior draws.
+    This is a 68% band for the plotted quantity, unlike evaluating the curve with
+    every parameter at its own 16th/84th percentile, which ignores correlations.
+    Returns None if fewer than half of the draws give a finite curve.
+    """
+    if not draws:
+        return None
+    ys = []
+    for p in draws:
+        try:
+            y = np.asarray(curve_fn(p), dtype=float)
+        except Exception:
+            continue
+        if y.size and np.all(np.isfinite(y)):
+            ys.append(y)
+    if len(ys) < max(10, len(draws) // 2):
+        return None
+    ys = np.vstack(ys)
+    return np.percentile(ys, 16, axis=0), np.percentile(ys, 84, axis=0)
+
+
+def _rd_badge_policy(model_cfg: dict, obs_tokens) -> str:
+    """
+    'calibrated' (BBN or primary CMB in the group), 'free' (r_d sampled in this group) or
+    'fixed' (BAO alone, or BAO with data that fix neither H0 nor r_d), read from
+    the group's sampled parameters as Config set them up. CMB lensing alone does not
+    calibrate r_d (Config samples it), so it is not counted here (item 61).
+    """
+    from Kosmulator_main.constants import CMB_PRIMARY_TAGS, CMB_EARLY_TAG
+    toks = [str(t) for t in obs_tokens]
+    if any(t.startswith("BBN") or t in CMB_PRIMARY_TAGS or t == CMB_EARLY_TAG for t in toks):
+        return "calibrated"
+    pars = _group_parameters(model_cfg, toks)
+    if pars is not None:
+        return "free" if "r_d" in pars else "fixed"
+    # Group not found in CONFIG: previous heuristic (BAO with an anchor -> free)
+    anchors = {"CC", "OHD", "PantheonPS", "PantheonP_SH0ES"}
+    return "free" if any(t in anchors for t in toks) else "fixed"
+
+
+def _group_parameters(model_cfg: dict, obs_tokens) -> list | None:
+    """Sampled parameters of the observation group with these dataset tags (None if not found)."""
+    def norm(t):
+        t = str(t)
+        return "PantheonPS" if t in ("PantheonP_SH0ES", "Pantheon+SH0ES") else t
+    want = sorted(norm(t) for t in obs_tokens)
+    for grp, pars in zip(model_cfg.get("observations", []) or [], model_cfg.get("parameters", []) or []):
+        if sorted(norm(t) for t in grp) == want:
+            return list(pars)
+    return None
+
+
+def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS, All_Samples=None):
+    """Create multi-panel best-fit plots per model and observation group.
+
+    Shaded bands are pointwise 68% intervals from posterior draws when
+    All_Samples is given (see _posterior_band); without samples no band is drawn.
+    """
     use_latex = bool(PLOT_SETTINGS.get("latex_enabled", False))
 
     for model_name, obs_dict in All_best_fit_values.items():
@@ -1168,30 +1457,81 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
 
             obs_list_raw = [_raw_token(t) for t in obs_list]
 
-            combined = All_best_fit_values[model_name][obs_key]
+            combined = {k: v for k, v in All_best_fit_values[model_name][obs_key].items() if k != "__D_bar__"}
             params_med, params_hi, params_lo = fetch_best_fit_values(combined)
+            # Values fixed for this group (e.g. H_0 for uncalibrated SNe)
+            try:
+                from Kosmulator_main.utils import with_fixed_params
+                _cfg_m = CONFIG.get(model_name, {})
+                _norm = lambda k: str(k).replace("PantheonP_SH0ES", "PantheonPS").replace("Pantheon+SH0ES", "PantheonPS")
+                _gi = next((i for i, g in enumerate(_cfg_m.get("observations", []))
+                            if _norm("+".join(g)) == _norm(obs_key)), None)
+                params_med = with_fixed_params(params_med, _cfg_m, _gi)
+                params_hi = with_fixed_params(params_hi, _cfg_m, _gi)
+                params_lo = with_fixed_params(params_lo, _cfg_m, _gi)
+            except Exception:
+                pass
 
             # (Optional) diagnostics
             try:
                 if any(tag in obs_key for tag in ("BAO", "DESI", "DESI_DR1", "DESI_DR2")):
-                    rd_med = compute_rd(params_med)
-                    print(f"[diag] {model_name} {obs_key}: median r_d ≈ {rd_med:.2f} Mpc")
-            except Exception:
-                pass
-
-            try:
-                h0_freeRD = 69.0  # or pull from your DESI-singleton fit
-                est = h0_freeRD * (R_D_SINGLETON / rd_med)
-                print(f"[diag] rough H0~ {est:.2f} km/s/Mpc from r_d scaling")
+                    rd_med, rd_src = rd_for_report(params_med, model_name)
+                    print(f"[diag] {model_name} {obs_key}: r_d at median parameters = {rd_med:.2f} Mpc ({rd_src})")
             except Exception:
                 pass
 
             # Store band for the dedicated CMB plotter (if used elsewhere)
             PLOT_SETTINGS["cmb_params_band"] = (params_lo, params_hi)
 
+            # Posterior draws for the shaded 68% bands
+            band_draws = _posterior_draws(All_Samples, CONFIG, model_name, obs_key, PLOT_SETTINGS)
+
+            # Every CMB likelihood of the group is drawn in its own figure (cmb_spectra.png, item 57:
+            # each likelihood's own band powers; CT-34: Planck-only groups too, all of a group's CMB in
+            # one figure); the best-fit figure keeps the other data of the group
+            from Plots import CMB_spectra as _CS
+            _fig_tags = [t for t in obs_list_raw if str(t).startswith("CMB_")]
+            obs_list_raw = [t for t in obs_list_raw if not str(t).startswith("CMB_")]
+
+            # CMB groups: one lensed CLASS run per draw. Compute them ahead through the
+            # sampling pool (in this process without one) so the band loop reads them (item 52).
+            if _fig_tags and band_draws:
+                from Kosmulator_main import Statistical_packages as _SP
+                # the point's lensed CLASS run, as the likelihoods use (CT-35: not the short "lowl" run)
+                _modes = ["hil"]
+                _SP.clear_cls_prefetch()                    # the previous group's spectra
+                # CT-38 (b): say so before the runs (several minutes with HMcode and l_max 8500)
+                print(f"[CMB] {model_name} {obs_key}: computing up to {(len(band_draws) + 3) * len(_modes)} CLASS "
+                      f"runs for the 68% bands ({len(band_draws) + 3} points x {len(_modes)} l-range(s)) ...",
+                      flush=True)
+                _t0 = __import__("time").time()
+                try:
+                    _n = _SP.prefetch_cls(list(band_draws) + [params_med, params_lo, params_hi], model_name, _modes)
+                except Exception as _e:                # the figure computes its spectra itself then
+                    _n = 0
+                    print(f"[CMB] {model_name} {obs_key}: band spectra not computed ahead ({_e}); computing "
+                          "them while drawing", flush=True)
+                if _n:
+                    print(f"[CMB] {model_name} {obs_key}: {_n} CLASS runs for the 68% bands "
+                          f"({__import__('time').time() - _t0:.0f} s)")
+
+            if _fig_tags:
+                try:
+                    from Kosmulator_main import Statistical_packages as _SPc, constants as _Kc
+                    _fig = _CS.cmb_spectra_figure(
+                        model_name, obs_key, list(_fig_tags),
+                        params_med, band_draws, PLOT_SETTINGS,
+                        lambda p: _SPc._compute_cls_cached(p, _Kc.CMB_CLASS_LMAX, mode="hil", model_name=model_name),
+                        model_label=model_disp)
+                    if _fig is not None:
+                        save_figure(_fig, model_name, obs_key, "cmb_spectra", PLOT_SETTINGS)
+                        plt.close(_fig)
+                except Exception as _e:
+                    print(f"[CMB spectra] {model_name} {obs_key}: figure not drawn ({_e})")
+
             parts = partition_by_compatibility([t for t in obs_list_raw])
 
-            PRIOR_ONLY = ("BBN_PryMordial", "BBN_prior")
+            PRIOR_ONLY = ("BBN_PryMordial", "BBN_prior", "ThetaStar_CMB")
             BBN_ONLY = ("BBN_DH", "BBN_DH_AlterBBN") + PRIOR_ONLY
 
             # Strip priors from each part
@@ -1245,7 +1585,8 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
 
                 # Cache all observation data in this column and collect per-column min-x
                 for obs_type in part:
-                    res = extract_observation_data(data, obs_type, params_median=params_med)
+                    res = extract_observation_data(data, obs_type, params_median=params_med,
+                                                   model_name=model_name)
 
                     # Back-compat: normalize to (x, y, yerr, meta)
                     if isinstance(res, tuple) and len(res) == 3:
@@ -1347,46 +1688,30 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                     rdpol = CONFIG.get(model_name, {}).get("rd_policy", {})
                     fixed_rd = float(rdpol.get("fixed_value", R_D_SINGLETON))
 
-                    def _can_compute_eh98(params: dict) -> bool:
-                        return all(k in params for k in ("H_0", "Omega_m", "Omega_bh^2"))
-
                     def _rd_from_params(params: dict | None) -> float:
+                        # Sampled r_d, else CLASS from the background (also for CMB
+                        # groups, which carry Omega_dh^2 instead of Omega_m), else fixed.
                         if params is None:
                             return fixed_rd
-                        if "r_d" in params:
-                            return float(params["r_d"])
-                        if _can_compute_eh98(params):
-                            return MODEL_FUNCS["rd"](params)
-                        return fixed_rd
+                        try:
+                            return float(MODEL_FUNCS["rd"](params))
+                        except KeyError:
+                            return fixed_rd
 
-                    has_cal = any(x in {
-                        "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",
-                        "CMB_hil", "CMB_lowl", "CMB_lensing"
-                    } for x in obs_list_raw)
-                    has_bao = any(x in {"BAO", "DESI_DR1", "DESI_DR2"} for x in obs_list_raw)
-                    has_unanch = any(x in {
-                        "JLA", "Pantheon", "PantheonP", "PantheonPS", 
-                        "DESY5", "Union3", "f", "f_sigma_8"
-                    } for x in obs_list_raw)
-
-                    if has_cal:
-                        rs_med = _rd_from_params(params_med)
-                        rs_lo = _rd_from_params(params_lo) if params_lo is not None else rs_med
-                        rs_hi = _rd_from_params(params_hi) if params_hi is not None else rs_med
-                    elif has_bao and has_unanch:
-                        rs_med = _rd_from_params(params_med)
-                        rs_lo = _rd_from_params(params_lo) if params_lo is not None else rs_med
-                        rs_hi = _rd_from_params(params_hi) if params_hi is not None else rs_med
-                    else:
+                    # r_d for the curves and the badge, decided by this group's sampled
+                    # parameters (the same policy Config applied when it built the group):
+                    #   BBN/CMB in the group -> calibrated (CLASS from the background)
+                    #   r_d sampled          -> free (its posterior value)
+                    #   otherwise            -> fixed (BAO alone, or BAO with data that fix
+                    #                           neither H0 nor r_d; H_0 then measures h*r_d)
+                    _policy = _rd_badge_policy(CONFIG.get(model_name, {}), obs_list)
+                    if _policy == "fixed":
                         rs_med = rs_lo = rs_hi = fixed_rd
-
-                    # Compact in-panel rd badge
-                    if has_cal:
-                        _policy, rd_show = "calibrated", float(rs_med)
-                    elif has_bao and has_unanch:
-                        _policy, rd_show = "free", float(rs_med)
                     else:
-                        _policy, rd_show = "fixed", float(fixed_rd)
+                        rs_med = _rd_from_params(params_med)
+                        rs_lo = _rd_from_params(params_lo) if params_lo is not None else rs_med
+                        rs_hi = _rd_from_params(params_hi) if params_hi is not None else rs_med
+                    rd_show = float(rs_med)
 
                     fs = int(PLOT_SETTINGS.get("label_font_size", 12))
                     rd_text = (rf"$r_d$ ({_policy}): ${rd_show:.2f}\,\mathrm{{Mpc}}$"
@@ -1427,12 +1752,25 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                             label=(f"{model_disp} (median) {label_txt}".strip()),
                         )
 
-                    # Optional 1σ band
-                    if params_lo is not None and params_hi is not None:
-                        y_low = MODEL_FUNCS["DM"](z_dense, params_lo, model_name) / rs_lo
-                        y_high = MODEL_FUNCS["DM"](z_dense, params_hi, model_name) / rs_hi
-                        ax.fill_between(z_dense, y_low, y_high, color="k", alpha=BAND_ALPHA,
-                                        linewidth=0, zorder=Z_BAND)
+                    # 68% band per plotted quantity, from posterior draws
+                    if band_draws:
+                        _codes = sorted(codes_present)
+
+                        def _bao_curves(p, _codes=_codes):
+                            rs_p = fixed_rd if _policy == "fixed" else _rd_from_params(p)
+                            dm_p = MODEL_FUNCS["DM"](z_dense, p, model_name)
+                            dh_p = C_KM_S / (float(p["H_0"]) * MODEL_FUNCS["E"](z_dense, p, model_name))
+                            dv_p = MODEL_FUNCS["DV"](z_dense, p, model_name)
+                            by_code = {8: dm_p / rs_p, 6: dh_p / rs_p, 5: dm_p / (1.0 + z_dense) / rs_p,
+                                       3: dv_p / rs_p, 7: rs_p / dv_p}
+                            return np.concatenate([by_code.get(c, dm_p / rs_p) for c in _codes])
+
+                        band = _posterior_band(band_draws, _bao_curves)
+                        if band is not None:
+                            nz = z_dense.size
+                            for k in range(len(_codes)):
+                                ax.fill_between(z_dense, band[0][k * nz:(k + 1) * nz], band[1][k * nz:(k + 1) * nz],
+                                                color="k", alpha=BAND_ALPHA, linewidth=0, zorder=Z_BAND)
 
                     y_label = r"BAO / DESI (dimensionless)"
 
@@ -1456,29 +1794,36 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                             label=f"{model_disp} (median)"
                         )
 
-                        if params_lo is not None and params_hi is not None:
-                            if backend == "alterbbn":
-                                y_low = float(SP.bbn_predict_alterbbn(params_lo, data[rep_type]))
-                                y_high = float(SP.bbn_predict_alterbbn(params_hi, data[rep_type]))
-                            elif backend == "alterbbn_grid":
-                                y_low = float(SP.bbn_predict_grid(params_lo, data[rep_type]))
-                                y_high = float(SP.bbn_predict_grid(params_hi, data[rep_type]))
-                            else:
-                                y_low = float(SP.bbn_predict_approx(params_lo))
-                                y_high = float(SP.bbn_predict_approx(params_hi))
+                        if band_draws:
+                            def _dh_pred(p, _b=backend, _d=data[rep_type]):
+                                if _b == "alterbbn":
+                                    return np.array([float(SP.bbn_predict_alterbbn(p, _d))])
+                                if _b == "alterbbn_grid":
+                                    return np.array([float(SP.bbn_predict_grid(p, _d))])
+                                return np.array([float(SP.bbn_predict_approx(p))])
 
-                            ax.fill_between(z_dense, y_low, y_high, color="k", alpha=BAND_ALPHA,
-                                            linewidth=0, zorder=Z_BAND)
+                            band = _posterior_band(band_draws, _dh_pred)
+                            if band is not None:
+                                ax.fill_between(z_dense, float(band[0][0]), float(band[1][0]), color="k",
+                                                alpha=BAND_ALPHA, linewidth=0, zorder=Z_BAND)
 
                     else:
                         if rep_type == "f_sigma_8":
-                            gamma_fixed = ("gamma" not in params_med)
+                            from Plots.Plot_functions import growth_is_geff as _geff_on
+                            from Kosmulator_main import constants as _Kgr
+                            import User_defined_modules as _UDMg
+                            gamma_fixed = ("gamma" not in params_med) and not _geff_on()
+                            txt = None
+                            if _geff_on() and _UDMg.get_geff_function(model_name) is None \
+                                    and model_name not in _Kgr.GR_GRAVITY_MODELS:
+                                txt = "GR growth (no G_eff function)"
                             if gamma_fixed:
                                 txt = (
                                     rf"$\gamma$ fixed to {GAMMA_FS8_SINGLETON:.2f} (GR)"
                                     if use_latex
                                     else f"γ fixed to {GAMMA_FS8_SINGLETON:.2f} (GR)"
                                 )
+                            if txt:
                                 ax.text(
                                     0.98, 0.98, txt,
                                     transform=ax.transAxes, ha="right", va="top",
@@ -1492,11 +1837,14 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                             z_dense, y_model, color=MODEL_COLOR, lw=2.0, zorder=Z_MODEL,
                             label=f"{model_disp} (median)"
                         )
-                        if params_lo is not None and params_hi is not None:
-                            y_low, _ = model_curve_for_type(rep_type, z_dense, params_lo, model_name, MODEL_FUNCS)
-                            y_high, _ = model_curve_for_type(rep_type, z_dense, params_hi, model_name, MODEL_FUNCS)
-                            ax.fill_between(z_dense, y_low, y_high, color="k", alpha=BAND_ALPHA,
-                                            linewidth=0, zorder=Z_BAND)
+                        if band_draws:
+                            band = _posterior_band(
+                                band_draws,
+                                lambda p, _t=rep_type: model_curve_for_type(_t, z_dense, p, model_name, MODEL_FUNCS)[0],
+                            )
+                            if band is not None:
+                                ax.fill_between(z_dense, band[0], band[1], color="k", alpha=BAND_ALPHA,
+                                                linewidth=0, zorder=Z_BAND)
 
                 ax.set_ylabel(y_label)
 
@@ -1522,6 +1870,22 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                         obs_type, x_dat, None if meta is None else meta,
                         params_med, model_name, MODEL_FUNCS
                     )
+
+                    # Uncalibrated SNe: the magnitude offset is marginalised in the
+                    # likelihood, so place the data with its best-fit value here.
+                    if (obs_type in ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "DESY5", "Union3")
+                            and bool((data.get(obs_type) or {}).get("marginalise_offset", False))):
+                        try:
+                            # JLA: per-SN offsets (two host-mass classes), using the
+                            # same alpha, beta as the standardised magnitudes
+                            _off = SP.sn_best_offset(
+                                data[obs_type], np.asarray(y_dat, dtype=float) - np.asarray(y_mod_pts, dtype=float),
+                                param_dict=params_med,
+                            )
+                            if np.all(np.isfinite(_off)):
+                                y_dat = np.asarray(y_dat, dtype=float) - _off
+                        except Exception:
+                            pass
 
                     # Best dataset highest among observations, but still below band/model
                     z_obs = Z_OBS_BASE + (len(part_sorted) - 1 - oi)
@@ -1558,7 +1922,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                     )
 
                     overlay_flag = bool(PLOT_SETTINGS.get("overlay_model_for_bao_desi", False))
-                    SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
+                    SNE_TYPES = ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
 
                     if obs_type in ("BAO", "DESI_DR1", "DESI_DR2"):
                         if overlay_flag:
@@ -1596,7 +1960,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                 # Legend: model first, then datasets (deduped)
                 handles, labels_here = _model_first_legend(ax, model_disp)
 
-                SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
+                SNE_TYPES = ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
                 if all(o in SNE_TYPES for o in part_sorted):
                     legend_loc = "lower right"
                     legend_anchor = (0.98, 0.02)
@@ -1615,6 +1979,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
 
                 ax.tick_params(labelbottom=False)
 
+            _layout_bestfit(fig, axes, PLOT_SETTINGS)
             save_figure(fig, model_name, obs_key, "bestfit", PLOT_SETTINGS)
             plt.close(fig)
 

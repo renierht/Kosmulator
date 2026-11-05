@@ -7,6 +7,7 @@ Main entry: `main(...)` — called by Kosmulator.py
 from __future__ import annotations
 
 import os
+import sys
 import logging
 import time
 from copy import deepcopy
@@ -23,6 +24,7 @@ except Exception:  # pragma: no cover
 
 import User_defined_modules as UDM
 from Kosmulator_main import Config
+from Kosmulator_main.utils import acquire_run_lock
 from Kosmulator_main.utils import (
     parse_cli_args,
     build_plot_settings,
@@ -37,13 +39,27 @@ from Kosmulator_main.utils import (
     cleanup_pantheon_cov,
     get_pool,
     get_parallel_flag,
+    set_main_threads,
+    mpi_node_ranks,
+    mpi_abort_on_error,
+    mpi_wait_all,
+    set_post_pool,
+    MPI_END_POLL_MAX_S,
     prepare_output,
     load_or_run_chain,
     init_summary_context,
     issue_observation_warnings,   # moved from here into utils.py
+    model_group_engines,
+    describe_group_engines,
+    engine_for_group,
+    settings_summary,
+    group_flags,
+    cpu_topology,
+    suggest_pool_settings,
 )
 import Plots.Plots as MP
 from Kosmulator_main import Class_run as CR
+from Kosmulator_main import rd_helpers as RDH
 import Kosmulator_main.constants as K   # live access to flags
 from Kosmulator_main.utils import generate_label as cfg_generate_label
 
@@ -133,6 +149,74 @@ def _log_parameter_injections(logger, obs_blocks: Iterable[Sequence[str]]) -> No
         # WARNING level so it stands out visually, like before
         logger.warning("  %s | %s", f"{block_str:<44}", params_str)
         
+def _rounds(n: int) -> str:
+    return f"{n} round{'s' if n != 1 else ''}"
+
+
+def suggestion_lines(CONFIG, model_names, vectorised, num_cores: int, use_mpi: bool, n_workers: int) -> List[str]:
+    """
+    CT-44: for every model with groups that use the worker pool, the --class_threads and nwalkers
+    that suit the CPUs given (utils.suggest_pool_settings), next to this run's setting. The
+    minimum walkers are Config's rule, 2 x the largest number of sampled parameters + 2, so the
+    CMB nuisance setting (lite, baseline, extended, full) and the ACT/SPT calibrations enter
+    through it. Under MPI only the walker range for the worker ranks (their threads depend on
+    how the ranks are launched).
+    """
+    logical, smt = cpu_topology()
+    ct = int(getattr(K, "CLASS_THREADS_PER_WORKER", 1) or 1)
+    out: List[str] = []
+    for m in model_names:
+        cfg = CONFIG[m]
+        can_vec = bool(vectorised.get(m, False))
+        groups = cfg.get("observations", []) or []
+        types = cfg.get("observation_types", []) or []
+        pool_idx = []
+        for i, g in enumerate(groups):
+            has_cmb, has_bbn = group_flags(g, types[i] if i < len(types) else [])
+            if has_cmb or has_bbn or not can_vec or any(
+                    o in getattr(K, "POOL_PREFERRED_DATASETS", set()) for o in g):
+                pool_idx.append(i)
+        if not pool_idx:
+            continue
+        ndims = [int(x) for x in (cfg.get("ndim") or [])]
+        min_w = 2 * max(ndims) + 2 if ndims else 2
+        half_min = (min_w + 1) // 2
+        nw = int(cfg.get("nwalker", 0) or 0)
+        half_run = (nw + 1) // 2
+        if use_mpi:
+            w = max(1, int(n_workers))
+            r = -(-half_min // w)
+            hi = 2 * w * r
+            out.append(f"Walkers for {m} (at least {min_w}) on {w} MPI worker ranks: nwalkers {2 * half_min} - {hi}: "
+                       f"{_rounds(r)} of calls per half-step ({hi + 2} - {2 * w * (r + 1)}: {r + 1}). "
+                       f"This run: nwalkers {nw}, {_rounds(-(-half_run // w))}.")
+            continue
+        uses_class = any(group_flags(groups[i], types[i] if i < len(types) else [])[0] for i in pool_idx)
+        t, w, r, (lo, hi) = suggest_pool_settings(int(num_cores), min_w, uses_class, smt)
+        w_run = max(1, int(num_cores) // ct)
+        smt_txt = f", {smt} threads per core" if smt > 1 else ""
+        out.append(f"Suggested for {m} (at least {min_w} walkers; {int(num_cores)} CPUs{smt_txt}): "
+                   f"--class_threads {t} ({w} workers) with nwalkers {lo if lo == hi else f'{lo} - {hi}'}: "
+                   f"{_rounds(r)} of calls per "
+                   f"half-step ({hi + 2} - {2 * w * (r + 1)}: {r + 1}). This run: --class_threads {ct}, "
+                   f"{w_run} workers, nwalkers {nw}, {_rounds(-(-half_run // w_run))}.")
+    return out
+
+
+def pool_rule(CONFIG, model_name: str, can_vec: bool) -> bool:
+    """
+    One rule for main's any_needs_pool (MPI: whether the worker ranks serve a pool) and for
+    run_mcmc_for_all_models (whether a pool is built): a group with CMB or BBN (CLASS per point: emcee
+    through the pool, and the initial ball through it with any engine), a model that cannot be
+    vectorised, or a pool-preferred data set (official JLA). Audit 19 Oct: the two rules had drifted
+    apart, so under MPI with --force_zeus a pool could be built on rank 0 while the other ranks waited
+    in the idle barrier (a hang).
+    """
+    return bool(_model_has_any_cmb_or_bbn(CONFIG, model_name) or not can_vec
+                or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set())
+                       for grp in CONFIG[model_name].get("observations", []) for o in grp))
+
+
 def _model_has_any_cmb_or_bbn(CONFIG, model_name: str) -> bool:
     """
     Return True if *any* observation group for this model
@@ -149,14 +233,29 @@ def _model_has_any_cmb_or_bbn(CONFIG, model_name: str) -> bool:
 def main(
     model_names: List[str],
     observations: List[List[str]],
-    true_model: str,
+    reference_model: str,
     prior_limits: Dict[str, tuple],
-    true_values: Dict[str, Any],
+    reference_values: Dict[str, Any],
     nwalkers: int,
     nsteps: int,
     burn: int,
     convergence: float,
     pantheonp_mode: str = "PplusSH0ES",
+    sample_H0_uncalibrated_SNe: bool = False,
+    cmb_nuisance: str = "baseline",
+    waic_include_cmb: bool = False,
+    neutrinos: str = "massive",
+    nu_mass_eV: float = 0.06,
+    nu_N_eff: float = 3.044,
+    cmb_nonlinear=None,
+    hmcode_version: str = "2020",
+    growth_model: str = "gamma",
+    emcee_moves: str = "de_snooker",
+    zeus_light_mode: bool = True,
+    rd_background: str = "model",
+    lensing_only_priors: bool = True,
+    corner_show_nuisance: bool = False,
+    cmb_sample_theta: bool = False,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -172,6 +271,15 @@ def main(
     # 1) CLI
     # ------------------------------------------------------------------
     args = parse_cli_args()
+    # CT-40: CLASS threads per pool worker / MPI worker rank, on every rank (get_pool reads it)
+    K.CLASS_THREADS_PER_WORKER = max(1, int(getattr(args, "class_threads", 1) or 1))
+    if getattr(args, "peek", False):
+        # Item 54: look at the run --output_suffix (while it goes on, or afterwards); no sampling
+        from Kosmulator_main.peek import peek
+        peek((getattr(args, "output_suffix", "") or "").strip(), burn=getattr(args, "peek_burn", None),
+             all_params=bool(getattr(args, "corner_show_all_cmb_params", False)),
+             latex_enabled=bool(getattr(args, "latex_enabled", False)))
+        return {}
     K.set_engine_overrides(
         force_vec=getattr(args, "force_vectorisation", False),
         disable_vec=getattr(args, "disable_vectorisation", False),
@@ -179,6 +287,43 @@ def main(
         force_e=getattr(args, "force_emcee", False),
         mode=getattr(args, "engine_mode", "mixed"),
     )
+
+    # Planck high-l likelihood: plik with Planck's nuisance parameters (baseline 21, extended 30,
+    # full 47), or plik_lite. Set before the config is built (the sampled nuisances and the
+    # files depend on it).
+    _mode = str(cmb_nuisance).strip().lower()
+    if _mode not in K.CMB_NUISANCE_MODES:
+        raise ValueError(f"cmb_nuisance must be one of {K.CMB_NUISANCE_MODES}, not {cmb_nuisance!r}")
+    K.CMB_NUISANCE = _mode
+    # WAIC of groups with Planck data: one term per Planck likelihood, or n/a (item 53)
+    K.WAIC_INCLUDE_CMB = bool(waic_include_cmb)
+    K.CORNER_SHOW_NUISANCE = bool(corner_show_nuisance)          # CT-15
+    # Neutrinos in every CLASS call and in the late-time E(z) (items 27, 13). Before any pool
+    # exists: spawned workers inherit them through the KOSM_* variables set here.
+    K.set_neutrinos(neutrinos, nu_mass_eV, nu_N_eff)
+    # Non-linear correction of the CMB lensing (one setting for every model) and the growth
+    # model for f and f sigma_8 (gamma, or the model's G_eff): also before any pool, and
+    # before the config (with "geff" gamma is not sampled)
+    K.set_cmb_nonlinear(cmb_nonlinear, hmcode_version)
+    K.set_growth_model(growth_model)
+    # Proposal moves of the samplers (item 55): emcee stretch or DE + snooker, zeus light mode
+    K.set_sampler_moves(emcee_moves, zeus_light_mode)
+    # r_d of calibrated BAO/DESI groups: the model's own E(z) (rd_Class) or flat LCDM (item 12).
+    # Before any pool: spawned workers read KOSM_RD_BACKGROUND.
+    K.set_rd_background(rd_background)
+    # Lensing without primary CMB (item 62): n_s prior and tau fixed. Before the config (tau is
+    # then not sampled) and before any pool (workers read KOSM_LENSING_ONLY_PRIORS).
+    K.set_lensing_only_priors(lensing_only_priors)
+    K.set_cmb_sample_theta(cmb_sample_theta)
+    # l_max of the lensed CLASS spectra: 3000 for Planck, 8501 with ACT, 4095 with SPT (item 57).
+    # One value for the run (every CMB group of it), before any pool: workers read KOSM_CMB_CLASS_LMAX.
+    K.set_cmb_class_lmax(K.cmb_lmax_for_groups(observations))
+    if _mode == "lite":
+        # figures and tables name the likelihood that was used
+        for _t in ("CMB_hil", "CMB_hil_TT"):
+            _tex, _txt = K.OBS_PRETTY_MAP[_t]
+            if not _txt.endswith(" lite"):
+                K.OBS_PRETTY_MAP[_t] = (_tex + " lite", _txt + " lite")
 
     # ------------------------------------------------------------------
     # 2) Plot settings
@@ -190,13 +335,14 @@ def main(
     PLOT_SETTINGS["corner_show_all_cmb_params"] = bool(
         getattr(args, "corner_show_all_cmb_params", False)
     )
+    PLOT_SETTINGS["corner_show_nuisance"] = bool(corner_show_nuisance)       # CT-15
     PLOT_SETTINGS["corner_table_full_params"] = bool(
         getattr(args, "corner_table_full", False)
     )
 
-    base_plots = PLOT_SETTINGS.get(
-        "base_plots_dir", str(Path("Plots") / "Saved_plots")
-    )
+    # Same root as corner and best-fit plots (constants.DEFAULT_PLOTS_BASE);
+    # "Saved_plots" here split the output into two folders on Linux/macOS.
+    base_plots = PLOT_SETTINGS.get("base_plots_dir", K.DEFAULT_PLOTS_BASE)
     suffix = (getattr(args, "output_suffix", "") or "").strip()
     auto_base = os.path.join(base_plots, suffix) if suffix else base_plots
     PLOT_SETTINGS["autocorr_save_path"] = auto_base
@@ -207,37 +353,56 @@ def main(
     )
     _user_buf = getattr(args, "autocorr_buffer", None)
     PLOT_SETTINGS["autocorr_buffer_after_burn"] = int(
-        _user_buf if _user_buf is not None else max(1000, burn // 5)
+        _user_buf if _user_buf is not None else 0
     )
     PLOT_SETTINGS["tau_consecutive"] = max(1, int(args.consecutive_required))
+    # Tolerance on the relative change of tau_max (Kosmulator.py `convergence`),
+    # used by the stopping rule and quoted in the convergence report
+    PLOT_SETTINGS["conv_tau_rtol"] = float(convergence)
     PLOT_SETTINGS["callback_ncheck"] = PLOT_SETTINGS["autocorr_check_every"]
 
     # ------------------------------------------------------------------
     # 3) MPI init
     # ------------------------------------------------------------------
     comm, rank = init_mpi()
+    # An error on any rank ends the whole MPI job instead of leaving the others waiting (item 50)
+    mpi_abort_on_error(comm)
+    # MPI ranks on rank 0's machine (they sleep while rank 0 works alone, item 49): rank 0's
+    # threads for its own CLASS work (item 45). Counted here, while every rank is present.
+    K.MPI_NODE_RANKS = mpi_node_ranks(comm) if bool(getattr(args, "use_mpi", False)) else 1
 
     # ------------------------------------------------------------------
     # 4) Master builds CONFIG & data
     # ------------------------------------------------------------------
+    if rank == 0 and int(nsteps) <= int(burn):
+        # CT-32 (audit 19 Oct): refused rather than warned. zeus extended such a chain once by at most
+        # max(buffer, check interval) steps; emcee not at all, so its chain after the burn-in was empty
+        from Kosmulator_main.utils import refuse
+        refuse(f"nsteps ({int(nsteps)}) must be larger than burn ({int(burn)}): no samples would remain after "
+               "the burn-in. Raise nsteps or lower burn.")
     if rank == 0:
         style = getattr(args, "init_log", "terse")
         with init_summary_context(style=style):
             models = UDM.Get_model_names(model_names)
             CONFIG, data = Config.create_config(
                 models=models,
-                true_values=true_values,
+                reference_values=reference_values,
                 prior_limits=prior_limits,
                 restrictions=UDM.Get_model_restrictions(model_names),
+                coupled_restrictions=UDM.Get_model_coupled_restrictions(model_names),
                 observation=observations,
                 nwalkers=nwalkers,
                 nsteps=nsteps,
                 burn=burn,
                 model_name=model_names,
                 pantheonp_mode=pantheonp_mode,
+                sample_H0_uncalibrated_SNe=sample_H0_uncalibrated_SNe,
                 logger=log,
             )
             issue_observation_warnings(CONFIG, models, token_mode=True)
+        from Kosmulator_main.utils import warn_data_overlaps
+        warn_data_overlaps(CONFIG, models)                        # item 35: same data counted twice
+        announce_growth_and_lensing(CONFIG, list(model_names))
     else:
         models = None
         CONFIG = None
@@ -261,7 +426,7 @@ def main(
     for tag in ("PantheonP", "PantheonPS"):
         pant_cov = compute_pantheon_cov(
             data,
-            CONFIG[true_model],
+            CONFIG[reference_model],
             comm,
             rank,
             os.path.join(K.OBSERVATIONS_BASE, "PantheonP.cov"),
@@ -307,8 +472,15 @@ def main(
     for m in model_names:
         can_vec = bool(vectorised.get(m, False))
         touches_cmb_bbn = _model_has_any_cmb_or_bbn(CONFIG, m)
+        # Expensive late-time likelihoods (official JLA) run zeus through the pool
+        if any(o in getattr(K, "POOL_PREFERRED_DATASETS", set())
+               for grp in CONFIG[m].get("observations", []) for o in grp):
+            any_needs_pool = True
 
         if engine_mode in ("single", "mixed"):
+            # (A rule here used to send every wowaCDM model to emcee because zeus
+            # walkers got stuck at the w0 + wa < 0 wall; fixed by the initial ball
+            # and warm-up in Kosmulator_MCMC, so w0waCDM follows the general rule.)
             if force_emcee:
                 eng = "emcee"
             elif force_zeus and (zeus is not None):
@@ -317,40 +489,41 @@ def main(
                 if touches_cmb_bbn:
                     eng = "emcee"
                 else:
-                    eng = "zeus" if (can_vec and zeus is not None) else "emcee"
+                    eng = "zeus" if (can_vec and zeus is not None) else "emcee" 
 
             K.engine_for_model[m] = eng
 
-            if eng == "emcee" or (eng == "zeus" and not can_vec):
-                any_needs_pool = True
-
-        elif engine_mode == "fastest":
-            if (not can_vec) or touches_cmb_bbn:
-                any_needs_pool = True
-
-        else:
+        elif engine_mode != "fastest":
             eng = "emcee" if touches_cmb_bbn else (
                 "zeus" if (can_vec and zeus is not None) else "emcee"
             )
             K.engine_for_model[m] = eng
-            if eng == "emcee" or (eng == "zeus" and not can_vec):
-                any_needs_pool = True
+        # the same rule as run_mcmc_for_all_models (pool_rule): CMB/BBN groups (emcee, or the
+        # initial ball with zeus), non-vectorisable models, the official JLA
+        if pool_rule(CONFIG, m, can_vec):
+            any_needs_pool = True
 
     # ------------------------------------------------------------------
     # 9) MPI early-exit if no pool is ever needed
     # ------------------------------------------------------------------
     if bool(getattr(args, "use_mpi", False)) and not any_needs_pool:
+        # The extra ranks wait for rank 0 in a sleeping barrier (MPI_Finalize spins on
+        # MPICH ch3, a whole core per rank for the whole run); rank 0 joins it at exit
         if rank != 0:
             try:
                 if comm is not None:
                     from mpi4py import MPI as _MPI
+                    mpi_wait_all(comm, MPI_END_POLL_MAX_S)
                     _MPI.Finalize()
             finally:
                 os._exit(0)
         else:
+            if comm is not None:
+                import atexit
+                atexit.register(mpi_wait_all, comm)
             print(
-                "MPI requested but all models use vectorized Zeus → "
-                "proceeding on rank 0; extra ranks exited."
+                "MPI requested but every group runs vectorised in this process (zeus or emcee) → "
+                "proceeding on rank 0; the extra ranks wait idle until it ends."
             )
 
     # ------------------------------------------------------------------
@@ -365,32 +538,54 @@ def main(
                 force_zeus,
                 force_emcee,
             )
+        if force_zeus and any(group_flags(g, t)[0] for m in model_names
+                              for g, t in zip(CONFIG[m].get("observations", []),
+                                              CONFIG[m].get("observation_types", []))):
+            log.info("--force_zeus does not apply to groups with CMB data: they always run emcee, through the "
+                     "worker pool")
 
+        # the engine of each group (CT-31); the model banners use them (CT-17)
+        K.GROUP_ENGINES = {m: model_group_engines(CONFIG, m, bool(vectorised.get(m, False)))
+                           for m in model_names}
         for m in model_names:
             log.info(
-                "  Model '%s': main engine=%s (vectorised=%s, touches CMB/BBN=%s)",
+                "  Model '%s': %s (vectorised=%s, touches CMB/BBN=%s)",
                 m,
-                K.engine_for_model.get(m, "auto"),
+                describe_group_engines(K.GROUP_ENGINES[m]),
                 bool(vectorised.get(m, False)),
                 _model_has_any_cmb_or_bbn(CONFIG, m),
             )
+        # the moves, once here instead of once per group (CT-01)
+        _used = sorted({e for d in K.GROUP_ENGINES.values() for e in d.values()})
+        if _used:
+            from Kosmulator_main import sampler_moves as _SM
+            log.info("  Moves: %s", "; ".join(_SM.describe(e) for e in _used))
 
         use_mpi   = bool(getattr(args, "use_mpi", False))
         num_cores = int(getattr(args, "num_cores", 1))
         parallel_flag = get_parallel_flag(use_mpi=use_mpi, num_cores=num_cores)
 
-        if any_needs_pool and parallel_flag and num_cores > 1:
+        if any_needs_pool and parallel_flag:
+            _ct = int(K.CLASS_THREADS_PER_WORKER)
             if use_mpi:
                 log.info(
                     "Parallel plan: MPI Pool for emcee / non-vectorised Zeus. "
                     "Vectorised Zeus remains single-core."
                 )
+                if _ct > 1:
+                    log.info("Each MPI worker rank runs CLASS on %d threads (--class_threads): launch "
+                             "the ranks with %d cores each, else the threads share one core.", _ct, _ct)
             else:
                 log.info(
-                    "Parallel plan: local multiprocessing Pool with up to %d workers "
-                    "for emcee / non-vectorised Zeus chains.",
-                    num_cores,
+                    "Parallel plan: local multiprocessing Pool with up to %d workers for CMB, BBN and "
+                    "official JLA groups and non-vectorised models%s; the other groups run vectorised "
+                    "in this process.",
+                    max(1, num_cores // _ct),
+                    f", {_ct} CLASS threads each (--class_threads {_ct})" if _ct > 1 else "",
                 )
+                if _ct > 1 and num_cores % _ct:
+                    log.warning("--num_cores %d is not a multiple of --class_threads %d: %d core(s) stay "
+                                "unused by the pool.", num_cores, _ct, num_cores % _ct)
         elif any_needs_pool:
             log.info(
                 "Parallel plan: engines could use a Pool, but parallelism disabled → serial."
@@ -398,14 +593,156 @@ def main(
         else:
             log.info(
                 "Parallel plan: selected engines do not require a worker Pool "
-                "(vectorised Zeus only)."
+                "(vectorised zeus and emcee run in this process)."
             )
+
+        # Item 42: a CMB group without a pool evaluates its walkers one after another
+        cmb_groups = [f"{m}: {'+'.join(g)}" for m in model_names
+                      for g in CONFIG[m].get("observations", []) if any(o in K.CMB_TAGS for o in g)]
+        nw = max([int(CONFIG[m].get("nwalker", nwalkers)) for m in model_names] or [nwalkers])
+        if cmb_groups and not parallel_flag:
+            import platform as _platform
+            why = ("native Windows has no worker pool (run Kosmulator in WSL)"
+                   if _platform.system() == "Windows" else f"--num_cores {num_cores}")
+            log.warning(
+                "Serial CMB run (%s): %s. The walkers' CLASS + Planck evaluations (seconds each) "
+                "run one after another on one core, so a converged chain takes days. Use "
+                "--num_cores N (up to nwalker/2 = %d) or --use_mpi.",
+                why, "; ".join(cmb_groups), max(1, nw // 2))
+        if any_needs_pool and parallel_flag:
+            _ct = int(K.CLASS_THREADS_PER_WORKER)
+            n_workers = (((comm.Get_size() - 1) if comm is not None else 0) if use_mpi
+                         else max(1, num_cores // _ct))
+            if n_workers > max(1, nw // 2):
+                log.info(
+                    "%d workers for %d walkers: emcee and zeus move half the walkers at a time, "
+                    "so only %d workers are busy and %d wait at each half-step.",
+                    n_workers, nw, nw // 2, n_workers - nw // 2)
+            # CT-44: per model, the threads per worker and walker counts that suit the CPUs given
+            for line in suggestion_lines(CONFIG, model_names, vectorised, num_cores, use_mpi, n_workers):
+                log.info(line)
+
+        # Item 12: r_d with the model's own E(z) (rd_Class, Kosmulator_main/rd_class.py) for
+        # BAO/DESI groups calibrated by BBN or Planck, for models other than LCDM. Compiled once
+        # and cached (Class/.cache/rd_Class); loaded here, before any worker pool exists, so the
+        # workers only read the cached build.
+        _bao = {"BAO", "DESI_DR1", "DESI_DR2"}
+        _rdc_models = set()
+        if K.RD_BACKGROUND == "model":
+            _early = set(K.CMB_PRIMARY_TAGS) | {K.CMB_EARLY_TAG}
+            rdc_groups = [f"{m}: {'+'.join(g)}" for m in model_names if m not in K.RD_LCDM_MODELS
+                          for g in CONFIG[m].get("observations", [])
+                          if set(g) & _bao and (any(str(o).startswith("BBN") for o in g) or set(g) & _early)]
+            if rdc_groups:
+                try:
+                    from Kosmulator_main import rd_class as RDC
+                    RDC.ensure_ready(announce=True)
+                    _rdc_models = {m for m in model_names if m not in K.RD_LCDM_MODELS}
+                    log.info("r_d from CLASS with each model's own E(z) (rd_Class) for: %s",
+                             "; ".join(rdc_groups))
+                except Exception as e:
+                    log.warning("rd_Class could not be built or loaded (%s): r_d from CLASS's flat-LCDM "
+                                "background for every model instead (rd_background = \"lcdm\")", e)
+                    K.set_rd_background("lcdm")
+
+        # Item 15: BAO/DESI calibrated by BBN (no Planck data, so no CLASS build of
+        # Kosmulator's is loaded) take r_d from CLASS if `import classy` works, otherwise
+        # from the EH98 fit. The run goes on either way; say so before it starts.
+        _bao = {"BAO", "DESI_DR1", "DESI_DR2"}
+        rd_groups = [f"{m}: {'+'.join(g)}" for m in model_names if m not in _rdc_models
+                     for g in CONFIG[m].get("observations", [])
+                     if set(g) & _bao and any(str(o).startswith("BBN") or o == K.CMB_EARLY_TAG for o in g)
+                     and not set(g) & set(K.CMB_TAGS)]
+        if rd_groups and RDH.classy_import_problem():
+            # No classy loaded or installed: Kosmulator's own LCDM_v build (compiled once, then
+            # cached) gives the flat-LCDM r_d; built here, before any worker pool exists, and only
+            # with a compiler (without one every run would try and fail)
+            import shutil as _sh
+            _path = (CR._build_env() or os.environ).get("PATH")
+            if all(_sh.which(t, path=_path) for t in ("gcc", "g++", "make", "ar")):
+                try:
+                    CR.ensure_class_ready(RDH.OWN_CLASS_MODEL, announce=True)
+                    RDH._OWN_CLASS_FAILED = False
+                except Exception as e:
+                    log.warning("CLASS for %s could not be built or loaded: %s", RDH.OWN_CLASS_MODEL, e)
+        _rd_problem = RDH.classy_import_problem() if rd_groups else None
+        if _rd_problem:
+            bar = "#" * 78
+            log.warning(bar)
+            log.warning("r_d WILL COME FROM THE EH98 FIT, NOT CLASS, for: %s", "; ".join(rd_groups))
+            log.warning("  Reason: %s.", _rd_problem)
+            log.warning("  Effect: %s. The run continues; the statistics notes repeat this.",
+                        RDH.EH98_EFFECT)
+            log.warning("  Fix: Kosmulator builds its own CLASS (Class/%s) when a C compiler is there; "
+                        "kosmulator-doctor --build-class %s shows what is missing. Then rerun.",
+                        RDH.OWN_CLASS_MODEL, RDH.OWN_CLASS_MODEL)
+            log.warning(bar)
 
         log.info("────────────────────────────────────────────────────────")
 
     # ------------------------------------------------------------------
     # 11) Run MCMC
     # ------------------------------------------------------------------
+    # One run per output folder: refuse to start if another live run is
+    # writing to MCMC_Chains/<suffix> (it would interleave chain rows).
+    if rank == 0:
+        acquire_run_lock((getattr(args, "output_suffix", "") or "").strip())
+        # Item 54: what this run is, for --peek (written after the lock: a run refused
+        # because another one holds the folder must not overwrite that run's settings).
+        # Chains already in the folder are reused (or resumed) unless --overwrite: refuse when
+        # they were made with other likelihood settings, warn when that is unknown.
+        from Kosmulator_main.peek import write_run_settings, check_run_settings
+        _check = {
+            "neutrinos": K.NEUTRINOS, "nu_mass_eV": K.NU_MASS_EV, "nu_N_eff": K.NU_N_EFF,
+            "growth_model": K.GROWTH_MODEL, "cmb_nonlinear": K.CMB_NONLINEAR, "hmcode_version": K.HMCODE_VERSION,
+            "cmb_nuisance": K.CMB_NUISANCE, "sample_H0_uncalibrated_SNe": bool(sample_H0_uncalibrated_SNe),
+        }
+        if any(m not in K.RD_LCDM_MODELS for m in model_names):   # r_d is the same for LCDM models
+            _check["rd_background"] = K.RD_BACKGROUND
+        if any(K.group_is_lensing_only(g) for g in observations):    # item 62
+            _check["lensing_only_priors"] = bool(K.LENSING_ONLY_PRIORS)
+        if any(K.group_has_primary_cmb(g) for g in observations):    # theta or H_0 sampled
+            _check["cmb_sample_theta"] = bool(K.CMB_SAMPLE_THETA)
+        # data-set switches, when the run has that data set (audit 19 Oct: chains made without
+        # Pantheon's systematics were reused after PANTHEON_SYS_COV = "full")
+        _flat = {o for g in observations for o in g}
+        if "Pantheon" in _flat:
+            _check["PANTHEON_SYS_COV"] = getattr(K, "PANTHEON_SYS_COV", None)
+        if "CC" in _flat:
+            _check["CC_SYS_COV"] = K.CC_SYS_COV
+        if "f_sigma_8" in _flat:
+            _check["FS8_WIGGLEZ_COV"] = bool(K.FS8_WIGGLEZ_COV)
+            _check["FS8_AP_CORRECTION"] = bool(K.FS8_AP_CORRECTION)
+        if K.CMB_EARLY_TAG in _flat:
+            _check["CMB_EARLY_OMEGA"] = K.CMB_EARLY_OMEGA
+        check_run_settings((getattr(args, "output_suffix", "") or "").strip(), _check,
+                           overwrite=bool(getattr(args, "overwrite", False)))
+        _run = {
+            "models": list(model_names), "observations": [list(g) for g in observations],
+            "nwalkers": nwalkers, "nsteps": nsteps, "burn": burn, "convergence": convergence,
+            "cmb_nuisance": K.CMB_NUISANCE, "sample_H0_uncalibrated_SNe": bool(sample_H0_uncalibrated_SNe),
+            "waic_include_cmb": bool(K.WAIC_INCLUDE_CMB), "neutrinos": K.NEUTRINOS,
+            # a massless run has no neutrino mass (CT-26: 0.06 was recorded)
+            "nu_mass_eV": K.NU_MASS_EV if K.NEUTRINOS == "massive" else 0.0,
+            "nu_N_eff": K.NU_N_EFF, "growth_model": K.GROWTH_MODEL,
+            "cmb_nonlinear": K.CMB_NONLINEAR, "hmcode_version": K.HMCODE_VERSION,
+            "num_cores": int(getattr(args, "num_cores", 1)), "use_mpi": bool(getattr(args, "use_mpi", False)),
+            "class_threads": int(K.CLASS_THREADS_PER_WORKER),
+            "emcee_moves": K.EMCEE_MOVES, "zeus_light_mode": bool(K.ZEUS_LIGHT_MODE),
+            "rd_background": K.RD_BACKGROUND, "lensing_only_priors": bool(K.LENSING_ONLY_PRIORS),
+            "cmb_sample_theta": bool(K.CMB_SAMPLE_THETA),
+            "CC_SYS_COV": K.CC_SYS_COV, "PANTHEON_SYS_COV": getattr(K, "PANTHEON_SYS_COV", None),
+            "FS8_WIGGLEZ_COV": bool(K.FS8_WIGGLEZ_COV), "FS8_AP_CORRECTION": bool(K.FS8_AP_CORRECTION),
+            "engine_mode": getattr(K, "engine_mode", "mixed"),
+            "tau_consecutive": int(PLOT_SETTINGS.get("tau_consecutive", K.CONV_CONSECUTIVE)),
+            "autocorr_buffer": int(PLOT_SETTINGS.get("autocorr_buffer_after_burn", 0) or 0),
+            "corner_show_nuisance": bool(getattr(K, "CORNER_SHOW_NUISANCE", False)),
+        }
+        if K.CMB_EARLY_TAG in _flat:
+            _run["CMB_EARLY_OMEGA"] = K.CMB_EARLY_OMEGA
+        K.RUN_SETTINGS = dict(_run)      # the "Settings" summary and the results' header (CT-26)
+        write_run_settings((getattr(args, "output_suffix", "") or "").strip(), _run)
+
     samples = run_mcmc_for_all_models(
         models=models,
         observations=observations,
@@ -424,10 +761,30 @@ def main(
     # ------------------------------------------------------------------
     # 12) Post-processing
     # ------------------------------------------------------------------
-    if rank == 0:
-        MP.generate_plots(samples, CONFIG, PLOT_SETTINGS, data, true_model)
-        elapsed = format_elapsed_time(time.time() - t0)
-        print_completion_banner(elapsed)
+    try:
+        if rank == 0:
+            # What to cite for this run: Kosmulator, the data sets of its groups and the codes used
+            # (written before the plots, so a plotting error does not lose it)
+            from Kosmulator_main import citations as CIT
+            _cite = CIT.write_run_citations(
+                PLOT_SETTINGS.get("output_suffix", "default_run"), list(model_names),
+                [list(g) for g in observations],
+                engines=CIT.ENGINES_USED or set(getattr(K, "engine_for_model", {}).values()),
+                settings={"emcee_moves": K.EMCEE_MOVES, "cmb_nonlinear": K.CMB_NONLINEAR,
+                          "hmcode_version": K.HMCODE_VERSION},
+                bbn_backends={o: d.get("bbn_model_effective") for o, d in (data or {}).items()
+                              if isinstance(d, dict) and d.get("bbn_model_effective")})
+            if K.CMB_SAMPLE_THETA:
+                # cmb_sample_theta: the chains' 100 theta_MC becomes H_0 before the statistics
+                from Kosmulator_main import theta_mc as TM
+                TM.convert_theta_runs(samples, CONFIG)
+            MP.generate_plots(samples, CONFIG, PLOT_SETTINGS, data, reference_model)
+            if _cite:
+                print(f"\nWhat to cite for this run (data, codes, acknowledgements): {_cite}")
+            elapsed = format_elapsed_time(time.time() - t0)
+            print_completion_banner(elapsed)
+    finally:
+        close_open_pools()
 
     return samples
 
@@ -466,12 +823,17 @@ def run_mcmc_for_all_models(
     need_hil     = any("CMB_hil"     in grp for grp in observations)
     need_hilTT   = any("CMB_hil_TT"  in grp for grp in observations)
     need_lowl    = any("CMB_lowl"    in grp for grp in observations)
+    need_lowlTT  = any("CMB_lowl_TT" in K.cmb_group_components(grp) for grp in observations)   # P-ACT, SPA too
     need_lensing = any("CMB_lensing" in grp for grp in observations)
 
-    # Define ALL paths first
-    hil_path   = os.path.join(K.OBSERVATIONS_BASE, "plik_rd12_HM_v22b_TTTEEE.clik") if need_hil else None
-    hiltt_path = os.path.join(K.OBSERVATIONS_BASE, "plik_rd12_HM_v22_TT.clik")      if need_hilTT else None
-    lowl_path  = os.path.join(K.OBSERVATIONS_BASE, "simall_100x143_offlike5_EE_Aplanck_B.clik") if need_lowl else None
+    # Define ALL paths first (plik or plik_lite: constants.CMB_NUISANCE)
+    def _planck_path(tag: str, needed: bool):
+        return os.path.join(K.OBSERVATIONS_BASE, K.planck_clik_file(tag)) if needed else None
+
+    hil_path    = _planck_path("CMB_hil", need_hil)
+    hiltt_path  = _planck_path("CMB_hil_TT", need_hilTT)
+    lowl_path   = _planck_path("CMB_lowl", need_lowl)
+    lowltt_path = _planck_path("CMB_lowl_TT", need_lowlTT)
     # Lensing files (Config.load_all_data provides both)
     lens_raw     = data.get("CMB_lensing_RAW") if need_lensing else None
     lens_cmbmarg = data.get("CMB_lensing_CMBMARGED") if need_lensing else None
@@ -488,12 +850,115 @@ def run_mcmc_for_all_models(
             "smicadx12_Dec5_ftl_mv2_ndclpp_p_teb_consext8_CMBmarged.clik_lensing",
         )
 
+    if rank == 0:
+        if any(K.CMB_EARLY_TAG in g for g in observations):
+            # The compressed CMB prior: its z_* grid read (or made, with CAMB) before any pool
+            from Kosmulator_main import cmb_early as CE
+            CE.check_available()
+            log.info("%s: Gaussian prior on (theta_*, omega_b, omega_bc), DESI DR2 Appendix A; theta_* with each "
+                     "model's own background, z_* and r_s(z_*) from a CAMB grid", K.CMB_EARLY_TAG)
+        _ground = sorted({o for g in observations for o in g if o in K.GROUND_CMB_TAGS})
+        if _ground:
+            # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57): load them here, so a
+            # missing package stops the run now rather than in a worker
+            from Kosmulator_main import ground_cmb as GC
+            GC.check_available(_ground)
+            for t in _ground:
+                log.info("%s: %s (%d data points)", t, " + ".join(K.cmb_components(t)), GC.n_data(t))
+            _act_spt = [t for t in _ground if K.cmb_components(t) and set(K.cmb_components(t)) & {"CMB_ACT", "CMB_SPT"}]
+            if _act_spt:
+                log.info("CLASS spectra to l = %d for every CMB group of this run (ACT needs 8501, SPT 4095, "
+                         "Planck 3000): a CMB point costs more than with Planck alone", K.CMB_CLASS_LMAX)
+            for grp in observations:
+                tp = K.cmb_tau_prior(grp)
+                if tp:
+                    log.info("Group %s has no low-l EE likelihood: tau prior %.4f +- %.4f (the one of "
+                             "%s's own likelihood)", grp, tp[0], tp[1],
+                             "SPT-lite" if "CMB_SPT" in K.cmb_group_components(grp) else "ACT-lite")
+            if not K.CMB_NONLINEAR and _act_spt:
+                log.warning("cmb_nonlinear = None with %s: ACT and SPT reach l = 8500 and 4000, where "
+                            "non-linear lensing matters (ACT DR6 and SPT-3G D1 used HMcode 2020); set "
+                            "cmb_nonlinear = \"hmcode\" in Kosmulator.py", ", ".join(_act_spt))
+        _lens = sorted({o for g in observations for o in g if o in K.EXT_LENSING_TAGS})
+        if _lens:
+            # ACT DR6 + Planck PR4 and SPT-3G MUSE lensing (item 61): load the data now (ACT + Planck
+            # per group's mode; the corrected one writes its cache here, before any pool)
+            from Kosmulator_main import ground_cmb as GC
+            for grp in observations:
+                for t in grp:
+                    if t == "CMB_lensing_ACTPlanck":
+                        lens_only = not K.group_has_primary_cmb(grp)
+                        GC.check_lensing(t, lens_only)
+                        log.info("%s in %s: %s, %d band powers, %s", t, grp, K.ACT_LENS_VARIANT, GC.n_data(t),
+                                 "CMB-marginalised covariance (no primary CMB in the group)" if lens_only else
+                                 "likelihood corrections from the group's own CMB spectra")
+                    elif t in K.EXT_LENSING_TAGS:
+                        GC.check_lensing(t, False)
+                        log.info("%s in %s: MUSE phi phi, %d band powers to L = %d (CLASS spectra to l = %d)",
+                                 t, grp, GC.n_data(t), GC.spt_muse().lmax, K.CMB_CLASS_LMAX)
+            if not K.CMB_NONLINEAR:
+                log.warning("cmb_nonlinear = None with %s: the lensing power spectrum depends on non-linear "
+                            "growth at the multipoles these data use (at the Planck 2018 best fit, linear "
+                            "instead of HMcode raises chi^2 by 2.4 - 3.6 for ACT + Planck and 19 for SPT "
+                            "MUSE); set cmb_nonlinear = \"hmcode\" in Kosmulator.py", ", ".join(_lens))
+        _lens_only = [list(g) for g in observations if K.group_is_lensing_only(g)]
+        if _lens_only and not K.LENSING_ONLY_PRIORS:
+            log.warning("lensing_only_priors = False: %s sample n_s and tau_reio within their top-hat priors; "
+                        "lensing alone leaves n_s nearly free, and tau_reio enters none of these likelihoods "
+                        "(item 62)", _lens_only)
+
+    # Planck likelihood code (clik, or clipy when clik is missing; see Class_run)
+    if need_hil or need_hilTT or need_lowl or need_lowlTT or need_lensing:
+        if CR.clik is None:
+            _env = os.environ.get("CONDA_DEFAULT_ENV") or os.environ.get("VIRTUAL_ENV") or ""
+            raise ImportError(
+                "CMB likelihoods need clik or clipy. Easiest: pip install \"clipy-like>=0.15\" "
+                "(pure Python); or build CLIK as in the README's advanced installation. "
+                f"(This Python: {sys.executable}"
+                + (f", environment '{os.path.basename(_env)}'" if _env else "")   # CT-32: the wrong env
+                + "; is this the environment Kosmulator was installed in?)"
+            )
+        if need_lowl:
+            problem = CR.clipy_lowl_problem()
+            if problem:
+                raise ImportError(problem)
+        # Compiled clik holds one plik_lite likelihood per process ("plik_cmbonly
+        # already initialized"); clipy has no such limit.
+        if K.CMB_NUISANCE == "lite" and need_hil and need_hilTT and CR.CLIK_BACKEND == "clik":
+            raise RuntimeError(
+                "cmb_nuisance = \"lite\" with both CMB_hil and CMB_hil_TT in one run: compiled clik "
+                "can load only one plik_lite likelihood per process. Run them separately, or use "
+                "clipy (pip install \"clipy-like>=0.15\" and make clik unimportable)."
+            )
+        if rank == 0:
+            log.info("Planck likelihood code: %s (%s)", CR.CLIK_BACKEND, getattr(CR.clik, "__file__", ""))
+            if need_hil or need_hilTT:
+                log.info("Planck high-l likelihood: %s (cmb_nuisance = %s; %d nuisance parameters sampled for "
+                         "TT,TE,EE, %d for TT)", "plik_lite" if K.CMB_NUISANCE == "lite" else "plik", K.CMB_NUISANCE,
+                         len(K.planck_sampled_nuisances("CMB_hil")), len(K.planck_sampled_nuisances("CMB_hil_TT")))
+                if K.CMB_NUISANCE == "extended":
+                    log.warning("cmb_nuisance = \"extended\": the three polarisation efficiencies and the six EE dust "
+                                "amplitudes that Planck's baseline fixes are sampled with their stated Gaussian priors "
+                                "(a robustness check of the baseline, not Planck's own analysis).")
+                elif K.CMB_NUISANCE == "full":
+                    log.warning("cmb_nuisance = \"full\": all 47 plik inputs are sampled. 17 of them (A_pol, cib_index, "
+                                "the dust indices, the correlated-noise and subpixel template amplitudes) have no published "
+                                "uncertainty; their flat boxes are Kosmulator's choice (constants.PLANCK_NUISANCE_FULL_EXTRA). "
+                                "Planck never published this analysis, so there is no reference result; expect slow "
+                                "convergence and prior-dominated nuisances.")
+            # Planck's "TT" includes the low-l TT likelihood (Commander)
+            for grp in observations:
+                if ("CMB_hil" in grp or "CMB_hil_TT" in grp) and "CMB_lowl_TT" not in grp:
+                    log.warning("Group %s has Planck high-l without CMB_lowl_TT (Commander, l = 2 - 29); "
+                                "Planck 2018's TT,TE,EE+lowE and TT+lowE combinations include it.", grp)
+
     # Sanity-check clik files early (rank 0 only)
     if rank == 0:
         for name, path in [
             ("Plik TTTEEE", hil_path),
             ("Plik TT",     hiltt_path),
             ("SimAll EE",   lowl_path),
+            ("Commander TT", lowltt_path),
             ("Lensing RAW",      lens_raw),
             ("Lensing CMBmarg",  lens_cmbmarg),
         ]:
@@ -507,6 +972,8 @@ def run_mcmc_for_all_models(
         CR.preload_clik_hilTT(hiltt_path)
     if lowl_path:
         CR.preload_clik_lowl(lowl_path)
+    if lowltt_path:
+        CR.preload_clik_lowlTT(lowltt_path)
 
     if lens_raw:
         CR.preload_clik_lensing_raw(lens_raw)
@@ -517,9 +984,58 @@ def run_mcmc_for_all_models(
     parallel_flag = get_parallel_flag(use_mpi, num_cores)
     pool_cache = {"mpi": None, "local": None}
 
+    # Threads of this process's own CLASS/BLAS work (item 45): the cores the run was given on
+    # this machine, which wait while the main process works: --num_cores with a local pool,
+    # the ranks on rank 0's machine under MPI, 1 for a serial run
+    if parallel_flag and use_mpi:
+        # each rank holds --class_threads cores (CT-40); set_main_threads caps at the CPUs available
+        n_main = int(getattr(K, "MPI_NODE_RANKS", 1) or 1) * int(K.CLASS_THREADS_PER_WORKER)
+    elif parallel_flag:
+        n_main = num_cores
+    else:
+        n_main = 1
+    main_threads = set_main_threads(n_main)
+    if rank == 0:
+        log.info("Threads for CLASS and BLAS in the main process: %s", main_threads)
+        # every switch of the run in one summary, the last lines before the runs (CT-26)
+        _lines, _nondef = settings_summary()
+        for _ln in _lines:
+            log.info(_ln)
+        if _nondef:
+            log.warning("Not the default (*): %s", "; ".join(_nondef))
+        # CT-38 (a): the nested best-fit search of groups with CMB nuisance parameters
+        try:
+            from Kosmulator_main import Post_processing as PP
+            _nuis = []
+            for _m in (list(models.keys()) if isinstance(models, dict) else list(models)):
+                _cm = CONFIG.get(_m, {})
+                for _g, _pl in zip(_cm.get("observations", []), _cm.get("parameters", [])):
+                    if len(PP._fast_cmb_params(_pl)) >= 2:
+                        _nuis.append(f"{_m}: {'+'.join(_g)}")
+            if _nuis:
+                log.warning("The statistics of %d group(s) with Planck/ACT/SPT nuisance parameters (%s) include a "
+                            "nested best-fit search: one CLASS run and about 500 likelihood calls per point (these "
+                            "through the worker pool when there is one), up to %d points per group, one point after "
+                            "the other. It can take longer than a short run's sampling; "
+                            "KOSM_POLISH_NESTED_MAXFEV_CMB=N lowers the number of points.",
+                            len(_nuis), "; ".join(_nuis), PP._polish_nested_maxfev_cmb())
+        except Exception as _e:                      # a warning only; never stops the run
+            log.debug("nested-polish warning skipped: %s", _e)
+
     # Build the model list from either dict or list
     model_list = list(models.keys()) if isinstance(models, dict) else list(models)
     engine_mode = getattr(K, "engine_mode", "mixed")
+
+    def _model_needs_pool(m: str) -> bool:
+        """
+        A group of model m evaluates its likelihood in the worker pool: emcee for
+        CMB/BBN groups (also in engine mode "fastest", where main records no
+        model-level engine), a model that cannot be vectorised, or a pool-preferred
+        dataset (official JLA). The same rule as any_needs_pool in main.
+        """
+        return pool_rule(CONFIG, m, bool(vectorised.get(m, False)))
+
+    any_model_needs_pool = any(_model_needs_pool(m) for m in model_list)
 
     for model_name in model_list:
         # -------------------------------
@@ -548,7 +1064,19 @@ def run_mcmc_for_all_models(
         # To avoid starving those runs of parallelism, we create a Pool whenever
         # parallelism is allowed for this model. run_mcmc() will then decide
         # per observation whether to actually use it (vectorised Zeus ignores it).
-        need_pool = parallel_flag
+        # Only create workers when this model has a group that uses them: emcee,
+        # non-vectorised zeus, or a pool-preferred dataset (official JLA).
+        # Vectorised zeus never uses the pool, so creating one there only left
+        # idle worker processes. Under MPI the extra ranks must wait in the pool
+        # from the first model on (otherwise they would walk the group loop of the
+        # models rank 0 runs alone), so the pool is built at the first model when
+        # any model needs it; when none does, the extra ranks have already exited
+        # (step 9 of main) and no MPIPool is built for ranks that are gone.
+        model_needs_pool = _model_needs_pool(model_name)
+        need_pool = parallel_flag and (model_needs_pool or (use_mpi and any_model_needs_pool))
+
+        # BLAS/OpenMP threads for groups that sample in this process without a pool
+        # are set per group in Kosmulator_MCMC (constants.MAIN_BLAS_THREADS_NO_POOL).
 
         pool_for_model = None
         if need_pool:
@@ -568,6 +1096,7 @@ def run_mcmc_for_all_models(
                         hiltt_path,
                         lens_raw,
                         lens_cmbmarg,
+                        lowltt_path,
                     ),
                 )
             pool_for_model = pool_cache[key]
@@ -588,6 +1117,8 @@ def run_mcmc_for_all_models(
                 can_vec=bool(vectorised.get(model_name, False)),
                 touches_cmb_bbn=_model_has_any_cmb_or_bbn(CONFIG, model_name),
                 single_engine_map=K.engine_for_model,
+                pool_kind=("serial" if pool_for_model is None else ("mpi" if use_mpi else "local")),
+                group_engines=(getattr(K, "GROUP_ENGINES", {}) or {}).get(model_name),
             )
             #print(bar, flush=True)
 
@@ -603,26 +1134,32 @@ def run_mcmc_for_all_models(
                 print("-" * 66)
 
             # One-time CLASS run for CMB pipelines (avoid repeated heavy prep)
-            if not did_class_prep and any(x in obs_set for x in ("CMB_hil", "CMB_hil_TT", "CMB_lensing", "CMB_lowl")):
+            if not did_class_prep and any(x in obs_set for x in K.CMB_TAGS):
                 no_rebuild = str(os.environ.get("KOSM_NO_CLASS_REBUILD", "")).strip().lower() in ("1", "true", "yes", "on")
                 ok = CR.ensure_class_ready(
                     model_name,
                     force=False,
                     no_rebuild=no_rebuild,
                     announce=(rank == 0),
+                    recheck=True,   # hash the sources once per model; per-point calls skip it
                 )
                 if not ok and no_rebuild:
                     raise RuntimeError("classy missing and rebuild forbidden (KOSM_NO_CLASS_REBUILD=1).")
                 if not ok:
-                    # ultra-conservative fallback (should be rare)
-                    CR.run_model(model_name)
+                    # ultra-conservative fallback (should be rare); its output to the build log (CT-22)
+                    CR.build_logged(f"[CLASS] Building CLASS for {model_name}", model_name,
+                                    lambda: CR.run_model(model_name))
                     # and load it explicitly so the right binary is active
                     CR.ensure_class_ready(model_name, force=False, no_rebuild=False)
                 did_class_prep = True
-                UDM._class_cache = None
 
-            # Work on a copy so per-obs modifications don't leak into the next set
-            data_work = deepcopy(data)
+            # Work on a copy so per-obs modifications don't leak into the next set. CT-06: only this
+            # group's data sets and the entries that are not data sets (the CMB lensing file paths):
+            # the pool file and every worker hold this dictionary (the JLA group's file held every
+            # data set of the run, 122 MB instead of 26 MB). The likelihoods read data[obs] only for
+            # the group's own obs (log_likelihood_all).
+            _run_obs = {o for _g in observations for o in _g} | set(obs_set)
+            data_work = deepcopy({k: v for k, v in data.items() if k in obs_set or k not in _run_obs})
             data_work = apply_pantheon_cov(data_work, obs_set, pantheon_cov)
 
             if "PantheonP" in data_work:
@@ -643,9 +1180,14 @@ def run_mcmc_for_all_models(
                 config_model=CONFIG[model_name],
                 obs_index=i,
             )  # e.g. "CC+PantheonP_SH0ES" or "CC+PantheonP"
+            # plik_lite, extended and full chains go to their own folders (_plik_lite, ...), so a
+            # run never loads or resumes a chain of the same group made with another Planck set
+            out_key = key.replace("+", "_")
+            if K.CMB_NUISANCE != "baseline" and any(o in ("CMB_hil", "CMB_hil_TT") for o in obs_set):
+                out_key += f"_plik_{K.CMB_NUISANCE}"
             output_dir = prepare_output(
                 model_name,
-                key.replace("+", "_"),
+                out_key,
                 suffix,
             )  # .../LCDM_v/CC_PantheonP_SH0ES
 
@@ -691,6 +1233,22 @@ def run_mcmc_for_all_models(
                     num_cores=num_cores,
                     obs_key=key,
                 )
+                # A chain made with other settings can have other parameters (with growth_model
+                # "gamma", f and f_sigma_8 groups sample gamma; with "geff" they do not)
+                _s = Samples[key].get("samples") if isinstance(Samples[key], dict) else Samples[key]
+                _pars = list(CONFIG[model_name]["parameters"][i])
+                if _s is not None and getattr(_s, "ndim", 0) == 2 and _s.shape[1] != len(_pars):
+                    raise RuntimeError(
+                        f"{model_name} {key}: the chain in {output_dir} has {_s.shape[1]} parameters, but this "
+                        f"run's group has {len(_pars)} ({', '.join(_pars)}). It was made with other settings "
+                        "(for example growth_model). Use --overwrite or another --output_suffix.")
+                # Where this group's chain lives, for the convergence report
+                _eng = engine_for_group(model_name, can_vec, obs_set, CONFIG[model_name]["observation_types"][i])
+                if _eng == "zeus" and len(_pars) == 1:
+                    _eng = "emcee"
+                PLOT_SETTINGS.setdefault("chain_index", {})[(model_name, key)] = {
+                    "dir": output_dir, "key": key, "obs_index": i, "engine": _eng,
+                }
 
             if rank == 0:
                 print("-" * 66)
@@ -701,15 +1259,83 @@ def run_mcmc_for_all_models(
 
         All_Samples[model_name] = Samples
 
-    # Tidy up any workers we created
-    for p in getattr(locals().get("pool_cache", {}), "values", lambda: [])():
-        if p is not None:
-            try:
-                if hasattr(p, "close"):
-                    p.close()
-                if hasattr(p, "join"):
-                    p.join()
-            except Exception:
-                pass
+    # Keep the workers for the statistics and plots (item 52): their CLASS runs (CMB
+    # band draws, CMB WAIC draws) go through the pool; main() closes it afterwards
+    pools = [p for p in getattr(locals().get("pool_cache", {}), "values", lambda: [])() if p is not None]
+    _OPEN_POOLS.extend(pools)
+    if rank == 0 and pools:
+        set_post_pool(pools[0])
 
     return All_Samples
+
+
+#: Pools kept open after sampling for the statistics and plots (item 52)
+_OPEN_POOLS: list = []
+
+
+def announce_growth_and_lensing(CONFIG, model_names) -> None:
+    """
+    Start-up lines on how each model's growth data (f, f sigma_8) and lensed CMB spectra are
+    computed (growth_model, cmb_nonlinear in Kosmulator.py), with warnings where that is an
+    approximation for the model: GR growth for a model without <model>_Geff, non-linear
+    fits calibrated on GR simulations, G_eff in the growth but GR perturbations in CLASS.
+    """
+    import User_defined_modules as UDM
+
+    def _tags(m):
+        cfg = CONFIG.get(m, {})
+        return ({str(o) for g in cfg.get("observations", []) for o in g}
+                | {str(t) for ts in cfg.get("observation_types", []) for t in ts})
+
+    growth = [m for m in model_names if m in CONFIG and {"f", "f_sigma_8"} & _tags(m)]
+    cmb = [m for m in model_names if m in CONFIG and any(t.startswith("CMB") for t in _tags(m))]
+    bar = "#" * 78
+    if growth and K.GROWTH_MODEL == "gamma":
+        log.info("Growth (f, f sigma_8): growth index, f = Omega_m(z)^gamma (growth_model = 'gamma')")
+        unused = [m for m in growth if UDM.get_geff_function(m) is not None]
+        if unused:
+            log.info("  G_eff functions of %s are not used with growth_model = 'gamma' ('geff' uses them)",
+                     ", ".join(unused))
+    elif growth:
+        for m in growth:
+            if UDM.get_geff_function(m) is not None:
+                log.info("Growth of %s: linear growth equation with G_eff from %s_Geff", m, m)
+            elif m in K.GR_GRAVITY_MODELS:
+                log.info("Growth of %s: linear growth equation, GR (G_eff = G)", m)
+            else:
+                log.warning(bar)
+                log.warning("NO G_eff FUNCTION FOR %s: its growth (f, f sigma_8) is computed with G_eff = G,", m)
+                log.warning("  that is the GR (LCDM) growth equation on %s's own expansion history.", m)
+                log.warning("  If %s changes gravity, its true f and f sigma_8 can differ from these, and", m)
+                log.warning("  so can the fit and the model comparison. Fix: add %s_Geff(z, p), returning", m)
+                log.warning("  G_eff/G, to User_defined_modules.py (example: f1CDM_v_Geff); or, if %s is a", m)
+                log.warning("  GR model with conserved matter (dark energy only, no interaction), add it to")
+                log.warning("  constants.GR_GRAVITY_MODELS. The growth equation assumes conserved matter")
+                log.warning("  (rho_m ~ a^-3): interacting dark-sector models need their own growth equation.")
+                log.warning(bar)
+        for m in growth:
+            if m in cmb and UDM.get_geff_function(m) is not None:
+                log.warning("%s: f and f sigma_8 use %s_Geff, but its CLASS build computes the CMB with GR "
+                            "perturbations, so the two parts of the fit treat gravity differently", m, m)
+    if cmb:
+        log.info("Non-linear correction of the CMB lensing: %s, the same for every model (cmb_nonlinear)",
+                 K.nonlinear_description())
+        mg = [m for m in cmb if m not in K.GR_GRAVITY_MODELS]
+        if K.CMB_NONLINEAR and mg:
+            log.warning("%s for %s: these fits are calibrated on simulations with GR, so for a model that "
+                        "changes gravity on small scales they are an approximation (cmb_nonlinear = None "
+                        "in Kosmulator.py: linear lensing for every model)", K.nonlinear_description(), ", ".join(mg))
+
+
+def close_open_pools() -> None:
+    """Close the pools kept for the statistics and plots (item 52)."""
+    set_post_pool(None)
+    while _OPEN_POOLS:
+        p = _OPEN_POOLS.pop()
+        try:
+            if hasattr(p, "close"):
+                p.close()
+            if hasattr(p, "join"):
+                p.join()
+        except Exception:
+            pass

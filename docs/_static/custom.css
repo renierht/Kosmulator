@@ -1,0 +1,15 @@
+/* Logo in the sidebar header: full width of the navy header, rounded corners */
+.wy-side-nav-search .wy-dropdown > a img.logo,
+.wy-side-nav-search > a img.logo {
+    max-width: 180px;
+    border-radius: 6px;
+}
+/* Wide tables scroll inside the page instead of overflowing it */
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+    white-space: normal;
+}
+/* Figures from Kosmulator runs: keep them inside the text column */
+.rst-content img {
+    max-width: 100%;
+}

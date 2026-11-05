@@ -8,7 +8,7 @@ Exports:
   • Console/UI helpers: phase_banner, section_banner, print_rule
   • Label helpers: greek_Symbols, format_for_latex, texify_label, pretty_obs_name
   • Table helpers: align_table_to_parameters, add_corner_table,
-                   print_aligned_latex_table, print_stats_table
+                   print_parameter_table, print_stats_table
   • Data helpers: extract_observation_data, fetch_best_fit_values,
                   partition_by_compatibility, residual_unit,
                   OBS_COLOR_ORDER, MODEL_COLOR
@@ -41,6 +41,7 @@ from Kosmulator_main.constants import (
     OBS_PRETTY_MAP, TABLE_ANCHORS_OBS, TABLE_ANCHORS_PARM, C_KM_S,T_CMB_DEFAULT, N_EFF_DEFAULT, TAU_N_DEFAULT, DEFAULT_CMB_FILES
 )
 from Kosmulator_main.rd_helpers import compute_rd as compute_rd
+from Kosmulator_main.rd_helpers import rd_for_report
 #from Kosmulator_main.Kosmulator_MCMC import _inject_derived_background
 __all__ = [
     # console
@@ -48,8 +49,8 @@ __all__ = [
     # labels
     "greek_Symbols", "format_for_latex", "texify_label", "pretty_obs_name",
     # tables
-    "align_table_to_parameters", "add_corner_table",
-    "print_aligned_latex_table", "print_parameter_list_table", "print_cmb_summary_matrix", "print_stats_table",
+    "align_table_to_parameters", "add_corner_table", "place_corner_legend",
+    "print_parameter_table", "print_parameter_list_table", "print_stats_table",
     # data helpers
     "extract_observation_data", "fetch_best_fit_values",
     "partition_by_compatibility", "residual_unit",
@@ -92,51 +93,28 @@ def print_rule() -> None:
 # =============================================================================
 # Label helpers
 # =============================================================================
-PARAM_LATEX_OVERRIDES = {
-    # Core cosmological / CMB parameters with non-trivial syntax
-    "Omega_bh^2":  r"\Omega_b h^2",
-    "Omega_dh^2":  r"\Omega_d h^2",
-    "ln10^10_As":  r"\ln 10^{10} A_s",
-    "tau_reio":    r"\tau_\mathrm{reio}",
-    "A_planck":    r"A_\mathrm{Planck}",
-    # You can extend this dict with any other special cases you care about.
-    # e.g.
-    # "A_cib_217":   r"A_\mathrm{CIB}^{217}",
-    # "A_sz":        r"A_\mathrm{SZ}",
-}
+#: Exact LaTeX labels for parameter names (without $). These win over the
+#: automatic rules in Plots/latex_labels.py, which already cover Greek names,
+#: digit subscripts, h^2 densities and Planck/JLA nuisance names. Example:
+#:   PARAM_LATEX_OVERRIDES["A_cib_217"] = r"A^{\rm CIB}_{217}"
+PARAM_LATEX_OVERRIDES: Dict[str, str] = {}
+
 
 def greek_Symbols(parameters: Sequence[str] | Sequence[Sequence[str]] | None = None):
     """
-    Map parameter names to TeX, handling subscripts.
+    Map parameter names to LaTeX (math mode, without $).
 
-    Rules:
-      * Simple names like ``Omega_m`` or ``H_0`` become ``\\Omega_{m}``, ``H_{0}``.
-      * Known special cases (Planck nuisance etc.) are taken from
-        ``PARAM_LATEX_OVERRIDES``.
-      * Names with more than one ``_`` (e.g. ``ps_A_100_100``) are treated as
-        plain text and wrapped in ``\\mathrm{...}`` so we don't guess a
-        subscript structure and lose information.
+    Delegates to ``latex_labels.param_latex``: Greek names anywhere in a name,
+    trailing digits as subscripts (w0 -> w_0), upright descriptive subscripts
+    (Omega_m -> \\Omega_{\\rm m}), h^2 densities, Planck-style nuisance names
+    (ps_A_100_100 -> A^{ps}_{100,100}) and escaped text otherwise. Every label
+    is test-compiled, so an odd name falls back to upright text instead of
+    stopping the plot. ``PARAM_LATEX_OVERRIDES`` wins over the rules.
     """
+    from Plots.latex_labels import param_latex
+
     def fmt_one(name: str) -> str:
-        # 1) Exact override first
-        if name in PARAM_LATEX_OVERRIDES:
-            return PARAM_LATEX_OVERRIDES[name]
-
-        # 2) No underscore → try full-name Greek replacement, otherwise leave
-        if "_" not in name:
-            return GREEK_SYMBOLS.get(name, name)
-
-        # 3) Very complex names (multiple underscores) → keep as roman text
-        #    e.g. ps_A_100_100, A_sbpx_100_100_TT, ...
-        if name.count("_") > 1:
-            safe = name.replace("_", r"\_")
-            return rf"\mathrm{{{safe}}}"
-
-        # 4) Simple base_sub pattern (Omega_m, H_0, etc.)
-        base, sub = name.split("_", 1)
-        base_label = GREEK_SYMBOLS.get(base, base)
-        sub_label  = GREEK_SYMBOLS.get(sub, sub)
-        return rf"{base_label}_{{{sub_label}}}"
+        return param_latex(name, PARAM_LATEX_OVERRIDES)
 
     if not parameters:
         return []
@@ -210,6 +188,10 @@ def pretty_obs_name(obs_key: str, latex_on: bool = True) -> str:
         # Fall back to your global mapping (keeps existing behavior)
         pair = OBS_PRETTY_MAP.get(t)
         if pair is None:
+            # Unknown dataset tag: make it safe for LaTeX (underscores etc.)
+            if latex_on:
+                from Plots.latex_labels import text_label
+                return text_label(t)
             return t
         return pair[0] if latex_on else pair[1]
 
@@ -330,244 +312,507 @@ def add_corner_table(
     labels,
     PLOT_SETTINGS,
     parameter_labels,
-    flat_parameters,
-    num_params,
+    flat_parameters=None,
+    num_params=None,
+    line_args=None,
 ):
     """
-    Draw the best–fit summary table as a band above the corner plot.
+    Draw the posterior summary table on a GetDist corner plot.
 
-    Behaviour:
-      * Band height mainly depends on the number of TABLE ROWS (obs combos),
-        with extra room when there is 1 row but many parameters.
-      * The table hugs the top of the corner grid with a small vertical pad.
-      * Font size and cell size adapt to BOTH rows and parameters.
+    The layout is computed in physical units (inches) from the measured size
+    of every label and value, so cells always fit their contents:
+
+      * The font follows the corner plot's axis-label size, but never drops
+        below a floor that keeps it readable when the whole figure is viewed
+        about 10 in wide (large corner plots are 4 in per parameter).
+      * ``table_position`` "auto" (default) puts the table in the empty
+        upper-right triangle of the corner plot when it fits there, and
+        otherwise in a band above the grid. For the band the figure is made
+        taller by exactly the table height, so the corner panels keep their
+        size and no extra whitespace is created.
+      * A table that is too wide even at the smallest allowed font is split
+        into column blocks stacked vertically; long observation names are
+        wrapped at " + " first.
+      * Each row label carries the colour and line style of its posterior, so
+        the separate figure legend is removed unless ``table_keep_legend``.
+
+    PLOT_SETTINGS keys (all optional):
+      table_position      "auto" | "top" | "triangle"
+      table_font_scale    font size relative to the axis labels (1.0)
+      table_display_pt, table_display_width_in
+                          readability floor: the table font is at least
+                          table_display_pt (9) when the figure is viewed
+                          table_display_width_in (10) wide
+      table_min_font_frac smallest font relative to that size before the
+                          table is split into blocks (0.7)
+      table_max_font_frac largest font relative to that size, used when the
+                          corner plot leaves room (1.4)
+      table_min_width_in  width allowed for a band table above a narrow grid (6.0)
+      table_style         "booktabs" (rules, shaded rows) | "grid"
+      table_keep_legend   keep GetDist's figure legend (False)
+
+    ``flat_parameters`` and ``num_params`` are accepted for backward
+    compatibility and not used. Returns the table axes, or None.
     """
     import matplotlib.pyplot as plt
-    import numpy as np
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Rectangle
 
-    # Get figure from GetDist plotter
-    fig = getattr(g, "fig", None)
-    if fig is None:
-        fig = plt.gcf()
+    fig = getattr(g, "fig", None) or plt.gcf()
 
-    if not latex_table or not any(isinstance(r, (list, tuple)) and len(r) for r in latex_table):
+    # ------------------------------------------------------------------
+    # Content
+    # ------------------------------------------------------------------
+    rows_in = [list(r) for r in (latex_table or []) if isinstance(r, (list, tuple))]
+    if not rows_in or not parameter_labels:
         return None
-    
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-    def _renderer(f):
-        try:
-            return f.canvas.get_renderer()
-        except Exception:
-            f.canvas.draw()
-            return f.canvas.get_renderer()
+    n_all = len(parameter_labels)
+    blank = {"", "—", "-", "nan", "$nan$"}
+    rows_full = [[("" if str(c).strip() in blank else str(c)) for c in (r[:n_all] + [""] * (n_all - len(r)))]
+                 for r in rows_in]
+    cols = [j for j in range(n_all) if any(r[j] for r in rows_full)]   # drop all-empty columns
+    if not cols:
+        return None
+    n_rows = len(rows_full)
+    latex_on = bool(PLOT_SETTINGS.get("latex_enabled", False))
+    # Typeset parameter names with or without --latex_enabled (item 33), as the corner axes
+    head_all = format_for_latex(greek_Symbols(list(parameter_labels)))
+    row_labels = [str(x) for x in (list(labels) + [""] * n_rows)[:n_rows]]
+
+    position = str(PLOT_SETTINGS.get("table_position", "auto")).lower()
+    style = str(PLOT_SETTINGS.get("table_style", "booktabs")).lower()
+    keep_legend = bool(PLOT_SETTINGS.get("table_keep_legend", False))
 
     # ------------------------------------------------------------------
-    # Determine footprint of the main corner grid
+    # Colour key per row (taken from GetDist's legend so it matches exactly)
     # ------------------------------------------------------------------
-    axes = [
-        ax for ax in fig.axes
-        if ax.get_visible() and ax.xaxis.get_visible() and ax.yaxis.get_visible()
-    ]
-    if not axes:
-        axes = [ax for ax in fig.axes if ax.get_visible()]
-    if not axes:
+    fills = [None] * n_rows
+    for lg in list(getattr(fig, "legends", [])):
+        handles = getattr(lg, "legend_handles", None) or getattr(lg, "legendHandles", [])
+        for i, h in enumerate(handles[:n_rows]):
+            try:
+                fills[i] = h.get_facecolor()
+            except Exception:
+                pass
+    styles = list(line_args or [])
+    for i in range(n_rows):
+        st = styles[i] if i < len(styles) else {}
+        if fills[i] is None:
+            import matplotlib.colors as mcolors
+            fills[i] = mcolors.to_rgba(st.get("color", "k"), 0.45)
+    if not keep_legend:
+        for lg in list(getattr(fig, "legends", [])):
+            lg.remove()
+        if getattr(g, "legend", None) is not None:
+            g.legend = None
+
+    # ------------------------------------------------------------------
+    # Corner grid geometry and obstacles (inches)
+    # ------------------------------------------------------------------
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    dpi = fig.dpi
+    W_fig, H_fig = fig.get_size_inches()
+    panels = [ax for ax in fig.axes if ax.get_visible() and ax.axison]
+    if not panels:
+        return None
+    pos = [ax.get_position() for ax in panels]
+    g_left = min(p.x0 for p in pos) * W_fig
+    g_right = max(p.x1 for p in pos) * W_fig
+    g_top = max(p.y1 for p in pos) * H_fig
+    obstacles = []
+    for ax in panels:
+        bb = ax.get_tightbbox(renderer)
+        if bb is not None:
+            obstacles.append((bb.x0 / dpi, bb.y0 / dpi, bb.x1 / dpi, bb.y1 / dpi))
+    for lg in list(getattr(fig, "legends", [])):          # only when kept
+        bb = lg.get_window_extent(renderer)
+        obstacles.append((bb.x0 / dpi, bb.y0 / dpi, bb.x1 / dpi, bb.y1 / dpi))
+    content_top = max([g_top] + [o[3] for o in obstacles])
+    avail_w = max(1e-3, g_right - g_left)
+
+    # ------------------------------------------------------------------
+    # Text measurement at a reference size (extents scale with font size)
+    # ------------------------------------------------------------------
+    F_REF = 10.0
+    _cache = {}
+
+    def _size(s, f=F_REF):
+        """Extent (w, h) in inches of text ``s`` drawn at font size ``f``."""
+        key = (s, round(float(f), 2))
+        if key not in _cache:
+            if not s.strip():
+                _cache[key] = (0.0, 0.0)
+            else:
+                t = fig.text(0, 0, s, fontsize=key[1])
+                bb = t.get_window_extent(renderer)
+                t.remove()
+                _cache[key] = (bb.width / dpi, bb.height / dpi)
+        return _cache[key]
+
+    def _ext(s, f, exact):
+        # Searching uses extents measured once at F_REF and scaled (cheap);
+        # the chosen layout is re-measured at its real size, because TeX and
+        # pixel rounding make small sizes slightly wider than the scaling says.
+        if exact:
+            return _size(s, f)
+        w, h = _size(s)
+        return w * f / F_REF, h * f / F_REF
+
+    def _wrap(label, max_w):
+        parts = label.split(" + ")
+        if len(parts) < 2 or _size(label)[0] <= max_w:
+            return label
+        lines, cur = [], parts[0]
+        for p in parts[1:]:
+            trial = cur + " + " + p
+            if _size(trial)[0] <= max_w:
+                cur = trial
+            else:
+                lines.append(cur + " +")
+                cur = p
+        lines.append(cur)
+        return "\n".join(lines)
+
+    def _geometry(f, block_cols, labs, exact=False):
+        em = f / 72.0
+        padx, pady = 0.55 * em, 0.30 * em
+        sw = 1.8 * em
+        lab_w = max(_ext(l, f, exact)[0] for l in labs) + sw + 0.45 * em + 2 * padx
+        col_w = [max([_ext(head_all[j], f, exact)[0]] + [_ext(r[j], f, exact)[0] for r in rows_full]) + 2 * padx
+                 for j in block_cols]
+        head_h = max(_ext(head_all[j], f, exact)[1] for j in block_cols) + 2 * pady
+        body_h = max([_ext(r[j], f, exact)[1] for r in rows_full for j in block_cols]
+                     + [_ext(l, f, exact)[1] for l in labs]) + 2 * pady
+        return {"f": f, "em": em, "padx": padx, "sw": sw, "lab_w": lab_w, "col_w": col_w,
+                "head_h": head_h, "body_h": body_h,
+                "W": lab_w + sum(col_w), "H": head_h + n_rows * body_h, "cols": block_cols}
+
+    def _split(k):
+        """Contiguous column blocks of similar width."""
+        w = [max([_size(head_all[j])[0]] + [_size(r[j])[0] for r in rows_full]) for j in cols]
+        target = sum(w) / k
+        blocks, cur, acc = [], [], 0.0
+        for j, wj in zip(cols, w):
+            if cur and acc + wj > target * 1.05 and len(blocks) < k - 1:
+                blocks.append(cur)
+                cur, acc = [], 0.0
+            cur.append(j)
+            acc += wj
+        blocks.append(cur)
+        return blocks
+
+    def _layout(f, blocks, labs, exact=False):
+        geos = [_geometry(f, b, labs, exact) for b in blocks]
+        gap = 0.7 * f / 72.0
+        return geos, max(gg["W"] for gg in geos), sum(gg["H"] for gg in geos) + gap * (len(geos) - 1)
+
+    def _fits(x0, y0, x1, y1, margin):
+        return all(x0 >= o[2] + margin or x1 <= o[0] - margin or y0 >= o[3] + margin or y1 <= o[1] - margin
+                   for o in obstacles)
+
+    def _in_triangle(f, labs, exact):
+        geos, W, H = _layout(f, [cols], labs, exact)
+        if _fits(g_right - W, g_top - H, g_right, g_top, 0.5 * f / 72.0):
+            return geos, W, H
         return None
 
+    f_label = float(PLOT_SETTINGS.get("table_font_scale", 1.0)) * float(
+        getattr(g.settings, "axes_labelsize", None) or PLOT_SETTINGS.get("label_font_size", 12))
+    # Readability floor. The corner plot is 4 in wide per parameter and is
+    # normally viewed scaled to a screen or slide, so a font fixed in points
+    # becomes unreadable on large plots. Keep the table at least
+    # table_display_pt when the whole figure is shown table_display_width_in
+    # wide; the table never shrinks below this (it wraps names, splits into
+    # column blocks or moves to the band instead).
+    f_read = (float(PLOT_SETTINGS.get("table_display_pt", 9.0)) * W_fig
+              / float(PLOT_SETTINGS.get("table_display_width_in", 10.0)))
+    f_target = max(f_label, f_read)
+    f_min = max(6.0, f_read, float(PLOT_SETTINGS.get("table_min_font_frac", 0.7)) * f_label)
+    # Large corner plots leave room for a larger table.
+    f_max = float(PLOT_SETTINGS.get("table_max_font_frac", 1.4)) * f_target
+
+    # ------------------------------------------------------------------
+    # 1) Upper-right triangle
+    # ------------------------------------------------------------------
+    choice = None
+    if position in ("auto", "triangle") and not keep_legend:
+        tri_min = max(f_min, f_target * (0.8 if position == "auto" else 0.5))
+        wrapped_tri = [_wrap(l, 0.45 * avail_w / (f_target / F_REF)) for l in row_labels]
+        for labs in (row_labels, wrapped_tri):
+            f = f_max
+            while f >= tri_min - 1e-9 and choice is None:
+                if _in_triangle(f, labs, False):
+                    res = None
+                    for _ in range(4):                       # confirm at the real size
+                        res = _in_triangle(f, labs, True)
+                        if res or f < tri_min * 0.95:
+                            break
+                        f *= 0.96
+                    if res:
+                        geos, W, H = res
+                        choice = ("triangle", geos, labs, g_right - W, g_top - H, W, H)
+                    break
+                f *= 0.95
+            if choice is not None:
+                break
+
+    # ------------------------------------------------------------------
+    # 2) Band above the grid (fallback, or forced)
+    # ------------------------------------------------------------------
+    if choice is None:
+        # A one- or two-panel corner plot is narrower than a readable table,
+        # so the band may be wider than the grid; the figure then widens.
+        band_w = max(avail_w, float(PLOT_SETTINGS.get("table_min_width_in", 6.0)))
+        wrapped = [_wrap(l, 0.5 * band_w / (f_target / F_REF)) for l in row_labels]
+        chosen, best = None, None
+        for k in range(1, len(cols) + 1):
+            blocks = _split(k)
+            for labs in (row_labels, wrapped):
+                _, W, _ = _layout(f_target, blocks, labs)
+                # A band adds height to the figure, so it is enlarged less than a
+                # table in the empty triangle, and wrapped labels not at all.
+                # Split tables are not enlarged either: they are already tall.
+                f_cap = min(f_max, 1.2 * f_target) if (labs is row_labels and k == 1) else f_target
+                f = min(f_cap, f_target * band_w / W)
+                # Splitting doubles the table height, so a single block may go
+                # up to 10 % below the floor rather than split for a few percent.
+                if f >= (0.9 * f_min if k == 1 else f_min):
+                    chosen = (f, blocks, labs)
+                    break
+                if best is None or f > best[0]:
+                    best = (f, blocks, labs)
+            if chosen is not None:
+                break
+        if chosen is None:              # one column per block and still too wide
+            chosen = (max(6.0, best[0]), best[1], best[2])
+        f, blocks, labs = chosen
+        for _ in range(4):                                   # confirm at the real size
+            geos, W, H = _layout(f, blocks, labs, True)
+            if W <= band_w * 1.0001 or f <= 6.0:
+                break
+            f = max(6.0, 0.995 * f * band_w / W)
+        gap = 0.8 * f / 72.0
+        top_margin = 0.25 * f / 72.0
+        side = 0.1
+        y0 = content_top + gap
+        new_W = max(W_fig, W + 2 * side)
+        new_H = max(H_fig, y0 + H + top_margin)
+        shift = 0.5 * (new_W - W_fig)
+        if new_W > W_fig or new_H > H_fig:
+            # grow the figure (upwards, and sideways if needed) keeping every
+            # existing axes at its physical size and relative place
+            for ax in fig.axes:
+                p = ax.get_position()
+                ax.set_position([(p.x0 * W_fig + shift) / new_W, p.y0 * H_fig / new_H,
+                                 p.width * W_fig / new_W, p.height * H_fig / new_H])
+            fig.set_size_inches(new_W, new_H, forward=False)
+        centre = 0.5 * (g_left + g_right) + shift
+        x0 = min(max(centre - 0.5 * W, side), new_W - W - side)
+        choice = ("top", geos, labs, x0, y0, W, H)
+        W_fig, H_fig = new_W, new_H
+
+    kind, geos, labs, x0, y0, W, H = choice
+
+    # ------------------------------------------------------------------
+    # Draw (axes in inches: x 0..W, y 0..H)
+    # ------------------------------------------------------------------
+    tax = fig.add_axes([x0 / W_fig, y0 / H_fig, W / W_fig, H / H_fig], zorder=5)
+    tax.set_xlim(0, W)
+    tax.set_ylim(0, H)
+    tax.axis("off")
+    tax.patch.set_alpha(0)
+    tax.set_in_layout(False)
+
+    y_top = H
+    for b, gg in enumerate(geos):
+        f, em, padx, sw = gg["f"], gg["em"], gg["padx"], gg["sw"]
+        Wb = gg["W"]
+        xb = 0.5 * (W - Wb) if kind == "top" else W - Wb
+        lw_thick, lw_thin = max(0.6, f / 11.0), max(0.4, f / 20.0)
+        # header
+        yh = y_top - gg["head_h"]
+        xc = xb + gg["lab_w"]
+        for j, cw in zip(gg["cols"], gg["col_w"]):
+            tax.text(xc + 0.5 * cw, yh + 0.5 * gg["head_h"], head_all[j], fontsize=f,
+                     ha="center", va="center")
+            xc += cw
+        # body
+        for i in range(n_rows):
+            yr = yh - (i + 1) * gg["body_h"]
+            ym = yr + 0.5 * gg["body_h"]
+            if style == "grid":
+                pass
+            elif i % 2 == 1:
+                tax.add_patch(Rectangle((xb, yr), Wb, gg["body_h"], facecolor=(0, 0, 0, 0.045),
+                                        edgecolor="none", zorder=0))
+            st = styles[i] if i < len(styles) else {}
+            tax.add_patch(Rectangle((xb + padx, ym - 0.32 * em), sw, 0.64 * em, facecolor=fills[i],
+                                    edgecolor="none", zorder=1))
+            tax.add_line(Line2D([xb + padx, xb + padx + sw], [ym, ym], color=st.get("color", "k"),
+                                ls=st.get("ls", "-"), lw=max(1.0, st.get("lw", 1.2) * f / 12.0), zorder=2))
+            tax.text(xb + padx + sw + 0.45 * em, ym, labs[i], fontsize=f, ha="left", va="center",
+                     linespacing=1.1)
+            xc = xb + gg["lab_w"]
+            for j, cw in zip(gg["cols"], gg["col_w"]):
+                if rows_full[i][j]:
+                    tax.text(xc + 0.5 * cw, ym, rows_full[i][j], fontsize=f, ha="center", va="center")
+                xc += cw
+        y_bot = yh - n_rows * gg["body_h"]
+        if style == "grid":
+            xs = [xb, xb + gg["lab_w"]]
+            for cw in gg["col_w"]:
+                xs.append(xs[-1] + cw)
+            ys = [y_top, yh] + [yh - (i + 1) * gg["body_h"] for i in range(n_rows)]
+            for x in xs:
+                tax.plot([x, x], [y_bot, y_top], color="k", lw=lw_thin)
+            for y in ys:
+                tax.plot([xb, xb + Wb], [y, y], color="k", lw=lw_thin)
+        else:
+            tax.plot([xb, xb + Wb], [y_top, y_top], color="k", lw=lw_thick)
+            tax.plot([xb, xb + Wb], [yh, yh], color="k", lw=lw_thin)
+            tax.plot([xb, xb + Wb], [y_bot, y_bot], color="k", lw=lw_thick)
+        y_top = y_bot - 0.7 * f / 72.0
+
+    return tax
+
+
+
+def place_corner_legend(g, PLOT_SETTINGS):
+    """
+    Lay out GetDist's corner-plot legend when no summary table is drawn.
+
+    Same rules as ``add_corner_table``: sizes come from the measured legend,
+    the font follows the axis labels with the same readability floor
+    (``table_display_pt`` at ``table_display_width_in``), and the legend goes
+    into the empty upper-right triangle when it fits there; otherwise it sits
+    in a band above the grid and the figure grows by exactly its height.
+    The number of legend columns is chosen to fit. Set
+    ``PLOT_SETTINGS["corner_legend_layout"] = "getdist"`` for GetDist's own
+    placement. Returns the new legend, or None.
+    """
+    import matplotlib.pyplot as plt
+
+    if str(PLOT_SETTINGS.get("corner_legend_layout", "auto")).lower() == "getdist":
+        return None
+    fig = getattr(g, "fig", None) or plt.gcf()
+    legends = list(getattr(fig, "legends", []))
+    if not legends:
+        return None
+    old = legends[0]
+    handles = list(getattr(old, "legend_handles", None) or getattr(old, "legendHandles", []))
+    labels = [t.get_text() for t in old.get_texts()]
+    if not handles or len(handles) != len(labels):
+        return None
+    for lg in legends:
+        lg.remove()
+
     fig.canvas.draw()
-    pos = [ax.get_position().bounds for ax in axes]  # (left, bottom, width, height)
-    grid_left  = min(l for (l, b, w, h) in pos)
-    grid_right = max(l + w for (l, b, w, h) in pos)
-    grid_top   = max(b + h for (l, b, w, h) in pos)
+    renderer = fig.canvas.get_renderer()
+    dpi = fig.dpi
+    W_fig, H_fig = fig.get_size_inches()
+    panels = [ax for ax in fig.axes if ax.get_visible() and ax.axison]
+    if not panels:
+        return None
+    pos = [ax.get_position() for ax in panels]
+    g_left = min(p.x0 for p in pos) * W_fig
+    g_right = max(p.x1 for p in pos) * W_fig
+    g_top = max(p.y1 for p in pos) * H_fig
+    obstacles = []
+    for ax in panels:
+        bb = ax.get_tightbbox(renderer)
+        if bb is not None:
+            obstacles.append((bb.x0 / dpi, bb.y0 / dpi, bb.x1 / dpi, bb.y1 / dpi))
+    content_top = max([g_top] + [o[3] for o in obstacles])
+    avail_w = max(1e-3, g_right - g_left)
 
-    # ------------------------------------------------------------------
-    # Row/column counts
-    # ------------------------------------------------------------------
-    n_rows = max(1, len(latex_table))        # table rows (obs combos)
-    n_cols = max(1, len(parameter_labels))   # parameters (columns)
-    n_obs  = max(1, len(labels))             # legend labels (for completeness)
+    f_label = float(PLOT_SETTINGS.get("table_font_scale", 1.0)) * float(
+        getattr(g.settings, "axes_labelsize", None) or PLOT_SETTINGS.get("label_font_size", 12))
+    f_read = (float(PLOT_SETTINGS.get("table_display_pt", 9.0)) * W_fig
+              / float(PLOT_SETTINGS.get("table_display_width_in", 10.0)))
+    f_target = max(f_label, f_read)
+    f_min = max(6.0, f_read, float(PLOT_SETTINGS.get("table_min_font_frac", 0.7)) * f_label)
+    f_max = float(PLOT_SETTINGS.get("table_max_font_frac", 1.4)) * f_target
+    F_REF = 10.0
+    n = len(labels)
 
-    # ------------------------------------------------------------------
-    # Band height: primarily rows, with extra for wide 1-row tables
-    # ------------------------------------------------------------------
-    base_band     = float(PLOT_SETTINGS.get("table_band_base", 0.14))
-    per_row       = float(PLOT_SETTINGS.get("table_band_per_row", 0.018))
-    per_col_wide  = float(PLOT_SETTINGS.get("table_band_per_col_wide", 0.012))
-    max_band_frac = float(PLOT_SETTINGS.get("table_max_band_fraction", 0.28))
+    def _make(ncol, f, loc, anchor):
+        return fig.legend(handles, labels, loc=loc, bbox_to_anchor=anchor,
+                          bbox_transform=fig.transFigure, ncol=ncol, fontsize=f,
+                          frameon=True, borderaxespad=0.0)
 
-    # Start from row-based budget
-    band_frac = base_band + per_row * (n_rows - 1)
+    _size_cache = {}
 
-    # Extra room if we have 1 row but many parameters (your CMB_hi case)
-    if n_rows == 1 and n_cols > 6:
-        band_frac += per_col_wide * (n_cols - 6)
+    def _size(ncol, f, exact=False):
+        """Legend (w, h) in inches; measured at F_REF and scaled unless exact."""
+        fk = round(f, 2) if exact else F_REF
+        key = (ncol, fk)
+        if key not in _size_cache:
+            lg = _make(ncol, fk, "upper right", (1.0, 1.0))
+            bb = lg.get_window_extent(renderer)
+            lg.remove()
+            _size_cache[key] = (bb.width / dpi, bb.height / dpi)
+        w, h = _size_cache[key]
+        return (w, h) if exact else (w * f / F_REF, h * f / F_REF)
 
-    # Clamp to sensible range
-    band_frac = max(0.12, min(max_band_frac, band_frac))
+    def _fits(x0, y0, x1, y1, margin):
+        return all(x0 >= o[2] + margin or x1 <= o[0] - margin or y0 >= o[3] + margin or y1 <= o[1] - margin
+                   for o in obstacles)
 
-    # Base vertical padding between grid and table
-    vpad = float(PLOT_SETTINGS.get("table_vpad", 0.018))
-    # For very shallow tables, use a smaller gap so they sit closer
-    if n_rows == 1:
-        vpad = min(vpad, 0.010)
+    choice = None
+    # 1) upper-right triangle: largest font that fits with some column count
+    f = f_max
+    while f >= max(f_min, 0.8 * f_target) - 1e-9 and choice is None:
+        for ncol in range(1, n + 1):
+            w, h = _size(ncol, f)
+            m = 0.5 * f / 72.0
+            if _fits(g_right - w, g_top - h, g_right, g_top, m):
+                w, h = _size(ncol, f, exact=True)
+                if _fits(g_right - w, g_top - h, g_right, g_top, m):
+                    choice = ("triangle", ncol, f)
+                break
+        f *= 0.95
 
-    # Push the corner grid down so `band_frac` of the figure height
-    # is available above it for the table + padding.
-    new_top = 1.0 - band_frac
-    fig.subplots_adjust(top=new_top)
-    fig.canvas.draw()
+    if choice is not None:
+        _, ncol, f = choice
+        return _make(ncol, f, "upper right", (g_right / W_fig, g_top / H_fig))
 
-    # Recompute grid after margin change
-    pos = [ax.get_position().bounds for ax in axes]
-    grid_left  = min(l for (l, b, w, h) in pos)
-    grid_right = max(l + w for (l, b, w, h) in pos)
-    grid_top   = max(b + h for (l, b, w, h) in pos)
-    headroom   = max(0.0, 1.0 - grid_top)
-
-    # ------------------------------------------------------------------
-    # Geometry of the table band
-    # ------------------------------------------------------------------
-    width_grid = grid_right - grid_left
-    width      = 0.94 * width_grid
-    height     = max(0.01, headroom - 2.0 * vpad)
-
-    # Horizontal centre, with optional user offset
-    xoffset = float(PLOT_SETTINGS.get("table_xoffset", 0.0))
-    xoffset = max(-0.25, min(0.25, xoffset))
-    left    = grid_left + (width_grid - width) * (0.5 + xoffset)
-
-    # Table band sits directly above the grid
-    bottom = grid_top + vpad
-
-    # ------------------------------------------------------------------
-    # Font size based on physical cell size
-    # ------------------------------------------------------------------
-    fmin = float(PLOT_SETTINGS.get("table_font_min", 9))
-    fmax = float(PLOT_SETTINGS.get("table_font_max", 14))
-
-    # For shallow but wide tables we allow a bit more fontsize
-    if n_rows <= 2 and n_cols >= 5:
-        fmax = min(fmax, 13.0)
-
-    fig_w_in, fig_h_in = fig.get_size_inches()
-
-    # Height constraint
-    cell_h_in = max(1e-3, (height * fig_h_in) / (n_rows + 1))
-    fontsize_h = 0.85 * 72.0 * cell_h_in
-
-    # Width constraint: ~10 characters per cell
-    approx_cols = float(n_cols + 1)  # +1 for Observation column
-    cell_w_in   = max(1e-3, (width * fig_w_in) / approx_cols)
-    fontsize_w  = 72.0 * cell_w_in / (10.0 * 0.6)
-
-    raw_fs   = min(fontsize_h, fontsize_w)
-    fontsize = float(np.clip(raw_fs, fmin, fmax))
-
-    # Row height factor; boost for single-row, many-parameter tables
-    cell_k = float(
-        PLOT_SETTINGS.get(
-            "table_cell_height_factor",
-            PLOT_SETTINGS.get("cell_height_factor", 6.0)
-        )
-    )
-    if n_rows == 1 and n_cols >= 5:
-        # make rows noticeably taller in the 1-obs / many-param case
-        cell_k *= 2.1
-
-    # ------------------------------------------------------------------
-    # Draw the table
-    # ------------------------------------------------------------------
-    cols_tex = (
-        format_for_latex(greek_Symbols(list(parameter_labels)))
-        if PLOT_SETTINGS.get("latex_enabled", False)
-        else list(parameter_labels)
-    )
-
-    # Pad rows to full width
-    rows = [row + [""] * (n_cols - len(row)) for row in latex_table]
-
-    ax = fig.add_axes([left, bottom, width, height], facecolor="none", zorder=3)
-    ax.axis("off")
-    ax.patch.set_alpha(0)
-
-    row_labels = list(labels)
-    if len(row_labels) < n_rows:
-        row_labels += [""] * (n_rows - len(row_labels))
-    elif len(row_labels) > n_rows:
-        row_labels = row_labels[:n_rows]
-
-    tbl = ax.table(
-        cellText=rows,
-        rowLabels=row_labels,
-        colLabels=cols_tex,
-        cellLoc="center",
-        loc="upper left",
-    )
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(fontsize)
-
-    # 1) scale Y to hit the desired physical cell height
-    target_cell_h_in = cell_k * fontsize / 72.0
-
-    # Allow a bit more vertical stretch for the 1-row, many-parameter case
-    max_y = 1.8
-    if n_rows == 1 and n_cols >= 7:
-        max_y = 3.5
-
-    yscale = float(np.clip(target_cell_h_in / cell_h_in, 0.65, max_y))
-    tbl.scale(1.0, yscale)
-
-    # 2) scale X so the table fills ~98% of the available width
-    fig.canvas.draw()
-    bb0 = tbl.get_window_extent(_renderer(fig)).transformed(
-        fig.transFigure.inverted()
-    )
-    cur_w = max(bb0.width, 1e-6)
-    xscale = float(np.clip((width * 0.98) / cur_w, 0.70, 2.2))
-    tbl.scale(xscale, 1.0)
-
-    # For very large tables thin the borders slightly
-    if n_rows > 6 or n_cols > 6:
-        for (row, col), cell in tbl.get_celld().items():
-            cell.set_linewidth(0.4)
-
-    # ------------------------------------------------------------------
-    # Re-position the legend into the gap between grid and table
-    # ------------------------------------------------------------------
-    legend = None
-    for ax0 in fig.axes:
-        lg = ax0.get_legend()
-        if lg is not None:
-            legend = lg
+    # 2) band above the grid: most columns that fit the width at the target font
+    band_w = max(avail_w, float(PLOT_SETTINGS.get("table_min_width_in", 6.0)))
+    f_cap = min(f_max, 1.2 * f_target)
+    best = None
+    for ncol in range(n, 0, -1):
+        w, h = _size(ncol, f_target)
+        f = min(f_cap, f_target * band_w / w)
+        if f >= f_min:
+            best = (ncol, f)
             break
+        if best is None or f > best[1]:
+            best = (ncol, f)
+    ncol, f = best
+    f = max(6.0, f)
+    for _ in range(4):                                         # confirm at the real size
+        w, h = _size(ncol, f, exact=True)
+        if w <= band_w * 1.0001 or f <= 6.0:
+            break
+        f = max(6.0, 0.995 * f * band_w / w)
 
-    if legend is not None:
-        gap = max(0.0, bottom - grid_top)
-        y_legend = max(
-            grid_top + 0.01,
-            min(bottom - 0.01, grid_top + 0.5 * gap),
-        )
-        x_center = 0.5 * (grid_left + grid_right)
-
-        base_leg_fs = PLOT_SETTINGS.get("legend_font_size", fontsize)
-        n_leg_labels = len(legend.get_texts())
-        leg_fs = base_leg_fs
-        if n_leg_labels >= 8:
-            leg_fs = max(7, min(base_leg_fs, fontsize - 2))
-        for txt in legend.get_texts():
-            txt.set_fontsize(leg_fs)
-
-        legend.set_bbox_to_anchor(
-            (x_center, y_legend),
-            transform=fig.transFigure,
-            loc="center",
-        )
-        legend.set_frame_on(True)
-        legend.get_frame().set_alpha(0.9)
-
-    return legend
-
+    gap = 0.8 * f / 72.0
+    top_margin = 0.25 * f / 72.0
+    side = 0.1
+    y0 = content_top + gap
+    new_W = max(W_fig, w + 2 * side)
+    new_H = max(H_fig, y0 + h + top_margin)
+    shift = 0.5 * (new_W - W_fig)
+    if new_W > W_fig or new_H > H_fig:
+        for ax in fig.axes:
+            p = ax.get_position()
+            ax.set_position([(p.x0 * W_fig + shift) / new_W, p.y0 * H_fig / new_H,
+                             p.width * W_fig / new_W, p.height * H_fig / new_H])
+        fig.set_size_inches(new_W, new_H, forward=False)
+    centre = 0.5 * (g_left + g_right) + shift
+    xc = min(max(centre, side + 0.5 * w), new_W - side - 0.5 * w)
+    return _make(ncol, f, "lower center", (xc / new_W, y0 / new_H))
 
 
 def _obs_col_width_from_names(names, base=30, wmin=28, wmax=72, pad=2):
@@ -578,41 +823,91 @@ def _obs_col_width_from_names(names, base=30, wmin=28, wmax=72, pad=2):
         longest = base
     return max(wmin, min(wmax, max(base, longest)))
     
-def print_aligned_latex_table(
-    latex_table: List[List[str]],
+def _table_width(out) -> int:
+    """Line width of the parameter table: the terminal's (read from /dev/tty, since the console output
+    usually goes through tee), else 160 (CT-43). Kosmulator passes the console's width to the file too,
+    so both have the same blocks (decision A8); 160 for a file when no width is given."""
+    if out is not None:
+        return 160
+    try:
+        with open("/dev/tty") as tty:
+            return max(80, int(os.get_terminal_size(tty.fileno()).columns))
+    except Exception:
+        pass
+    try:
+        return max(80, int(os.get_terminal_size(1).columns))
+    except Exception:
+        return 160
+
+
+def print_parameter_table(
+    table: List[List[str]],
     parameter_labels: Sequence[str],
-    observation_names: Sequence[str],
+    group_names: Sequence[str],
+    nuisance=(),
+    order: Optional[Sequence[str]] = None,
+    width: Optional[int] = None,
     out=None,
+    title: Optional[str] = None,
+    notes: Sequence[str] = (),
 ) -> None:
     """
-    Pretty-print an aligned LaTeX-style table.
-
-    If `out` is None, print to stdout with colour accents.
-    If `out` is a file-like object, write plain text to that file.
+    One table per model (CT-42, CT-43): parameters as rows (`order`, then any others), groups as
+    columns; `table` has one row per group, aligned to `parameter_labels`. Each column is as wide as
+    its longest entry, header included. When the table is wider than `width` (console: the terminal,
+    else 160; file: 160) the groups are split into blocks, each with the parameter column and a line
+    "(groups a - b of n)"; a block lists only the rows it has values for. The likelihoods' nuisance
+    parameters (`nuisance`) come after a "nuisance" line. `notes` are printed under the table.
     """
-    blue, red, reset = "\033[34m", "\033[31m", "\033[0m"
+    blue, reset = "\033[34m", "\033[0m"
+    emit = (lambda s="": print(s)) if out is None else (lambda s="": print(s, file=out))
+    labels = list(parameter_labels)
+    n = len(group_names)
+    cell = {p: [(str(table[g][j]).strip() if g < len(table) and j < len(table[g]) else "") for g in range(n)]
+            for j, p in enumerate(labels)}
+    rows = [p for p in (order or []) if p in cell] + [p for p in labels if p not in set(order or [])]
+    nuis = set(nuisance or ())
+    main = [p for p in rows if p not in nuis]
+    extra = [p for p in rows if p in nuis]
+    pw = max([len("Parameter"), len("nuisance")] + [len(p) for p in rows])
+    gw = [max([len(str(group_names[g]))] + [len(cell[p][g]) for p in rows]) for g in range(n)]
+    width = int(width or _table_width(out))
+    blocks, cur, used = [], [], pw
+    for g in range(n):
+        if cur and used + 3 + gw[g] > width:
+            blocks.append(cur)
+            cur, used = [], pw
+        cur.append(g)
+        used += 3 + gw[g]
+    if cur:
+        blocks.append(cur)
 
-    # Dynamic width for the Observation column
-    obs_w = _obs_col_width_from_names(observation_names, base=30, wmin=28, wmax=72, pad=2)
+    if title:
+        emit(title)
+    for b, gs in enumerate(blocks):
+        if b:
+            emit()
+        if len(blocks) > 1:
+            emit(f"(groups {gs[0] + 1} - {gs[-1] + 1} of {n})" if len(gs) > 1 else f"(group {gs[0] + 1} of {n})")
+        line = lambda first, cells: (first.ljust(pw) + " | "
+                                     + " | ".join(c.ljust(gw[g]) for c, g in zip(cells, gs))).rstrip()
+        head = line("Parameter", [str(group_names[g]) for g in gs])
+        emit(blue + head + reset if out is None else head)
+        emit("-" * len(head))
+        for p in main:
+            vals = [cell[p][g] for g in gs]
+            if any(vals):
+                emit(line(p, vals))
+        shown = [p for p in extra if any(cell[p][g] for g in gs)]
+        if shown:
+            emit("nuisance".ljust(pw) + " |")
+            for p in shown:
+                emit(line(p, [cell[p][g] for g in gs]))
+    if notes:
+        emit()
+    for note in notes or ():
+        emit(note)
 
-    header = ["Observation"] + list(parameter_labels)
-    head_str = f"{header[0]:<{obs_w}} | " + " | ".join(f"{c:<32}" for c in header[1:])
-
-    if out is None:
-        print(blue + head_str + reset)
-        print("-" * len(head_str))
-    else:
-        print(head_str, file=out)
-        print("-" * len(head_str), file=out)
-
-    for name, row in zip(observation_names, latex_table):
-        row_str = " | ".join(f"{c:<32}" for c in row)
-        if out is None:
-            obs_str = red + f"{name:<{obs_w}}" + reset
-            print(f"{obs_str} | {row_str}")
-        else:
-            obs_str = f"{name:<{obs_w}}"
-            print(f"{obs_str} | {row_str}", file=out)
 
 def print_parameter_list_table(
     row: Sequence[str],
@@ -631,7 +926,9 @@ def print_parameter_list_table(
     if title is None:
         title = f"Detailed parameter table for {observation_name}"
 
-    header = f"{'Parameter':<30} | {'Value':>30}"
+    # the value column as wide as the longest value (CT-42), at least 30
+    vw = max([30] + [len(str(v).strip()) for v in row])
+    header = f"{'Parameter':<30} | {'Value':>{vw}}"
 
     if out is None:
         print(title)
@@ -646,74 +943,12 @@ def print_parameter_list_table(
         v = str(val).strip()
         if not v:
             continue
-        line = f"{pname:<30} | {v:>30}"
+        line = f"{pname:<30} | {v:>{vw}}"
         if out is None:
             print(line)
         else:
             print(line, file=out)
 
-def print_cmb_summary_matrix(
-    aligned_table: List[List[str]],
-    parameter_labels: Sequence[str],
-    observation_names: Sequence[str],
-    cmb_param_names: Sequence[str],
-    title: str = "CMB parameter summary (rows = params, columns = CMB obs):",
-    out=None,
-) -> None:
-    """
-    Print a matrix:
-
-        CMB parameter | Obs1 | Obs2 | ...
-
-    where columns are all observation rows whose name contains 'CMB'.
-    Only parameters in `cmb_param_names` and present in `parameter_labels` are shown.
-    """
-    # Select CMB rows by name (simple and robust)
-    cmb_row_indices = [
-        i for i, name in enumerate(observation_names) if "CMB" in str(name)
-    ]
-    if not cmb_row_indices:
-        return
-
-    # Which parameters will form the rows?
-    params = [p for p in cmb_param_names if p in parameter_labels]
-    if not params:
-        return
-
-    # Column indices of those parameters
-    col_index = {p: parameter_labels.index(p) for p in params}
-
-    # Build header: 'CMB parameter' + CMB obs names
-    header = ["CMB parameter"] + [observation_names[i] for i in cmb_row_indices]
-    col_w = 26
-    val_w = 32
-
-    head_str = f"{header[0]:<{col_w}} | " + " | ".join(
-        f"{name:<{val_w}}" for name in header[1:]
-    )
-
-    if out is None:
-        print(title)
-        print(head_str)
-        print("-" * len(head_str))
-    else:
-        print(title, file=out)
-        print(head_str, file=out)
-        print("-" * len(head_str), file=out)
-
-    # Each row: one parameter
-    for p in params:
-        values = []
-        for ridx in cmb_row_indices:
-            row = aligned_table[ridx]
-            values.append(str(row[col_index[p]]).strip() or " ")
-        row_str = f"{p:<{col_w}} | " + " | ".join(f"{v:<{val_w}}" for v in values)
-        if out is None:
-            print(row_str)
-        else:
-            print(row_str, file=out)
-
-        
 def _obs_col_width(stats_list, base=38, wmin=30, wmax=68, pad=2):
     """Pick a nice width for the Observation column.
     - Start from `base`
@@ -751,7 +986,7 @@ def print_stats_table(model: str, stats_list):
 
     header = (
         f"{'Observation':<{obs_w}} | {'Log-Likelihood':>18} | {'Chi-Squared':>15} | "
-        f"{'Reduced Chi-Squared':>20} | {'AIC':>11} | {'BIC':>11} | {'dAIC':>11} | {'dBIC':>11}"
+        f"{'Reduced Chi-Squared':>20} | {'AIC':>11} | {'BIC':>11} | {'AICc':>11} | {'DIC':>11} | {'WAIC':>11} | {'dAIC':>11} | {'dBIC':>11} | {'dAICc':>11} | {'dDIC':>11} | {'dChi':>11} |  {'sigma':>11} | {'dWAIC':>11} |"
     )
     print(f"Statistical Results for Model: {model}")
     print(blue + header + reset)
@@ -766,16 +1001,31 @@ def print_stats_table(model: str, stats_list):
         rchi = _as_float(stats.get('Reduced_Chi_squared', _np.nan))
         aic  = _as_float(stats.get('AIC', _np.nan))
         bic  = _as_float(stats.get('BIC', _np.nan))
+        aicc = _as_float(stats.get('AICc',_np.nan))
+        dic = _as_float(stats.get('DIC',_np.nan))
+        waic = _as_float(stats.get('WAIC', _np.nan))
         daic = _as_float(stats.get('dAIC', _np.nan))
         dbic = _as_float(stats.get('dBIC', _np.nan))
+        daicc = _as_float(stats.get('dAICc', _np.nan))
+        ddic = _as_float(stats.get('dDIC', _np.nan))
+        dwaic = _as_float(stats.get('dWAIC',_np.nan))
+        dchi = _as_float(stats.get('dChi', _np.nan))
+        sigma = _as_float(stats.get('sigma', _np.nan))
 
         obs_str = f"{obs:<{obs_w}}"
         print(
             f"{obs_str} | {ll:>18.4f} | {chi2:>15.4f} | "
-            f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | "
-            f"{daic:>11.3f} | {dbic:>11.3f}"
+            f"{rchi:>20.4f} | {aic:>11.3f} | {bic:>11.3f} | {aicc:>11.3f} | {dic:>11.3f} | {waic:>11.3f} | "
+            f"{daic:>11.3f} | {dbic:>11.3f} | {daicc:>11.3f} | {ddic:>11.3f} | {dchi:>11.3f} |  {sigma:>11.3f} | {dwaic:>11.3f} |"
         )
         #print(row)
+    # Per-group notes, as in stats_summary.txt
+    notes = [(str(s.get("Observation", "")), str(s.get("Note") or "")) for s in stats_list]
+    notes = [(o, n) for o, n in notes if n]
+    if notes:
+        print("Notes:")
+        for o, n in notes:
+            print(f"  {o}: {n}")
 
 # =============================================================================
 # Data helpers
@@ -808,13 +1058,13 @@ def partition_by_compatibility(obs_list: Sequence[str]) -> List[List[str]]:
 def residual_unit(obs_type: str) -> str:
     if obs_type in ("OHD", "CC"):
         return r"km s$^{-1}$ Mpc$^{-1}$"
-    if obs_type in ("PantheonP", "Pantheon", "JLA", "DESY5", "Union3"):
+    if obs_type in ("PantheonP", "Pantheon", "JLA", "JLA_legacy", "DESY5", "Union3"):
         return "mag"
     if obs_type in ("BBN_DH", "BBN_DH_AlterBBN"):
         return "D/H (absolute)"
     return ""  # BAO/DESI/f/f_sigma_8 dimensionless
 
-def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None) -> str:
+def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None, model_name: str | None = None) -> str:
     """
     Return concise policy tokens for an observation group, e.g.:
       BAO                -> "rd: fixed 147.5 (RD_SINGLETON) Mpc" / "rd: free"
@@ -833,14 +1083,29 @@ def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None) 
     # -------- Part 1: r_d token (BAO/DESI) --------
     has_bao_desi = any(("bao" in L) or ("desi" in L) for L in lower)
     has_cc       = any(L == "cc" for L in lower)
-    has_cal      = any(L.startswith("bbn") or L.startswith("cmb") for L in lower)
+    # calibrators as in Config: BBN or primary CMB (CMB lensing alone leaves r_d sampled, item 61)
+    from Kosmulator_main.constants import CMB_PRIMARY_TAGS, CMB_EARLY_TAG
+    has_cal      = (any(L.startswith("bbn") for L in lower) or any(t in CMB_PRIMARY_TAGS for t in tags)
+                    or CMB_EARLY_TAG in tags)
+
+    # The group's sampled parameters decide when they are known: r_d sampled ->
+    # free; not sampled and no calibrator -> fixed (singleton BAO, and BAO with
+    # only uncalibrated data, see Config "BAO/DESI uncalibrated").
+    params_here = None
+    try:
+        if obs_index is not None:
+            params_here = list(model_config.get("parameters", [])[obs_index])
+    except Exception:
+        params_here = None
 
     if has_bao_desi:
         # Early-time calibrator present -> calibrated
         if has_cal:
             tokens.append("rd: calibrated")
+        elif params_here is not None and "r_d" in params_here:
+            tokens.append("rd: free")
         # If BAO is combined with CC (or any non-calibrator second dataset) -> FREE
-        elif has_cc or len(obs_list) > 1:
+        elif params_here is None and (has_cc or len(obs_list) > 1):
             tokens.append("rd: free")
         else:
             # Singleton BAO policy (typical DESI rule): FIX to configured value if present
@@ -859,7 +1124,17 @@ def rd_policy_label(obs_list, model_config: dict, obs_index: int | None = None) 
 
     # -------- Part 2: gamma token for f_sigma_8 --------
     has_fs8 = any(("f_sigma_8" in L) or ("fσ8" in tags[i]) for i, L in enumerate(lower))
-    if has_fs8:
+    has_f = any(L.strip() == "f" for L in lower)          # the growth rate f alone (CT-32: no tag)
+    if (has_fs8 or has_f) and growth_is_geff():
+        from Kosmulator_main import constants as _K
+        mname = str(model_name or "")
+        if mname and UDM.get_geff_function(mname) is not None:
+            tokens.append("growth: G_eff")
+        elif mname and mname not in _K.GR_GRAVITY_MODELS:
+            tokens.append("growth: GR (no G_eff)")
+        else:
+            tokens.append("growth: GR")
+    elif has_fs8:
         fixed_map = model_config.get("fs8_gamma_fixed_by_group", {}) or {}
 
         matched_index = obs_index
@@ -887,6 +1162,7 @@ def extract_observation_data(
     data: Mapping[str, Mapping[str, Any]],
     obs_type: str,
     params_median: Optional[Mapping[str, float]] = None,
+    model_name: Optional[str] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
     """Return (z, y, yerr, meta) for a given observation type.
 
@@ -915,11 +1191,23 @@ def extract_observation_data(
         yerr = np.asarray(obs_data.get("type_data_error", np.zeros_like(y)))
         return z, y, yerr, None
 
+    # --- Official JLA: magnitudes standardised with the plotted alpha, beta ---
+    if isinstance(obs_data, Mapping) and obs_data.get("jla_full"):
+        from Kosmulator_main import Statistical_packages as _SP
+        from Kosmulator_main.constants import JLA_NUISANCE_DEFAULTS as _JND
+        pm = dict(params_median or {})
+        a = float(pm.get("alpha_JLA", _JND["alpha_JLA"][2]))
+        b = float(pm.get("beta_JLA", _JND["beta_JLA"][2]))
+        z = np.asarray(obs_data["redshift"], dtype=float)
+        y = _SP.jla_standardised_mag(obs_data, a, b)
+        yerr = np.sqrt(np.diag(_SP.jla_covariance(obs_data, a, b)))
+        return z, y, yerr, None
+
     # --- CMB HANDLING ---
     if obs_type.startswith("CMB_"):
-        # Map tag to file key
-        mode = "TT"
-        if "lowl" in obs_type: mode = "EE"
+        # Map tag to file key: low-l EE (SimAll) for CMB_lowl, TT otherwise (low-l TT for
+        # Commander's CMB_lowl_TT, which used to show the EE data)
+        mode = "EE" if obs_type in ("CMB_lowl", "CMB_lowl_sroll2") else "TT"
         
         # Define bounds (Adjust these based on your specific requirements)
         if "lowl" in obs_type:
@@ -945,7 +1233,7 @@ def extract_observation_data(
 
             return ell[mask], Dl[mask], yerr_masked, None
 
-    if obs_type in ("BBN_PryMordial", "BBN_prior"):
+    if obs_type in ("BBN_PryMordial", "BBN_prior", "ThetaStar_CMB"):   # priors: nothing to plot
         return np.array([]), np.array([]), np.array([]), {"is_prior": True}
     
     # --- BBN (D/H) ---
@@ -954,11 +1242,12 @@ def extract_observation_data(
         units = obs_data.get("units", "absolute")
         scale = 1e-6 if units == "scaled1e6" else 1.0
         mode  = obs_data.get("mode", "mean")
+        from Kosmulator_main import constants as _Kc        # the run's N_eff, read now (CT-39)
         # meta passes backend + constants (and grid if present) to the evaluator
         meta = {
             "bbn_backend": obs_data.get("bbn_backend", "approx"),
             # Fall back to global defaults when the dataset itself does not specify Neff / tau_n
-            "Neff":  float(obs_data.get("Neff",  N_EFF_DEFAULT)),
+            "Neff":  float(obs_data.get("Neff",  _Kc.NU_N_EFF)),
             "tau_n": float(obs_data.get("tau_n", TAU_N_DEFAULT)),
             "bbn_grid":   obs_data.get("bbn_grid", None),
         }
@@ -981,26 +1270,7 @@ def extract_observation_data(
             z = np.arange(len(systems), dtype=float)
         return z, y, yerr, meta
         
-    if obs_type == "BAO":
-        z = np.array([0.295, 0.510, 0.510, 0.706, 0.706, 0.930, 0.930, 1.317, 1.317, 1.491, 2.330, 2.330], dtype=float)
-        if "obs_vec" in obs_data and obs_data["obs_vec"] is not None:
-            y = np.asarray(obs_data["obs_vec"], dtype=float)
-        else:
-            y = np.array([
-                7.92512927,
-                13.6200308, 20.98334647,
-                16.84645313, 20.07872919,
-                21.70841761, 17.87612922,
-                27.78720817, 13.82372285,
-                26.07217182,
-                39.70838281, 8.52256583,
-            ], dtype=float)
-        cov  = np.asarray(obs_data["covd1"])
-        yerr = np.sqrt(np.diag(cov)) if cov.ndim == 2 else np.zeros_like(y)
-        meta = np.array([3, 8, 6, 8, 6, 8, 6, 8, 6, 3, 8, 6], dtype=int)
-        return z, y, yerr, meta
-        
-    if obs_type in ("DESI", "DESI_DR1", "DESI_DR2"):
+    if obs_type in ("BAO", "DESI", "DESI_DR1", "DESI_DR2"):
         # z
         if   "redshift" in obs_data: z = np.asarray(obs_data["redshift"])
         elif "z_eff"    in obs_data: z = np.asarray(obs_data["z_eff"])
@@ -1043,7 +1313,7 @@ def extract_observation_data(
                 if params_median is not None and "r_d" in params_median:
                     rs = float(params_median["r_d"])
                 elif params_median is not None:
-                    rs = float(compute_rd(params_median))
+                    rs = float(rd_for_report(params_median, model_name)[0])   # as in the likelihood
                 else:
                     rs = R_D_SINGLETON
             except Exception:
@@ -1090,16 +1360,32 @@ def extract_observation_data(
     elif "sigma" in obs_data:             yerr = np.asarray(obs_data["sigma"])
     else:                                 yerr = np.zeros_like(y)
 
+    # A data set used with a covariance (Pantheon with PANTHEON_SYS_COV, CC with CC_SYS_COV, the
+    # WiggleZ rows of f_sigma_8): the error bars include its diagonal, i.e. the systematics the
+    # likelihood adds (Renier, 19 Oct; before, the statistical errors only). The correlations
+    # cannot be drawn. (A Cholesky factor stored as "cov" is not symmetric and is left out.)
+    cov = obs_data.get("cov") if isinstance(obs_data, Mapping) else None
+    if cov is not None:
+        cov = np.asarray(cov, dtype=float)
+        if cov.ndim == 2 and cov.shape == (y.size, y.size) and np.allclose(cov, cov.T):
+            yerr = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
+
     return z, y, yerr, None
 
 
 def fetch_best_fit_values(
     combined_best_fit: Mapping[str, Sequence[float]]
 ) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, float]]:
+
+    #Filter out metadata keys (D_bar, D_var) and non-indexable values
+    valid_items = {
+        k: v for k, v in combined_best_fit.items()
+        if not str(k).startswith("__") and isinstance(v, (list, tuple, np.ndarray))
+    }
     """Return (median, upper, lower) dicts from the combined best-fit mapping."""
-    med = {k: float(v[0]) for k, v in combined_best_fit.items()}
-    up  = {k: float(v[1]) for k, v in combined_best_fit.items()}
-    lo  = {k: float(v[2]) for k, v in combined_best_fit.items()}
+    med = {k: float(v[0]) for k, v in valid_items.items()}
+    up  = {k: float(v[1]) for k, v in valid_items.items()}
+    lo  = {k: float(v[2]) for k, v in valid_items.items()}
     return med, up, lo
 
 
@@ -1165,10 +1451,26 @@ def _rate_limited_warn(msg, _payload):
         logger.debug("%s (suppressed)", msg)
 
 
+def _growth_geff(z, param_dict, model_name):
+    """f(z) and D(z)/D(0) from the growth equation with the model's G_eff (growth_model "geff")."""
+    from Kosmulator_main import utils as _U
+    p = _with_derived_background(param_dict)
+    MODEL = _model_func_for(model_name)
+    return _U.growth_ode(z, p, MODEL, UDM.get_geff_function(model_name, MODEL),
+                         UDM.get_dlnE_function(model_name, MODEL))
+
+
+def growth_is_geff() -> bool:
+    from Kosmulator_main import constants as _K
+    return getattr(_K, "GROWTH_MODEL", "gamma") == "geff"
+
+
 def compute_f(z: np.ndarray | float, param_dict: Mapping[str, float], model_name: str) -> np.ndarray:
     z = np.atleast_1d(z)
     if z.size == 0:                       # ← NEW
         return z.astype(float)
+    if growth_is_geff():
+        return _growth_geff(z, param_dict, model_name)[0]
     p  = _with_derived_background(param_dict)
     Ez = compute_E(z, p, model_name)
     Omz = (p["Omega_m"] * (1.0 + z)**3) / (Ez**2)
@@ -1193,6 +1495,9 @@ def compute_sigma8z(
     z = np.atleast_1d(z)
     if z.size == 0:
         return z.astype(float)
+
+    if growth_is_geff():
+        return float(param_dict["sigma_8"]) * _growth_geff(z, param_dict, model_name)[1]
 
     p = _with_derived_background(param_dict)
     gamma = float(p.get("gamma", DEFAULT_GROWTH_INDEX))
@@ -1224,7 +1529,9 @@ def model_curve_for_type(
 
     # Work with a copy so we can safely inject gamma if needed
     p = dict(param_dict)
-    if "gamma" not in p:
+    if growth_is_geff():
+        gamma_fixed = False                 # no gamma: the model's G_eff (growth_model "geff")
+    elif "gamma" not in p:
         p["gamma"] = DEFAULT_GROWTH_INDEX
         gamma_fixed = True
     else:
@@ -1234,7 +1541,7 @@ def model_curve_for_type(
         Ez = MODEL_funcs["E"](zgrid, p, model_name)
         return p["H_0"] * Ez, r"$H(z)$ (km s$^{-1}$ Mpc$^{-1}$)"
 
-    if obs_type in ("PantheonP", "PantheonPS", "Pantheon", "JLA", "DESY5", "Union3"):
+    if obs_type in ("PantheonP", "PantheonPS", "Pantheon", "JLA", "JLA_legacy", "DESY5", "Union3"):
         Dc = MODEL_funcs["Dc"](zgrid, p, model_name)
         mu = 25.0 + 5.0 * np.log10(np.clip((1.0 + zgrid) * Dc, 1e-12, None))
         return mu, r"Distance modulus $\mu$ (mag)"
@@ -1290,19 +1597,20 @@ def model_curve_for_type(
         if zgrid.size == 0:
             return np.array([]), r"$D_{\ell}$ [$\mu K^2$]"
 
-        # Pick likelihood mode
-        mode = "lowl" if "lowl" in obs_type else "hil"
+        # the point's lensed CLASS run, as the likelihoods use (CT-35); the short "lowl" run
+        # (l_max 31, unlensed) is up to 45% low in TT near l = 29
+        mode = "hil"
 
         # Pick spectrum
         spec_key = "tt"
         if ("TE" in obs_type) or ("_TE" in obs_type):
             spec_key = "te"
-        if ("EE" in obs_type) or ("_EE" in obs_type) or ("lowl" in obs_type):
+        if ("EE" in obs_type) or ("_EE" in obs_type) or (obs_type in ("CMB_lowl", "CMB_lowl_sroll2")):
             spec_key = "ee"
 
         # Compute up to what we need for the dense curve
-        l_req = int(np.nanmax(zgrid))
-        l_req = max(30, l_req + 5)
+        from Kosmulator_main import constants as _Kc
+        l_req = int(_Kc.CMB_CLASS_LMAX)                     # the likelihood's cache entry (CT-35)
 
         cls = SP._compute_cls_cached(param_dict, l_req, mode=mode)
         arr = np.asarray(cls.get(spec_key, []), dtype=float)
@@ -1345,7 +1653,7 @@ def evaluator_for_points(
         Ez = MODEL_funcs["E"](z, param_dict, model_name)
         return param_dict["H_0"] * Ez
 
-    if obs_type in ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3"):
+    if obs_type in ("JLA", "JLA_legacy", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3"):
         z = np.asarray(z, dtype=float)
         d_c = MODEL_funcs["Dc"](z, param_dict, model_name)     # comoving distance [Mpc]
         d_l = d_c * (1.0 + z)                                  # luminosity distance [Mpc]
@@ -1370,15 +1678,15 @@ def evaluator_for_points(
         # 1. Determine l_max safely
         # We need the theory to cover at least the max ell in the data (z)
         data_max_l = int(np.max(z))
-        l_max_request = max(2500, data_max_l + 10) # Ensure at least 2500 or data max
-        
-        mode = "lowl" if "lowl" in obs_type else "hil"
+        from Kosmulator_main import constants as _Kc
+        l_max_request = max(int(_Kc.CMB_CLASS_LMAX), data_max_l + 10)   # the likelihood's run (CT-35)
+
+        mode = "hil"
         
         # 2. Compute Cls
         cls = SP._compute_cls_cached(param_dict, l_max_request, mode=mode)
         
-        spec_key = "tt"
-        if "lowl" in obs_type: spec_key = "ee"
+        spec_key = "ee" if obs_type in ("CMB_lowl", "CMB_lowl_sroll2") else "tt"
         
         # 3. Check actual size of returned theory
         cls_array = cls[spec_key]
@@ -1531,8 +1839,9 @@ def normalize_save_roots(PLOT_SETTINGS: Dict[str, Any]) -> None:
 def base_dir(PLOT_SETTINGS: Mapping[str, Any]) -> str:
     """Return unified base dir INCLUDING exactly one `<output_suffix>`."""
     root = os.path.normpath(str(PLOT_SETTINGS.get("save_root", DEFAULT_PLOTS_BASE)))
-    suffix = str(PLOT_SETTINGS.get("output_suffix", "default_run"))
-    return root if os.path.basename(root) == suffix else os.path.join(root, suffix)
+    suffix = os.path.normpath(str(PLOT_SETTINGS.get("output_suffix", "default_run")))
+    already_appended = (root == suffix) or root.endswith(os.sep + suffix)
+    return root if already_appended else os.path.join(root, suffix)
 
 
 def save_figure(fig, model_name: str, obs_key: Optional[str], fname_suffix: str, PLOT_SETTINGS: Mapping[str, Any]) -> str:

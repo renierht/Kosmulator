@@ -17,6 +17,7 @@ Public / semi-public pieces:
 from __future__ import annotations
 
 import math
+import sys
 from typing import Mapping
 from functools import lru_cache
 import logging
@@ -24,15 +25,103 @@ import logging
 logger = logging.getLogger("Kosmulator.rd_helpers")
 
 # ------------------------------------------------------------------
-# Optional CLASS backend
+# Optional CLASS backend, looked up when r_d is computed
 # ------------------------------------------------------------------
-try:
-    from classy import Class
-    _HAVE_CLASS = True
-except Exception:
-    _HAVE_CLASS = False
+# Not "from classy import Class" at import: when Kosmulator imports this module no model's
+# CLASS build is loaded yet (Class_run.ensure_class_ready puts it in sys.modules["classy"]
+# later), so without a globally installed classy every r_d fell back to EH98 (about 2%
+# high), and with one, r_d came from that build rather than the one Kosmulator loaded.
+from Kosmulator_main import constants as _K   # neutrino settings (item 27), read at call time
+
+
+#: Kosmulator's own LCDM CLASS build (Class/LCDM_v, also rd_Class's source): the flat-LCDM r_d
+#: when no classy is loaded or installed, so that no separately installed CLASS is needed
+OWN_CLASS_MODEL = "LCDM_v"
+_OWN_CLASS_FAILED = False
+
+
+def _own_classy():
+    """Kosmulator's LCDM_v build from its cache (Class/.cache), loaded as sys.modules["classy"], or
+    None. Never compiles here (MCMC_setup builds it before any worker pool) and gives up for the
+    process after a miss, so that r_d calls do not hash the CLASS sources again."""
+    global _OWN_CLASS_FAILED
+    if _OWN_CLASS_FAILED:
+        return None
+    try:
+        from Kosmulator_main import Class_run as _CR
+        if _CR.ensure_class_ready(OWN_CLASS_MODEL, no_rebuild=True):
+            return sys.modules.get("classy")
+    except Exception as e:
+        logger.debug("own CLASS build for r_d not available: %s", e)
+    _OWN_CLASS_FAILED = True
+    return None
+
+
+def _classy_module():
+    """The classy Kosmulator has loaded (sys.modules), else an installed one, else Kosmulator's
+    own LCDM_v build (cached), else None."""
+    mod = sys.modules.get("classy")
+    if mod is None:
+        try:
+            import classy as mod  # noqa: F811
+        except Exception:
+            mod = _own_classy()
+            if mod is None:
+                return None
+    return mod if hasattr(mod, "Class") else None
+
+def classy_import_problem():
+    """None if CLASS (classy) can compute r_d in this process, else the reason it cannot."""
+    mod = sys.modules.get("classy")
+    if mod is not None and hasattr(mod, "Class"):
+        return None
+    try:
+        import classy as mod  # noqa: F811
+    except Exception as e:
+        if _own_classy() is not None:
+            return None
+        return (f"import classy failed ({type(e).__name__}: {e}) and Kosmulator's own CLASS build "
+                f"for {OWN_CLASS_MODEL} is not available")
+    return None if hasattr(mod, "Class") else "the module 'classy' has no Class"
+
+
+#: Text used at start-up and in the statistics notes when r_d comes from EH98 (item 15)
+EH98_EFFECT = ("the Eisenstein & Hu (1998) fit is about 2% above CLASS, which lowers H_0 from "
+               "BAO/DESI + BBN by about 3 km/s/Mpc")
 
 _RD_BACKEND_LOGGED = False
+
+# ------------------------------------------------------------------
+# r_d fallback bookkeeping (per process)
+# ------------------------------------------------------------------
+from collections import Counter as _Counter
+
+_RD_FALLBACKS = _Counter()
+_RD_WARN_AT = {1, 10, 100, 1_000, 10_000, 100_000, 1_000_000}
+
+
+class RdUnavailableError(ValueError):
+    """A calibrated r_d was required but could not be computed (CLASS and EH98 failed)."""
+
+
+def _note_fallback(kind: str, detail: str = "") -> None:
+    """Count an r_d fallback and warn at a decaying rate (1st, 10th, 100th, ...)."""
+    _RD_FALLBACKS[kind] += 1
+    n = _RD_FALLBACKS[kind]
+    if n in _RD_WARN_AT:
+        logger.warning(
+            "r_d fallback: %s (occurrence %d in this process)%s",
+            kind, n, f" - {detail}" if detail else "",
+        )
+
+
+def rd_fallback_counts() -> dict:
+    """Fallback counts recorded in this process since the last reset."""
+    return dict(_RD_FALLBACKS)
+
+
+def reset_rd_fallback_counts() -> None:
+    _RD_FALLBACKS.clear()
 
 # ------------------------------------------------------------------
 # Shared constants
@@ -143,11 +232,15 @@ def _rd_class_core(
     Omega_k: float,
     YHe_mode,
     tau_n,
+    build: str = "",
+    m_ncdm: float = 0.0,
 ) -> float:
     """
     Cached CLASS.rs_drag() evaluator.
 
-    Args are pre-quantised for cache friendliness; see compute_rd_class().
+    Args are pre-quantised for cache friendliness; see compute_rd_class(). `build` (the
+    classy file) is part of the cache key, so values from one CLASS build are never reused
+    for another.
     """
     pars = {
         "h":         float(h),
@@ -158,6 +251,8 @@ def _rd_class_core(
         "Omega_k":   float(Omega_k),
         "output":    "",  # background-only is enough for rs_drag()
     }
+    if m_ncdm:                         # one massive neutrino (constants.NEUTRINOS, item 27)
+        pars.update({"N_ncdm": 1, "m_ncdm": float(m_ncdm)})
 
     if str(YHe_mode).upper() == "BBN":
         pars["YHe"] = "BBN"
@@ -166,7 +261,7 @@ def _rd_class_core(
     else:
         pars["YHe"] = float(YHe_mode)
 
-    c = Class()
+    c = _classy_module().Class()
     c.set(pars)
     c.compute()
     rd = float(c.rs_drag())
@@ -185,12 +280,33 @@ def _q(x, step):
     return step * round(float(x) / step)
 
 
-def compute_rd_class(p: dict):
+def _rd_class_model(p: dict, model_name):
+    """
+    r_d from rd_Class with the model's own E(z) (Kosmulator_main/rd_class.py), or None when
+    the flat-LCDM CLASS value applies: rd_background "lcdm", an LCDM model (identical r_d),
+    no model name, or rd_Class unavailable or failing for this point (counted and warned).
+    """
+    if not model_name or _K.RD_BACKGROUND != "model" or model_name in _K.RD_LCDM_MODELS:
+        return None
+    try:
+        from Kosmulator_main import rd_class as _RC
+        return float(_RC.rd_model(str(model_name), dict(p)))
+    except Exception as e:
+        _note_fallback(f"rd_Class failed for {model_name}, flat-LCDM CLASS r_d used", str(e))
+        return None
+
+
+def compute_rd_class(p: dict, model_name=None):
     """
     Compute r_d via CLASS.rs_drag(), with conservative parameter quantisation.
-    Returns None if CLASS is unavailable.
+    With a model name (and rd_background "model", the default), a model other than LCDM gets
+    r_d from rd_Class with its own E(z). Returns None if CLASS is unavailable.
     """
-    if not _HAVE_CLASS:
+    rd_m = _rd_class_model(p, model_name)
+    if rd_m is not None:
+        return rd_m
+    mod = _classy_module()
+    if mod is None:
         return None
 
     H0   = float(p["H_0"])
@@ -203,11 +319,16 @@ def compute_rd_class(p: dict):
     else:
         Om  = float(p["Omega_m"])
         Ob  = Obh2 / (h * h)
-        Onu = float(p.get("Omega_nu", 0.0))
+        Onu = float(p.get("Omega_nu", _K.omega_nu() / (h * h)))
         Oc  = max(Om - Ob - Onu, 0.0)
         ocdmh2 = Oc * h * h
 
-    N_ur = float(p.get("N_ur", p.get("N_eff", _N_EFF)))
+    # Neutrinos as in the CMB calls (constants.NEUTRINOS): one 0.06 eV state plus massless
+    # ones, N_eff = NU_N_EFF in total; a sampled N_eff (BBN groups) sets the total
+    nu = _K.class_neutrino_params()
+    m_ncdm = float(nu.get("m_ncdm", 0.0))
+    n_eff_total = float(p.get("N_eff", _K.NU_N_EFF))
+    N_ur = float(p.get("N_ur", n_eff_total - (_K.NU_NEFF_PER_MASSIVE if m_ncdm else 0.0)))
     Tcmb = float(p.get("T_CMB", _T_CMB))
     Ok   = float(p.get("Omega_k", 0.0))
     tau_n = float(p["tau_n"]) if "tau_n" in p else None
@@ -217,30 +338,32 @@ def compute_rd_class(p: dict):
     obq   = _q(Obh2,   2e-7)   # ~1e-5 relative bins in ω_b
     ocq   = _q(ocdmh2, 2e-7)   # ~1e-5 relative bins in ω_cdm
     nurq  = _q(N_ur,   1e-3)
-    tcmbq = _q(Tcmb,   1e-3)
+    tcmbq = round(Tcmb, 6)   # a 1e-3 bin turned 2.7255 K into 2.725 K (item 14)
     okq   = _q(Ok,     5e-4)
     taunq = _q(tau_n,  0.1) if tau_n is not None else None
 
-    return _rd_class_core(hq, obq, ocq, nurq, tcmbq, okq, "BBN", taunq)
+    return _rd_class_core(hq, obq, ocq, nurq, tcmbq, okq, "BBN", taunq, str(getattr(mod, "__file__", "")), m_ncdm)
 
 
 # ------------------------------------------------------------------
 # Policy helpers
 # ------------------------------------------------------------------
-def _try_compute_rd(param_dict: dict):
+def _try_compute_rd(param_dict: dict, model_name=None):
     """
-    Central helper: try CLASS rs_drag() first; fall back to EH98 compute_rd().
+    Central helper: try CLASS rs_drag() first (rd_Class with the model's E(z) when
+    model_name is given, see compute_rd_class); fall back to EH98 compute_rd().
     Returns r_d [Mpc] or None if both fail.
     """
     global _RD_BACKEND_LOGGED
 
     # 1) CLASS first
     try:
-        rd = compute_rd_class(param_dict)
+        rd = compute_rd_class(param_dict, model_name)
         if rd is not None:
             if not _RD_BACKEND_LOGGED:
                 logger.debug(
-                    "r_d backend = CLASS; r_d = %.3f Mpc @ p=%s",
+                    "r_d backend = CLASS (%s); r_d = %.3f Mpc @ p=%s",
+                    getattr(_classy_module(), "__file__", "?"),
                     rd,
                     {
                         k: param_dict[k]
@@ -250,12 +373,9 @@ def _try_compute_rd(param_dict: dict):
                 )
                 _RD_BACKEND_LOGGED = True
             return float(rd)
+        _note_fallback("CLASS not available, EH98 used (~2% above CLASS)")
     except Exception as e:
-        if not _RD_BACKEND_LOGGED:
-            logger.warning(
-                "CLASS rs_drag() failed (%s); falling back to EH98.", e
-            )
-            _RD_BACKEND_LOGGED = True
+        _note_fallback("CLASS rs_drag() failed, EH98 used (~2% above CLASS)", str(e))
 
     # 2) EH98 fallback
     try:
@@ -272,7 +392,8 @@ def _try_compute_rd(param_dict: dict):
             )
             _RD_BACKEND_LOGGED = True
         return rd
-    except Exception:
+    except Exception as e:
+        _note_fallback("CLASS and EH98 both failed, no r_d", str(e))
         return None
 
 
@@ -295,11 +416,18 @@ def _resolve_rd(p: dict, Type: str) -> float:
         return float(p["r_d"])
 
     # 2) If we have a background, try to compute r_d (CLASS first, then EH98)
-    have_bg = all(k in p for k in ("H_0", "Omega_m", "Omega_bh^2"))
+    have_bg = ("H_0" in p and "Omega_bh^2" in p
+               and any(k in p for k in ("Omega_m", "Omega_dh^2", "Omega_ch^2")))
     if have_bg:
         rd = _try_compute_rd(p)
         if rd is not None:
             return float(rd)
+        # A calibrated r_d that cannot be computed must not silently become
+        # the fixed singleton value below.
+        raise RdUnavailableError(
+            "r_d should be calibrated from the background here, but CLASS and "
+            "EH98 both failed."
+        )
 
     # 3) Pure BAO/DESI-only combinations: fall back to a fixed fiducial sound horizon
     if Type in ("BAO", "DESI", "DESI_DR1", "DESI_DR2"):
@@ -324,14 +452,14 @@ def _try_resolve_rd(param_dict, Type):
         return None
 
 
-def _compute_r_d_from_bbn_and_background(p: dict) -> float:
+def _compute_r_d_from_bbn_and_background(p: dict, model_name=None) -> float:
     """
     Centralised r_d [Mpc] for calibrated runs.
 
-    Try CLASS rs_drag via _try_compute_rd; fall back to EH98 compute_rd().
+    Try CLASS rs_drag via _try_compute_rd (rd_Class for the model); fall back to EH98.
     """
     try:
-        rd = _try_compute_rd(p)
+        rd = _try_compute_rd(p, model_name)
         if rd is not None:
             return float(rd)
     except Exception:
@@ -340,26 +468,76 @@ def _compute_r_d_from_bbn_and_background(p: dict) -> float:
     return float(compute_rd(p))
 
 
+class RdReportTask:
+    """CT-27: rd_for_report for a chunk of parameter dicts in a pool worker (picklable)."""
+
+    def __init__(self, model_name=None):
+        self.model_name = model_name
+
+    def __call__(self, dicts):
+        return [rd_for_report(p, self.model_name) for p in dicts]
+
+
+def rd_for_report(p: Mapping[str, float], model_name=None):
+    """
+    r_d [Mpc] for tables, plots and diagnostics, resolved the same way as the
+    likelihood: a sampled r_d first, then CLASS rs_drag(), and EH98 only if
+    CLASS is unavailable or fails (EH98 runs ~2% above CLASS).
+
+    Returns (r_d, source) with source in {"sampled", "CLASS", "EH98"}.
+    Raises KeyError if r_d is not sampled and the background is incomplete
+    (needs H_0, Omega_bh^2 and Omega_m or Omega_dh^2 / Omega_ch^2), so callers
+    can fall back to a policy-fixed r_d.
+    """
+    if "r_d" in p:
+        return float(p["r_d"]), "sampled"
+
+    has_bg = ("H_0" in p and "Omega_bh^2" in p
+              and any(k in p for k in ("Omega_m", "Omega_dh^2", "Omega_ch^2")))
+    if not has_bg:
+        raise KeyError(
+            "r_d is not sampled and the background is incomplete "
+            "(need H_0, Omega_bh^2 and Omega_m or Omega_dh^2)."
+        )
+
+    rd = None
+    try:
+        rd = compute_rd_class(dict(p), model_name)
+        if rd is None:
+            _note_fallback("CLASS not available for a reported r_d, EH98 used (~2% above CLASS)")
+    except Exception as e:
+        _note_fallback("CLASS rs_drag() failed for a reported r_d, EH98 used (~2% above CLASS)", str(e))
+    if rd is not None:
+        return float(rd), "CLASS"
+    return float(compute_rd(p)), "EH98"
+
+
 def _maybe_calibrate_rd(theta_map: dict, CONFIG: dict, obs_index: int) -> None:
     """
-    If this observation set includes BBN and r_d is absent, compute it from
-    (Omega_bh^2, Omega_m, H_0[, N_eff, T_CMB]) and inject into theta_map.
+    If this observation set includes BBN or primary Planck data and r_d is absent, compute
+    it from (Omega_bh^2, Omega_m, H_0[, N_eff, T_CMB]) and the model's E(z) (rd_Class, for
+    a model other than LCDM) and inject it into theta_map.
 
     Used by Kosmulator_MCMC at the θ→param stage so BAO/DESI runs that
-    include BBN can have r_d pre-calibrated.
+    include BBN or Planck can have r_d pre-calibrated. (Planck groups used to get the
+    flat-LCDM r_d inside the BAO likelihood, without the model.)
     """
     try:
         if "r_d" in theta_map:
             return
         obs_set = CONFIG.get("observations", [])[obs_index]
-        has_bbn = any(str(o).startswith(("BBN",)) for o in obs_set)
-        if not has_bbn:
+        has_bbn = any(str(o).startswith(("BBN",)) for o in obs_set) or \
+            any(str(o) in _K.CMB_PRIMARY_TAGS or str(o) == _K.CMB_EARLY_TAG for o in obs_set)
+        # Only BAO/DESI use r_d: skip the CLASS call (~50 ms) for groups such
+        # as CC + BBN or SNe + BBN, where it was computed and never used.
+        has_bao = any(str(o) in ("BAO", "DESI", "DESI_DR1", "DESI_DR2") for o in obs_set)
+        if not (has_bbn and has_bao):
             return
         needed = ("Omega_bh^2", "Omega_m", "H_0")
         if not all(k in theta_map for k in needed):
             # Silent no-op; downstream will raise if BAO/DESI needs r_d
             return
-        theta_map["r_d"] = _compute_r_d_from_bbn_and_background(theta_map)
+        theta_map["r_d"] = _compute_r_d_from_bbn_and_background(theta_map, CONFIG.get("model_name"))
     except Exception:
         # Fail-safe: do nothing; BAO/DESI branch will error clearly if r_d missing
         pass

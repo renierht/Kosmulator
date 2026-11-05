@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from numbers import Number
-from typing import Callable, Dict, Any, Optional
+from typing import Callable, Dict, Any, Optional, Tuple
 import inspect
 import sys
 from pathlib import Path
@@ -27,6 +27,8 @@ import importlib.util
 import numpy as np
 import scipy.linalg as la
 from scipy.interpolate import PchipInterpolator
+
+
 
 from Kosmulator_main.constants import (
     C_KM_S,
@@ -37,6 +39,13 @@ from Kosmulator_main.constants import (
     OBSERVATIONS_BASE,
     BBN_GRID_RELATIVE,
     PLANCK_NUISANCE_DEFAULTS,
+    CMB_CLASS_LMAX,
+    CMB_SPECTRA_CACHE_SIZE,
+    BBN_DH_REF,
+    BBN_DH_OMEGA_B_REF,
+    BBN_DH_SLOPE,
+    BBN_DH_THEORY_FRAC,
+    CMB_EARLY_TAG,
 )
 
 from . import Class_run as CR
@@ -45,7 +54,10 @@ from Kosmulator_main import utils as U
 try:
     import clik  # noqa: F401  # imported for side effects in some environments
 except Exception:
-    clik = None
+    try:
+        import clipy as clik  # noqa: F401  # pure-Python clik, as in Class_run
+    except Exception:
+        clik = None
 
 # User-defined cosmology models (background + Cℓ wrappers)
 try:
@@ -87,6 +99,14 @@ TCMB2 = _T_CMB_uK ** 2               # (µK)^2
 
 # Simple per-process cache for theory Cℓs
 _CMB_THEORY_CACHE: Dict[str, Any] = {"key": None, "cls": None}
+#: C_l computed ahead through the worker pool for the best-fit plots (item 52), keyed by
+#: (model, mode, parameters); read by _compute_cls_cached for models with a CMB helper
+_CLS_PREFETCH: Dict[tuple, Any] = {}
+
+# Lensed spectra of the last CMB_SPECTRA_CACHE_SIZE points (get_cmb_spectra), keyed on
+# the model and the parameters other than Planck nuisance parameters
+from collections import OrderedDict as _OrderedDict
+_CMB_SPECTRA: "_OrderedDict[tuple, Optional[Dict[str, np.ndarray]]]" = _OrderedDict()
 _classy_cache_sp = None             # reusable low-ℓ CLASS instance
 
 # -----------------------------------------------------------------------------
@@ -134,7 +154,8 @@ def _compute_cls_cached(
     m = (mode or "").lower()
     ell_max_default = 31 if m.startswith("low") else 2509
     ell_max = int(Lmax) if (Lmax is not None) else ell_max_default
-    ell_max = max(8, min(int(ell_max), 4096))
+    from Kosmulator_main import constants as _Kl   # live value: MCMC_setup sets it per run (item 57)
+    ell_max = max(8, min(int(ell_max), max(4096, int(_Kl.CMB_CLASS_LMAX))))   # ACT needs 8501
 
     # Try to infer model name from the CLASS runtime if not supplied
     model_name = model_name or getattr(CR, "_current_class_model", "LCDM_v")
@@ -149,15 +170,23 @@ def _compute_cls_cached(
             sorted((k, v) for k, v in pd.items() if isinstance(v, (int, float)))
         )
 
-    key = (model_name, ell_max, m, numeric_items)
+    from Kosmulator_main import constants as _Knu      # neutrinos, non-linear part of the key
+    nu_sig = _Knu.class_signature()
+    key = (model_name, ell_max, m, numeric_items, nu_sig)
 
     if _CMB_THEORY_CACHE.get("key") == key:
         return _CMB_THEORY_CACHE.get("cls")
+    if _CLS_PREFETCH and (model_name, m, numeric_items, nu_sig) in _CLS_PREFETCH:
+        return _CLS_PREFETCH[(model_name, m, numeric_items, nu_sig)]   # helpers ignore Lmax (item 52)
 
     cl: Optional[Dict[str, np.ndarray]] = None
 
     cmb_fn = getattr(UDM, f"{model_name}_CMB", None)
     if cmb_fn is not None:
+        # The model's own helper decides; when it returns None (CLASS failed, or the
+        # point is unphysical) the point is rejected. No fallback to the generic
+        # CLASS call below: that would compute a different model (stock LCDM settings,
+        # no model parameters) for exactly the points the model's helper refused.
         try:
             sig = inspect.signature(cmb_fn)
             if "mode" in sig.parameters:
@@ -166,11 +195,14 @@ def _compute_cls_cached(
                 cl = cmb_fn(pd)
         except Exception as e:
             logger.exception("Model-specific CMB helper failed (%s_CMB): %s", model_name, e)
-            cl = None  # continue to generic CLASS fallback
-    else:
-        logger.warning("No model-specific CMB helper (%s_CMB). Using generic CLASS fallback.", model_name)
+            cl = None
+        _CMB_THEORY_CACHE["key"] = key
+        _CMB_THEORY_CACHE["cls"] = cl
+        return cl
 
-    # 2) Generic fallback: drive CLASS directly
+    logger.warning("No model-specific CMB helper (%s_CMB). Using generic CLASS fallback.", model_name)
+
+    # 2) Generic fallback (models without a CMB helper): drive CLASS directly
     if cl is None:
         try:
             from classy import Class, CosmoComputationError  # local import
@@ -208,10 +240,15 @@ def _compute_cls_cached(
                 "tau_reio": float(pd["tau_reio"]),
                 "A_s": A_s,
                 "Omega_k": 0.0,
-                "N_ur": float(pd.get("N_eff", N_EFF_DEFAULT)),
-                "N_ncdm": 0,
-                "non linear": "none",
             }
+            # Neutrinos and non-linear lensing as in the model helpers (constants, item 27);
+            # a sampled N_eff sets the total
+            from Kosmulator_main import constants as _Kc
+            pars.update(_Kc.class_neutrino_params())
+            if "N_eff" in pd:
+                pars["N_ur"] = float(pd["N_eff"]) - (_Kc.NU_NEFF_PER_MASSIVE if "m_ncdm" in pars else 0.0)
+            if lensing_on:
+                pars.update(_Kc.class_nonlinear_params(model_name or ""))
 
             # Optional model-specific extensions (e.g. f(T) parameters)
             if "n" in pd:
@@ -220,7 +257,8 @@ def _compute_cls_cached(
             cosmo.set(pars)
             cosmo.compute()
 
-            raw = cosmo.raw_cl()
+            # lensed spectra unless low-l (the high-l and lensing likelihoods take lensed C_l)
+            raw = cosmo.lensed_cl() if lensing_on else cosmo.raw_cl()
             cl = {
                 "tt": np.asarray(raw.get("tt", []), dtype=float),
                 "ee": np.asarray(raw.get("ee", []), dtype=float),
@@ -240,7 +278,10 @@ def _compute_cls_cached(
                 _classy_cache_sp = cosmo
 
         except Exception as e:
-            logger.error("CLASS failed (lensing=%s, L=%s): %s", not m.startswith("low"), ell_max, e)
+            # CLASS refusing a point (CosmoComputationError) is a rejection, counted in the
+            # run's summary; anything else is reported
+            (logger.debug if type(e).__name__ == "CosmoComputationError" else logger.error)(
+                "CLASS failed (lensing=%s, L=%s): %s", not m.startswith("low"), ell_max, e)
             cl = None
 
     _CMB_THEORY_CACHE["key"] = key
@@ -348,6 +389,141 @@ def _get_cls_from_model(
 
 
 
+def planck_nuisance_value(name: str, pd: Dict[str, float]) -> float:
+    """
+    Value passed to clik for a Planck nuisance parameter: the sampled value if the
+    point has it, else the Planck-baseline fixed value, else its reference value.
+    """
+    from Kosmulator_main import constants as _K
+    if name in pd:
+        return float(pd[name])
+    if name in _K.PLANCK_NUISANCE_FIXED:
+        return float(_K.PLANCK_NUISANCE_FIXED[name])
+    if name in PLANCK_NUISANCE_DEFAULTS:
+        return float(PLANCK_NUISANCE_DEFAULTS[name][0])
+    return 1.0 if (name.startswith("calib_") or name == "A_planck") else 0.0
+
+
+def planck_nuisance_prior_chi2(pd: Dict[str, float]) -> float:
+    """
+    -2 ln(prior) of the Planck nuisance parameters present in pd (Gaussian priors and the
+    SZ prior on ksz_norm + 1.6 A_sz), up to a constant; 0 when none are present.
+    Same terms as log_prior_all in Kosmulator_MCMC.
+    """
+    from Kosmulator_main import constants as _K
+    chi2 = 0.0
+    for name, (mu, sig) in _K.PLANCK_GAUSSIAN_PRIORS.items():
+        if name in pd:
+            chi2 += ((float(pd[name]) - mu) / sig) ** 2
+    if "ksz_norm" in pd and "A_sz" in pd:
+        c, mu, sig = _K.PLANCK_SZ_PRIOR
+        chi2 += ((float(pd["ksz_norm"]) + c * float(pd["A_sz"]) - mu) / sig) ** 2
+    return chi2
+
+
+def cmb_prior_chi2(pd: Dict[str, float], group) -> float:
+    """
+    -2 ln(prior) of a group's CMB parameters present in pd, up to a constant: the Gaussian
+    priors of constants.cmb_gaussian_priors(group) (Planck and ground-based nuisances, tau
+    for ACT or SPT without low-l EE) and the SZ prior. Same terms as log_prior_all.
+    """
+    from Kosmulator_main import constants as _K
+    chi2 = 0.0
+    for name, (mu, sig) in _K.cmb_gaussian_priors(tuple(group or ())).items():
+        if name in pd:
+            chi2 += ((float(pd[name]) - mu) / sig) ** 2
+    if "ksz_norm" in pd and "A_sz" in pd:
+        c, mu, sig = _K.PLANCK_SZ_PRIOR
+        chi2 += ((float(pd["ksz_norm"]) + c * float(pd["A_sz"]) - mu) / sig) ** 2
+    return chi2
+
+
+class _ClsTask:
+    """Picklable C_l of one point for the worker pool (item 52)."""
+
+    def __init__(self, model_name: str, mode: str):
+        self.model_name, self.mode = model_name, mode
+
+    def __call__(self, pd):
+        CR.ensure_class_ready(self.model_name)
+        return _compute_cls_cached(dict(pd), None, mode=self.mode, model_name=self.model_name)
+
+
+def prefetch_cls(param_dicts, model_name: str, modes) -> int:
+    """
+    Compute the C_l of these points through the worker pool (utils.post_map; in this
+    process without one) and keep them for _compute_cls_cached: the CMB band draws of
+    the best-fit plots (item 52). Only for models with a CMB helper. Returns the number
+    of points computed; clear_cls_prefetch() frees them.
+    """
+    if getattr(UDM, f"{model_name}_CMB", None) is None or not param_dicts:
+        return 0
+    from Kosmulator_main import utils as _U, constants as _Knu
+    nu_sig = _Knu.class_signature()
+    n = 0
+    for mode in modes:
+        m = (mode or "").lower()
+        keyed = []
+        for p in param_dicts:
+            q = _U.ensure_background_params(dict(p))
+            items = tuple(sorted((k, float(v)) for k, v in q.items() if isinstance(v, (int, float))))
+            if (model_name, m, items, nu_sig) not in _CLS_PREFETCH:
+                keyed.append(((model_name, m, items, nu_sig), p))
+        res = _U.post_map(_ClsTask(model_name, m), [p for _, p in keyed])
+        for (k, _), cl in zip(keyed, res):
+            _CLS_PREFETCH[k] = cl
+            n += 1
+    return n
+
+
+def clear_cls_prefetch() -> None:
+    _CLS_PREFETCH.clear()
+
+
+def _spectra_key(pd: Dict[str, float], model_name: str) -> tuple:
+    """Cache key: the model, the CLASS settings (neutrinos, non-linear) and every numeric parameter except Planck nuisances."""
+    from Kosmulator_main import constants as _K
+    skip = set(getattr(_K, "PLANCK_NUISANCE_NAMES", ())) | set(PLANCK_NUISANCE_DEFAULTS) \
+        | set(getattr(_K, "GROUND_NUISANCE_SAMPLED", ()))       # ACT/SPT nuisances (item 57)
+    items = []
+    for k, v in pd.items():
+        if k in skip:
+            continue
+        try:
+            items.append((k, float(v)))
+        except (TypeError, ValueError):
+            continue
+    return (model_name, _K.class_signature(), tuple(sorted(items)))
+
+
+def get_cmb_spectra(pd: Dict[str, float], model_name: str) -> Optional[Dict[str, np.ndarray]]:
+    """
+    Lensed C_l (tt, ee, te, bb, pp; dimensionless, l = 0..CMB_CLASS_LMAX) for this point.
+
+    One CLASS run serves every CMB likelihood of a group: the high-l, low-l and lensing
+    likelihoods take their slices from the same spectra, and the last
+    CMB_SPECTRA_CACHE_SIZE points are kept, so a point is computed once whatever order
+    the likelihoods are called in. Uses the model's <model>_CMB helper (mode "cmb"), or
+    the generic CLASS call for models without one. None if CLASS failed or the helper
+    rejected the point.
+    """
+    key = _spectra_key(pd, model_name)
+    if key in _CMB_SPECTRA:
+        _CMB_SPECTRA.move_to_end(key)
+        return _CMB_SPECTRA[key]
+    if getattr(UDM, f"{model_name}_CMB", None) is not None:
+        cl = _get_cls_from_model(pd, model_name, mode="cmb")
+    else:
+        from Kosmulator_main import constants as _Kl
+        cl = _compute_cls_cached(pd, Lmax=_Kl.CMB_CLASS_LMAX, mode="cmb", model_name=model_name)
+    if cl is not None and not isinstance(cl, dict):
+        cl = None
+    _CMB_SPECTRA[key] = cl
+    while len(_CMB_SPECTRA) > max(1, int(CMB_SPECTRA_CACHE_SIZE)):
+        _CMB_SPECTRA.popitem(last=False)
+    return cl
+
+
 # -----------------------------------------------------------------------------
 # Planck high-ℓ TTTEEE likelihood
 # -----------------------------------------------------------------------------
@@ -391,11 +567,16 @@ def cmb_hil_loglike(pd: Dict[str, float], model_name: str, floor: float = -1e10)
     nEE = _n_ell(lEE)
     nTE = _n_ell(lTE)
 
-    # 2) Theory Cℓ from the user model, as for TT-only
+    # 2) Theory Cℓ: the point's single lensed CLASS run (shared with low-l and lensing)
     try:
-        cl = _get_cls_from_model(pd, model_name, mode="hil")
+        cl = get_cmb_spectra(pd, model_name)
     except Exception as e:
-        logger.error("cmb_hil_loglike: _get_cls_from_model failed: %s", e)
+        logger.error("cmb_hil_loglike: get_cmb_spectra failed: %s", e)
+        return float(floor)
+
+    # CLASS returns None for numerically invalid proposals. Treat those points
+    # as rejected samples instead of allowing the sampler to crash below.
+    if cl is None or not isinstance(cl, dict):
         return float(floor)
 
     def _block(name: str, n: int) -> Optional[np.ndarray]:
@@ -425,17 +606,9 @@ def cmb_hil_loglike(pd: Dict[str, float], model_name: str, floor: float = -1e10)
     except Exception:
         nuis_names = []
 
-    calib_ones = {
-        "A_planck",
-        "calib_100T", "calib_143T", "calib_217T",
-        "calib_100P", "calib_143P", "calib_217P",
-    }
-
-    def _nuis_default(name: str) -> float:
-        return 1.0 if name in calib_ones else 0.0
-
+    # Sampled nuisances from the point; the Planck-baseline fixed ones from constants
     nuis = (
-        np.array([pd.get(n, _nuis_default(n)) for n in nuis_names], dtype=np.float64)
+        np.array([planck_nuisance_value(n, pd) for n in nuis_names], dtype=np.float64)
         if nuis_names
         else np.empty(0, np.float64)
     )
@@ -506,9 +679,9 @@ def cmb_hilTT_loglike(pd: Dict[str, float], model_name: str) -> float:
     lmax = int(lmax)
     need = lmax + 1  # ℓ = 0..lmax
 
-    # 2) Theory TT in µK^2
+    # 2) Theory TT in µK^2 (the point's single lensed CLASS run)
     try:
-        cl = _get_cls_from_model(pd, model_name, mode="hil")
+        cl = get_cmb_spectra(pd, model_name)
     except Exception as e:
         logger.warning("cmb_hilTT_loglike: theory failed (%s). Returning sentinel.", e)
         return -1e10
@@ -530,10 +703,9 @@ def cmb_hilTT_loglike(pd: Dict[str, float], model_name: str) -> float:
         for n in nuis_raw
     ]
 
-    def _nuis_default(name: str) -> float:
-        return 1.0 if name in ("A_planck", "calib_100T", "calib_143T", "calib_217T") else 0.0
-
-    nuis = np.array([pd.get(n, _nuis_default(n)) for n in nuis_names], dtype=np.float64)
+    # Sampled nuisances from the point; the Planck-baseline fixed ones (cib_index,
+    # A_sbpx_*_TT) from constants
+    nuis = np.array([planck_nuisance_value(n, pd) for n in nuis_names], dtype=np.float64)
 
     vec = np.ascontiguousarray(np.concatenate([tt, nuis]), np.float64)
 
@@ -671,8 +843,10 @@ def cmb_lensing_loglike(pd: Dict[str, float], model_name: str) -> float:
     # ------------------------------------------------------------------
     # 3. Compute theory Cℓ up to at least φφ(Lpp_req)
     # ------------------------------------------------------------------
-    cl = _compute_cls_cached(pd, Lmax=Lpp_req, mode="lensing")
-    if (cl is None) or ("pp" not in cl):
+    cl = get_cmb_spectra(pd, model_name)
+    if cl is None:
+        return -1e10          # CLASS could not compute the point: rejected and counted, no message
+    if "pp" not in cl:
         logger.warning("cmb_lensing_loglike: theory Cl computation failed; returning sentinel")
         return -1e10
 
@@ -746,17 +920,8 @@ def cmb_lensing_loglike(pd: Dict[str, float], model_name: str) -> float:
     except Exception:
         nuis_names = []
 
-    nuis: list[float] = []
-    for name in nuis_names:
-        if name in pd:
-            # If the user/engine provided this nuisance explicitly, use it
-            val = float(pd[name])
-        else:
-            # Fall back to the PLANCK_NUISANCE_DEFAULTS mean (first element of tuple),
-            # or 0.0 if the nuisance is not in that dictionary.
-            default = PLANCK_NUISANCE_DEFAULTS.get(name, (0.0, (None, None)))[0]
-            val = float(default)
-        nuis.append(val)
+    # Sampled value if present (A_planck), else the Planck-baseline value
+    nuis: list[float] = [planck_nuisance_value(name, pd) for name in nuis_names]
 
     nuis = np.asarray(nuis, np.float64)
 
@@ -800,6 +965,30 @@ def cmb_lensing_loglike(pd: Dict[str, float], model_name: str) -> float:
 # Planck low-ℓ EE likelihood
 # -----------------------------------------------------------------------------
 
+_SIMALL_RANGE: Dict[str, Any] = {}
+
+
+def _simall_range() -> Optional[Tuple[int, int, float, int]]:
+    """(l_min, l_max, step, number of steps) of the CMB_lowl SimAll table's D_l^EE grid in muK^2, read
+    from the clik folder's metadata (3000 steps of 1e-4, i.e. 0 - 0.3 muK^2); None if unreadable."""
+    if "r" not in _SIMALL_RANGE:
+        try:
+            import os
+            from Kosmulator_main import constants as _K
+            d = os.path.join(_K.OBSERVATIONS_BASE, _K.PLANCK_LOWL_FILES["CMB_lowl"], "clik", "lkl_0")
+            mdb = {}
+            with open(os.path.join(d, "_mdb")) as fh:
+                for line in fh:
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        mdb[parts[0]] = parts[2]
+            _SIMALL_RANGE["r"] = (int(mdb["lmin"]), int(mdb["lmax"]), float(mdb["stepEE"]),
+                                  int(mdb["nstepsEE"]))
+        except Exception:
+            _SIMALL_RANGE["r"] = None
+    return _SIMALL_RANGE["r"]
+
+
 def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
     """
     Planck low-ℓ EE likelihood (SimAll).
@@ -813,9 +1002,11 @@ def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
             model_name, e,
         )
 
-    # Ask for a low-ℓ CMB setup
+    # Low-l EE from the point's single lensed CLASS run. A separate short run at
+    # l_max_scalars = 31 (the old "lowl" mode) is unlensed and 2 - 45% low in TT and up
+    # to 8% low in EE near l = 29; the lensed run is right to 0.06%.
     try:
-        cl = _get_cls_from_model(pd, model_name, mode="lowl")
+        cl = get_cmb_spectra(pd, model_name)
     except Exception:
         return float(-1e10)
 
@@ -836,10 +1027,7 @@ def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
 
     # Default nuisances: use PLANCK_NUISANCE_DEFAULTS mean if available, else 0.0
     # (low-ℓ SimAll usually has none, but keep this generic and robust)
-    nuis = np.array(
-        [pd.get(n, PLANCK_NUISANCE_DEFAULTS.get(n, (0.0, (None, None)))[0]) for n in nuis_names],
-        dtype=np.float64
-    )
+    nuis = np.array([planck_nuisance_value(n, pd) for n in nuis_names], dtype=np.float64)
 
     # EE block: need length 30 (ℓ=0..29) for this likelihood
     ee = np.asarray(cl.get("ee", []), dtype=float)
@@ -851,6 +1039,24 @@ def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
 
     cl_ee = np.ascontiguousarray(ee * TCMB2, dtype=np.float64)
     v = np.ascontiguousarray(np.concatenate([cl_ee, nuis]), dtype=np.float64)
+
+    # SimAll tabulates ln P per multipole on a grid of D_l^EE / A_planck^2 (0 - 0.3 muK^2); a
+    # spectrum beyond it (tau_reio >~ 0.15 at Planck's A_s e^-2tau, already Delta ln L ~ -40 below the
+    # peak in SimAll) is rejected here without a message, as Kosmulator's SRoll2 table does
+    # (ground_cmb.TableEE). clik would refuse it with error -1233 and clipy with an IndexError.
+    # clik's own test (src/simall/clik_simall.c) is position > nstepsEE, so it still evaluates
+    # position == nstepsEE (D_l = 0.3 - 0.3001 muK^2) by reading the next multipole's first table
+    # entry (past the table for l = 29); that bin is rejected here too, as clipy does.
+    rng = _simall_range()
+    if rng is not None:
+        lmin, lmax, step, nsteps = rng
+        a_pl = float(nuis[nuis_names.index("A_planck")]) if "A_planck" in nuis_names else 1.0
+        ell = np.arange(lmin, lmax + 1, dtype=float)
+        dl = cl_ee[lmin:lmax + 1] * ell * (ell + 1.0) / (2.0 * np.pi) / a_pl ** 2
+        idx = np.floor(dl / step)                       # the table's own look-up
+        if np.all(np.isfinite(dl)) and (np.any(idx >= nsteps) or np.any(idx < 0)):
+            logger.debug("cmb_lowl_loglike: D_l^EE outside the SimAll table (max %.3f muK^2)", float(np.max(dl)))
+            return -np.inf
     #logger.warning("cl_ee: type=%s dtype=%s shape=%s", type(cl_ee), getattr(cl_ee, "dtype", None), getattr(cl_ee, "shape", None))
     #logger.warning("nuis:  type=%s dtype=%s shape=%s", type(nuis), getattr(nuis, "dtype", None), getattr(nuis, "shape", None))
     #logger.warning("v:     type=%s dtype=%s shape=%s", type(v), getattr(v, "dtype", None), getattr(v, "shape", None))
@@ -875,6 +1081,51 @@ def cmb_lowl_loglike(pd: Dict[str, float], model_name: str) -> float:
         return -np.inf
 
 
+
+
+# -----------------------------------------------------------------------------
+# Planck low-ℓ TT likelihood (Commander)
+# -----------------------------------------------------------------------------
+
+def cmb_lowlTT_loglike(pd: Dict[str, float], model_name: str) -> float:
+    """
+    Planck 2018 low-ℓ TT likelihood (Commander, ℓ = 2 - 29; Planck's "lowl").
+    TT from the point's single lensed CLASS run, in µK², plus A_planck.
+    Returns log-likelihood; bad points get -1e10.
+    """
+    try:
+        CR.ensure_class_ready(model_name)
+    except Exception as e:
+        logger.warning("ensure_class_ready(%s) failed (%s); proceeding anyway", model_name, e)
+    try:
+        cl = get_cmb_spectra(pd, model_name)
+    except Exception:
+        return float(-1e10)
+    if cl is None or (not isinstance(cl, dict)) or ("tt" not in cl):
+        return float(-1e10)
+
+    like = CR.get_clik_lowlTT()
+    try:
+        lmax_tt = int(list(like.get_lmax())[0])
+    except Exception:
+        lmax_tt = 29
+    need = lmax_tt + 1
+    tt = np.asarray(cl["tt"], float)
+    tt = np.pad(tt, (0, need - tt.size), mode="constant") if tt.size < need else tt[:need]
+    try:
+        raw_names = like.get_extra_parameter_names()
+        nuis_names = [n.decode() if isinstance(n, (bytes, bytearray)) else str(n) for n in raw_names]
+    except Exception:
+        nuis_names = []
+    nuis = np.array([planck_nuisance_value(n, pd) for n in nuis_names], dtype=np.float64)
+    v = np.ascontiguousarray(np.concatenate([tt * TCMB2, nuis]), dtype=np.float64)
+    try:
+        with U.quiet_cstdio():
+            out = like(v)
+        return float(np.asarray(out).reshape(-1)[0])
+    except Exception as e:
+        logger.error("cmb_lowlTT_loglike: clik evaluation failed: %s", e)
+        return -np.inf
 
 
 # -----------------------------------------------------------------------------
@@ -927,6 +1178,19 @@ def Covariance_matrix(
     return float(np.sum(delta * delta * inv_diag))
 
 
+def Calc_obs_chi(obs_type: str, obs_data: dict, model: np.ndarray) -> float:
+    """
+    chi^2 of an H(z) or growth dataset: the full covariance when the dataset
+    carries one (obs_data["inv_cov"], e.g. CC with the correlated DESI points of
+    CC_corr.txt), otherwise diagonal errors (Calc_chi).
+    """
+    inv = obs_data.get("inv_cov")
+    if inv is not None:
+        r = np.asarray(obs_data["type_data"], dtype=float) - np.asarray(model, dtype=float)
+        return float(r @ (np.asarray(inv, dtype=float) @ r))
+    return Calc_chi(obs_type, obs_data["type_data"], obs_data["type_data_error"], model)
+
+
 def Calc_chi(
     Type: str,
     type_data: np.ndarray,
@@ -946,32 +1210,242 @@ def Calc_chi(
     return float(np.sum((residual ** 2) / (type_data_error ** 2)))
     
 
+# -----------------------------------------------------------------------------
+# Supernova magnitude offset, marginalised analytically
+# -----------------------------------------------------------------------------
+# For a residual r = data - model and covariance C, the chi^2 with a constant
+# offset marginalised (flat prior) or minimised is
+#     chi2 = A - B^2 / E,   A = r^T C^-1 r,  B = 1^T C^-1 r,  E = 1^T C^-1 1,
+# and the best offset is B / E. This is what the Cobaya SN likelihoods do with
+# use_abs_mag: False (inverse covariance projected orthogonal to the offset).
+_SN_CHOL_ONES: Dict[int, Any] = {}
+
+# All SN chi^2 terms are computed for a batch of residual vectors R (one row per
+# walker) at once: r^T C^-1 r for every row is one matrix product (or one
+# triangular solve with every residual as a column), instead of one matrix-vector
+# product per walker. The scalar functions below call the same code with one row,
+# so the sampler, the statistics and the plots use one implementation.
+
+
+def _sn_chol_ones(L_cov: np.ndarray):
+    """(e, E) with e = L^-1 1 and E = 1^T C^-1 1, cached per Cholesky factor."""
+    key = id(L_cov)
+    hit = _SN_CHOL_ONES.get(key)
+    if hit is None or hit[0] is not L_cov:
+        e = la.solve_triangular(L_cov, np.ones(L_cov.shape[0]), lower=True, check_finite=False)
+        hit = (L_cov, e, float(e @ e))       # keeps L alive, so the id stays unique
+        _SN_CHOL_ONES[key] = hit
+    return hit[1], hit[2]
+
+
+def sn_terms_chol_rows(L_cov: np.ndarray, R: np.ndarray):
+    """(A, B, E) for every row of R from a lower Cholesky factor L of C (Pantheon+)."""
+    R = np.atleast_2d(np.asarray(R, dtype=float))
+    e, E = _sn_chol_ones(L_cov)
+    U = la.solve_triangular(L_cov, R.T, lower=True, check_finite=False)   # (N, n_rows)
+    return np.einsum("ij,ij->j", U, U), e @ U, E
+
+
+def _sn_terms_chol(L_cov: np.ndarray, residual: np.ndarray):
+    """(A, B, E) from a lower Cholesky factor L of C (Pantheon+), one residual."""
+    A, B, E = sn_terms_chol_rows(L_cov, residual)
+    return float(A[0]), float(B[0]), float(E)
+
+
+def _sn_W1(obs_data: dict, n: int):
+    """C^-1 1 and E = 1^T C^-1 1 for an SN set with an inverse covariance (cached)."""
+    W1 = obs_data.get("_sn_W1")
+    if W1 is None or np.shape(W1)[0] != n:
+        W1 = np.asarray(obs_data["inv_cov"], dtype=float).sum(axis=1)
+        obs_data["_sn_W1"] = W1
+        obs_data["_sn_E"] = float(W1.sum())
+    return W1, float(obs_data["_sn_E"])
+
+
+def sn_offset_terms_rows(obs_data: dict, R: np.ndarray):
+    """(A, B, E) for every row of R: inverse covariance if present, else diagonal errors."""
+    R = np.atleast_2d(np.asarray(R, dtype=float))
+    inv_cov = obs_data.get("inv_cov")
+    if inv_cov is not None:
+        W1, E = _sn_W1(obs_data, R.shape[1])
+        return np.einsum("ij,ij->i", R @ np.asarray(inv_cov, dtype=float), R), R @ W1, E
+    w = 1.0 / np.asarray(obs_data["type_data_error"], dtype=float) ** 2
+    return (R * R) @ w, R @ w, float(np.sum(w))
+
+
+def sn_offset_terms(obs_data: dict, residual: np.ndarray):
+    """(A, B, E) for a generic SN set: inverse covariance if present, else diagonal errors."""
+    A, B, E = sn_offset_terms_rows(obs_data, residual)
+    return float(A[0]), float(B[0]), float(E)
+
+
+def generic_sn_residual(obs_data: dict, model: np.ndarray, param_dict: Dict[str, float]) -> np.ndarray:
+    """Residual of a generic SN set (DES-Y5, Union3, Pantheon, JLA_legacy) whose chi^2
+    generic_sn_chi2_rows evaluates; M_abs enters only when the offset is not marginalised
+    and the data are magnitudes rather than distance moduli."""
+    type_data = np.asarray(obs_data["type_data"], dtype=float)
+    if obs_data.get("marginalise_offset", False) or obs_data.get("data_is_distance_modulus", False):
+        return type_data - model
+    return (type_data - param_dict.get("M_abs", 0.0)) - model
+
+
+def generic_sn_chi2_rows(obs_data: dict, R: np.ndarray) -> np.ndarray:
+    """chi^2 of a generic SN set for every row of R (residuals from generic_sn_residual)."""
+    R = np.atleast_2d(np.asarray(R, dtype=float))
+    if obs_data.get("marginalise_offset", False):
+        A, B, E = sn_offset_terms_rows(obs_data, R)
+        return A - B * B / E
+    if "inv_cov" in obs_data:
+        return np.einsum("ij,ij->i", R @ np.asarray(obs_data["inv_cov"], dtype=float), R)
+    return (R * R) @ (1.0 / np.asarray(obs_data["type_data_error"], dtype=float) ** 2)
+
+
+def pantheon_residual(mb, trig, cepheid, model, param_dict: Dict[str, float],
+                      marginalise: bool = False) -> np.ndarray:
+    """Pantheon+ residual: Cepheid distances for calibrators, the model otherwise;
+    M_abs is subtracted unless the offset is marginalised."""
+    moduli = np.where(np.asarray(trig) == 1, cepheid, model)
+    if marginalise:
+        return np.asarray(mb, dtype=float) - moduli
+    return np.asarray(mb, dtype=float) - param_dict.get("M_abs", -19.20) - moduli
+
+
+def pantheon_chi2_rows(L_cov: np.ndarray, R: np.ndarray, marginalise: bool = False) -> np.ndarray:
+    """Pantheon+ chi^2 for every row of R (residuals from pantheon_residual)."""
+    A, B, E = sn_terms_chol_rows(L_cov, R)
+    return A - B * B / E if marginalise else A
+
+
+def sn_chi2_rows(obs_data: dict, obs_name: str, R: np.ndarray) -> np.ndarray:
+    """chi^2 of one SN dataset (not the official JLA) for every row of residuals R."""
+    if obs_name in ("PantheonP", "PantheonPS"):
+        return pantheon_chi2_rows(obs_data.get("cov"), R, bool(obs_data.get("marginalise_offset", False)))
+    return generic_sn_chi2_rows(obs_data, R)
+
+
+# -----------------------------------------------------------------------------
+# Official JLA likelihood (Betoule et al. 2014, arXiv:1401.4064)
+# -----------------------------------------------------------------------------
+# mu = m_B - (M_B - alpha X_1 + beta C), with M_B -> M_B + Delta_M for massive
+# hosts. The covariance depends on alpha and beta (Cobaya sn.jla / CosmoMC):
+#   C = V0 + a^2 Va + b^2 Vb + 2a V0a - 2b V0b - 2ab Vab
+#       + diag(dmb^2 + a^2 dx1^2 + b^2 dc^2 + 2a c_ms - 2b c_mc - 2ab c_sc).
+# The two absolute magnitudes enter linearly through the (N, 2) template T, so
+# they are fitted analytically:
+#   chi2 = r^T C^-1 r - b^T F^-1 b,  b = T^T C^-1 r,  F = T^T C^-1 T,
+# with r = m_B + a X_1 - b C - mu_model. Marginalising them with flat priors
+# instead adds ln det(F / 2 pi), which depends only on alpha and beta (it moves
+# them by < 0.05 sigma and leaves the cosmology unchanged). It is left out so
+# that the sampler, chi2_min, AIC/BIC and DIC all use the same deviance; the
+# official JLA code also reports chi2 with M_B and Delta_M at their best fit.
+_JLA_CACHE: Dict[str, Any] = {}
+
+
+def jla_standardised_mag(obs_data: dict, alpha: float, beta: float) -> np.ndarray:
+    """m_B + alpha X_1 - beta C (= mu + M_B), per SN."""
+    return (np.asarray(obs_data["mb"], dtype=float)
+            + alpha * np.asarray(obs_data["x1"], dtype=float)
+            - beta * np.asarray(obs_data["colour"], dtype=float))
+
+
+def jla_covariance(obs_data: dict, alpha: float, beta: float) -> np.ndarray:
+    """Full JLA covariance of the standardised magnitudes for given alpha, beta."""
+    a, b = float(alpha), float(beta)
+    w = np.array([1.0, a * a, b * b, 2.0 * a, -2.0 * b, -2.0 * a * b])
+    C = np.tensordot(w, obs_data["V_blocks"], axes=1)
+    C[np.diag_indices_from(C)] += (
+        obs_data["dmb2"] + a * a * obs_data["dx12"] + b * b * obs_data["dc2"]
+        + 2.0 * a * obs_data["cov_ms"] - 2.0 * b * obs_data["cov_mc"]
+        - 2.0 * a * b * obs_data["cov_sc"]
+    )
+    return C
+
+
+def _jla_factor(obs_data: dict, alpha: float, beta: float):
+    """Cholesky factor of C(alpha, beta) and C^-1 T, cached for the last (alpha, beta)."""
+    key = (id(obs_data), float(alpha), float(beta))
+    if _JLA_CACHE.get("key") == key:
+        return _JLA_CACHE["cf"], _JLA_CACHE["CiT"], _JLA_CACHE["F"]
+    C = jla_covariance(obs_data, alpha, beta)
+    cf = la.cho_factor(C, lower=True, check_finite=False)
+    T = obs_data["templates"]
+    CiT = la.cho_solve(cf, T, check_finite=False)
+    F = T.T @ CiT
+    _JLA_CACHE.update(key=key, cf=cf, CiT=CiT, F=F)
+    return cf, CiT, F
+
+
+def _jla_terms(obs_data: dict, model: np.ndarray, param_dict: Dict[str, float]):
+    """(chi2, best-fit offsets, residual before offsets) for the official JLA."""
+    alpha = float(param_dict["alpha_JLA"])
+    beta = float(param_dict["beta_JLA"])
+    r = jla_standardised_mag(obs_data, alpha, beta) - np.asarray(model, dtype=float)
+    cf, CiT, F = _jla_factor(obs_data, alpha, beta)
+    Cir = la.cho_solve(cf, r, check_finite=False)
+    bvec = obs_data["templates"].T @ Cir
+    offsets = np.linalg.solve(F, bvec)
+    chi2 = float(r @ Cir - bvec @ offsets)
+    return chi2, offsets, r
+
+
+def Calc_JLA_chi(obs_data: dict, model: np.ndarray, param_dict: Dict[str, float]) -> float:
+    """
+    chi^2 of the official JLA sample for distance moduli ``model``
+    (25 + 5 log10(D_L / Mpc), D_L = (1 + z_hel) D_M(z_cmb)), with M_B and
+    Delta_M fitted analytically. Needs alpha_JLA and beta_JLA in param_dict.
+    """
+    try:
+        chi2, _, _ = _jla_terms(obs_data, model, param_dict)
+    except la.LinAlgError:
+        return np.inf
+    return chi2
+
+
+def sn_best_offset(obs_data: dict, residual: np.ndarray, param_dict: Optional[Dict[str, float]] = None):
+    """
+    Best-fit magnitude offset for a SN set (used to place the data in plots):
+    B/E for one constant offset; for the official JLA a per-SN array with the
+    two host-mass offsets, which needs alpha_JLA and beta_JLA in param_dict
+    (``residual`` must then use magnitudes standardised with the same values).
+    """
+    r = np.asarray(residual, dtype=float)
+    if obs_data.get("jla_full"):
+        pd_ = dict(param_dict or {})
+        pd_.setdefault("alpha_JLA", 0.14)
+        pd_.setdefault("beta_JLA", 3.1)
+        cf, CiT, F = _jla_factor(obs_data, pd_["alpha_JLA"], pd_["beta_JLA"])
+        offsets = np.linalg.solve(F, obs_data["templates"].T @ la.cho_solve(cf, r, check_finite=False))
+        return obs_data["templates"] @ offsets
+    L = obs_data.get("cov")
+    if "m_b_corr" in obs_data and L is not None and np.shape(L) == (r.size, r.size):
+        _, B, E = _sn_terms_chol(np.asarray(L), r)
+    elif obs_data.get("inv_cov") is not None or obs_data.get("type_data_error") is not None:
+        _, B, E = sn_offset_terms(obs_data, r)
+    else:
+        return float(np.nanmean(r))
+    return float(B / E)
+
+
 def Calc_Generic_SNe_chi(
     obs_data: dict,               # <-- Now takes the whole dict
     model: np.ndarray,
     param_dict: Dict[str, float],
 ) -> float:
     """
-    Generic SNe χ² evaluator.
-    Supports diagonal errors (JLA/DESY5) AND full covariance (Union3).
+    Generic SNe χ² evaluator (JLA, Pantheon, DESY5, Union3).
+    Supports diagonal errors AND a full (inverse) covariance.
+
+    With obs_data["marginalise_offset"] the magnitude offset is marginalised
+    analytically (chi2 = A - B^2/E), so neither M_abs nor H_0 enters.
     """
-    type_data = obs_data["type_data"]
-    
-    # 1. Marginalize M_abs (if present)
-    #    (JLA doesn't have it -> M=0 -> Data is Absolute)
-    #    (DESY5/Union3 have it -> M!=0 -> Data is Apparent)
-    M = param_dict.get("M_abs", 0.0)
-    residual = (type_data - M) - model
-
-    # 2. Check for Covariance (Union3)
-    if "inv_cov" in obs_data:
-        inv_cov = obs_data["inv_cov"]
-        # Matrix Chi2: R.T @ C^-1 @ R
-        return float(residual @ inv_cov @ residual)
-
-    # 3. Fallback to Diagonal Errors (JLA/DESY5)
-    type_data_error = obs_data["type_data_error"]
-    return float(np.sum((residual ** 2) / (type_data_error ** 2)))
+    if obs_data.get("jla_full"):
+        # Official JLA: alpha/beta-dependent covariance, two analytic offsets
+        return Calc_JLA_chi(obs_data, model, param_dict)
+    # Offset marginalised: chi2 = A - B^2/E. Otherwise DESY5/Union3 and the
+    # JLA/Pantheon files hold distance moduli, so M_abs only enters when sampled;
+    # full inverse covariance if present (DES-Y5, Union3), else diagonal errors.
+    r = generic_sn_residual(obs_data, model, param_dict)
+    return float(generic_sn_chi2_rows(obs_data, r)[0])
 
 
 def Calc_PantP_chi(
@@ -981,6 +1455,7 @@ def Calc_PantP_chi(
     L_cov: np.ndarray,
     model: np.ndarray,
     param_dict: Dict[str, float],
+    marginalise: bool = False,
 ) -> float:
     """
     Pantheon+ χ² with full covariance, using a Cholesky solve.
@@ -1000,106 +1475,17 @@ def Calc_PantP_chi(
     param_dict : dict
         Parameter dictionary containing at least 'M_abs'.
 
+    marginalise : bool
+        Marginalise the magnitude offset analytically (uncalibrated Pantheon+);
+        M_abs is then not used.
+
     Returns
     -------
     float
         χ² value for the Pantheon+ subset.
     """
-    M = param_dict.get("M_abs", -19.20)
-
-    moduli = np.where(trig == 1, cepheid, model)
-    delta = mb - M - moduli
-
-    residuals = la.solve_triangular(L_cov, delta, lower=True, check_finite=False)
-    return float(np.dot(residuals, residuals))
-
-
-# -----------------------------------------------------------------------------
-# BAO χ² (legacy 12-element vector)
-# -----------------------------------------------------------------------------
-
-def Calc_BAO_chi(data, Model_func, param_dict, Type) -> float:
-    """
-    χ² for the legacy 12-element BAO vector.
-
-    Data requirements
-    -----------------
-    data["covd1"] : (12, 12) covariance matrix.
-    Optionally data["obs_vec"] : (12,) observed vector. If absent, falls back
-    to hard-coded values.
-
-    Theory uses:
-      * dmrd(z)  → D_M / r_d
-      * dhrd(z)  → D_H / r_d
-      * dvrd(z)  → D_V / r_d
-
-    The ordering of the 12 slots matches your original BAO implementation.
-    """
-    cov = np.asarray(data["covd1"], dtype=float)
-    if cov.shape != (12, 12):
-        raise ValueError(f"BAO vector expects a 12×12 covariance; got {cov.shape}")
-    cov = 0.5 * (cov + cov.T)
-
-    try:
-        L = la.cholesky(cov)
-    except la.LinAlgError:
-        eig_min = np.min(la.eigvalsh(cov))
-        jitter = 1e-12 if eig_min > -1e-12 else 10.0 * abs(eig_min) + 1e-12
-        L = la.cholesky(cov + jitter * np.eye(cov.shape[0]))
-
-    zs_full = np.array(
-        [0.295, 0.510, 0.510, 0.706, 0.706, 0.930, 0.930, 1.317, 1.317, 1.491, 2.330, 2.330],
-        dtype=float,
-    )
-    zs_dv = np.array([0.295, 1.491], dtype=float)
-
-    dm = dmrd(zs_full, Model_func, param_dict, Type)  # D_M / r_d
-    dh = dhrd(zs_full, Model_func, param_dict, Type)  # D_H / r_d
-    dv = dvrd(zs_dv, Model_func, param_dict, Type)    # D_V / r_d
-
-    if (not np.isfinite(dm).all()) or (not np.isfinite(dh).all()) or (not np.isfinite(dv).all()):
-        raise FloatingPointError("BAO theory contains non-finite values (check model/params).")
-
-    theo = np.array(
-        [
-            dv[0],        # DV/rd @ 0.295
-            dm[1], dh[1], # DM/rd, DH/rd @ 0.510
-            dm[3], dh[3], # @ 0.706
-            dm[5], dh[5], # @ 0.930
-            dm[7], dh[7], # @ 1.317
-            dv[1],        # DV/rd @ 1.491
-            dm[10], dh[10],  # @ 2.330
-        ],
-        dtype=float,
-    )
-
-    if "obs_vec" in data and data["obs_vec"] is not None:
-        obs = np.asarray(data["obs_vec"], dtype=float)
-    else:
-        obs = np.array(
-            [
-                7.925129270,
-                13.62003080,
-                20.98334647,
-                16.84645313,
-                20.07872919,
-                21.70841761,
-                17.87612922,
-                27.78720817,
-                13.82372285,
-                26.07217182,
-                39.70838281,
-                8.522565830,
-            ],
-            dtype=float,
-        )
-
-    if obs.shape != (12,):
-        raise ValueError(f"BAO observed vector must have shape (12,), got {obs.shape}")
-
-    resid = theo - obs
-    y = la.solve_triangular(L, resid, lower=True, check_finite=False)
-    return float(y @ y)
+    r = pantheon_residual(mb, trig, cepheid, model, param_dict, marginalise)
+    return float(pantheon_chi2_rows(L_cov, r, marginalise)[0])
 
 
 # -----------------------------------------------------------------------------
@@ -1139,7 +1525,9 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
     DV = (DA * DA * (1.0 + z) * (1.0 + z) * (z * DH)) ** (1.0 / 3.0)
 
     if _must_calibrate(Type):
-        rs = _try_compute_rd(param_dict)
+        # r_d the caller calibrated (rd_helpers._maybe_calibrate_rd: rd_Class with the model's own E(z),
+        # as the sampler has it, CT-46) when given; otherwise CLASS's flat-LCDM r_d here
+        rs = float(param_dict["r_d"]) if "r_d" in param_dict else _try_compute_rd(param_dict)
         if rs is None:
             return 1e300
     else:
@@ -1147,6 +1535,10 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
         if rs is None:
             rs = _try_compute_rd(param_dict)
         if rs is None:
+            if "Omega_bh^2" in param_dict:
+                # Calibrated background but no r_d (CLASS and EH98 failed): reject
+                # the point instead of silently using the fixed singleton r_d.
+                return 1e300
             rs = float(R_D_SINGLETON)
     rs = float(rs)
     if not np.isfinite(rs) or rs <= 0.0:
@@ -1163,6 +1555,11 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
             types[types == 4] = 3
 
     theo = np.full_like(meas, np.nan, dtype=float)
+    #Added change here in order to check NaNs of w0wa values for NaN
+    supported_types = {3, 5, 6, 7, 8}
+    unknown_types = [int(t) for t in set(types) if int(t) not in supported_types]
+    if unknown_types:
+        raise ValueError(f"DESI: unhandled type code(s): {unknown_types}. Supported: 3,5,6,7,8")
     m3 = types == 3
     m5 = types == 5
     m6 = types == 6
@@ -1175,9 +1572,8 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
     theo[m7] = rs / DV[m7]
     theo[m8] = DM[m8] / rs
 
-    if np.isnan(theo).any():
-        unknown = sorted(set(types[np.isnan(theo)]))
-        raise ValueError(f"DESI: unhandled type code(s): {unknown}. Supported: 3,5,6,7,8")
+    if not np.isfinite(theo).all():
+        return np.inf
 
     diff = theo - meas
 
@@ -1202,23 +1598,17 @@ def Calc_DESI_chi(data, Model_func, param_dict, Type) -> float:
 
 def _bbn_predict_DH(param_dict: Dict[str, float]) -> float:
     """
-    Approximate primordial D/H (number ratio) from Omega_b h^2.
+    Standard-BBN primordial D/H (number ratio) from Omega_b h^2:
+      D/H = BBN_DH_REF * (omega_b / BBN_DH_OMEGA_B_REF)^BBN_DH_SLOPE
+    a power law fitted to the PRyMordial table (Burns et al. 2023,
+    arXiv:2307.07061; constants.py has the details); 2.508e-5 at omega_b = 0.0224.
 
-    Uses a calibrated power law:
-      D/H = K * (6 / eta10)^alpha,   alpha ≈ 1.6
-
-    with K chosen such that
-      Omega_b h^2 = 0.02205  →  D/H = 25.47 × 10^{-6}.
+    The earlier version fixed its normalisation by forcing the curve through the
+    observed PDG mean (25.47e-6) at the omega_b PDG infers from it (0.02205), so
+    the "prediction" was set by the data it was fitted to.
     """
     obh2 = float(param_dict["Omega_bh^2"])
-    alpha = 1.6
-    eta10 = 273.9 * obh2
-
-    eta10_ref = 273.9 * 0.02205
-    DH_ref = 25.47e-6
-
-    K = DH_ref * (eta10_ref / 6.0) ** alpha
-    return K * (6.0 / eta10) ** alpha
+    return float(BBN_DH_REF * (obh2 / BBN_DH_OMEGA_B_REF) ** BBN_DH_SLOPE)
 
 
 def bbn_predict_approx(p: Dict[str, float], data: Optional[dict] = None) -> float:
@@ -1233,8 +1623,11 @@ def _bbn_call_cached(obh2_r: float, neff_r: float, tau_n_r: float) -> float:
 
     The AlterBBN interface is several orders of magnitude slower than the
     algebraic approximation; we cache on (Omega_b h^2, N_eff, tau_n).
+    run_bbn is found as in the grid build (PYTHONPATH, then AlterBBN_files/);
+    a bare import missed AlterBBN_files/, and the live backend then fell back
+    to the approximation without a message.
     """
-    from alterbbn_ctypes import run_bbn
+    run_bbn = _import_run_bbn()
     return float(run_bbn(obh2_r, neff_r, tau_n_r)["D_H"])
 
 
@@ -1242,13 +1635,36 @@ def bbn_predict_alterbbn(p: Dict[str, float], data: Optional[dict] = None) -> fl
     """
     Live AlterBBN D/H prediction.
 
-    If `data` is provided, we use any observational Neff/tau_n overrides;
-    otherwise we fall back to defaults.
+    N_eff and tau_n come from the parameters when sampled (as in the grid
+    backend), otherwise from `data` or the defaults.
     """
+    data = data or {}
     obh2 = round(float(p["Omega_bh^2"]), 6)
-    neff = round(float(p.get("N_eff", data.get("Neff", N_EFF_DEFAULT))) if data else N_EFF_DEFAULT, 6)
-    tau = round(float(data.get("tau_n", TAU_N_DEFAULT)) if data else TAU_N_DEFAULT, 3)
+    from Kosmulator_main import constants as _Kc            # read at call time (set_neutrinos, CT-39)
+    neff = round(float(p.get("N_eff", data.get("Neff", _Kc.NU_N_EFF))), 6)
+    tau = round(float(p.get("tau_n", data.get("tau_n", TAU_N_DEFAULT))), 3)
     return _bbn_call_cached(obh2, neff, tau)
+
+
+def bbn_prior_chi2(obs_data: Dict[str, Any], param_dict: Dict[str, float]) -> float:
+    """
+    chi^2 of the BBN Gaussian prior on Omega_b h^2 (BBN_PryMordial / BBN_prior),
+    or of the 2D (Omega_b h^2, N_eff) prior when 'cov' and 'mu_Neff' are given.
+    Used by the sampler and by the statistics step, so both see the same term.
+    """
+    obh2 = float(param_dict["Omega_bh^2"])
+    if ("cov" in obs_data) and ("mu_Neff" in obs_data):
+        x   = np.array([obh2, float(param_dict["N_eff"])], dtype=float)
+        mu  = np.array([float(obs_data["mu_obh2"]), float(obs_data["mu_Neff"])], dtype=float)
+        cov = np.array(obs_data["cov"], dtype=float)
+        try:
+            inv = np.linalg.inv(cov)
+        except np.linalg.LinAlgError:
+            inv = np.linalg.pinv(cov, rcond=1e-12)
+        d = x - mu
+        return float(d @ (inv @ d))
+    mu, sig = float(obs_data["mu_obh2"]), float(obs_data["sigma_obh2"])
+    return float(((obh2 - mu) / sig) ** 2)
 
 
 def Calc_BBN_DH_chi(
@@ -1319,15 +1735,23 @@ def Calc_BBN_DH_chi(
                 f"Original error: {e!r}"
             ) from e
 
-        # Otherwise keep the robust fallback
+        # Otherwise keep the robust fallback, but say so once per process
+        if not getattr(Calc_BBN_DH_chi, "_warned_fallback", False):
+            logger.warning("BBN_DH: backend %s failed (%r); using the D/H approximation "
+                           "for this and any later failing points.", backend, e)
+            Calc_BBN_DH_chi._warned_fallback = True
         DH_th = bbn_predict_approx(param_dict)
     units = obs.get("units", "absolute")
     scale = 1e-6 if units == "scaled1e6" else 1.0
     S = float(obs.get("S", 1.0))
+    # Theory uncertainty of the prediction: one error common to every system
+    sig_th = float(obs.get("theory_frac_error", BBN_DH_THEORY_FRAC)) * abs(float(DH_th))
 
     systems = obs.get("systems", []) or []
     if len(systems) > 0:
-        chi2 = 0.0
+        # chi^2 with covariance C = diag(S^2 sigma_i^2) + sig_th^2 1 1^T (fully correlated
+        # theory error), by Sherman-Morrison: A - sig_th^2 B^2 / (1 + sig_th^2 E)
+        A = B = E = 0.0
         for s in systems:
             y = float(s["DH"]) * scale
             if "sigma" in s:
@@ -1341,17 +1765,20 @@ def Calc_BBN_DH_chi(
                 resid = y - DH_th
                 sig = su if resid >= 0.0 else sd
 
-            sig_eff = max(S * sig, 1e-18)
-            chi2 += ((y - DH_th) / sig_eff) ** 2
-        return float(chi2)
+            w = 1.0 / max(S * sig, 1e-18) ** 2
+            r = y - DH_th
+            A += w * r * r
+            B += w * r
+            E += w
+        return float(A - sig_th ** 2 * B * B / (1.0 + sig_th ** 2 * E))
 
     # Fallback: weighted mean only
     if "weighted_mean" in obs:
         wm = obs["weighted_mean"]
         y = float(wm["DH"]) * scale
         sig = float(wm["sigma"]) * scale
-        sig_eff = max(S * sig, 1e-18)
-        return float(((y - DH_th) / sig_eff) ** 2)
+        var = max(S * sig, 1e-18) ** 2 + sig_th ** 2
+        return float((y - DH_th) ** 2 / var)
 
     raise ValueError("BBN_DH obs has neither 'systems' nor 'weighted_mean'.")
 
@@ -1359,6 +1786,10 @@ def Calc_BBN_DH_chi(
 # -----------------------------------------------------------------------------
 # BBN backend initialisation (approx / alterbbn / alterbbn_grid)
 # -----------------------------------------------------------------------------
+#: BBN grids built by this process (the start-up line says "built now" for them on every load)
+_BBN_GRIDS_BUILT: set = set()
+
+
 def _import_run_bbn():
     """
     Import run_bbn from alterbbn_ctypes.
@@ -1439,7 +1870,8 @@ def ensure_bbn_backend(
         return (min(lo, hi), max(lo, hi))
 
     obh2_lo, obh2_hi = _span("Omega_bh^2", (0.0200, 0.0240))
-    neff_lo, neff_hi = _span("N_eff", (N_EFF_DEFAULT, N_EFF_DEFAULT))
+    from Kosmulator_main import constants as _Kc            # read at call time (set_neutrinos, CT-39)
+    neff_lo, neff_hi = _span("N_eff", (_Kc.NU_N_EFF, _Kc.NU_N_EFF))
     tau_lo, tau_hi = _span("tau_n", (out.get("tau_n", TAU_N_DEFAULT), out.get("tau_n", TAU_N_DEFAULT)))
 
     neff_fixed = np.isclose(neff_hi, neff_lo, atol=1e-12)
@@ -1549,7 +1981,8 @@ def ensure_bbn_backend(
                         "Grid %s does not cover priors "
                         "[obh2 %.6f..%.6f vs %.6f..%.6f, "
                         "Neff %.3f..%.3f vs %.3f..%.3f, "
-                        "tau %.2f..%.2f vs %.2f..%.2f]; rebuilding.",
+                        "tau %.2f..%.2f vs %.2f..%.2f]; building a new grid with AlterBBN, which "
+                        "replaces this file (git checkout restores the grid shipped with Kosmulator).",
                         path,
                         g_obh2.min(),
                         g_obh2.max(),
@@ -1567,7 +2000,10 @@ def ensure_bbn_backend(
                 if neff_fixed and g_neff.size > 1:
                     j = int(np.abs(g_neff - neff_lo).argmin())
                     if log:
-                        log.info("BBN grid: collapsing Neff to nearest node %.3f", g_neff[j])
+                        log.debug("BBN grid: collapsing Neff to nearest node %.3f", g_neff[j])
+                        if abs(float(g_neff[j]) - float(neff_lo)) > 1e-6:
+                            log.warning("BBN grid: N_eff = %.4f requested, the grid's nearest node %.4f is used "
+                                        "(D/H changes by about 0.0135%% per 0.001 in N_eff)", neff_lo, g_neff[j])
                     G = G[:, j, :]
                     g_neff = np.array([g_neff[j]], float)
 
@@ -1582,18 +2018,26 @@ def ensure_bbn_backend(
 
                 if log:
                     dims = (g_obh2.size, g_neff.size, g_tau.size)
-                    log.info("Loaded BBN grid %s: shape=%s, effective dims=%s, logspace=%s", path, G.shape, dims, logspace)
+                    log.debug("Loaded BBN grid %s: shape=%s, effective dims=%s, logspace=%s", path, G.shape, dims, logspace)
+                out["bbn_grid_neff_nodes"] = [float(x) for x in g_neff]          # D1: for the data line
 
                 grid = {"obh2": g_obh2, "DH": G, "logspace": bool(logspace)}
                 if g_neff.size > 1:
                     grid["neff"] = g_neff
+                else:
+                    grid["neff_fixed"] = float(g_neff[0])      # the node used (audit 19 Oct)
                 if g_tau.size > 1:
                     grid["tau"] = g_tau
 
                 out["bbn_grid"] = grid
+                if os.path.abspath(path) in _BBN_GRIDS_BUILT:   # built earlier in this run: say so again
+                    out["bbn_grid_built_now"] = True
                 set_backend("alterbbn_grid")
                 return out
 
+        except FileNotFoundError:
+            if log:
+                log.info("BBN grid not found: building it once (%s)", path)
         except Exception as e:
             if log:
                 log.warning("Failed to load BBN grid at %s; will attempt build. Reason: %s", path, e)
@@ -1604,10 +2048,9 @@ def ensure_bbn_backend(
     # --- Build grid if needed
     if want_grid:
         try:
-            from alterbbn_ctypes import run_bbn
+            run_bbn = _import_run_bbn()   # PYTHONPATH, then AlterBBN_files/
         except Exception as e:
             strict = bool(out.get("bbn_strict", False))
-            run_bbn = _import_run_bbn()
             if strict:
                 raise RuntimeError(
                     "AlterBBN requested but alterbbn_ctypes could not be imported.\n"
@@ -1615,14 +2058,10 @@ def ensure_bbn_backend(
                     "and (3) keep alterbbn_ctypes.py either on PYTHONPATH or in Kosmulator/AlterBBN_files/.\n"
                     f"Original import error: {e}"
                 )
-            if model == "alterbbn_grid":
-                if log:
-                    log.warning("alterbbn_ctypes unavailable; reverting to approx (grid requested). %s", e)
-                set_backend("approx")
-                return out
+            # Live AlterBBN needs the same module, so the approximation is the only fallback
             if log:
-                log.warning("alterbbn_ctypes unavailable; falling back to live alterbbn. %s", e)
-            set_backend("alterbbn")
+                log.warning("alterbbn_ctypes unavailable; using the D/H approximation (%s requested). %s", model, e)
+            set_backend("approx")
             return out
 
         nO, nN, nT = obh2_nodes.size, neff_nodes.size, tau_nodes.size
@@ -1659,14 +2098,29 @@ def ensure_bbn_backend(
         grid = {"obh2": obh2_nodes, "DH": logDH, "logspace": True}
         if neff_nodes.size > 1:
             grid["neff"] = neff_nodes
+        else:
+            grid["neff_fixed"] = float(neff_nodes[0])
+        out["bbn_grid_neff_nodes"] = [float(x) for x in neff_nodes]
+        out["bbn_grid_built_now"] = True
+        if path:
+            _BBN_GRIDS_BUILT.add(os.path.abspath(path))
         if tau_nodes.size > 1:
             grid["tau"] = tau_nodes
         out["bbn_grid"] = grid
         set_backend("alterbbn_grid")
         return out
 
-    # --- live AlterBBN, no grid
+    # --- live AlterBBN, no grid (checked once here, not at every likelihood call)
     if model == "alterbbn":
+        try:
+            _import_run_bbn()
+        except Exception as e:
+            if bool(out.get("bbn_strict", False)):
+                raise RuntimeError(f"AlterBBN requested but alterbbn_ctypes could not be loaded: {e}") from e
+            if log:
+                log.warning("alterbbn_ctypes unavailable; using the D/H approximation (live AlterBBN requested). %s", e)
+            set_backend("approx")
+            return out
         set_backend("alterbbn")
         if log:
             log.info("BBN backend: alterbbn (live)")
@@ -1695,7 +2149,11 @@ def bbn_predict_grid(param_dict: Dict[str, float], obs: dict) -> float:
     vals_raw = np.asarray(grid["DH"], float)  # log(D/H) if logspace True
     logspace = bool(grid.get("logspace", True))
 
-    neff_nodes = np.asarray(grid["neff"], float) if "neff" in grid else np.array([3.046], float)
+    # the grid's N_eff node when its N_eff axis was collapsed (it was a hard-coded 3.046, which made
+    # every point with N_eff = 3.044 in its parameters fall back to the approximation; audit 19 Oct)
+    from Kosmulator_main import constants as _Kg
+    neff_nodes = (np.asarray(grid["neff"], float) if "neff" in grid
+                  else np.array([float(grid.get("neff_fixed", _Kg.NU_N_EFF))], float))
     tau_nodes = (
         np.asarray(grid["tau"], float)
         if "tau" in grid
@@ -1703,7 +2161,10 @@ def bbn_predict_grid(param_dict: Dict[str, float], obs: dict) -> float:
     )
 
     obh2 = float(param_dict["Omega_bh^2"])
-    Neff = float(param_dict.get("N_eff", neff_nodes[0]))
+    # not sampled: the run's N_eff on an N_eff axis (it was the axis's lowest node), else the node
+    Neff = float(param_dict.get("N_eff", _Kg.NU_N_EFF if neff_nodes.size > 1 else neff_nodes[0]))
+    if neff_nodes.size == 1 and abs(Neff - neff_nodes[0]) < 1e-6:
+        Neff = float(neff_nodes[0])
     tau = float(param_dict.get("tau_n", tau_nodes[0]))
 
     if not (obh2_nodes[0] <= obh2 <= obh2_nodes[-1]):
@@ -1876,3 +2337,162 @@ def dArd(
     rd = _resolve_rd(p, Type or "")
     out = (DM / (1.0 + z)) / rd
     return out if out.size > 1 else float(out)
+
+
+
+# -----------------------------------------------------------------------------
+# Pointwise-loglike calculators
+# -----------------------------------------------------------------------------
+
+def pointwise_log_like_CC(obs_data, model, param_dict):
+    H_data = np.asarray(obs_data['type_data'], dtype=float)
+    residual = H_data - np.asarray(model, dtype=float)
+    if obs_data.get("cov") is not None:
+        # Correlated points: terms of the whitened residual L^-1 r (C = L L^T),
+        # which sum to the full chi^2
+        L = np.linalg.cholesky(np.asarray(obs_data["cov"], dtype=float))
+        u = la.solve_triangular(L, residual, lower=True, check_finite=False)
+        return -0.5 * u ** 2
+    H_err = np.asarray(obs_data['type_data_error'], dtype=float)
+    return -0.5 * (residual / H_err) ** 2
+
+def pointwise_log_like_DESI(obs_data, Model_func, param_dict, obs_type):
+    chi2 = Calc_DESI_chi(obs_data, Model_func, param_dict, obs_type)
+    return np.array([-0.5 * chi2]) #Shape (1,)
+
+def pointwise_log_like_SNe(obs_data, model, param_dict):
+    if "inv_cov" in obs_data or obs_data.get("jla_full"):
+        # Correlated (DESY5, Union3, official JLA) → N=1
+        chi2 = Calc_Generic_SNe_chi(obs_data, model, param_dict)
+        return np.array([-0.5 * chi2])
+    else:
+        # Diagonal errors (JLA_legacy, Pantheon) → N = number of SNe
+        # Same residual as the chi^2 (generic_sn_residual), so the per-SN terms sum
+        # to it: M_abs only enters when it is sampled and the data are magnitudes.
+        err = np.asarray(obs_data["type_data_error"], dtype=float)
+        residual = generic_sn_residual(obs_data, model, param_dict)
+        if obs_data.get("marginalise_offset", False):
+            _, B, E = sn_offset_terms(obs_data, residual)
+            residual = residual - B / E    # per-SN terms sum to the marginalised chi^2
+        return -0.5 * (residual / err) ** 2                 # shape (N,) - only valid if no inv_cov
+
+def pointwise_log_like_PantP(obs_data, model, param_dict):
+    chi2 = Calc_PantP_chi(
+        obs_data["m_b_corr"], obs_data["IS_CALIBRATOR"],
+        obs_data["CEPH_DIST"], obs_data.get("cov"), model, param_dict,
+        marginalise=bool(obs_data.get("marginalise_offset", False)),
+    )
+    return np.array([-0.5 * chi2])                    # shape (1,)
+
+class LogLikeRowsTask:
+    """
+    CT-27: build_log_like_matrix for a chunk of WAIC draws in a pool worker (picklable; the model
+    function by name). With CMB data in the group the model's CLASS build is loaded first, as in
+    log_likelihood_all, so BAO's r_d comes from the same build as in the sampler.
+    """
+
+    def __init__(self, obs_data, obs_type, obs_name, CONFIG, obs_index, model_name, group_has_cmb=False):
+        self.obs_data, self.obs_type, self.obs_name = obs_data, obs_type, obs_name
+        self.CONFIG, self.obs_index, self.model_name = CONFIG, obs_index, model_name
+        self.group_has_cmb = bool(group_has_cmb)
+
+    def __call__(self, draws):
+        import User_defined_modules as UDM
+        if self.group_has_cmb:
+            from Kosmulator_main import Class_run as _CR
+            _CR.ensure_class_ready(self.model_name)
+        draws = np.atleast_2d(np.asarray(draws, dtype=float))
+        return build_log_like_matrix(draws, self.obs_data, self.obs_type, self.obs_name,
+                                     UDM.Get_model_function(self.model_name), self.CONFIG, self.obs_index,
+                                     S=len(draws), idx=np.arange(len(draws)), model_name=self.model_name)
+
+
+def pickled_size_small(obj, limit_mb: float = 8.0) -> bool:
+    """True when the arrays in obj (a dict of a data set) total less than limit_mb (CT-27: such a
+    data set travels with each chunk of draws; a larger one, e.g. Pantheon+'s 23 MB covariance, is
+    evaluated in the main process, where its cost is the covariance solve, not CLASS)."""
+    tot = 0
+    for v in (obj.values() if isinstance(obj, dict) else [obj]):
+        tot += int(getattr(v, "nbytes", 0) or 0)
+    return tot < limit_mb * 1024 * 1024
+
+
+def build_log_like_matrix(flat_samples, obs_data, obs_type, obs_name,
+                          Model_func, CONFIG, obs_index, S=1000, idx=None, model_name=None):
+    from Kosmulator_main import utils
+
+    N_total = flat_samples.shape[0]
+    if idx is None:
+        from Kosmulator_main import constants as _K
+        idx = np.random.default_rng(_K.WAIC_SUBSAMPLE_SEED).choice(N_total, size=min(S, N_total), replace=False)
+    draws   = flat_samples[idx]
+    params  = CONFIG["parameters"][obs_index]
+
+    rows = []
+    for theta in draws:
+        param_dict = dict(zip(params, theta))
+        param_dict = utils.with_fixed_params(param_dict, CONFIG, obs_index)
+        param_dict = utils.ensure_background_params(param_dict)
+
+        if obs_name in ("DESI_DR1", "DESI_DR2", "BAO"):
+            # CT-46: r_d as the sampler has it (rd_Class for a model other than LCDM with BBN or Planck)
+            from Kosmulator_main import rd_helpers as _RDw
+            _RDw._maybe_calibrate_rd(param_dict, CONFIG, obs_index)
+            ll_i = pointwise_log_like_DESI(obs_data, Model_func, param_dict, obs_type)
+
+        elif obs_name in ("PantheonP", "PantheonPS"):
+            z    = obs_data["zHD"]
+            d_c  = utils.Comoving_distance_vectorized(Model_func, z, param_dict)
+            # (1 + z_HEL) prefactor when present (Pantheon+), as in the sampler
+            model = 25.0 + 5.0 * np.log10(
+                utils.sn_luminosity_distance(d_c, z, obs_data.get("z_hel"))
+            )
+            ll_i  = pointwise_log_like_PantP(obs_data, model, param_dict)
+
+        elif obs_type == "SNe":
+            z    = obs_data["redshift"]
+            d_c  = utils.Comoving_distance_vectorized(Model_func, z, param_dict)
+            # (1 + z_HEL) prefactor when the dataset provides z_hel (DESY5)
+            model = 25.0 + 5.0 * np.log10(
+                utils.sn_luminosity_distance(d_c, z, obs_data.get("z_hel"))
+            )
+            ll_i  = pointwise_log_like_SNe(obs_data, model, param_dict)
+
+        elif obs_type in ("CC", "OHD"):
+            z     = obs_data["redshift"]
+            E_z   = utils.E_of_z(z, Model_func, param_dict)
+            model = param_dict["H_0"] * E_z
+            ll_i  = pointwise_log_like_CC(obs_data, model, param_dict)
+
+        elif obs_type in ("f", "f_sigma_8"):
+            # Same prediction as the sampler; these data were skipped before, so WAIC
+            # of a group with f or f_sigma_8 left them out
+            gamma = None
+            if obs_type == "f_sigma_8" and "gamma" not in param_dict:
+                from Kosmulator_main import constants as _K
+                gamma = CONFIG.get("fs8_gamma_fixed_by_group", {}).get(obs_index, _K.GAMMA_FS8_SINGLETON)
+            model = utils.growth_prediction(obs_type, obs_data, param_dict, Model_func, gamma,
+                                            model_name=model_name)
+            ll_i  = pointwise_log_like_CC(obs_data, model, param_dict)
+
+        elif obs_type == "BBN_DH":
+            # One term, as the sampler computes it: the D/H systems share the
+            # theory error, so they are correlated (one term, as DESI and Pantheon+)
+            ll_i = np.array([-0.5 * Calc_BBN_DH_chi(obs_data, Model_func, param_dict, "BBN_DH")])
+
+        elif obs_type == "BBN_prior":
+            # BBN_PryMordial: the Gaussian on Omega_b h^2, one term (as in chi^2 and DIC)
+            ll_i = np.array([-0.5 * bbn_prior_chi2(obs_data, param_dict)])
+
+        elif obs_name == CMB_EARLY_TAG:
+            # The compressed CMB prior (theta_*, omega_b, omega_bc): correlated, one term
+            from Kosmulator_main import cmb_early as _CE
+            ll_i = np.array([-0.5 * _CE.chi2(param_dict, Model_func)])
+
+        else:
+            continue  # Planck likelihoods: Post_processing adds them (item 53)
+
+        rows.append(ll_i)
+
+    return np.array(rows)   # (S, N)                         # (S, N)
+

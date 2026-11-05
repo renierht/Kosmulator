@@ -68,58 +68,112 @@ logging.basicConfig(level=logging.INFO)
 # User configuration
 # ----------------------------------------------------------------------
 
-# Models implemented in User_defined_modules.py
+# Models implemented in User_defined_modules.py (LCDM_v, wowaCDM_v, f1CDM_v, or your own)
 model_names: List[str] = ["LCDM_v"]
 
-# Each inner list is a combined likelihood
+# Each inner list is one group: its data sets are combined into one likelihood and fitted
+# together, and every model is fitted to every group. All tags: see the documentation
+# (https://kosmulator.readthedocs.io, "Data set tags").
 observations: List[List[str]] = [
-    #['JLA'],
-    #['JLA','CC'],
-    #['OHD'],
-    #['CC'],
-    #['PantheonP'],
-    #['PantheonPS'],
-    #['PantheonPS','CC'],
-    #['f_sigma_8'],
-    #['f'],
-    #['DESI_DR1'],
-    #['DESI_DR2'],
-    #['BAO'],
-    #['Union3'],
-    #["DESY5"],
-    #['Union3','CC'],
-    #["DESY5",'CC'],
-    #["JLA","CC","OHD"],
-    #['PantheonPS','CC','DESI_DR2'],
-    #['PantheonP','DESI_DR2','BBN_DH_AlterBBN'],
-    #['PantheonPS','DESI_DR2','BBN_DH_AlterBBN'],
-    #["JLA","Pantheon","PantheonP","DESY5","Union3"],
-    #["CMB_lowl", "CMB_hil_TT"],
-    #["DESI_DR2", 'CC','PantheonP','f_sigma_8'],
-    #["DESI_DR2",'BBN_PryMordial'],
-    #["DESI_DR2","BBN_DH_AlterBBN"],
-    #["DESI_DR2","CMB_lowl"],
-    #["DESI_DR2","CMB_lowl","BBN_PryMordial"],
-    #["CMB_lowl"],
-    #['CMB_hil'],
-    ['CMB_lensing', 'CMB_lowl'],
-    #['CMB_hil_TT'],
-    #["CC", "DESI_DR1"],
-    #["JLA","DESY5","Union3"],
-    #["DESI_DR1", "f_sigma_8", "CC"],
-    #["f", "f_sigma_8"],
-    #["f", "PantheonP"],
-    #["f_sigma_8", "PantheonP"],
+    ['CC'],
+    ['CC', 'PantheonP'],
+    # More examples:
+    # ['DESI_DR2', 'PantheonP'],                          # BAO + supernovae (r_d fixed, H_0 r_d measured)
+    # ['DESI_DR2', 'PantheonP', 'BBN_DH'],                # ... with BBN calibrating r_d
+    # ['CC', 'DESI_DR2', 'PantheonPS'],                   # with H_0 anchors (r_d sampled)
+    # ['DESI_DR2', 'ThetaStar_CMB'],                      # DESI DR2 with the compressed CMB
+    # ['f_sigma_8', 'DESI_DR2', 'PantheonP'],             # growth of structure
+    # ['CMB_hil', 'CMB_lowl_TT', 'CMB_lowl'],             # Planck 2018 TT,TE,EE+lowE
+    # ['CMB_hil', 'CMB_lowl_TT', 'CMB_lowl', 'CMB_lensing', 'DESI_DR2'],
+    # ['CMB_SPA', 'CMB_lensing_ACTPlanck', 'DESI_DR2'],   # CMB-SPA + ACT DR6/Planck PR4 lensing + DESI DR2
 ]
 
-true_model: str = "LCDM_v"
+# The model every other model is compared with (it is fitted first)
+reference_model: str = "LCDM_v"
 
 # Sampler settings
-nwalkers: int = 36
-nsteps: int = 100000
-burn: int = 500
-convergence: float = 0.01
-
+nwalkers: int = 32
+nsteps: int = 5000     # the most steps; a run stops earlier once the convergence rule holds
+burn: int = 200
+# Convergence rule (zeus and emcee): the run stops once, after burn-in, the chain is
+# >= 100 tau_max long, ESS >= 2000, split-Rhat < 1.01 and tau_max changed by less than
+# `convergence` (relative) since the previous check (constants.CONV_*).
+convergence: float = 0.05
+# Uncalibrated supernovae without BAO/DESI or an H0 anchor (CC, OHD, SH0ES, CMB): once the
+# SN offset is marginalised H_0 cancels from the likelihood. False (default, the usual
+# choice): H_0 is not sampled and distances use reference_values["H_0"]. True: H_0 is
+# sampled anyway; its posterior is then the prior and it is not counted in k.
+sample_H0_uncalibrated_SNe: bool = False
+# Planck high-l likelihood (CMB_hil, CMB_hil_TT). "baseline": plik, with Planck's nuisance
+# parameters sampled (21 for TTTEEE, 15 for TT) under Planck's priors. "lite": plik_lite,
+# Planck's foreground-marginalised likelihood with A_planck only (6 + 1 parameters for LCDM,
+# much faster to converge). "extended": baseline plus the polarisation efficiencies and EE
+# dust amplitudes Planck fixes, sampled with their stated priors (30 for TTTEEE). "full": all
+# 47 inputs of plik TTTEEE (20 of TT); 17 of them have no published uncertainty and get flat
+# boxes chosen by Kosmulator, so they are prior-dominated and convergence is slow. Chains of
+# the other settings go to folders ending in _plik_lite, _plik_extended or _plik_full.
+cmb_nuisance: str = "baseline"
+# WAIC for groups with Planck data. The Planck likelihoods give one total log-likelihood,
+# not one per data point, so WAIC can only count each of them as one term, and that costs
+# one lensed CLASS run per WAIC draw (1000 draws per group, after sampling). False
+# (default): WAIC is reported as n/a, with a note, for groups with Planck data. True: it is
+# computed, if you are willing to wait.
+waic_include_cmb: bool = False
+# Neutrinos in every CLASS call (CMB spectra, r_d) and in the late-time expansion. "massive"
+# (default): one massive neutrino of nu_mass_eV plus massless ones, nu_N_eff in total, as in
+# Planck 2018 (0.06 eV, N_eff 3.046) and DESI DR2 (sum 0.06 eV, N_eff 3.044). "massless": all
+# nu_N_eff massless (Kosmulator before October 2026). BBN uses nu_N_eff too; N_eff is sampled
+# only by a model that has it among its parameters, within prior_limits["N_eff"].
+neutrinos: str = "massive"
+nu_mass_eV: float = 0.06
+nu_N_eff: float = 3.044
+# Non-linear correction of the CMB lensing (lensed spectra and Planck lensing), as in Cobaya: one
+# setting for every model, passed to CLASS. None (default): linear lensing. "halofit", or "hmcode"
+# (hmcode_version "2020", CAMB's default, or "2015", the earlier HMcode that Planck 2018 used; use it
+# to compare with Planck's tables). These fits are calibrated on simulations with GR; for models that
+# change gravity on small scales they are an approximation, and Kosmulator warns for models not in
+# constants.GR_GRAVITY_MODELS. HMcode costs about 70% more time per CMB point than None, halofit 8%.
+cmb_nonlinear = None
+hmcode_version: str = "2020"
+# Growth data (f, f_sigma_8). "gamma" (default): f = Omega_m(z)^gamma with the growth index gamma
+# sampled (fixed to 0.55 for f_sigma_8 alone), a phenomenological test of gravity. "geff": the model's
+# own linear growth with G_eff/G from <model>_Geff(z, p) in User_defined_modules.py (gamma not
+# sampled). A model without <model>_Geff is grown with G_eff = G, the GR (LCDM) growth equation on its
+# own expansion history; for a theory that changes gravity that can differ from its true growth, and
+# Kosmulator warns at start-up.
+growth_model: str = "gamma"
+# Proposal moves of the samplers. emcee_moves: "de_snooker" (default): differential evolution (80% of
+# the steps) plus a snooker move (20%, ter Braak & Vrugt 2008), or "stretch" (emcee's own move). Both
+# sample the same posterior; in Kosmulator's tests de_snooker needed 2 - 6 times fewer steps than
+# stretch (about 4.5 times on a 27-parameter target shaped like a Planck baseline chain; Planck lite:
+# 4900 against 11 600 steps, same posterior) at the same likelihood calls per step. zeus_light_mode: True
+# (default) skips zeus's interval expansions after its tuning phase: fewer likelihood calls per step but
+# more steps (in Kosmulator's tests 1.1 - 1.9 times more steps, 1.3 - 2.3 times less time, same posteriors);
+# False gives zeus's full slice step. Changing either between a run and its --resume is allowed.
+emcee_moves: str = "de_snooker"
+zeus_light_mode: bool = True
+# r_d of BAO/DESI groups calibrated by BBN or Planck. "model" (default): CLASS with the model's own
+# E(z) in place of the cosmological constant (rd_Class: compiled once, then cached), for every model
+# other than LCDM; this matters when the model's dark sector is not negligible before recombination
+# (e.g. w0wa with w0 + wa near 0). "lcdm": CLASS's flat-LCDM r_d for every model (as before).
+rd_background: str = "model"
+# Groups whose CMB data are lensing only (CMB_lensing, CMB_lensing_ACTPlanck, CMB_lensing_SPT without
+# primary CMB). True (default): n_s gets a Gaussian prior N(0.96, 0.02) and tau_reio, which enters none
+# of these likelihoods, is fixed at its reference value, as in lensing-only analyses (Madhavacheril
+# et al. 2024, arXiv:2304.05203). Add a BBN tag (e.g. BBN_DH) for Omega_b h^2; it also calibrates r_d.
+# False: n_s and tau_reio sampled within their top-hat priors (as before October 2026).
+lensing_only_priors: bool = True
+# Groups with primary CMB data (Planck, ACT, SPT): False (default) samples H_0 with a flat prior. True
+# samples 100 theta_MC (CosmoMC's approximation to the angular acoustic scale) with a flat prior instead,
+# as Planck and DESI DR2 do, and solves H_0 from it at every point (within its prior box, as CAMB's
+# solver); the statistics and figures show H_0 as usual. The two differ only in the prior on H_0, which
+# matters where the data leave H_0 broad (e.g. w0waCDM with CMB alone).
+cmb_sample_theta: bool = False
+# Corner plots: the likelihoods' nuisance parameters (Planck's foregrounds and calibrations, the ACT and
+# SPT calibrations, the SN calibration M_abs and JLA's alpha and beta) and, per group, parameters that are
+# only their prior (H_0 of uncalibrated SNe with sample_H0_uncalibrated_SNe) are left out unless True
+# (A_planck is drawn either way). The tables and statistics list every parameter.
+corner_show_nuisance: bool = False
 # Top-hat priors
 prior_limits: Dict[str, Tuple[float, float]] = {
     "Omega_m": (0.01, 1.0),
@@ -129,33 +183,27 @@ prior_limits: Dict[str, Tuple[float, float]] = {
     "M_abs": (-30.0, -5.0),
     "gamma": (0.01, 1.0),
     "sigma_8": (0.01, 1.0),
-    "n": (0.0, 0.6),
-    "q0": (-0.8, -0.01),
-    "q1": (-0.75, 1.0),
-    "beta": (0.01, 5.0),
-    "tau_reio": (0.04, 0.09),
+    "n": (-0.6, 0.6),   # f1CDM; n < 0 is phantom-like (w < -1), n = 0 is LCDM; n < 0.5 by restrict_f1CDM_v
+    "tau_reio": (0.01, 0.8),      # Planck 2018's range; (0.04, 0.09) cut Planck's tau at about 2 sigma
     "Omega_dh^2": (0.05, 0.2),
     "Omega_bh^2": (0.015, 0.031),
     "ln10^10_As": (2.5, 3.5),
     "n_s": (0.9, 1.1),
     "100theta_s": (1.035, 1.047),
-    "N_eff": (K.N_EFF_DEFAULT, K.N_EFF_DEFAULT),
+    "100theta_MC": (1.03, 1.05),     # cmb_sample_theta (DESI DR2: U[0.5, 10]; the data fix it to 0.03%)
+    "N_eff": (nu_N_eff, nu_N_eff),       # BBN uses the N_eff of the CLASS calls; a range samples it
     "tau_n": (K.TAU_N_DEFAULT, K.TAU_N_DEFAULT),
-    "alpha": (0.00, 1.00),
-    "B": (0.00, 0.333),
-    "f1": (0.01, 100.0),
+    "w0": (-3.0, 1.0),     # w0waCDM: DESI DR2's priors (w0 + wa < 0 in User_defined_modules.py)
+    "wa": (-3.0, 2.0),
 }
 
 # Reference “true” values (for diagnostics/plots)
-true_values: Dict[str, float] = {
+reference_values: Dict[str, float] = {
     "Omega_m": 0.315,
     "H_0": 67.4,
     "gamma": K.GAMMA_FS8_SINGLETON,
     "sigma_8": 0.8,
-    "q0": -0.537,
     "n": 0.25,
-    "q1": 0.125,
-    "beta": 2.505,
     "r_d": K.R_D_SINGLETON,
     "M_abs": -19.2,
     "tau_reio": 0.054,
@@ -163,18 +211,20 @@ true_values: Dict[str, float] = {
     "Omega_bh^2": 0.0224,
     "n_s": 0.9624,
     "ln10^10_As": 3.045,
-    "Omega_de": 0.69,
     "100theta_s": 1.04110,
-    "N_eff": K.N_EFF_DEFAULT,
+    "100theta_MC": 1.04110,
+    "N_eff": nu_N_eff,
     "tau_n": K.TAU_N_DEFAULT,
     "Omega_b": 0.05,
+    "w0": -1.0,
+    "wa": 0.0,
 }
 
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
 
-def _ensure_true_model_first(names: List[str], tm: str) -> List[str]:
+def _ensure_reference_model_first(names: List[str], tm: str) -> List[str]:
     """Return `names` with `tm` (if present) moved to the front."""
     ordered = list(names)
     if tm in ordered:
@@ -194,7 +244,7 @@ def main() -> None:
     except Exception:
         rank = 0
 
-    ordered_models = _ensure_true_model_first(model_names, true_model)
+    ordered_models = _ensure_reference_model_first(model_names, reference_model)
 
     if rank == 0:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
@@ -212,13 +262,28 @@ def main() -> None:
     run_mcmc(
         model_names=ordered_models,
         observations=observations,
-        true_model=true_model,
+        reference_model=reference_model,
         prior_limits=prior_limits,
-        true_values=true_values,
+        reference_values=reference_values,
         nwalkers=nwalkers,
         nsteps=nsteps,
         burn=burn,
         convergence=convergence,
+        sample_H0_uncalibrated_SNe=sample_H0_uncalibrated_SNe,
+        cmb_nuisance=cmb_nuisance,
+        waic_include_cmb=waic_include_cmb,
+        neutrinos=neutrinos,
+        nu_mass_eV=nu_mass_eV,
+        nu_N_eff=nu_N_eff,
+        cmb_nonlinear=cmb_nonlinear,
+        hmcode_version=hmcode_version,
+        growth_model=growth_model,
+        emcee_moves=emcee_moves,
+        zeus_light_mode=zeus_light_mode,
+        rd_background=rd_background,
+        lensing_only_priors=lensing_only_priors,
+        corner_show_nuisance=corner_show_nuisance,
+        cmb_sample_theta=cmb_sample_theta,
     )
 
 

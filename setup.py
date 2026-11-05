@@ -40,6 +40,16 @@ def parse_requirements(req_path: Path) -> list[str]:
     return reqs
 
 
+# Optional groups: pip install -e ".[cmb]", ".[mpi]" or ".[all]"
+EXTRAS = {
+    # Planck through clipy (pure-Python clik), ACT DR6 / SPT-3G D1 through candl, ACT DR6 lensing
+    "cmb": ["clipy-like>=0.15", "candl-like>=2.0.3", "act_dr6_lenslike"],
+    # MPI runs; mpi4py needs an MPI library (conda: mpich; Ubuntu: sudo apt install mpich)
+    "mpi": ["mpi4py", "schwimmbad"],
+}
+EXTRAS["all"] = sorted({req for reqs in EXTRAS.values() for req in reqs})
+
+
 setup(
     name="kosmulator",
     version=read_version(),
@@ -53,9 +63,10 @@ setup(
     zip_safe=False,
     python_requires=">=3.9,<3.13",
     install_requires=parse_requirements(ROOT / "requirements.txt"),
+    extras_require=EXTRAS,
     entry_points={
         "console_scripts": [
-            # Prints a detailed environment report (CLASS/CLIK/Planck dirs, etc.)
+            # Checks the installation; --setup also builds CLASS and makes a test run
             "kosmulator-doctor=Kosmulator_main:main_doctor",
         ]
     },

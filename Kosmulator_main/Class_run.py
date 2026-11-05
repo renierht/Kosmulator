@@ -16,6 +16,7 @@ Public API (used elsewhere in Kosmulator):
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import glob
@@ -30,8 +31,42 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-import clik
-import sysconfig
+# Planck likelihood code: clik (compiled PLC) if installed, otherwise clipy, the
+# pure-Python clik (pip install "clipy-like>=0.15"), which reads the same .clik
+# folders through the same calls. CLIK_BACKEND records which one is in use.
+try:
+    import clik
+    CLIK_BACKEND = "clik"
+except ImportError:
+    try:
+        import clipy as clik
+        CLIK_BACKEND = "clipy"
+    except ImportError:
+        clik = None
+        CLIK_BACKEND = None
+
+
+def clipy_lowl_problem() -> Optional[str]:
+    """Why CMB_lowl (Planck SimAll EE) cannot run through clipy here, or None.
+
+    clipy 0.15's SimAll calls numpy.astype, which NumPy has only from 2.0 (clipy
+    declares numpy >= 1.23.5). clipy on JAX is not affected (jax.numpy has astype).
+    Nothing in clipy is changed; this only reads which array module it uses.
+    """
+    if CLIK_BACKEND != "clipy":
+        return None
+    import numpy as _np
+    arrays = getattr(clik, "jnp", _np)   # the array module clipy computes with
+    if hasattr(arrays, "astype"):
+        return None
+    return (
+        f"CMB_lowl through clipy needs NumPy >= 2.0 (clipy {getattr(clik, '__version__', '?')}'s "
+        f"SimAll calls numpy.astype); this environment has NumPy {_np.__version__}. "
+        "Install clik, or use NumPy >= 2.0."
+    )
+
+
+import sysconfig 
 
 from Kosmulator_main import utils as U
 
@@ -49,6 +84,7 @@ _clik_path_lowl: str | None = None
 _clik_path_lensing: str | None = None
 _clik_path_lensing_cmbmarg: str | None = None
 _clik_path_hilTT: str | None = None
+_clik_path_lowlTT: str | None = None
 
 # Per-process clik instances
 _clik_pid: int | None = None
@@ -57,6 +93,7 @@ _clik_instance_lowl: Optional[clik.clik] = None
 _clik_instance_lensing: Optional[clik.clik_lensing] = None
 _clik_instance_lensing_cmbmarg: Optional[clik.clik_lensing] = None
 _clik_hilTT: Optional[clik.clik] = None
+_clik_instance_lowlTT: Optional[clik.clik] = None
 
 # CLASS build signature cache
 _current_class_model: Optional[str] = None
@@ -85,15 +122,21 @@ def _first_line(cmd: str) -> str:
 
 def _python_abi_sig() -> dict:
     """Describe the Python ABI relevant to compiled extensions."""
+    import numpy as _np
     return {
         "py": sys.version.split()[0],
         "soabi": sysconfig.get_config_var("SOABI") or "",
         "plat": sysconfig.get_platform(),
+        # classy is compiled against NumPy's C API: a build made under NumPy 1.x does
+        # not import under 2.x, so a new NumPy major version means a new build
+        "numpy": _np.__version__.split(".")[0],
     }
 
 
+@functools.lru_cache(maxsize=None)
 def _toolchain_sig() -> dict:
-    """Describe the toolchain/libc used to build CLASS."""
+    """Describe the toolchain/libc used to build CLASS. Three compiler/linker
+    subprocesses, so cached: the toolchain does not change during a run."""
     env = os.environ
     return {
         "CCv": _first_line((env.get("CC") or "gcc") + " --version"),
@@ -103,6 +146,44 @@ def _toolchain_sig() -> dict:
         "SYSROOT": env.get("SYSROOT", "") or env.get("LDFLAGS", ""),
         "libc": " ".join(platform.libc_ver()),
     }
+
+
+# Files a CLASS build reads, for the cache key and the staleness test. classy.pyx and
+# cclassy.pxd are sources; python/classy.c or .cpp is what Cython writes from classy.pyx
+# during the build (git-ignored, with absolute paths inside), so it is output, not source.
+_SOURCE_SUFFIXES = (".c", ".h", ".cc", ".cpp", ".hpp", ".py", ".txt", ".pyx", ".pxd")
+_GENERATED_SOURCES = (os.path.join("python", "classy.c"), os.path.join("python", "classy.cpp"))
+
+
+def _is_build_source(model_dir: str, fp: str) -> bool:
+    """True for a file the CLASS build reads (not one it writes)."""
+    return fp.endswith(_SOURCE_SUFFIXES) and os.path.relpath(fp, model_dir) not in _GENERATED_SOURCES
+
+
+def _source_newer_than(model_dir: str, artifact: str) -> Optional[str]:
+    """First build-relevant source (the files _source_tree_hash reads) that is newer than
+    the built classy `artifact`, or None. A newer source means the build is stale."""
+    t_built = os.path.getmtime(artifact)
+    for extra in ("Makefile", os.path.join("python", "setup.py")):
+        p = os.path.join(model_dir, extra)
+        if os.path.exists(p) and os.path.getmtime(p) > t_built:
+            return p
+    for root in ("source", "tools", "external", "include", "python"):
+        r = os.path.join(model_dir, root)
+        if not os.path.isdir(r):
+            continue
+        for dp, dns, fns in os.walk(r):
+            dns.sort()
+            for fn in sorted(fns):
+                fp = os.path.join(dp, fn)
+                if not _is_build_source(model_dir, fp):
+                    continue
+                try:
+                    if os.path.getmtime(fp) > t_built:
+                        return fp
+                except OSError:
+                    continue
+    return None
 
 
 def _source_tree_hash(model_dir: str) -> str:
@@ -122,11 +203,12 @@ def _source_tree_hash(model_dir: str) -> str:
         r = os.path.join(model_dir, root)
         if not os.path.isdir(r):
             continue
-        for dp, _, fns in os.walk(r):
+        for dp, dns, fns in os.walk(r):
+            dns.sort()   # same order on every file system
             for fn in sorted(fns):
-                if not fn.endswith((".c", ".h", ".cc", ".cpp", ".hpp", ".py", ".txt")):
-                    continue
                 fp = os.path.join(dp, fn)
+                if not _is_build_source(model_dir, fp):
+                    continue
                 rel = fp[len(model_dir) :].encode()
                 h.update(rel)
                 try:
@@ -143,13 +225,81 @@ def _full_signature(model_dir: str) -> dict:
     return {
         "src": _source_tree_hash(model_dir),
         "pyabi": _python_abi_sig(),
-        "tool": _toolchain_sig(),
+        "tool": dict(_toolchain_sig()),   # a copy: the cached dict stays unchanged
     }
 
 
 def _sig_hash(sig_dict: dict) -> str:
     """Hash of the full build signature."""
     return hashlib.sha256(json.dumps(sig_dict, sort_keys=True).encode()).hexdigest()
+
+
+@contextmanager
+def output_to(path) -> None:
+    """Send everything written to stdout/stderr (this process and the build commands it starts)
+    to `path` for the duration of the block (file descriptors 1 and 2, so the compilers' output
+    goes there too)."""
+    path = Path(path)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        saved = os.dup(1), os.dup(2)
+        try:
+            os.dup2(f.fileno(), 1)
+            os.dup2(f.fileno(), 2)
+            yield
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.dup2(saved[0], 1)
+            os.dup2(saved[1], 2)
+            os.close(saved[0])
+            os.close(saved[1])
+
+
+def log_errors(log_path, n: int = 12) -> str:
+    """The compiler's first error lines (with the two lines after each), else the log's last lines."""
+    try:
+        lines = Path(log_path).read_text(errors="replace").splitlines()
+    except Exception:
+        return ""
+    out = []
+    for i, line in enumerate(lines):
+        if "error:" in line or "Error:" in line:
+            out += [x for x in lines[i:i + 3] if x not in out]
+        if len(out) >= n:
+            break
+    if out:
+        return "first errors in the log:\n" + "\n".join(out[:n])
+    return "last lines of the log:\n" + "\n".join(lines[-n:])
+
+
+def build_logged(label: str, model_name: str, fn):
+    """
+    Run the build function fn() with make's, the compilers' and Cython's output in
+    Class/<model_name>/build.log, and one line on the console (CT-22: 100 - 150 lines before).
+    KOSM_VERBOSE_BUILD=1 shows the output as before. A failed build prints the first errors and
+    the log's path, then raises as before.
+    """
+    if str(os.environ.get("KOSM_VERBOSE_BUILD", "")).strip().lower() in ("1", "true", "yes", "on"):
+        return fn()
+    log_path = Path("./Class") / model_name / "build.log"
+    try:                                       # a log that cannot be written: build on the console
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        open(log_path, "a").close()
+    except OSError as e:
+        U.print_through_quiet(f"{label} (once; about 1 - 3 minutes; the log {log_path} cannot be written: {e})")
+        return fn()
+    # (shown also when the caller silences the console, e.g. --peek's set-up)
+    U.print_through_quiet(f"{label} (once; about 1 - 3 minutes; log: Class/{model_name}/build.log)")
+    try:
+        with output_to(log_path):
+            return fn()
+    except Exception:
+        U.print_through_quiet(f"[CLASS] The build of {model_name} failed; {log_errors(log_path)}\n"
+                              f"(full log: {log_path}; KOSM_VERBOSE_BUILD=1 shows the build output on the console)")
+        raise                                  # (Ctrl-C and exits pass through without the message)
 
 
 def _mpi_rank0() -> bool:
@@ -198,7 +348,7 @@ def _lock_path(model_name: str, sig_hash: str) -> str:
 
 
 @contextmanager
-def _with_lock(model_name: str, sig_hash: str, timeout_s: int = 120):
+def _with_lock(model_name: str, sig_hash: str, timeout_s: int = 900):
     """
     Acquire a simple filesystem lock for this model/signature.
 
@@ -226,7 +376,7 @@ def _with_lock(model_name: str, sig_hash: str, timeout_s: int = 120):
             time.sleep(0.1)
 
 
-def _wait_for_artifact(model_name: str, sig_hash: str, timeout_s: int = 180) -> Optional[str]:
+def _wait_for_artifact(model_name: str, sig_hash: str, timeout_s: int = 900) -> Optional[str]:
     """Wait for another rank/process to build the .so and put it in cache."""
     start = time.time()
     while time.time() - start < timeout_s:
@@ -240,6 +390,48 @@ def _wait_for_artifact(model_name: str, sig_hash: str, timeout_s: int = 180) -> 
 # ---------------------------------------------------------------------------
 # CLASS build + load helpers
 # ---------------------------------------------------------------------------
+
+
+_BUILD_ENV: Optional[dict] = None
+_BUILD_ENV_DONE = False
+
+
+def _build_env() -> Optional[dict]:
+    """Environment for the CLASS build commands (make, python setup.py build_ext), or None for
+    this process's own environment.
+
+    CLASS's Makefile and python/setup.py call the tools by name (gcc, g++, ar). A conda environment
+    with conda-forge's compilers may have them only under their own names, in $CC, $CXX and $AR
+    (x86_64-conda-linux-gnu-cc, ...). Only then a private folder with gcc, g++ and ar that call those
+    goes first on PATH for the build (removed at exit); with gcc, g++ and ar on PATH nothing changes.
+    (On macOS /usr/bin/gcc always exists; it needs the Xcode Command Line Tools.)"""
+    global _BUILD_ENV, _BUILD_ENV_DONE
+    if not _BUILD_ENV_DONE:
+        import shutil as _shutil
+        import tempfile as _tempfile
+        tools = {}
+        for name, var in (("gcc", "CC"), ("g++", "CXX"), ("ar", "AR")):
+            if _shutil.which(name) is None:
+                cmd = shlex.split(os.environ.get(var) or sysconfig.get_config_var(var) or "")
+                if cmd and _shutil.which(cmd[0]):
+                    tools[name] = [_shutil.which(cmd[0])] + cmd[1:]
+        if tools:
+            import atexit
+            shim = _tempfile.mkdtemp(prefix="kosmulator_cc_")
+            atexit.register(_shutil.rmtree, shim, True)
+            for name, cmd in tools.items():
+                dst = os.path.join(shim, name)
+                if len(cmd) == 1:
+                    os.symlink(cmd[0], dst)          # gcc finds its own tools through the link
+                else:                                # e.g. CC="ccache gcc"
+                    with open(dst, "w") as f:
+                        f.write("#!/bin/sh\nexec " + " ".join(shlex.quote(c) for c in cmd) + ' "$@"\n')
+                    os.chmod(dst, 0o755)
+            _BUILD_ENV = dict(os.environ)
+            _BUILD_ENV["PATH"] = shim + os.pathsep + _BUILD_ENV.get("PATH", "")
+            logger.info("[CLASS] build uses %s", ", ".join(f"{n} -> {' '.join(c)}" for n, c in tools.items()))
+        _BUILD_ENV_DONE = True
+    return _BUILD_ENV
 
 
 def find_classy_so(model_name: str) -> str:
@@ -276,10 +468,10 @@ def _ensure_libclass(model_dir: str) -> None:
     Many CLASS Makefiles already provide a 'libclass.a' target.
     """
     try:
-        subprocess.run(["make", "-C", model_dir, "libclass.a"], check=True)
+        subprocess.run(["make", "-C", model_dir, "libclass.a"], check=True, env=_build_env())
     except subprocess.CalledProcessError:
         # Fallback: try a minimal build that may produce libclass.a
-        subprocess.run(["make", "-C", model_dir, "class", "-k"], check=False)
+        subprocess.run(["make", "-C", model_dir, "class", "-k"], check=False, env=_build_env())
         if not os.path.exists(os.path.join(model_dir, "libclass.a")):
             raise
 
@@ -312,16 +504,20 @@ def _build_python_extension(model_dir: str) -> None:
     """Build the Python extension for CLASS in model_dir/python."""
     model_dir_path = Path(model_dir)
     _ensure_libclass(str(model_dir_path))
-    subprocess.run(["make", "-C", str(model_dir_path), "libclass.a"], check=True)
+    subprocess.run(["make", "-C", str(model_dir_path), "libclass.a"], check=True, env=_build_env())
     _strip_mvec_from_setup(str(model_dir_path / "python"))
+    # --force: classy links libclass.a, which setup.py does not list as a dependency, so
+    # without it build_ext sees classy.pyx unchanged, keeps the old in-place classy*.so and
+    # a change to the C sources never reaches Python
     subprocess.run(
-        [sys.executable, "setup.py", "build_ext", "--inplace"],
+        [sys.executable, "setup.py", "build_ext", "--inplace", "--force"],
         cwd=str(model_dir_path / "python"),
         check=True,
+        env=_build_env(),
     )
     subprocess.run([sys.executable, "setup.py", "build_ext", "--inplace"],
                    cwd=str(model_dir_path / "python"),
-                   check=True)
+                   check=True, env=_build_env())
     _ensure_python_external_symlink(model_dir)
 
 
@@ -335,14 +531,14 @@ def run_model(model_name: str) -> None:
     built = False
     for target in ["libclass.a", "lib"]:
         try:
-            subprocess.run(["make", "-C", str(model_dir), target], check=True)
+            subprocess.run(["make", "-C", str(model_dir), target], check=True, env=_build_env())
             built = True
             break
         except subprocess.CalledProcessError:
             continue
 
     if not built:
-        subprocess.run(["make", "-C", str(model_dir)], check=True)
+        subprocess.run(["make", "-C", str(model_dir)], check=True, env=_build_env())
 
     _build_python_extension(str(model_dir))
 
@@ -459,21 +655,30 @@ def ensure_class_ready(
     force: bool = False,
     no_rebuild: bool = False,
     announce: bool = False,
+    recheck: bool = False,
 ) -> bool:
     """
     Ensure the correct classy for `model_name` is loaded.
 
-    - Cache key includes: source tree, Python ABI, toolchain/libc.
+    - Cache key includes: source tree, Python ABI (and NumPy major version), toolchain/libc.
+    - On a cache miss an in-tree build is used only if it is newer than its sources.
     - Rank 0 rebuilds behind a lock; workers wait for the artifact to appear.
-    - If the same model+signature is already active in this process, this is a no-op.
+    - If this model's build is already loaded in this process, this is a no-op that does
+      not hash the sources (the likelihoods call it at every point). recheck=True (the
+      once-per-model call in MCMC_setup) hashes them and reloads if they changed.
     """
     global _current_class_model, _current_class_hash
+
+    # Fast path: this model's build is already loaded in this process
+    if (not force) and (not recheck) and _current_class_model == model_name \
+            and _current_class_hash is not None:
+        return True
 
     model_dir = os.path.join("./Class", model_name)
     sig = _full_signature(model_dir)
     sig_hash = _sig_hash(sig)
 
-    # Fast path: already loaded in this process
+    # Already loaded with the same sources (recheck=True)
     if (not force) and (_current_class_model == model_name) and (_current_class_hash == sig_hash):
         return True
 
@@ -499,10 +704,22 @@ def ensure_class_ready(
                 e,
             )
 
-        # Try existing model-local build (pre-cache behaviour)
+    # Try the existing in-tree build (pre-cache behaviour), but only if it is newer than
+    # every source it is built from: after a source edit there is no cache entry for the
+    # new hash, and an older in-tree build must not be taken (and cached) as the new one
     if not force:
         try:
             local_so = find_classy_so(model_name)
+            newer = _source_newer_than(model_dir, local_so)
+            if newer:
+                msg = (f"[CLASS] In-tree build for {model_name} is older than "
+                       f"{os.path.relpath(newer, model_dir)}; "
+                       f"{'not using it (no_rebuild)' if no_rebuild else 'rebuilding'}")
+                if announce:
+                    print(msg, flush=True)
+                else:
+                    logger.info(msg)
+                raise RuntimeError(msg)
             load_classy_so(local_so, model_name, sig_hash)
             from classy import Class  # type: ignore
             _ = Class()
@@ -533,12 +750,13 @@ def ensure_class_ready(
             if cached2 and not force:
                 path = cached2
             else:
-                try:
-                    subprocess.run(["make", "clean", "-C", model_dir], check=False)
-                except Exception:
-                    pass
-
-                run_model(model_name)
+                def _build():
+                    try:
+                        subprocess.run(["make", "clean", "-C", model_dir], check=False)
+                    except Exception:
+                        pass
+                    run_model(model_name)
+                build_logged(f"[CLASS] Building CLASS for {model_name}", model_name, _build)
                 built_cached = _copy_built_so_to_cache(model_name, sig_hash)
                 path = built_cached or find_classy_so(model_name)
                 _write_stamp(model_name, sig_hash, sig, path)
@@ -589,16 +807,17 @@ def init_clik_worker(
     hiltt_path: str | None = None,
     lens_raw_path: str | None = None,
     lens_cmbmarg_path: str | None = None,
+    lowltt_path: str | None = None,
 ) -> None:
     """
     Initialiser for worker processes that need Planck clik likelihoods.
 
-    - Forces single-threaded BLAS/OpenMP per worker.
+    - Forces single-threaded BLAS per worker; CLASS gets --class_threads threads (CT-40),
+      1 by default.
     - Optionally preloads paths for CMB high-ℓ, low-ℓ, TT-only, and lensing.
     """
-    # keep workers single-threaded
+    # keep workers single-threaded (BLAS)
     for var in (
-        "OMP_NUM_THREADS",
         "MKL_NUM_THREADS",
         "OPENBLAS_NUM_THREADS",
         "NUMEXPR_NUM_THREADS",
@@ -606,6 +825,9 @@ def init_clik_worker(
         "BLIS_NUM_THREADS",
     ):
         os.environ[var] = "1"
+    # CLASS's threads: --class_threads, passed by utils.get_pool (CT-40); CLASS reads
+    # OMP_NUM_THREADS at every call
+    os.environ["OMP_NUM_THREADS"] = str(max(1, int(os.environ.get("KOSM_CLASS_THREADS_PER_WORKER", "1") or 1)))
 
     if hil_path:
         preload_clik_hil(hil_path)
@@ -617,12 +839,14 @@ def init_clik_worker(
         preload_clik_lensing_raw(lens_raw_path)
     if lens_cmbmarg_path:
         preload_clik_lensing_cmbmarg(lens_cmbmarg_path)
+    if lowltt_path:
+        preload_clik_lowlTT(lowltt_path)
 
 
 def _ensure_process_local() -> None:
     """Reset per-process clik instances when pid changes (e.g. after fork)."""
     global _clik_pid, _clik_instance_hil, _clik_instance_lowl, _clik_instance_lensing
-    global _clik_instance_lensing_cmbmarg, _clik_hilTT
+    global _clik_instance_lensing_cmbmarg, _clik_hilTT, _clik_instance_lowlTT
 
     pid = os.getpid()
     if _clik_pid != pid:
@@ -632,6 +856,7 @@ def _ensure_process_local() -> None:
         _clik_instance_lensing = None
         _clik_instance_lensing_cmbmarg = None
         _clik_hilTT = None
+        _clik_instance_lowlTT = None
 
 
 # ---------------------------------------------------------------------------
@@ -649,6 +874,13 @@ def preload_clik_lowl(path: str) -> None:
     """Preload path for low-ℓ EE likelihood."""
     global _clik_path_lowl
     _clik_path_lowl = U.fast_path_for_clik(path)
+
+
+def preload_clik_lowlTT(path: str) -> None:
+    """Preload path for the low-ℓ TT likelihood (Commander)."""
+    global _clik_path_lowlTT, _clik_instance_lowlTT
+    _clik_path_lowlTT = U.fast_path_for_clik(path)
+    _clik_instance_lowlTT = None
 
 
 def preload_clik_lensing_raw(path: str) -> None:
@@ -710,6 +942,19 @@ def get_clik_lowl():
     return _clik_instance_lowl
 
 
+def get_clik_lowlTT():
+    """Return cached low-ℓ TT clik instance (Commander, silent)."""
+    global _clik_instance_lowlTT
+    _ensure_process_local()
+    if _clik_instance_lowlTT is not None:
+        return _clik_instance_lowlTT
+    if _clik_path_lowlTT is None:
+        raise RuntimeError("CMB_lowl_TT path not set")
+    with U.quiet_cstdio():
+        _clik_instance_lowlTT = clik.clik(_clik_path_lowlTT)
+    return _clik_instance_lowlTT
+
+
 def get_clik_lensing():
     """Planck 2018 lensing likelihood (RAW: expects pp + TT/EE/TE)."""
     global _clik_instance_lensing, _DID_LOG_LENSING_RAW
@@ -730,7 +975,11 @@ def get_clik_lensing():
         _clik_instance_lensing = clik.clik_lensing(path_raw)
 
     if not _DID_LOG_LENSING_RAW:
-        logger.info("Loaded lensing (RAW) clik from '%s'", path_raw)
+        import multiprocessing as mp
+        # once, from the main process (each pool worker loads it too: one line per worker
+        # before, CT-36), as get_clik_lensing_cmbmarg does
+        if mp.current_process().name == "MainProcess" and _mpi_rank0():
+            logger.info("Loaded Planck 2018 lensing (raw) %s", os.path.basename(path_raw))
         _DID_LOG_LENSING_RAW = True
 
     return _clik_instance_lensing
@@ -757,8 +1006,8 @@ def get_clik_lensing_cmbmarg():
     if not _DID_LOG_LENSING_CMBMARG:
         import multiprocessing as mp
         # Check if this specific worker is the main coordinating process
-        if mp.current_process().name == "MainProcess":
-            logger.info("Loaded lensing (CMB-marged) clik from '%s'", path_marg)
+        if mp.current_process().name == "MainProcess" and _mpi_rank0():
+            logger.info("Loaded Planck 2018 lensing (CMB-marginalised) %s", os.path.basename(path_marg))
         
         # Set the flag to True for EVERY worker so they all stop trying
         _DID_LOG_LENSING_CMBMARG = True

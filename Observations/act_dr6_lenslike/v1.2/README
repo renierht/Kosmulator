@@ -1,0 +1,40 @@
+DR6 Lensing Likelihood Data
+===========================
+
+Version: v1.2
+Date: 2023-12-22
+
+This data should be copied to the cloned git repository
+for the likelihood software: https://github.com/ACTCollaboration/act_dr6_lenslike
+
+The `data` directory should be inside the directory that has __init__.py in
+the cloned repositry. Copy it there. Only then should you proceed with
+the pip install.
+
+
+A typical Cobaya block should have:
+
+likelihood:
+		act_dr6_lenslike.ACTDR6LensLike:
+		        lens_only: False
+				stop_at_error: True
+				lmax: 4000
+				variant: act_baseline
+
+Set lens_only to True if not including primary CMB information.
+
+Other variants include:
+- act_extended (extended multipole range up to L=1250)
+- actplanck_baseline
+- actplanck_extended
+
+The latter two combine ACT and Planck lensing.
+
+Changelog
+---------
+
+Changes w.r.t. v1.1:
+* Bug fix for likelihood correction derivatives. Results in negligible differences to parameter constraints, only for combinations with 2-point CMB power spectra.
+
+Changes in v1.1 w.r.t. v1.0:
+* Bug fix for ACT+Planck covariance matrices

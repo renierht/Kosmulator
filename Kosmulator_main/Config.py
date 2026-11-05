@@ -10,10 +10,11 @@ Responsibilities:
   - Construct the CONFIG dict consumed by the MCMC layer:
       CONFIG[model_name] = {
           "observations", "observation_types",
-          "parameters", "true_values", "prior_limits",
+          "parameters", "reference_values", "prior_limits",
           "restrictions", "ndim",
           "rd_policy", "pantheonp_mode",
-          "fs8_gamma_fixed_by_group",
+          "fs8_gamma_fixed_by_group", "fixed_params_by_group",
+          "unconstrained_params_by_group",
           "nwalker", "nwalker_by_obs",
       }
   - Build a single shared `data` dict with loaded datasets.
@@ -89,6 +90,161 @@ def load_data(file_path: Union[str, Path]) -> Dict[str, np.ndarray]:
     }
 
 
+def _attach_correlations(d: Dict[str, np.ndarray], corr_path: Union[str, Path], logger=None) -> Dict[str, np.ndarray]:
+    """
+    Full covariance for a diagonal-error dataset (CC) when `corr_path` lists
+    correlated rows as "z_i z_j rho" (matched by redshift, each must match one
+    row): C = diag(sigma^2) with C_ij = rho sigma_i sigma_j. Adds d["cov"] and
+    d["inv_cov"]; without the file the dataset stays diagonal.
+    """
+    path = Path(corr_path)
+    if not path.exists():
+        return d
+    pairs = np.atleast_2d(np.loadtxt(path, usecols=(0, 1, 2)))
+    if pairs.size == 0:
+        return d
+    z = np.asarray(d["redshift"], dtype=float)
+    s = np.asarray(d["type_data_error"], dtype=float)
+    C = np.diag(s ** 2)
+
+    def _row(zz):
+        idx = np.where(np.isclose(z, zz, rtol=0.0, atol=1e-6))[0]
+        if idx.size != 1:
+            raise ValueError(f"{path.name}: z = {zz} matches {idx.size} rows of the data (need exactly 1)")
+        return int(idx[0])
+
+    for zi, zj, rho in pairs:
+        i, j = _row(zi), _row(zj)
+        C[i, j] = C[j, i] = float(rho) * s[i] * s[j]
+    np.linalg.cholesky(C)      # must be positive definite
+    d["cov"] = C
+    d["inv_cov"] = np.linalg.inv(C)
+    if logger:
+        logger.info("%s: %d correlated pairs from %s", path.stem.replace("_corr", ""), len(pairs), path.name)
+    return d
+
+
+def cc_sps_covariance(z, H, mode: str) -> np.ndarray:
+    """
+    SPS-model systematic covariance of CC rows (constants.CC_SYS_COV): Moresco et
+    al. 2020 Eq. 9, C_ij = sum_X eta_X(z_i) H_i eta_X(z_j) H_j over X = IMF,
+    stellar library and SPS ("full") or SPS without the most discordant model
+    ("ooo"), for the D4000 rows (constants.CC_D4000_Z); zero elsewhere.
+    """
+    if mode not in ("full", "ooo"):
+        raise ValueError(f"CC_SYS_COV must be None, 'full' or 'ooo', not {mode!r}")
+    T = np.asarray(K.CC_MORESCO2020_TABLE3, dtype=float)
+    z = np.asarray(z, dtype=float)
+    H = np.asarray(H, dtype=float)
+    on = np.zeros(z.size, dtype=bool)
+    for zz in K.CC_D4000_Z:
+        idx = np.where(np.isclose(z, zz, rtol=0.0, atol=1e-6))[0]
+        if idx.size != 1:
+            raise ValueError(f"CC_D4000_Z: z = {zz} matches {idx.size} CC rows (need exactly 1)")
+        on[idx[0]] = True
+    C = np.zeros((z.size, z.size))
+    for col in (1, 2, 3 if mode == "full" else 4):
+        v = np.where(on, np.interp(z, T[:, 0], T[:, col]) / 100.0 * H, 0.0)  # np.interp holds the end rows
+        C += np.outer(v, v)
+    return C
+
+
+def _attach_cc_systematics(d: Dict[str, np.ndarray], mode, logger=None) -> Dict[str, np.ndarray]:
+    """Add cc_sps_covariance to CC's covariance (diagonal or CC_corr.txt) when mode is set."""
+    if not mode:
+        return d
+    s = np.asarray(d["type_data_error"], dtype=float)
+    C = np.array(d["cov"], dtype=float) if "cov" in d else np.diag(s ** 2)
+    C = C + cc_sps_covariance(d["redshift"], d["type_data"], mode)
+    np.linalg.cholesky(C)
+    d["cov"] = C
+    d["inv_cov"] = np.linalg.inv(C)
+    if logger:
+        logger.info("CC: Moresco 2020 SPS-model covariance added (%s) for %d D4000 rows",
+                    mode, len(K.CC_D4000_Z))
+    return d
+
+
+def pantheon_sys_covariance(z, mu, dmu) -> np.ndarray:
+    """
+    The Pantheon release's systematic covariance (Observations/Pantheon_release/sys_full_long.txt,
+    release order) in Pantheon.dat's order (CT-14). Each Pantheon.dat row (zcmb, mb + 19.3, dmb) is
+    matched to exactly one row of the release's lcparam_full_long.txt.
+    """
+    folder = os.path.join(K.OBSERVATIONS_BASE, "Pantheon_release")
+    lc = np.loadtxt(os.path.join(folder, "lcparam_full_long.txt"), usecols=(1, 4, 5), skiprows=1, ndmin=2)
+    with open(os.path.join(folder, "sys_full_long.txt"), "r") as fh:
+        n = int(fh.readline().split()[0])
+        S = np.array(fh.read().split(), dtype=float)
+    if n != lc.shape[0] or S.size != n * n:
+        raise ValueError(f"Pantheon_release: {lc.shape[0]} SNe in lcparam_full_long.txt, sys_full_long.txt "
+                         f"says {n} with {S.size} values")
+    S = S.reshape(n, n)
+    z, mu, dmu = (np.asarray(a, dtype=float) for a in (z, mu, dmu))
+    hit = ((np.abs(z[:, None] - lc[None, :, 0]) < 1e-6) & (np.abs(mu[:, None] - (lc[None, :, 1] + 19.3)) < 1e-4)
+           & (np.abs(dmu[:, None] - lc[None, :, 2]) < 1e-6))
+    counts = hit.sum(axis=1)
+    if np.any(counts != 1):
+        raise ValueError(f"Pantheon.dat: {int(np.sum(counts == 0))} row(s) without and {int(np.sum(counts > 1))} "
+                         "with several matches in the release's lcparam_full_long.txt")
+    idx = np.argmax(hit, axis=1)
+    if np.unique(idx).size != idx.size:
+        raise ValueError("Pantheon.dat: two rows match the same release row")
+    return S[np.ix_(idx, idx)]
+
+
+def _attach_pantheon_systematics(d: Dict[str, np.ndarray], mode, logger=None) -> Dict[str, np.ndarray]:
+    """Pantheon with constants.PANTHEON_SYS_COV = "full": C = diag(dmb^2) + the release's systematic
+    covariance (CT-14), as the release's CosmoMC set-up."""
+    if not mode:
+        return d
+    if mode != "full":
+        raise ValueError(f"PANTHEON_SYS_COV must be None or 'full', not {mode!r}")
+    s = np.asarray(d["type_data_error"], dtype=float)
+    C = np.diag(s ** 2) + pantheon_sys_covariance(d["redshift"], d["type_data"], s)
+    np.linalg.cholesky(C)
+    d["cov"] = C
+    d["inv_cov"] = np.linalg.inv(C)
+    if logger:
+        logger.info("Pantheon: systematic covariance added (the release's sys_full_long.txt, Scolnic et al. "
+                    "2018; PANTHEON_SYS_COV = \"full\")")
+    return d
+
+
+def _attach_fs8_extras(d: Dict[str, np.ndarray], file_path, logger=None) -> Dict[str, np.ndarray]:
+    """
+    f_sigma_8: the fiducial Omega_m of each row (4th column, for the AP-type
+    correction when constants.FS8_AP_CORRECTION is True) and the WiggleZ
+    covariance (constants.FS8_WIGGLEZ_COV), matched by (z, f sigma_8).
+    """
+    raw = np.loadtxt(file_path, ndmin=2)
+    if raw.shape[1] >= 4:
+        d["omega_m_fid"] = raw[:, 3]
+    if bool(getattr(K, "FS8_AP_CORRECTION", False)):
+        if "omega_m_fid" not in d:
+            raise ValueError("FS8_AP_CORRECTION needs the fiducial Omega_m column in f_sigma_8.dat")
+        d["ap_correction"] = True
+    if bool(getattr(K, "FS8_WIGGLEZ_COV", False)):
+        z = np.asarray(d["redshift"], dtype=float)
+        v = np.asarray(d["type_data"], dtype=float)
+        s = np.asarray(d["type_data_error"], dtype=float)
+        C = np.array(d["cov"], dtype=float) if "cov" in d else np.diag(s ** 2)
+        idx = []
+        for zz, vv in K.FS8_WIGGLEZ_ROWS:
+            hit = np.where(np.isclose(z, zz, atol=1e-6) & np.isclose(v, vv, atol=1e-6))[0]
+            if hit.size != 1:
+                raise ValueError(f"FS8_WIGGLEZ_ROWS: ({zz}, {vv}) matches {hit.size} rows (need exactly 1)")
+            idx.append(int(hit[0]))
+        C[np.ix_(idx, idx)] = np.asarray(K.FS8_WIGGLEZ_COV_MATRIX, dtype=float)
+        np.linalg.cholesky(C)
+        d["cov"] = C
+        d["inv_cov"] = np.linalg.inv(C)
+    if logger:
+        logger.info("f_sigma_8: WiggleZ covariance %s, AP correction %s",
+                    "on" if "inv_cov" in d else "off", "on" if d.get("ap_correction") else "off")
+    return d
+
+
 # ---------------------------------------------------------------------------
 # Pantheon+ helper
 # ---------------------------------------------------------------------------
@@ -96,8 +252,9 @@ def load_data(file_path: Union[str, Path]) -> Dict[str, np.ndarray]:
 def prepare_pantheonP_data(data, z_min: float = 0.01, mode: str = "PplusSH0ES"):
     """
     Prepare Pantheon+ for either:
-      • "Pplus"       : Pantheon+ without SH0ES anchor (exclude calibrators)
-      • "PplusSH0ES"  : Pantheon+ with SH0ES anchor (include calibrators)
+      • "Pplus"       : Pantheon+ without SH0ES anchor: all SNe with zHD > z_min
+                        (Cepheid hosts included as Hubble-flow SNe, distances unused)
+      • "PplusSH0ES"  : Pantheon+ with SH0ES anchor: zHD > z_min or calibrator
 
     Notes:
       - The "mode" string is treated case-insensitively and matched on "sh0es".
@@ -117,12 +274,16 @@ def prepare_pantheonP_data(data, z_min: float = 0.01, mode: str = "PplusSH0ES"):
         mask = (z > z_min) | (trig > 0)
         trig_eff = trig
     else:
-        # Pure Hubble-flow subset: drop calibrators completely
-        mask = (z > z_min) & (trig == 0)
+        # Uncalibrated Pantheon+ (no SH0ES): every SN in the Hubble flow,
+        # zHD > z_min, including Cepheid-host SNe above the cut. Their Cepheid
+        # distances are not used (trig_eff = 0). This is the selection of the
+        # Pantheon+ release and of Cobaya's PantheonPlus likelihood
+        # (zmask = zcmb > 0.01, with zcmb read from the zHD column).
+        mask = (z > z_min)
         trig_eff = np.zeros_like(trig)
 
     idx = np.where(mask)[0]
-    return {
+    out = {
         "mode": ("PplusSH0ES" if use_sh0es else "Pplus"),
         "mask": mask,
         "indices": idx,
@@ -135,6 +296,11 @@ def prepare_pantheonP_data(data, z_min: float = 0.01, mode: str = "PplusSH0ES"):
             os.path.join(K.OBSERVATIONS_BASE, "PantheonP.cov"),
         ),
     }
+    # Heliocentric redshift for the (1 + zHEL) factor in D_L = (1 + zHEL) D_M(zHD),
+    # as in the Pantheon+ / Cobaya likelihood (utils.sn_luminosity_distance).
+    if data.get("zHEL") is not None:
+        out["z_hel"] = np.asarray(data["zHEL"], dtype=float)[mask]
+    return out
 
 
 from pathlib import Path
@@ -152,7 +318,14 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         #name zcmb zhel dz mb dmb x1 dx1 color dcolor 3rdvar d3rdvar ...
 
     Behaviour:
-      - Uses the CMB-frame redshift column (zCMB/zcmb) as `redshift`.
+      - CSV files (DESY5): uses the Hubble-diagram redshift (zHD) as
+        `redshift`, falling back to zCMB/z if zHD is absent. Also returns the
+        heliocentric redshift (zHEL) as `z_hel` when that column exists. The
+        likelihood then uses D_L = (1 + z_HEL) * D_c(z_HD), as in the DES-SN5YR
+        (Cobaya) likelihood; see utils.sn_luminosity_distance.
+      - Whitespace files (Union3): uses the CMB-frame redshift column
+        (zcmb/z) as `redshift`; no `z_hel` is returned, so the single-redshift
+        behaviour is unchanged.
       - Uses MU/mb as `type_data` (distance-modulus–like quantity).
       - Uses MUERR_FINAL/dmb/etc. as `type_data_error` (σ_μ).
       - For Union3, parses lines manually to tolerate missing trailing columns.
@@ -182,16 +355,21 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         df.columns = cols_norm
         name_map = {c.lower(): c for c in df.columns}
 
-        # redshift
+        # redshift used inside the comoving-distance integral.
+        # zHD (Hubble-diagram redshift) comes first; candidates are matched
+        # against the lower-cased column names in name_map.
         z_name = None
-        for cand in ("zcmb", "z_cmb", "zhd", "z"):
+        for cand in ("zhd", "zcmb", "z_cmb", "z"):
             if cand in name_map:
                 z_name = name_map[cand]
                 break
         if z_name is None:
             raise ValueError(
-                f"Could not find a zCMB-like column in {file_path} (columns={df.columns.tolist()})"
+                f"Could not find a zHD/zCMB-like column in {file_path} (columns={df.columns.tolist()})"
             )
+
+        # optional heliocentric redshift, used only in the (1 + z) prefactor
+        hel_name = name_map.get("zhel")
 
         # distance modulus / magnitude
         mu_name = None
@@ -220,8 +398,15 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         else:
             sigma = np.ones_like(z, dtype=float)
 
-        # Clean rows
+        z_hel = None
+        if hel_name is not None:
+            z_hel = pd.to_numeric(df[hel_name], errors="coerce").to_numpy(dtype=float)
+
+        # Clean rows (z_hel, when present, is cleaned with the same mask so all
+        # arrays stay aligned with the covariance matrix)
         good = np.isfinite(z) & np.isfinite(mu) & np.isfinite(sigma) & (sigma > 0)
+        if z_hel is not None:
+            good &= np.isfinite(z_hel)
         z = z[good]
         mu = mu[good]
         sigma = sigma[good]
@@ -229,11 +414,14 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         if z.size == 0:
             raise ValueError(f"{file_path}: no valid rows after cleaning numeric columns.")
 
-        return {
+        out = {
             "redshift": z,
             "type_data": mu,
             "type_data_error": sigma,
         }
+        if z_hel is not None:
+            out["z_hel"] = z_hel[good]
+        return out
 
 
     # --------------------------------------------------
@@ -307,6 +495,86 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
 # ---------------------------------------------------------------------------
 # DESI BAO VI loaders
 # ---------------------------------------------------------------------------
+
+def load_jla_full(folder: Union[str, Path]) -> Dict[str, Any]:
+    """
+    Official JLA sample (Betoule et al. 2014, arXiv:1401.4064): 740 SNe Ia.
+
+    Reads the CosmoMC/Cobaya distribution of the JLA inputs (see
+    Observations/JLA/README.md): jla_lcparams.txt and the six blocks of
+    C_eta (jla_{v0,va,vb,v0a,v0b,vab}_covmatrix.dat).
+
+    The returned dict carries everything Statistical_packages.Calc_JLA_chi
+    needs to build C(alpha, beta) and the standardised magnitudes. For code
+    that only understands (redshift, type_data, type_data_error), it also
+    holds magnitudes standardised at the default alpha, beta and the matching
+    diagonal errors; the likelihood itself never uses those two arrays.
+    """
+    folder = Path(folder)
+    lc_path = folder / "jla_lcparams.txt"
+    if not lc_path.exists():
+        raise FileNotFoundError(f"JLA light-curve file not found: {lc_path}")
+
+    cols, names, rows = None, [], []
+    with open(lc_path) as fh:
+        for line in fh:
+            if line.startswith("#"):
+                cols = line[1:].split()
+                continue
+            if not line.strip():
+                continue
+            parts = line.split()
+            names.append(parts[0])
+            rows.append([float(x) for x in parts[1:]])
+    if cols is None or cols[0] != "name":
+        raise ValueError(f"{lc_path}: expected a '#name ...' header line")
+    arr = np.asarray(rows, dtype=float)
+    col = {c: arr[:, i] for i, c in enumerate(cols[1:])}
+    n = len(names)
+
+    blocks = []
+    for tag in ("v0", "va", "vb", "v0a", "v0b", "vab"):
+        path = folder / f"jla_{tag}_covmatrix.dat"
+        raw = np.loadtxt(path)
+        if int(round(raw[0])) != n or raw.size != n * n + 1:
+            raise ValueError(f"{path}: expected {n} x {n} entries after the size line")
+        m = raw[1:].reshape(n, n)
+        blocks.append(0.5 * (m + m.T))
+
+    host = col["3rdvar"]
+    split = float(getattr(K, "JLA_HOST_MASS_SPLIT", 10.0))
+    templates = np.column_stack([(host <= split), (host > split)]).astype(float)
+
+    data: Dict[str, Any] = {
+        "names": np.asarray(names),
+        "redshift": col["zcmb"],
+        "z_hel": col["zhel"],
+        "mb": col["mb"],
+        "x1": col["x1"],
+        "colour": col["color"],
+        "host_logmass": host,
+        "dmb2": col["dmb"] ** 2,
+        "dx12": col["dx1"] ** 2,
+        "dc2": col["dcolor"] ** 2,
+        "cov_ms": col["cov_m_s"],
+        "cov_mc": col["cov_m_c"],
+        "cov_sc": col["cov_s_c"],
+        "survey": col["set"].astype(int),
+        "V_blocks": np.stack(blocks),       # (6, N, N): v0, va, vb, v0a, v0b, vab
+        "templates": templates,             # (N, 2): M_B and M_B + Delta_M
+        "jla_full": True,
+        "data_is_distance_modulus": True,
+        "marginalise_offset": True,
+    }
+
+    # Fallback arrays for generic consumers (standardised at the default alpha, beta)
+    a0 = K.JLA_NUISANCE_DEFAULTS["alpha_JLA"][2]
+    b0 = K.JLA_NUISANCE_DEFAULTS["beta_JLA"][2]
+    from Kosmulator_main import Statistical_packages as _SP
+    data["type_data"] = _SP.jla_standardised_mag(data, a0, b0)
+    data["type_data_error"] = np.sqrt(np.diag(_SP.jla_covariance(data, a0, b0)))
+    return data
+
 
 def load_DESI_data(file_path: Union[str, Path]) -> Dict[str, np.ndarray]:
     """
@@ -421,7 +689,11 @@ def load_DESI_cov(file_path: Union[str, Path]) -> Tuple[np.ndarray, np.ndarray]:
     try:
         np.linalg.cholesky(cov)
     except np.linalg.LinAlgError:
-        logger.warning("DESI cov not PD under Cholesky; using pseudo-inverse fallback.")
+        logger.warning(
+            "Covariance %s is not positive definite under Cholesky; its pseudo-inverse "
+            "is used where an inverse is needed (expected for a systematics-only matrix).",
+            path.name,
+        )
         inv_cov = np.linalg.pinv(cov, rcond=1e-12)
         cov     = 0.5 * (cov + cov.T)
 
@@ -497,6 +769,7 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     "m_b_corr": df["m_b_corr"].values,
                     "IS_CALIBRATOR": df["IS_CALIBRATOR"].values,
                     "CEPH_DIST": df["CEPH_DIST"].values,
+                    "zHEL": df["zHEL"].values if "zHEL" in df.columns else None,
                     "cov_path": os.path.join(K.OBSERVATIONS_BASE, "PantheonP.cov"),
                 }
 
@@ -511,6 +784,11 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 observation_data[obs] = prepare_pantheonP_data(
                     pantheon_data,
                     mode=mode,
+                )
+                # Uncalibrated Pantheon+: magnitude offset marginalised analytically
+                # (Cobaya use_abs_mag: False). With SH0ES (PantheonPS) M_abs is sampled.
+                observation_data[obs]["marginalise_offset"] = (
+                    obs == "PantheonP" and bool(getattr(K, "SN_MARGINALISE_OFFSET", True))
                 )
 
                 # Pre-build covariance + lower Cholesky and attach it
@@ -535,63 +813,41 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     )
 
             # ------------------
-            # BAO (13-element vector with fixed order)
-            # ------------------
-            elif obs == "BAO":
-                observation_data[obs] = {
-                    "covd1": np.loadtxt(file_path),
-                    # 12-slot observed vector in the SAME order as the chi^2 builder
-                    "obs_vec": np.array([
-                        7.92512927,
-                        13.6200308, 20.98334647,
-                        16.84645313, 20.07872919,
-                        21.70841761, 17.87612922,
-                        27.78720817, 13.82372285,
-                        26.07217182,
-                        39.70838281, 8.52256583,
-                    ], dtype=float),
-                    # Meta to keep plotting/chi² in sync
-                    "z_slots": [
-                        0.295, 0.510, 0.510, 0.706, 0.706, 0.930,
-                        0.930, 1.317, 1.317, 1.491, 2.330, 2.330
-                    ],
-                    "code_slots": [
-                        3, 8, 6, 8, 6, 8,
-                        6, 8, 6, 3, 8, 6  # 3=DV/rd, 8=DM/rd, 6=DH/rd
-                    ],
-                }
-
-            # ------------------
             # Planck CMB paths
             # ------------------
-            elif obs == 'CMB_hil':
-                observation_data[obs] = os.path.join(
-                    K.OBSERVATIONS_BASE, "plik_rd12_HM_v22b_TTTEEE.clik"
-                )
-
-            elif obs == 'CMB_hil_TT':
-                observation_data[obs] = os.path.join(
-                    K.OBSERVATIONS_BASE, "plik_rd12_HM_v22_TT.clik"
-                )
-
-            elif obs == 'CMB_lowl':
-                observation_data[obs] = os.path.join(
-                    K.OBSERVATIONS_BASE,
-                    "simall_100x143_offlike5_EE_Aplanck_B.clik",
-                )
+            elif obs in ('CMB_hil', 'CMB_hil_TT', 'CMB_lowl', 'CMB_lowl_TT'):
+                # plik or plik_lite (constants.CMB_NUISANCE), SimAll EE, Commander TT
+                observation_data[obs] = os.path.join(K.OBSERVATIONS_BASE, K.planck_clik_file(obs))
 
             elif obs == 'CMB_lensing':
                 # We store RAW here; likelihood will decide whether to swap to CMBMARGED
                 observation_data[obs] = _lensing_file_nonmarg
 
+            elif obs in K.GROUND_CMB_TAGS:
+                # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57): ground_cmb loads
+                # its data itself (Observations/candl, plik_lite folder, SRoll2 table)
+                observation_data[obs] = {"ground_cmb": obs, "parts": list(K.cmb_components(obs))}
+
+            elif obs in K.EXT_LENSING_TAGS:
+                # ACT DR6 + Planck PR4 and SPT-3G MUSE lensing (item 61): ground_cmb loads the data
+                observation_data[obs] = {"lensing": obs, "variant": (K.ACT_LENS_VARIANT if obs == "CMB_lensing_ACTPlanck"
+                                                                     else "MUSE phi phi")}
+
             # ------------------
-            # DESI DR1 / DR2
+            # BAO / DESI, all in the DESI VI format (Calc_DESI_chi):
+            #   DESI_DR1  all 12 DESI DR1 measurements, full covariance (arXiv:2404.03002)
+            #   DESI_DR2  DESI DR2 (arXiv:2503.14738)
+            #   BAO       the 10 anisotropic DESI DR1 measurements (no D_V/r_d points)
+            # Before October 2026 the DESI_DR1 and BAO tags were the other way round.
             # ------------------
-            elif obs == "DESI_DR1":
-                # If your current files are named Isma_desi_*.txt, keep them here;
-                # otherwise rename them to DESI_DR1_* accordingly.
-                vi_path  = os.path.join(K.OBSERVATIONS_BASE, "Isma_desi_VI.txt")
-                cov_path = os.path.join(K.OBSERVATIONS_BASE, "Isma_desi_covtot_VI.txt")
+            elif obs in ("DESI_DR1", "DESI_DR2", "BAO"):
+                vi_file, cov_file = {
+                    "DESI_DR1": ("DESI_DR1.txt", "DESI_DR1_cov.txt"),
+                    "DESI_DR2": ("DESI_DR2_synced.txt", "DESI_DR2_covtot.txt"),
+                    "BAO": ("BAO.txt", "BAO_invcov.txt"),
+                }[obs]
+                vi_path  = os.path.join(K.OBSERVATIONS_BASE, vi_file)
+                cov_path = os.path.join(K.OBSERVATIONS_BASE, cov_file)
 
                 desi = load_DESI_data(vi_path)
                 cov, inv_cov = load_DESI_cov(cov_path)
@@ -601,27 +857,8 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 n = len(desi["redshift"])
                 if cov.shape != (n, n):
                     logger.error(
-                        "DESI_DR1 covariance shape %s != (%d,%d)",
-                        cov.shape, n, n,
-                    )
-
-                observation_data[obs] = desi
-
-            elif obs == "DESI_DR2":
-                # DR2 uses the same VI structure
-                vi_path  = os.path.join(K.OBSERVATIONS_BASE, "DESI_DR2_synced.txt")
-                cov_path = os.path.join(K.OBSERVATIONS_BASE, "DESI_DR2_covtot.txt")
-
-                desi = load_DESI_data(vi_path)
-                cov, inv_cov = load_DESI_cov(cov_path)
-                desi["cov"] = cov
-                desi["inv_cov"] = inv_cov
-
-                n = len(desi["redshift"])
-                if cov.shape != (n, n):
-                    logger.error(
-                        "DESI_DR2 covariance shape %s != (%d,%d)",
-                        cov.shape, n, n,
+                        "%s covariance shape %s != (%d,%d)",
+                        obs, cov.shape, n, n,
                     )
 
                 observation_data[obs] = desi
@@ -635,22 +872,11 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     # "per_system": uses full list of individual systems (default).
                     "mode": "per_system",
                     "units": "scaled1e6",  # PDG numbers as printed (1e6 * D/H)
-                    "S": 1.137,            # scale factor for error inflation
-                    "weighted_mean": {"DH": 25.47, "sigma": 0.29},
-                    "bbn_model": "approx",  # simple BBN backend
-                    "systems": [
-                        {"name": "SDSS J1419+0829", "DH": 25.06, "sig_up": 0.52, "sig_dn": 0.52},
-                        {"name": "HS 0105+1619",    "DH": 25.76, "sig_up": 1.54, "sig_dn": 1.54},
-                        {"name": "QSO B0913+0715",  "DH": 25.29, "sig_up": 1.05, "sig_dn": 1.05},
-                        {"name": "SDSS J1358+0349", "DH": 26.18, "sig_up": 0.72, "sig_dn": 0.72},
-                        {"name": "SDSS J1358+6522", "DH": 25.82, "sig_up": 0.71, "sig_dn": 0.71},
-                        {"name": "SDSS J1558-0031", "DH": 24.04, "sig_up": 1.44, "sig_dn": 1.44},
-                        {"name": "PKS 1937-1009 A", "DH": 24.49, "sig_up": 2.80, "sig_dn": 2.80},
-                        {"name": "QSO J1444+2919",  "DH": 19.68, "sig_up": 3.3,  "sig_dn": 2.8},
-                        {"name": "PKS 1937-1009 B", "DH": 26.24, "sig_up": 0.48, "sig_dn": 0.48},
-                        {"name": "QSO 1009+2956",   "DH": 24.77, "sig_up": 4.1,  "sig_dn": 3.5},
-                        {"name": "QSO 1243+307",    "DH": 23.88, "sig_up": 0.82, "sig_dn": 0.82},
-                    ],
+                    "S": K.BBN_DH_PDG_S,   # PDG scale factor for error inflation
+                    "weighted_mean": dict(K.BBN_DH_PDG_MEAN),
+                    "bbn_model": "approx",  # standard-BBN power law (constants.BBN_DH_*)
+                    "theory_frac_error": K.BBN_DH_THEORY_FRAC,
+                    "systems": [dict(x) for x in K.BBN_DH_PDG_SYSTEMS],
                     "bbn_model_effective": "approx",
                 }
 
@@ -662,9 +888,11 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 observation_data[obs] = {
                     "mode": "per_system",  # or "mean"
                     "units": "scaled1e6",
-                    "S": 1.137,
-                    "weighted_mean": {"DH": 25.47, "sigma": 0.29},
-                    "bbn_model": "alterbbn_grid",  # request high-precision BBN backend
+                    "S": K.BBN_DH_PDG_S,
+                    "weighted_mean": dict(K.BBN_DH_PDG_MEAN),
+                    "systems": [dict(x) for x in K.BBN_DH_PDG_SYSTEMS],
+                    "theory_frac_error": K.BBN_DH_THEORY_FRAC,
+                    "bbn_model": "alterbbn_grid",  # AlterBBN grid (close to PRIMAT, about 3% below the power law)
                    #"bbn_force_rebuild": True,
 
                     # Precomputed grid path; comment this out to run AlterBBN live.
@@ -694,14 +922,14 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
 
                 # Build prior boxes for grid-building from priors (with safe defaults)
                 pri_src = prior_limits or {}
+                _smp = set(config.get("bbn_sampled", {"N_eff", "tau_n"}) if isinstance(config, dict) else ())
+                _tau0 = observation_data[obs]["tau_n"]
                 priors = {
                     "Omega_bh^2": pri_src.get("Omega_bh^2", (0.019, 0.026)),
-                    "N_eff":      pri_src.get("N_eff",      (K.N_EFF_DEFAULT, K.N_EFF_DEFAULT)),
-                    "tau_n":      pri_src.get(
-                        "tau_n",
-                        (observation_data[obs]["tau_n"],
-                         observation_data[obs]["tau_n"]),
-                    ),
+                    # the run's N_eff (CT-39); the prior's range only when N_eff is sampled
+                    "N_eff":      (pri_src.get("N_eff", (K.NU_N_EFF, K.NU_N_EFF)) if "N_eff" in _smp
+                                   else (K.NU_N_EFF, K.NU_N_EFF)),
+                    "tau_n":      (pri_src.get("tau_n", (_tau0, _tau0)) if "tau_n" in _smp else (_tau0, _tau0)),
                 }
 
                 try:
@@ -715,12 +943,35 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     priors=priors,
                 )
 
-                # Nice logging for visibility
+                # What D/H comes from, in one line (D1: the grid in git is used without AlterBBN)
                 cfg = observation_data['BBN_DH_AlterBBN']
-                logger.info("BBN resolved backend: %s", cfg.get("bbn_model_effective"))
-                if cfg.get("bbn_model_effective") == "alterbbn_grid":
+                _eff = cfg.get("bbn_model_effective")
+                logger.debug("BBN resolved backend: %s", _eff)
+                if _eff == "alterbbn_grid":
+                    _g = cfg["bbn_grid"]
+                    _p = os.path.abspath(str(cfg.get("bbn_grid_path") or ""))
+                    try:
+                        import hashlib
+                        with open(_p, "rb") as _fh:
+                            _ship = hashlib.md5(_fh.read()).hexdigest() == K.BBN_GRID_MD5
+                    except OSError:
+                        _ship = False
+                    _nn = cfg.get("bbn_grid_neff_nodes") or []
+                    _neff = ("N_eff sampled within %.3f - %.3f" % (_g["neff"][0], _g["neff"][-1]) if "neff" in _g
+                             else ("N_eff %.3f" % _nn[0] if _nn else "N_eff fixed"))
+                    _src = ("an AlterBBN grid built now with AlterBBN" if cfg.get("bbn_grid_built_now") else
+                            "the AlterBBN grid shipped with Kosmulator" if _ship else "an AlterBBN grid built earlier")
+                    logger.info("BBN_DH_AlterBBN: D/H from %s (%s; Omega_bh^2 %.4f - %.4f, %s)%s", _src,
+                                os.path.relpath(_p), float(_g["obh2"][0]), float(_g["obh2"][-1]), _neff,
+                                "" if cfg.get("bbn_grid_built_now") else "; AlterBBN itself is not needed")
+                elif _eff == "alterbbn":
+                    logger.info("BBN_DH_AlterBBN: D/H from AlterBBN, called at each point")
+                elif _eff == "approx":
+                    logger.info("BBN_DH_AlterBBN: D/H from the approximation (power law fitted to PRyMordial), "
+                                "not AlterBBN")
+                if _eff == "alterbbn_grid":
                     g = cfg["bbn_grid"]
-                    logger.info(
+                    logger.debug(
                         "Grid: obh2[%d]=[%.6f..%.6f], neff[%d]=%s, tau[%d]=%s, "
                         "logspace=%s, DH.shape=%s",
                         len(g["obh2"]), g["obh2"][0], g["obh2"][-1],
@@ -746,59 +997,99 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 }
 
             # ------------------
+            # Compressed CMB: Gaussian prior on (theta_*, omega_b, omega_bc), DESI DR2 App. A
+            # (cmb_early.py computes theta_* with the model's background; the z_* grid ships)
+            # ------------------
+            elif obs == K.CMB_EARLY_TAG:
+                from Kosmulator_main import cmb_early as _CE
+                observation_data[obs] = {"mean": _CE.MEAN.copy(), "cov": _CE.COV.copy()}
+
+            # ------------------
             # DESY5 / Union3 SNe Hubble diagrams
             # ------------------
             elif obs in ("DESY5", "Union3"):
                 if obs == "DESY5":
                     sne_path = os.path.join(K.OBSERVATIONS_BASE, "DESY5.dat")
                     cov_path = os.path.join(K.OBSERVATIONS_BASE, "DESY5_covsys_000.txt")
+
+                    #DESY5 covariant matrix correction
+                    data_sne = load_named_sne_with_zcmb(sne_path)
+
+                    if cov_path and os.path.exists(cov_path):
+                        #Load raw 1D stream and reshape
+                        raw_data = np.loadtxt(cov_path)
+                        n_dim = int(raw_data[0]) 
+                        cov_loaded = raw_data[1:].reshape((n_dim, n_dim))
+                        cov_loaded = 0.5 * (cov_loaded + cov_loaded.T)
+
+                        n_data = len(data_sne['type_data'])
+                        if cov_loaded.shape != (n_data, n_data):
+                            logger.error(f"{obs} Covariance shape {cov_loaded.shape} != Data length {n_data}")
+                            raise ValueError(f"{obs} Covariance dimension mismatch!")
+
+                        #2. Add diagonal statistical variances
+                        sigma_stat = data_sne["type_data_error"]
+                        cov_total = cov_loaded + np.diag(sigma_stat**2)
+
+                        ##. invert the total corrected matrix
+                        try:
+                            inv_cov_total = np.linalg.inv(cov_total)
+                        except np.linalg.LinAlgError:
+                            inv_cov_total = np.linalg.pinv(cov_total, rcond = 1e-12)
+
+                        data_sne["cov"] = cov_total
+                        data_sne["inv_cov"] = inv_cov_total
+
                 else:  # "Union3"
                     sne_path = os.path.join(K.OBSERVATIONS_BASE, "Union3.txt")
                     cov_path = os.path.join(K.OBSERVATIONS_BASE, "Union3_mag_covmat.txt")
 
-                data_sne = load_named_sne_with_zcmb(sne_path)
+                    data_sne = load_named_sne_with_zcmb(sne_path)
 
-                if cov_path and os.path.exists(cov_path):
-                    # 1. Load the raw matrix
-                    cov_loaded, _ = load_DESI_cov(cov_path)
-                    
-                    n_data = len(data_sne["type_data"])
-                    if cov_loaded.shape != (n_data, n_data):
-                        logger.error(f"{obs} Covariance shape {cov_loaded.shape} != Data length {n_data}")
-                        raise ValueError(f"{obs} Covariance dimension mismatch! Check for commented rows.")
+                    if cov_path and os.path.exists(cov_path):
+                        cov_loaded, inv_cov_loaded = load_DESI_cov(cov_path)
+                        data_sne["cov"] = cov_loaded
+                        data_sne["inv_cov"] = inv_cov_loaded
 
-                    # 2. CRITICAL FIX: Explicitly handle DESY5
-                    # DESY5 uses a systematic-only matrix, so we MUST add the diagonal statistical errors.
-                    # Union3 uses a full matrix, so we use it as-is.
-                    
-                    if obs == "DESY5" or np.mean(np.diag(cov_loaded)) < 1e-3: 
-                        sigma_stat = data_sne["type_data_error"]
-                        
-                        # Add diagonal stats: C_total = C_sys + diag(sigma_stat^2)
-                        # This adds 280^2 to the bad SN, correctly de-weighting it.
-                        cov_total = cov_loaded + np.diag(sigma_stat**2)
-                        
-                        logger.info(f"Augmented {obs} covariance with diagonal statistical errors.")
-                    else:
-                        # Union3 path
-                        cov_total = cov_loaded
-                    
-                    # 3. Invert the corrected TOTAL matrix
-                    try:
-                        inv_cov_total = np.linalg.inv(cov_total)
-                    except np.linalg.LinAlgError:
-                        # Fallback for numerical stability
-                        inv_cov_total = np.linalg.pinv(cov_total, rcond=1e-12)
 
-                    data_sne["cov"] = cov_total
-                    data_sne["inv_cov"] = inv_cov_total
-
+                data_sne["data_is_distance_modulus"] = (obs == "Union3") or (obs == 'DESY5')
+                # Their distance moduli carry an arbitrary H0/M normalisation:
+                # marginalise it analytically, as the DES-Y5 and Union3 likelihoods do.
+                data_sne["marginalise_offset"] = bool(getattr(K, "SN_MARGINALISE_OFFSET", True))
                 observation_data[obs] = data_sne
+            # ------------------
+            # Official JLA (740 SNe, alpha/beta-dependent covariance)
+            # ------------------
+            elif obs == "JLA":
+                observation_data[obs] = load_jla_full(
+                    os.path.join(K.OBSERVATIONS_BASE, K.JLA_DIR_RELATIVE)
+                )
             # ------------------
             # Default loader
             # ------------------
             else:
                 observation_data[obs] = load_data(file_path)
+                if obs == "CC":
+                    _attach_correlations(
+                        observation_data[obs], os.path.join(K.OBSERVATIONS_BASE, "CC_corr.txt"), logger
+                    )
+                    _attach_cc_systematics(observation_data[obs], getattr(K, "CC_SYS_COV", None), logger)
+                if obs == "Pantheon":
+                    _attach_pantheon_systematics(observation_data[obs], getattr(K, "PANTHEON_SYS_COV", None),
+                                                 logger)                                    # CT-14
+                if obs == "f_sigma_8":
+                    _attach_fs8_extras(observation_data[obs], file_path, logger)
+                if obs == "JLA_legacy":
+                    logger.warning(
+                        "JLA_legacy is the old 359-SN file (JLA redshifts, distance moduli "
+                        "of undocumented origin), kept to reproduce earlier runs; use 'JLA' "
+                        "for the official 740-SN likelihood."
+                    )
+                if obs in ("JLA_legacy", "Pantheon") and isinstance(observation_data[obs], dict):
+                    # Distance moduli with an arbitrary normalisation: offset marginalised
+                    observation_data[obs]["marginalise_offset"] = bool(
+                        getattr(K, "SN_MARGINALISE_OFFSET", True)
+                    )
 
     return observation_data
 
@@ -809,15 +1100,17 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
 
 def create_config(
     models: Dict[str, Any],
-    true_values: Union[Dict[str, float], Any] = None,
+    reference_values: Union[Dict[str, float], Any] = None,
     prior_limits: Dict[str, Tuple[float, float]] = None,
     restrictions: Dict[str, Dict[str, Callable[[float], bool]]] = None,
+    coupled_restrictions: Dict[str, List[Callable[[Dict[str, float]], bool]]] = None,
     observation: List[List[str]] = None,
     nwalkers: int = 20,
     nsteps: int = 200,
     burn: int = 20,
     model_name: List[str] = None,
     pantheonp_mode: str = "PplusSH0ES",  # DEPRECATED: use PantheonP/PantheonPS tags instead
+    sample_H0_uncalibrated_SNe: bool = False,
     logger=None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
@@ -829,7 +1122,7 @@ def create_config(
         Model registry, e.g. {"LCDM_v": {"parameters": [...], ...}, ...}.
         `parameters` here is the *core* model parameter list, not yet expanded
         per observation group.
-    true_values : dict
+    reference_values : dict
         Global "true" parameter guesses (used as initial means).
     prior_limits : dict
         Global prior boxes: {param: (low, high)}. Each parameter used in any
@@ -845,6 +1138,10 @@ def create_config(
         List of keys in `models` to use for this run.
     pantheonp_mode : str
         One of {"Pplus", "PplusSH0ES"}; controls Pantheon+ anchor strategy.
+    sample_H0_uncalibrated_SNe : bool
+        Uncalibrated SNe without BAO/DESI or an H0 anchor: False fixes H_0 at the
+        reference value (it cancels from the likelihood); True samples it anyway
+        and records it in "unconstrained_params_by_group" (not counted in k).
 
     Returns
     -------
@@ -855,9 +1152,10 @@ def create_config(
     """
     # Defaults
     observation  = observation  or [['PantheonP']]
-    true_values  = true_values  or {}
+    reference_values  = reference_values  or {}
     prior_limits = prior_limits or {}
     restrictions = restrictions or {}
+    coupled_restrictions = coupled_restrictions or {}
 
     # Normalise observation groups (order, duplicates, logging)
     observation = canonicalise_and_dedup_observations(observation, logger)
@@ -869,6 +1167,7 @@ def create_config(
     obs_type_map = {
         # --- SNe-like (distance modulus) ---
         'JLA':       'SNe',
+        'JLA_legacy': 'SNe',
         'Pantheon':  'SNe',
         'PantheonP': 'SNe',
         'PantheonPS': 'SNe',
@@ -893,11 +1192,17 @@ def create_config(
         'BBN_DH_AlterBBN': 'BBN_DH',
         'BBN_PryMordial' : 'BBN_prior',
 
+        # --- Compressed CMB (a prior on theta_*, omega_b, omega_bc; not a CMB likelihood) ---
+        K.CMB_EARLY_TAG: K.CMB_EARLY_TAG,
+
         # --- CMB ---
         'CMB_hil':    'CMB',
         'CMB_hil_TT': 'CMB',
         'CMB_lowl':   'CMB',
+        'CMB_lowl_TT':'CMB',
         'CMB_lensing':'CMB',
+        **{t: 'CMB' for t in K.GROUND_CMB_TAGS},
+        **{t: 'CMB' for t in K.EXT_LENSING_TAGS},
     }
 
     # ----------------------------------------------------------------------
@@ -905,43 +1210,29 @@ def create_config(
     #    globally (we'll later prune them per group based on clik).
     # ----------------------------------------------------------------------
     flat_obs = {o for grp in observation for o in grp}
-    if {"CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lensing"} & flat_obs:
-        try:
-            # Lazy import to avoid loading clik when not needed
-            from Kosmulator_main.Class_run import (
-                get_clik_hil,
-                get_clik_hilTT,
-                get_clik_lowl,
-                get_clik_lensing,
-                quiet_cstdio,
-            )
-            names: set[str] = set()
-            if "CMB_hil" in flat_obs:
-                with quiet_cstdio():
-                    names |= set(get_clik_hil().get_extra_parameter_names())
-            if "CMB_hil_TT" in flat_obs:
-                with quiet_cstdio():
-                    names |= set(get_clik_hilTT().get_extra_parameter_names())
-            if "CMB_lowl" in flat_obs:
-                with quiet_cstdio():
-                    names |= set(get_clik_lowl().get_extra_parameter_names())
-            if "CMB_lensing" in flat_obs:
-                with quiet_cstdio():
-                    names |= set(get_clik_lensing().get_extra_parameter_names())
-        except Exception:
-            # If clik isn't available, fall back to our default nuisance table
-            names = set()
+    if set(K.CMB_TAGS) & flat_obs:
+        # Sampled Planck nuisances (constants.planck_sampled_nuisances: Planck's baseline
+        # treatment); the fixed ones never get a prior. Not asked from clik here: at this
+        # point only the lensing file has a default path, so the answer depended on which
+        # likelihoods the run used.
+        names: set[str] = set()
+        for o in flat_obs:
+            names |= K.planck_sampled_nuisances(o)
+        _inject_planck_nuisance_defaults(reference_values, prior_limits, sorted(names))
+        # ACT and SPT nuisance parameters (item 57): Kosmulator's defaults unless set in Kosmulator.py
+        for o in flat_obs:
+            for n in K.GROUND_NUISANCE_PARAMS.get(o, ()):
+                if n in K.GROUND_NUISANCE_SAMPLED:
+                    ref, box, _g = K.GROUND_NUISANCE_SAMPLED[n]
+                    prior_limits.setdefault(n, box)
+                    reference_values.setdefault(n, ref)
 
-        # Minimum safe set: if clik didn’t return anything, use the default
-        defaults = set(PLANCK_NUISANCE_DEFAULTS.keys())
-        if not names:
-            names = defaults
-        else:
-            # Always allow A_planck as a special case
-            if "A_planck" in defaults:
-                names.add("A_planck")
-
-        _inject_planck_nuisance_defaults(true_values, prior_limits, sorted(names))
+    # Official JLA: default priors and starting values for alpha_JLA, beta_JLA
+    # (as Cobaya's sn.jla) unless the user set them in Kosmulator.py.
+    if "JLA" in flat_obs:
+        for _p, (_lo, _hi, _start) in K.JLA_NUISANCE_DEFAULTS.items():
+            prior_limits.setdefault(_p, (_lo, _hi))
+            reference_values.setdefault(_p, _start)
 
     # ----------------------------------------------------------------------
     # 2. Expand each model's core parameter list with obs-required params
@@ -956,7 +1247,7 @@ def create_config(
         obs_types  = [[obs_type_map[o] for o in grp] for grp in observation]
 
         # ------------------------------------------------------------------
-        # 2a. Build parameter sets, true_values, prior_limits per group
+        # 2a. Build parameter sets, reference_values, prior_limits per group
         # ------------------------------------------------------------------
         param_sets: List[List[str]] = []
         tv_sets:     List[np.ndarray] = []
@@ -986,7 +1277,7 @@ def create_config(
                     )
                 lo, hi = prior_limits[p]
                 pl_map[p] = (lo, hi)
-                tv_vec.append(true_values.get(p, 0.5 * (lo + hi)))
+                tv_vec.append(reference_values.get(p, 0.5 * (lo + hi)))
 
             param_sets.append(flat_pset)
             tv_sets.append(np.asarray(tv_vec, dtype=float))
@@ -999,9 +1290,10 @@ def create_config(
             "observations":      observation,
             "observation_types": obs_types,
             "parameters":        param_sets,
-            "true_values":       tv_sets,
+            "reference_values":  tv_sets,
             "prior_limits":      pl_sets,
             "restrictions":      restrictions.get(mod, {}),
+            "coupled_restrictions": coupled_restrictions.get(mod, []),
             "ndim":              ndim_sets,
             "nsteps":            nsteps,
             "burn":              burn,
@@ -1017,7 +1309,7 @@ def create_config(
         # ------------------------------------------------------------------
         # 3. r_d policy & fσ8 singleton gamma policy
         # ------------------------------------------------------------------
-        tv_global = true_values or {}
+        tv_global = reference_values or {}
 
         rd_fixed = float(tv_global.get("r_d_fixed", K.R_D_SINGLETON))     # <- fixed singleton value
         rd_mu    = float(tv_global.get("r_d", rd_fixed))                  # <- free/gaussian mean (defaults to fixed)
@@ -1031,8 +1323,8 @@ def create_config(
 
         def _has_early_calibrator(grp: list[str]) -> bool:
             early = {
-                "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",
-                "CMB_hil", "CMB_hil_TT", "CMB_lowl",
+                "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial", K.CMB_EARLY_TAG,
+                *K.CMB_PRIMARY_TAGS,
             }  # note: CMB_lensing excluded by design
             return any(x in early for x in grp)
 
@@ -1042,8 +1334,29 @@ def create_config(
         def _is_bao_desi_singleton(grp: list[str]) -> bool:
             return len(grp) == 1 and grp[0] in {"BAO", "DESI_DR1", "DESI_DR2"}
 
+        # Data that fix neither H0 nor r_d: uncalibrated SNe (offset marginalised)
+        # and growth data. Combined with BAO/DESI they leave only h*r_d measured,
+        # exactly as BAO alone, so r_d is fixed and H_0 carries h*r_d (DESI DR2
+        # samples hrd for the same reason, arXiv:2503.14738 Sec. V).
+        _sn_offset_only = {"JLA", "JLA_legacy", "Pantheon", "PantheonP", "DESY5", "Union3"}
+        _no_distance_scale = {"f", "f_sigma_8"}
+        _h0_anchors = {
+            "CC", "OHD", "PantheonPS", K.CMB_EARLY_TAG,
+            *K.CMB_TAGS,
+        }
+
+        def _is_bao_desi_uncalibrated(grp: list[str]) -> bool:
+            if not bool(getattr(K, "SN_MARGINALISE_OFFSET", True)):
+                return False
+            if not _has_bao_desi(grp) or len(grp) < 2:
+                return False
+            others = [x for x in grp if x not in {"BAO", "DESI_DR1", "DESI_DR2"}]
+            return all(x in (_sn_offset_only | _no_distance_scale) for x in others)
+
         param_sets_policy = []
         fs8_gamma_fixed_by_group = {}
+        fixed_params_by_group = {}
+        unconstrained_params_by_group = {}
 
         for gi, obs_grp in enumerate(config[mod]["observations"]):
             grp_params = list(config[mod]["parameters"][gi])
@@ -1055,10 +1368,11 @@ def create_config(
             if _has_early_calibrator(obs_grp):
                 if "r_d" in grp_params:
                     grp_params.remove("r_d")
-                if logger:
+                # only groups with BAO/DESI use r_d (CT-24: BBN_DH + CC got the line too)
+                if logger and any(x in {"BAO", "DESI_DR1", "DESI_DR2"} for x in obs_grp):
                     early = {
-                        "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial",
-                        "CMB_hil", "CMB_hil_TT", "CMB_lowl",
+                        "BBN_DH", "BBN_DH_AlterBBN", "BBN_PryMordial", K.CMB_EARLY_TAG,
+                        *K.CMB_PRIMARY_TAGS,
                     }
                     calibs = [x for x in obs_grp if x in early]
                     logger.warning(
@@ -1077,6 +1391,17 @@ def create_config(
                         rd_fix, obs_grp, mod,
                     )
 
+            elif _is_bao_desi_uncalibrated(obs_grp):
+                if "r_d" in grp_params:
+                    grp_params.remove("r_d")
+                if logger:
+                    rd_fix = float(config[mod]["rd_policy"].get("fixed_value", K.R_D_SINGLETON))
+                    logger.warning(
+                        "BAO/DESI uncalibrated: no H0 or r_d anchor, so H_0 measures h*r_d; fixed "
+                        "r_d=%.1f Mpc and removed 'r_d' from parameters for %s (model %s)",
+                        rd_fix, obs_grp, mod,
+                    )
+
             elif _has_bao_desi(obs_grp):
                 if "r_d" not in grp_params:
                     grp_params.append("r_d")
@@ -1089,11 +1414,61 @@ def create_config(
                 if "r_d" in grp_params:
                     grp_params.remove("r_d")
 
-            # fσ8 singleton: fix gamma to GR-like value to avoid degeneracy
-            if len(obs_grp) == 1 and obs_grp[0] == "f_sigma_8":
+            # Uncalibrated SNe without BAO or an H0 anchor: H_0 drops out of the
+            # likelihood once the offset is marginalised (5 log10 H_0 is absorbed by
+            # the offset), so by default it is not sampled. Distances still need a
+            # value: H_0 is fixed at the reference value, which changes no chi^2.
+            # With sample_H0_uncalibrated_SNe (Kosmulator.py) it is sampled anyway;
+            # its posterior is then the prior and it is left out of k.
+            _h0_cancels = (bool(getattr(K, "SN_MARGINALISE_OFFSET", True))
+                    and any(x in _sn_offset_only for x in obs_grp)
+                    and not _has_bao_desi(obs_grp)
+                    and not any(x in _h0_anchors for x in obs_grp)
+                    and "H_0" in grp_params)
+            if _h0_cancels and sample_H0_uncalibrated_SNe:
+                unconstrained_params_by_group.setdefault(gi, []).append("H_0")
+                if logger:
+                    logger.warning(
+                        "Uncalibrated SNe %s: H_0 is sampled (sample_H0_uncalibrated_SNe) but not "
+                        "constrained (the supernova offset absorbs it), so its posterior is the "
+                        "prior and it is not counted in k (model %s)",
+                        obs_grp, mod,
+                    )
+            elif _h0_cancels:
+                grp_params.remove("H_0")
+                h0_fix = float(reference_values.get("H_0", K.H0_RADIATION_FALLBACK))
+                fixed_params_by_group.setdefault(gi, {})["H_0"] = h0_fix
+                if logger:
+                    logger.warning(
+                        "Uncalibrated SNe %s: H_0 is not constrained (the supernova offset is "
+                        "marginalised), so it is not sampled; distances use H_0 = %.1f, which "
+                        "the offset absorbs (model %s)",
+                        obs_grp, h0_fix, mod,
+                    )
+
+            # CMB lensing without primary CMB (item 62, Kosmulator.py lensing_only_priors):
+            # tau_reio enters none of the group's likelihoods (no lensed spectra are used), so it
+            # is fixed at its reference value; n_s gets a Gaussian prior (constants.
+            # cmb_gaussian_priors), as in the literature's lensing-only analyses
+            if K.LENSING_ONLY_PRIORS and K.group_is_lensing_only(obs_grp) and "tau_reio" in grp_params:
+                grp_params.remove("tau_reio")
+                tau_fix = float(reference_values.get("tau_reio", K.TAU_REIO_FALLBACK))
+                fixed_params_by_group.setdefault(gi, {})["tau_reio"] = tau_fix
+                if logger:
+                    mu, sig = K.LENSING_ONLY_NS_PRIOR
+                    logger.warning(
+                        "CMB lensing without primary CMB %s: tau_reio fixed at %.4f (it enters no "
+                        "likelihood of the group) and n_s ~ N(%.2f, %.2f) (lensing_only_priors; "
+                        "Madhavacheril et al. 2024) (model %s)",
+                        obs_grp, tau_fix, mu, sig, mod,
+                    )
+
+            # fσ8 singleton: fix gamma to GR-like value to avoid degeneracy (growth_model
+            # "gamma" only; "geff" has no gamma)
+            if len(obs_grp) == 1 and obs_grp[0] == "f_sigma_8" and K.GROWTH_MODEL == "gamma":
                 if "gamma" in grp_params:
                     grp_params.remove("gamma")
-                gamma_fix = float(true_values.get("gamma_fixed", K.GAMMA_FS8_SINGLETON))
+                gamma_fix = float(reference_values.get("gamma_fixed", K.GAMMA_FS8_SINGLETON))
                 fs8_gamma_fixed_by_group[gi] = gamma_fix
                 if logger:
                     logger.warning(
@@ -1101,10 +1476,19 @@ def create_config(
                         gamma_fix, obs_grp, mod,
                     )
 
+            # cmb_sample_theta (DESI DR2, Planck): 100 theta_MC instead of H_0 in groups with primary
+            # CMB; H_0 is solved from it at every point (theta_mc) and replaces it before the statistics
+            if K.CMB_SAMPLE_THETA and K.group_has_primary_cmb(obs_grp) and "H_0" in grp_params:
+                grp_params[grp_params.index("H_0")] = K.THETA_MC_PARAM
+                prior_limits.setdefault(K.THETA_MC_PARAM, K.THETA_MC_BOX)
+                reference_values.setdefault(K.THETA_MC_PARAM, K.THETA_MC_REF)
+
             param_sets_policy.append(grp_params)
 
         config[mod]["parameters"] = param_sets_policy
         config[mod]["fs8_gamma_fixed_by_group"] = fs8_gamma_fixed_by_group
+        config[mod]["fixed_params_by_group"] = fixed_params_by_group
+        config[mod]["unconstrained_params_by_group"] = unconstrained_params_by_group
         # After our policy choices, singleton_mode is effectively "fixed"
         config[mod]["rd_policy"]["singleton_mode"] = "fixed"
         config[mod]["prior_limits_global"] = dict(prior_limits)
@@ -1145,30 +1529,16 @@ def create_config(
 
         def _nuisance_allowlist_for_group(obs_grp: list[str]) -> set[str]:
             """
-            For a given obs group, build the allowed set of Planck nuisance
-            parameters, based on:
-              - High-level policy (TT-only vs TTTEEE vs lowl vs lensing-only).
-              - What clik *actually* exposes for that combination.
+            Planck nuisance parameters sampled for this group: the union over its Planck
+            likelihoods (constants.planck_sampled_nuisances). This used to be intersected
+            with the names clik reported, but at configuration time only the lensing file
+            could be opened, so a group with CMB_hil and CMB_lensing kept A_planck only and
+            plik ran with every foreground amplitude at 0.
             """
-            # Choose base allowlist by combo (policy-driven)
-            if ("CMB_hil_TT" in obs_grp) and ("CMB_hil" not in obs_grp):
-                base = set(PLANCK_TT_ONLY_NUISANCE)
-                base.add("A_planck")  # ✅ ensure A_planck is never pruned for TT-only combos
-            elif ("CMB_hil" in obs_grp):
-                base = PLANCK_TTTEEE_NUISANCE   # TTTEEE: keep EE/TE & P-cal terms
-            elif ("CMB_lowl" in obs_grp):
-                base = _cmb_extra_names_for("CMB_lowl")  # usually empty/minimal
-            elif ("CMB_lensing" in obs_grp):
-                base = set()  # lensing 4pt exposes no sampler nuisances
-            else:
-                base = set()
-
-            # Intersect with what clik reports for the group
-            clik_reported = set()
+            allow: set[str] = set()
             for o in obs_grp:
-                clik_reported |= _cmb_extra_names_for(o)
-
-            return (set(base) & clik_reported) if clik_reported else set(base)
+                allow |= K.planck_sampled_nuisances(o)
+            return allow
 
         # Make a superset for safe membership tests
         ALL_PLANCK_NUISANCE = (
@@ -1204,12 +1574,12 @@ def create_config(
                     )
                 lo, hi = prior_limits[p]
                 pl_map[p] = (lo, hi)
-                tv_vec.append(true_values.get(p, 0.5 * (lo + hi)))
+                tv_vec.append(reference_values.get(p, 0.5 * (lo + hi)))
             tv_sets2.append(np.asarray(tv_vec, float))
             pl_sets2.append(pl_map)
             ndim_sets2.append(len(pset))
 
-        config[mod]["true_values"]   = tv_sets2
+        config[mod]["reference_values"]   = tv_sets2
         config[mod]["prior_limits"]  = pl_sets2
         config[mod]["ndim"]          = ndim_sets2
 
@@ -1247,10 +1617,16 @@ def create_config(
     # ----------------------------------------------------------------------
     # 8. Load data once (based on the observation list)
     # ----------------------------------------------------------------------
+    # BBN's N_eff and tau_n axes follow prior_limits only when a BBN group samples them (audit 19 Oct:
+    # a range in prior_limits alone samples nothing, and BBN then used the grid's lowest node)
+    _bbn_sampled = {p for mod in config for g, pl in zip(config[mod].get("observations", []),
+                                                          config[mod].get("parameters", []))
+                    if any(str(o).startswith("BBN_DH") for o in g) for p in pl if p in ("N_eff", "tau_n")}
     data = load_all_data(
         {
             'observations': observation,
             'prior_limits': prior_limits,
+            'bbn_sampled': _bbn_sampled,
         },
         prior_limits=prior_limits,
         logger=logger,
@@ -1281,37 +1657,55 @@ def Add_required_parameters(
            {H_0, Omega_bh^2, Omega_dh^2} in that group only.
         Non-CMB groups keep the model's native parametrisation (e.g. Omega_m).
     """
+    def _sampled_nuisances(tag: str, lead: tuple = ()) -> list:
+        """Planck nuisances sampled for tag (constants.planck_sampled_nuisances: plik's
+        21 or 15, or A_planck for plik_lite), in a fixed order."""
+        allow = K.planck_sampled_nuisances(tag)
+        order = [*lead, *PLANCK_NUISANCE_DEFAULTS.keys()]
+        return [n for i, n in enumerate(order) if n in allow and n not in order[:i]]
+
     params_map = {
         'BAO': ['H_0', 'r_d'],
         'DESI_DR1': ['H_0', 'r_d'],
         'DESI_DR2': ['H_0', 'r_d'],
         'Pantheon': ['H_0'],
-        'PantheonP': ['H_0', 'M_abs'],
+        # Uncalibrated Pantheon+: M_abs is marginalised analytically by default
+        'PantheonP': ['H_0'] if getattr(K, "SN_MARGINALISE_OFFSET", True) else ['H_0', 'M_abs'],
         'PantheonPS':['H_0', 'M_abs'],
         'DESY5': ['H_0'],
         'Union3':     ['H_0'],
-        'f_sigma_8': ['Omega_m','sigma_8', 'gamma'],
-        'f': ['Omega_m','gamma'],
-        'JLA': ['H_0'],
+        # growth index gamma only with growth_model "gamma"; "geff" uses the model's G_eff
+        'f_sigma_8': ['Omega_m', 'sigma_8'] + (['gamma'] if K.GROWTH_MODEL == "gamma" else []),
+        'f': ['Omega_m'] + (['gamma'] if K.GROWTH_MODEL == "gamma" else []),
+        # Official JLA: light-curve nuisance parameters are sampled; the two
+        # absolute magnitudes are fitted analytically (Calc_JLA_chi).
+        'JLA': ['H_0', 'alpha_JLA', 'beta_JLA'],
+        'JLA_legacy': ['H_0'],
         'OHD': ['H_0'],
         'CC': ['H_0'],
         'BBN_DH': ['Omega_bh^2'],
         'BBN_DH_AlterBBN': ['Omega_bh^2'],
         'BBN_PryMordial': ['Omega_bh^2'],
+        # theta_* needs the distance to z_* (H_0 and the model) and omega_b; omega_m is the model's Omega_m h^2
+        K.CMB_EARLY_TAG: ['H_0', 'Omega_bh^2'],
 
-        # CMB core + nuisance to *sample* (we prune nuisances later)
+        # CMB core + the Planck nuisances to sample (plik or plik_lite: constants.CMB_NUISANCE)
         "CMB_hil": [
             "H_0", "Omega_bh^2", "Omega_dh^2",
             "ln10^10_As", "n_s", "tau_reio",
-            *PLANCK_NUISANCE_DEFAULTS.keys(),
+            *_sampled_nuisances("CMB_hil"),
         ],
         "CMB_hil_TT": [
             "H_0", "Omega_bh^2", "Omega_dh^2",
             "ln10^10_As", "n_s", "tau_reio",
-            "calib_100T", "calib_217T",
-            *PLANCK_NUISANCE_DEFAULTS.keys(),  # pruned later by clik
+            *_sampled_nuisances("CMB_hil_TT", ("calib_100T", "calib_217T")),
         ],
         "CMB_lowl": [
+            "H_0", "Omega_bh^2", "Omega_dh^2",
+            "ln10^10_As", "n_s", "tau_reio",
+            "A_planck",
+        ],
+        "CMB_lowl_TT": [
             "H_0", "Omega_bh^2", "Omega_dh^2",
             "ln10^10_As", "n_s", "tau_reio",
             "A_planck",
@@ -1321,10 +1715,15 @@ def Add_required_parameters(
             "ln10^10_As", "n_s", "tau_reio",
             "A_planck",
         ],
+        # ACT, SPT and the Planck + ACT (+ SPT) combinations (item 57)
+        **{t: ["H_0", "Omega_bh^2", "Omega_dh^2", "ln10^10_As", "n_s", "tau_reio",
+               *K.GROUND_NUISANCE_PARAMS[t]] for t in K.GROUND_CMB_TAGS},
+        # lensing of item 61: no nuisance parameters
+        **{t: ["H_0", "Omega_bh^2", "Omega_dh^2", "ln10^10_As", "n_s", "tau_reio"] for t in K.EXT_LENSING_TAGS},
     }
 
     # CMB datasets that trigger per-group reparametrisation
-    cmb_names = {"CMB_hil", "CMB_hil_TT", "CMB_lowl", "CMB_lensing"}
+    cmb_names = set(K.CMB_TAGS)
 
     for mod, mod_data in models.items():
         # Core parameter list specified by the model (e.g. LCDM parameters)
@@ -1341,6 +1740,12 @@ def Add_required_parameters(
                     if req not in grp_params:
                         grp_params.append(req)
                         added.append(req)
+
+            # ACT's calibration is Planck's when both are in the group (P-ACT, SPA; item 57)
+            if "A_act" in grp_params and "A_planck" in grp_params:
+                grp_params.remove("A_act")
+                if "A_act" in added:
+                    added.remove("A_act")
 
             if added:
                 logger.warning(
@@ -1364,7 +1769,7 @@ def Add_required_parameters(
             grp_has_cmb = any(o in cmb_names for o in obs_grp)
 
             # --- NEW: CMB r_d advisory (primary CMB only; exclude lensing-only) ---
-            has_primary_cmb = any(o in {"CMB_hil", "CMB_hil_TT", "CMB_lowl"} for o in obs_grp)
+            has_primary_cmb = any(o in K.CMB_PRIMARY_TAGS for o in obs_grp)
             if has_primary_cmb:
                 if "r_d" in grp_params:
                     grp_params.remove("r_d")

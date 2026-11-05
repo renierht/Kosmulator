@@ -1,0 +1,33 @@
+# Kosmulator environment (conda-forge only). From the Kosmulator folder:
+#
+#   conda env create -f environment.yml
+#   conda activate kosmulator
+#   kosmulator-doctor --setup
+#
+# The compilers, make and MPI come from conda-forge, so nothing needs sudo. The last line
+# installs Kosmulator itself (editable, from this folder) with its optional groups
+# (setup.py: clipy, candl, act_dr6_lenslike, mpi4py, schwimmbad).
+# Update an existing environment with: conda env update -f environment.yml --prune
+name: kosmulator
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11
+  - numpy>=2.0          # clipy's SimAll (CMB_lowl) needs NumPy 2
+  - scipy
+  - matplotlib
+  - h5py
+  - pandas
+  - astropy
+  - cython
+  - setuptools
+  - threadpoolctl
+  - c-compiler          # Kosmulator compiles CLASS per model (Class/<model>)
+  - cxx-compiler
+  - make
+  - mpich
+  - mpi4py
+  - pip
+  - pip:
+      - "-e .[all]"

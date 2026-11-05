@@ -18,6 +18,18 @@ typedef struct {
     int    status;  // 1=OK, 0=fail
 } bbn_result;
 
+// AlterBBN v1.4 reads some local variables of nucl() before setting them (valgrind;
+// e.g. the comma in "...=Tnu0=dTnu0_dt,phiW0=..." in bbn.c leaves seven of them equal
+// to an unset value). In a fresh process that stack memory is zero, so the results
+// are those of the stored grids; after other code (numpy, LAPACK) has used the stack,
+// D/H changed by up to 2e-3 in a test. Zeroing the stack region first makes every
+// call give the fresh-process value. nucl and linearize use about 37 kB.
+#define KOSMO_STACK_SCRUB_BYTES (256 * 1024)
+static __attribute__((noinline)) void kosmo_scrub_stack(void){
+    volatile unsigned char buf[KOSMO_STACK_SCRUB_BYTES];
+    for (size_t i = 0; i < sizeof(buf); ++i) buf[i] = 0;
+}
+
 // eta_10 = 273.9 * (Ω_b h^2)  =>  eta = 2.739e-8 * (Ω_b h^2)
 static inline double eta_from_omegabh2(double Obh2){ return 2.739e-8 * Obh2; }
 
@@ -38,6 +50,7 @@ KOSMO_EXPORT int kosmo_bbn_run(double Omega_b_h2, double N_eff, double tau_n, bb
 
     // Compute central values: err=0. Results in ratioH[].
     double ratioH[64]; memset(ratioH, 0, sizeof(ratioH));
+    kosmo_scrub_stack();            // see the note above kosmo_scrub_stack
     int ret = nucl(0, p, ratioH);   // NOTE: this fork returns 0 on success
 
     // Map ratioH[] → our compact struct
