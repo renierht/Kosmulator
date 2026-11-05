@@ -28,3 +28,15 @@ rd_helpers.py, CLASS routing, EOS policy, physical conditions and existing
 convergence thresholds. A full upstream merge would remove IDE modules.
 Production chains must keep using their original source until equivalence is
 established. Likelihood-changing updates need a separately validated fresh run.
+
+Second batch records run_settings.json for every new paper-launcher sampling run.
+Existing manifests are checked for datasets, model, priors, CLASS settings, regime,
+EOS switches, walkers, burn, thinning and convergence settings. Operational
+max_steps changes remain possible. Writes use an atomic replacement under the lock.
+Legacy chains without complete provenance are refused by this isolated launcher;
+use their original production launcher until explicit provenance validation.
+Analysis mode does not overwrite sampling manifests.
+Two focused regression tests passed, covering incompatible settings, operational
+changes, manifest preservation and refusal to relabel legacy chains.
+The warm-background regression suite was run; see /tmp/ide-physics-regression.log.
+Source comparison confirms the protected IDE files still match 5e28be3.

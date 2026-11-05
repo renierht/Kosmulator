@@ -109,20 +109,12 @@ def main():
     sys.path.insert(0, str(root))
     from Kosmulator_main.run_lock import run_lock
     with run_lock(root / "MCMC_Chains" / suffix):
-        if args.mode == "sample" and (args.delta_prior is not None or args.omega_m_prior is not None):
-            run_dir = root / "MCMC_Chains" / suffix
-            manifest = run_dir / "prior_run_settings.json"
-            if manifest.exists():
-                previous = json.loads(manifest.read_text())
-                for key in ("priors", "models", "class_settings", "regime_switches", "walkers", "burn", "thin", "convergence_policy"):
-                    if previous.get(key) != settings.get(key):
-                        parser.error("Saved run settings differ: " + key + "; use a fresh run name")
-            elif run_dir.exists() and any(run_dir.rglob("*.h5")):
-                parser.error("Cannot apply prior overrides to existing chains without matching run settings")
-            if run_dir.exists() and any(run_dir.rglob("*.h5")) and not args.resume:
-                parser.error("Run already has chains; use --resume with identical settings or a fresh name")
-            run_dir.mkdir(parents=True, exist_ok=True)
-            manifest.write_text(json.dumps(settings, indent=2))
+        if args.mode == "sample":
+            from Kosmulator_main.run_manifest import validate_or_record
+            try:
+                validate_or_record(root / "MCMC_Chains" / suffix, settings)
+            except ValueError as exc:
+                parser.error(str(exc))
         os.environ.setdefault("MPLBACKEND", "Agg")
         sys.path.insert(0, str(root))
         os.chdir(root)
