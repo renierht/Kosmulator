@@ -80,3 +80,14 @@ Before recommending new moves, perform a sufficiently long mixing comparison if
 needed and obtain agreement of numerical likelihoods against the original setup.
 Then continue pending live inspection, worker transport, environment tooling and
 likelihood-change review batches. No full production run has been launched.
+
+Benchmark finished and reviewed. Stretch 552.73 s / 100 steps, acceptance 0.4689;
+DE/snooker 469.14 s, acceptance 0.1821. DE/snooker used 15.1% less elapsed time.
+Mean squared jumps (including rejections) were 2.68x larger for delta and 3.07x
+for H0; approximately 3.16x and 3.61x per unit time. These are movement diagnostics,
+not independent-sample throughput or demonstrated convergence speed.
+Only one short segment per method, with stretch first, so timing can contain
+order/cache effects. Tau estimates near 8-10 from 100 steps are not trustworthy
+given the full production chain tau ~188. Keep stretch as the default until a
+longer replicated benchmark and posterior consistency check can be completed.
+No sampler benchmark process remained at review.
