@@ -2,6 +2,7 @@
 """Generate independent SAIP IDE chains, or analyse the user's saved chains."""
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -15,18 +16,24 @@ def main():
     parser.add_argument("--chains", type=Path, help="JSON mapping model names to saved HDF5 paths")
     parser.add_argument("--max-steps", type=int, default=100000)
     parser.add_argument("--derived-rd-samples", type=int, default=6000)
+    parser.add_argument("--init-jitter-frac", type=float, default=0.10, help="Initial scatter as fraction of prior width; no change to sampling priors")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--num-cores", type=int, default=1)
-    parser.add_argument("--ide-model", choices=("NonLinear_IDE_2", "SignSwitch_IDE_1"), default="NonLinear_IDE_2")
+    parser.add_argument("--ide-model", choices=("NonLinear_IDE_2", "SignSwitch_IDE_1", "SignSwitch_IDE_2"), default="NonLinear_IDE_2")
     parser.add_argument("--only-model", choices=("lcdm", "ide", "cpl"), help="Run one model in a separate output suffix")
     parser.add_argument("--burn", type=int, default=1000, help="Fixed burn-in steps, as in the upstream convergence policy")
     parser.add_argument("--tau-consecutive", type=int, default=1)
+    parser.add_argument("--dataset", choices=("paper", "dovekie"), default="paper")
     parser.add_argument("--plan", action="store_true", help="Print settings without importing Kosmulator or running CLASS")
+    parser.add_argument("--delta-prior", nargs=2, type=float, metavar=("LOW", "HIGH"))
+    parser.add_argument("--omega-m-prior", nargs=2, type=float, metavar=("LOW", "HIGH"))
     args = parser.parse_args()
     if args.regime is None:
         if args.only_model != "cpl":
             parser.error("--regime is required for LCDM/IDE runs")
         args.regime = "iw"
+    if not 0 < args.init_jitter_frac <= 1:
+        parser.error("--init-jitter-frac must be in (0, 1]")
     if args.num_cores < 1:
         parser.error("--num-cores must be positive")
     for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "BLIS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
@@ -35,17 +42,29 @@ def main():
         parser.error("--run-name must contain only letters, numbers, underscores or hyphens")
     if args.burn < 0 or args.max_steps <= args.burn or args.derived_rd_samples <= 0 or args.tau_consecutive < 1:
         parser.error("Require max-steps > burn >= 0, positive derived-rd-samples and tau-consecutive")
-    if args.only_model != "cpl" and args.ide_model == "SignSwitch_IDE_1" and args.regime == "siw":
-        parser.error("Model 9 has no validated doom-factor stability classification")
+    if args.only_model != "cpl" and args.ide_model in ("SignSwitch_IDE_1", "SignSwitch_IDE_2") and args.regime == "siw":
+        parser.error("Models 9–10 have no validated doom-factor stability classification")
     if args.mode == "analyse" and (args.chains is None or args.resume):
         parser.error("Analysis requires --chains and cannot resume sampling")
     if args.mode == "sample" and args.chains is not None:
         parser.error("--chains is only for --mode analyse")
     root = Path(__file__).resolve().parents[3]
     config = json.loads((root / "reproducibility/SAIP2026_IDE/configs/paper.json").read_text())
+    if args.dataset == "dovekie":
+        config["observations"] = [["DES_Dovekie", "DESI_DR2"]]
+        config["prior_limits"].pop("M_abs")
     if args.only_model == "cpl":
         config["prior_limits"] = {k: v for k, v in config["prior_limits"].items() if k not in ("w", "delta")}
         config["prior_limits"].update(w0=[-3., 1.], wa=[-3., 2.])
+    for key, bounds in (("delta", args.delta_prior), ("Omega_m", args.omega_m_prior)):
+        if bounds is not None:
+            if not all(math.isfinite(v) for v in bounds) or bounds[0] >= bounds[1]:
+                parser.error("Prior bounds must be finite and increasing")
+            if key == "delta" and args.only_model != "ide":
+                parser.error("--delta-prior requires --only-model ide")
+            if key == "Omega_m" and not (0 < bounds[0] < bounds[1] < 1):
+                parser.error("Require 0 < Omega_m lower < upper < 1")
+            config["prior_limits"][key] = bounds
     paths = None
     selected_models = (["w0waCDM"] if args.only_model == "cpl" else
                        ["LCDM_v"] if args.only_model == "lcdm" else
@@ -64,13 +83,16 @@ def main():
                 parser.error("Missing chain: " + str(path))
             paths[model] = str(path)
     suffix = args.run_name + ("_cpl" if args.only_model == "cpl" else "_" + args.regime)
+    if args.dataset == "dovekie":
+        suffix += "_dovekie"
     settings = {
+        "observations": config["observations"],
         "mode": args.mode, "regime": args.regime, "output_suffix": suffix,
         "models": selected_models, "free_w": True, "free_w_dm": False,
         "walkers": config["walkers"], "burn": args.burn, "thin": config["thin"],
         "max_steps": args.max_steps, "convergence_setting": 0.05,
         "convergence_policy": {"tau_factor": 100, "ess_min": 2000, "rhat_max": 1.01, "consecutive": args.tau_consecutive},
-        "derived_rd_samples": args.derived_rd_samples,
+        "init_jitter_frac": args.init_jitter_frac, "derived_rd_samples": args.derived_rd_samples,
         "class_settings": config["class_settings"], "priors": config["prior_limits"],
         "regime_switches": config["regime_switches"][args.regime],
         "chain_paths": paths, "dic_convention": "posterior-mean",
@@ -84,6 +106,20 @@ def main():
     print(json.dumps(settings, indent=2), flush=True)
     if args.plan:
         return
+    if args.mode == "sample" and (args.delta_prior is not None or args.omega_m_prior is not None):
+        run_dir = root / "MCMC_Chains" / suffix
+        manifest = run_dir / "prior_run_settings.json"
+        if manifest.exists():
+            previous = json.loads(manifest.read_text())
+            for key in ("priors", "models", "class_settings", "regime_switches", "walkers", "burn", "thin", "convergence_policy"):
+                if previous.get(key) != settings.get(key):
+                    parser.error("Saved run settings differ: " + key + "; use a fresh run name")
+        elif run_dir.exists() and any(run_dir.rglob("*.h5")):
+            parser.error("Cannot apply prior overrides to existing chains without matching run settings")
+        if run_dir.exists() and any(run_dir.rglob("*.h5")) and not args.resume:
+            parser.error("Run already has chains; use --resume with identical settings or a fresh name")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(json.dumps(settings, indent=2))
     os.environ.setdefault("MPLBACKEND", "Agg")
     sys.path.insert(0, str(root))
     os.chdir(root)
@@ -112,7 +148,7 @@ def main():
     options = {
         "postprocessing_options": dict(config["postprocessing"]),
         "plot_settings_overrides": {
-            "derived_rd_samples": args.derived_rd_samples,
+            "init_jitter_frac": args.init_jitter_frac, "derived_rd_samples": args.derived_rd_samples,
             "derived_rd_seed": config["derived_rd_seed"],
         },
     }

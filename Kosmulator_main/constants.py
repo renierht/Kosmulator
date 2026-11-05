@@ -104,6 +104,7 @@ GREEK_SYMBOLS: Dict[str, str] = {
 OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
     # SNe datasets
     "JLA":       ("JLA",               "JLA"),
+    "DES_Dovekie": ("DES_Dovekie", "DES-Dovekie"),
     "DESY5":       ("DESY5",               "DESY5"),
     "Union3":       ("Union3",               "Union3"),
     "Pantheon":       (r"Pantheon",       "Pantheon"),
@@ -140,7 +141,7 @@ OBS_PRETTY_MAP: Dict[str, Tuple[str, str]] = {
 #: Which observation types can share an axis column in best-fit panels
 COMBINE_GROUPS: List[Set[str]] = [
     {"OHD", "CC"},
-    {"PantheonP", "PantheonP_SH0ES", "Pantheon", "JLA", "DESY5", "Union3"},
+    {"PantheonP", "PantheonP_SH0ES", "Pantheon", "JLA", "DESY5", "DES_Dovekie", "Union3"},
     {"BAO", "DESI_DR1", "DESI_DR2"},
 ]
 

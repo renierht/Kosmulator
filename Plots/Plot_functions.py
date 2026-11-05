@@ -699,16 +699,17 @@ def _obs_col_width(stats_list, base=38, wmin=30, wmax=68, pad=2):
 def print_stats_table(model: str, stats_list):
     """Print the same model-comparison columns used by persisted summaries."""
     columns = ["N", "k", "p_D", "Chi_squared", "Reduced_Chi_squared",
-               "AIC", "AICc", "DIC", "BIC", "dAIC", "dAICc", "dDIC", "dBIC"]
+               "AIC", "AICc", "DIC", "BIC", "dAIC", "dAICc", "dDIC", "dBIC", "LRT_sigma"]
     obs_w = _obs_col_width(stats_list, base=38, wmin=30, wmax=68, pad=2)
     header = f"{'Observation':<{obs_w}} | " + " | ".join(f"{c:>12}" for c in columns)
     print(f"Statistical Results for Model: {model}")
+    print("LRT_sigma is an approximate joint Wilks significance; see likelihood_ratio_significance.csv for eligibility/status.")
     print(header)
     print("-" * len(header))
     for row in stats_list:
         fields = []
         for key in columns:
-            value = float(row.get(key, np.nan))
+            value = float(row[key]) if row.get(key) is not None else np.nan
             text = (str(int(value)) if key in ("N", "k") and np.isfinite(value)
                     else f"{value:.3f}" if np.isfinite(value) else "--")
             fields.append(f"{text:>12}")
@@ -746,7 +747,7 @@ def partition_by_compatibility(obs_list: Sequence[str]) -> List[List[str]]:
 def residual_unit(obs_type: str) -> str:
     if obs_type in ("OHD", "CC"):
         return r"km s$^{-1}$ Mpc$^{-1}$"
-    if obs_type in ("PantheonP", "Pantheon", "JLA", "DESY5", "Union3"):
+    if obs_type in ("PantheonP", "Pantheon", "JLA", "DESY5", "DES_Dovekie", "Union3"):
         return "mag"
     if obs_type in ("BBN_DH", "BBN_DH_AlterBBN"):
         return "D/H (absolute)"
@@ -1207,7 +1208,7 @@ def model_curve_for_type(
         Ez = MODEL_funcs["E"](zgrid, p, model_name)
         return p["H_0"] * Ez, r"$H(z)$ (km s$^{-1}$ Mpc$^{-1}$)"
 
-    if obs_type in ("PantheonP", "PantheonPS", "Pantheon", "JLA", "DESY5", "Union3"):
+    if obs_type in ("PantheonP", "PantheonPS", "Pantheon", "JLA", "DESY5", "DES_Dovekie", "Union3"):
         Dc = MODEL_funcs["Dc"](zgrid, p, model_name)
         mu = 25.0 + 5.0 * np.log10(np.clip((1.0 + zgrid) * Dc, 1e-12, None))
         return mu, r"Distance modulus $\mu$ (mag)"
@@ -1318,7 +1319,7 @@ def evaluator_for_points(
         Ez = MODEL_funcs["E"](z, param_dict, model_name)
         return param_dict["H_0"] * Ez
 
-    if obs_type in ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3"):
+    if obs_type in ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "DES_Dovekie", "Union3"):
         z = np.asarray(z, dtype=float)
         d_c = MODEL_funcs["Dc"](z, param_dict, model_name)     # comoving distance [Mpc]
         d_l = d_c * (1.0 + z)                                  # luminosity distance [Mpc]
@@ -1523,3 +1524,18 @@ def save_figure(fig, model_name: str, obs_key: Optional[str], fname_suffix: str,
         pad_inches=0.02,
     )
     return out_path
+
+
+def validated_rd_plot_band(median, lower, upper, resolver):
+    """Reject invalid marginal-endpoint combinations without masking median errors."""
+    central = resolver(median)
+    if not np.isfinite(central) or central <= 0:
+        raise ValueError("Invalid central sound horizon for plot")
+    try:
+        for endpoint in (lower, upper):
+            value = resolver(endpoint)
+            if not np.isfinite(value) or value <= 0:
+                raise ValueError("Invalid endpoint sound horizon")
+    except ValueError as exc:
+        return None, None, "Marginal-endpoint band omitted: invalid joint parameter combination (" + str(exc) + ")."
+    return lower, upper, None

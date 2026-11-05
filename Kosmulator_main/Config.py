@@ -748,6 +748,21 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
             # ------------------
             # DESY5 / Union3 SNe Hubble diagrams
             # ------------------
+            elif obs == "DES_Dovekie":
+                folder = Path(K.OBSERVATIONS_BASE) / obs
+                hd = pd.read_csv(folder / "DES-Dovekie_HD.csv", comment="#", sep=r"\s+")
+                n = len(hd)
+                with np.load(folder / "STAT+SYS.npz") as packed:
+                    if n != 1820 or int(packed["nsn"][0]) != n or not (hd.zHD > 0).all():
+                        raise ValueError("Unexpected DES-Dovekie sample or precision dimensions")
+                    precision = np.empty((n, n))
+                    upper = np.triu_indices(n)
+                    precision[upper] = packed["cov"]
+                    precision[upper[::-1]] = packed["cov"]
+                weights = precision.sum(axis=1)
+                observation_data[obs] = dict(redshift=hd.zHD.to_numpy(), zhel=hd.zHEL.to_numpy(),
+                                            type_data=hd.MU.to_numpy(), type_data_error=hd.MUERR.to_numpy(),
+                                            inv_cov=precision, intercept_weights=weights)
             elif obs in ("DESY5", "Union3"):
                 if obs == "DESY5":
                     sne_path = os.path.join(K.OBSERVATIONS_BASE, "DESY5.dat")
@@ -874,7 +889,7 @@ def create_config(
         'Pantheon':  'SNe',
         'PantheonP': 'SNe',
         'PantheonPS': 'SNe',
-        'DESY5':     'SNe',
+        'DESY5':     'SNe', 'DES_Dovekie':     'SNe',
         'Union3':    'SNe',
 
         # --- Background expansion ---
@@ -1342,7 +1357,7 @@ def Add_required_parameters(
         'Pantheon': ['H_0'],
         'PantheonP': ['H_0', 'M_abs'],
         'PantheonPS':['H_0', 'M_abs'],
-        'DESY5': ['H_0'],
+        'DESY5': ['H_0'], 'DES_Dovekie': ['H_0'],
         'Union3':     ['H_0'],
         'f_sigma_8': ['Omega_m','sigma_8', 'gamma'],
         'f': ['Omega_m','gamma'],

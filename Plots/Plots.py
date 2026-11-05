@@ -86,6 +86,7 @@ QUALITY_ORDER = {
     "DESI_DR2": 0, "DESI_DR1": 1, "BAO": 2,
     # Supernovae: overlay order (top → bottom)
     "PantheonP": 0,   # includes PantheonP_SH0ES (we map that to PantheonP earlier)
+    "DES_Dovekie": 1,
     "DESY5":     1,
     "Pantheon":  2,
     "Union3":    3,
@@ -510,7 +511,7 @@ def generate_plots(All_Samples, CONFIG, PLOT_SETTINGS, data, true_model):
                 "dAIC": stats["dAIC"],
                 "dBIC": stats["dBIC"],
                 **{name: stats[name] for name in (
-                    "N", "k", "p_D", "AICc", "DIC", "dAICc", "dDIC",
+                    "N", "k", "p_D", "AICc", "DIC", "dAICc", "dDIC", "LRT_sigma",
                 )},
             }
 
@@ -1184,6 +1185,17 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                 parameters.update(CONFIG[model_name].get("fixed_parameters", {}))
                 parameters["__model_name__"] = model_name
 
+            band_note = None
+            from Kosmulator_main import rd_helpers
+            if (any(t in ("BAO", "DESI_DR1", "DESI_DR2") for t in obs_list_raw)
+                    and rd_helpers._model_class_rd_enabled(params_med)):
+                from Plots.Plot_functions import validated_rd_plot_band
+                params_lo, params_hi, band_note = validated_rd_plot_band(
+                    params_med, params_lo, params_hi,
+                    lambda p: resolve_plot_rd(p, model_name, "DESI_DR2"))
+                if band_note:
+                    print(f"[plot warning] {model_name}: {band_note}", flush=True)
+
             # (Optional) diagnostics
             try:
                 if any(tag in obs_key for tag in ("BAO", "DESI", "DESI_DR1", "DESI_DR2")):
@@ -1372,7 +1384,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                     has_bao = any(x in {"BAO", "DESI_DR1", "DESI_DR2"} for x in obs_list_raw)
                     has_unanch = any(x in {
                         "JLA", "Pantheon", "PantheonP", "PantheonPS", 
-                        "DESY5", "Union3", "f", "f_sigma_8"
+                        "DESY5", "DES_Dovekie", "Union3", "f", "f_sigma_8"
                     } for x in obs_list_raw)
 
                     from Kosmulator_main import constants as constants
@@ -1564,7 +1576,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                     )
 
                     overlay_flag = bool(PLOT_SETTINGS.get("overlay_model_for_bao_desi", False))
-                    SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
+                    SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "DES_Dovekie", "Union3")
 
                     if obs_type in ("BAO", "DESI_DR1", "DESI_DR2"):
                         if overlay_flag:
@@ -1599,7 +1611,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                 # Legend: model first, then datasets (deduped)
                 handles, labels_here = _model_first_legend(ax, model_disp)
 
-                SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "Union3")
+                SNE_TYPES = ("JLA", "Pantheon", "PantheonP", "PantheonPS", "PantheonP_SH0ES", "DESY5", "DES_Dovekie", "Union3")
                 if all(o in SNE_TYPES for o in part_sorted):
                     legend_loc = "lower right"
                     legend_anchor = (0.98, 0.02)
@@ -1618,6 +1630,8 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
 
                 ax.tick_params(labelbottom=False)
 
+            if band_note:
+                fig.suptitle("Marginal-endpoint band omitted: invalid joint parameter combination", fontsize=9)
             save_figure(fig, model_name, obs_key, "bestfit", PLOT_SETTINGS)
             plt.close(fig)
 

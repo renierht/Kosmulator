@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
+import Kosmulator_main.significance  # retain the real reporting helper under mocked package fixtures
 
 spec = importlib.util.spec_from_file_location(
     "comparison_under_test",

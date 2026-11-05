@@ -175,7 +175,7 @@ def model_likelihood(
     # Predictions per type
     if obs_type == "SNe":
         d_c = utils.Comoving_distance_vectorized(MODEL_func, z, param_dict)
-        y_dl = d_c * (1.0 + z)
+        y_dl = d_c * (1.0 + (obs_data["zhel"] if obs == "DES_Dovekie" else z))
         if (not np.isfinite(y_dl).all()) or (np.min(y_dl) <= 0):
             return -np.inf
         model = 25.0 + 5.0 * np.log10(y_dl)
@@ -213,6 +213,13 @@ def model_likelihood(
     if obs in ("PantheonP", "PantheonPS"):
         # Pantheon+ has its own complex covariance logic
         chi2 = SP.Calc_PantP_chi(mb, trig, cep, cov, model, param_dict)
+
+    elif obs == "DES_Dovekie":
+        residual = model - type_data
+        weights = obs_data["intercept_weights"]
+        norm = weights.sum()
+        residual -= (weights @ residual) / norm
+        chi2 = residual @ (obs_data["inv_cov"] @ residual) + np.log(norm / (2 * np.pi))
 
     elif obs_type == "SNe":
         # ALL other SNe (JLA, DESY5, Union3) go here.

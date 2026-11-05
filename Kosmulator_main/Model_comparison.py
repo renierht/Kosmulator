@@ -481,6 +481,8 @@ def analyse_group(samples, data, cfg, model_name, index, source=None, options=No
             notes.append("One or more optimiser runs did not report convergence; see diagnostics")
         if notes:
             result["Note"] = " | ".join(notes)
+        from Kosmulator_main.significance import posterior_for_group
+        result["Posterior_preferences"] = posterior_for_group(samples, cfg, index, source)
         return result
     finally:
         for key, value in original.items():
@@ -502,7 +504,8 @@ def compare_models(results, reference):
             if not matching:
                 result["Note"] = (result.get("Note", "") +
                     " | Matching reference model/dataset unavailable; deltas undefined").strip(" |")
-    return results
+    from Kosmulator_main.significance import attach_lrt
+    return attach_lrt(results, reference)
 
 
 def analyse_models(all_samples, data, config, reference):
@@ -514,6 +517,15 @@ def analyse_models(all_samples, data, config, reference):
             index = observation_index(key, cfg)
             source = cfg.get("_postprocessing_sources", {}).get(key)
             results[model][key] = analyse_group(samples, data, cfg, model, index, source)
+    from Kosmulator_main.significance import validate_nesting
+    for model, groups in results.items():
+        if model == reference: continue
+        for key, row in groups.items():
+            refkey = next((k for k in results.get(reference, {}) if normalise_key(k) == normalise_key(key)), None)
+            if refkey is not None:
+                row["Nesting_check"] = validate_nesting(model, reference, row, results[reference][refkey],
+                    config[model], config[reference], data, observation_index(key, config[model]),
+                    observation_index(refkey, config[reference]))
     return compare_models(results, reference)
 
 
@@ -533,23 +545,25 @@ def export_comparison(results, folder):
     """Full-precision diagnostics, CSV, LaTeX table and data-driven IC figure."""
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
+    from Kosmulator_main.significance import export_reports
+    export_reports(results, folder)
     (folder / "model_comparison.json").write_text(
         json.dumps(_json_safe(results), indent=2, allow_nan=False), encoding="utf-8")
     fields = ["Model", "Observation", "N", "k", "p_D", "Chi_squared",
               "D_bar", "D_at_mean", "AIC", "AICc", "DIC", "BIC",
-              "dChi_squared", "dAIC", "dAICc", "dDIC", "dBIC", "MLE_note"]
+              "dChi_squared", "dAIC", "dAICc", "dDIC", "dBIC", "MLE_note", "LRT_df", "LRT_p", "LRT_sigma", "LRT_status"]
     with (folder / "model_comparison.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         for model, groups in results.items():
             for key, row in groups.items():
                 writer.writerow({"Model": model, "Observation": key,
-                                 **{name: row[name] for name in fields[2:]}})
+                                 **{name: row.get(name) for name in fields[2:]}})
     from Kosmulator_main.Plot_metadata import model_label, observation_label
     def escape(value):
         return str(value).replace("_", r"\_").replace("&", r"\&").replace("%", r"\%")
-    lines = [r"\begin{tabular}{llrrrrrrrr}",
-             r"Model & Observations & $N$ & $k$ & $p_D$ & $\Delta\chi^2$ & $\Delta$AIC & $\Delta$AICc & $\Delta$DIC & $\Delta$BIC \\",
+    lines = [r"\begin{tabular}{llrrrrrrrrr}",
+             r"Model & Observations & $N$ & $k$ & $p_D$ & $\Delta\chi^2$ & $\Delta$AIC & $\Delta$AICc & $\Delta$DIC & $\Delta$BIC & $Z_{\rm LRT}$ (approx.) \\",
              r"\hline"]
     for model, groups in results.items():
         for key, row in groups.items():
@@ -557,6 +571,7 @@ def export_comparison(results, folder):
                       escape(observation_label(key)), str(row["N"]), str(row["k"])]
             values += [f"{row[name]:.3f}" if np.isfinite(row[name]) else "--"
                        for name in ("p_D", "dChi_squared", "dAIC", "dAICc", "dDIC", "dBIC")]
+            values.append(f"{row['LRT_sigma']:.3f}" if row.get("LRT_sigma") is not None else "--")
             lines.append(" & ".join(values) + r" \\")
     lines.append(r"\end{tabular}")
     (folder / "model_comparison.tex").write_text("\n".join(lines)+"\n", encoding="utf-8")
