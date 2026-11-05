@@ -12,6 +12,7 @@ Design notes:
   resume logic are factored out for clarity.
 """
 from __future__ import annotations
+from Kosmulator_main import sampler_moves
 
 import os
 import time
@@ -1118,6 +1119,7 @@ def run_mcmc(
                     args=(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index),
                     pool=pool,
                     backend=backend,
+            moves=sampler_moves.emcee_moves(),
                 )
 
                 if autoCorr:
@@ -1195,6 +1197,7 @@ def run_mcmc(
             args=(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index),
             pool=pool,
             backend=backend,
+            moves=sampler_moves.emcee_moves(),
         )
 
         if saveChains:

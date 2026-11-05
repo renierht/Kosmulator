@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--derived-rd-samples", type=int, default=6000)
     parser.add_argument("--init-jitter-frac", type=float, default=0.10, help="Initial scatter as fraction of prior width; no change to sampling priors")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--emcee-moves", choices=("stretch", "de_snooker"), default="stretch")
     parser.add_argument("--num-cores", type=int, default=1)
     parser.add_argument("--ide-model", choices=("NonLinear_IDE_2", "SignSwitch_IDE_1", "SignSwitch_IDE_2"), default="NonLinear_IDE_2")
     parser.add_argument("--only-model", choices=("lcdm", "ide", "cpl"), help="Run one model in a separate output suffix")
@@ -86,6 +87,7 @@ def main():
     if args.dataset == "dovekie":
         suffix += "_dovekie"
     settings = {
+        "emcee_moves": args.emcee_moves,
         "observations": config["observations"],
         "mode": args.mode, "regime": args.regime, "output_suffix": suffix,
         "models": selected_models, "free_w": True, "free_w_dm": False,
@@ -121,6 +123,7 @@ def main():
         import Kosmulator as kc
         import User_defined_modules as udm
         from Kosmulator_main import constants as K
+        K.EMCEE_MOVES = args.emcee_moves
         kc.model_names = selected_models
         udm.FREE_W, udm.FREE_W_DM = True, False
         kc.true_model = config["reference_model"] if "LCDM_v" in selected_models else selected_models[0]

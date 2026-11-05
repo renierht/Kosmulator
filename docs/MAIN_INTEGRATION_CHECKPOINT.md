@@ -40,3 +40,16 @@ Two focused regression tests passed, covering incompatible settings, operational
 changes, manifest preservation and refusal to relabel legacy chains.
 The warm-background regression suite was run; see /tmp/ide-physics-regression.log.
 Source comparison confirms the protected IDE files still match 5e28be3.
+
+Third batch ports the upstream sampler_moves module and wires both fresh and
+resumed emcee constructors. The paper launcher exposes --emcee-moves stretch or
+de_snooker. Stretch remains the default. Proposal choice is recorded and checked
+in run manifests; missing values in earlier complete manifests mean stretch.
+Only constants and proposal wiring change; IDE equations and CLASS density
+sources remain identical to the preservation snapshot.
+A seeded 48-walker, three-dimensional unit Gaussian smoke test (2500 steps,
+500 discarded) recovered means within 0.024 and standard deviations within
+0.010 for both options. Results are in validation/upstream_moves_smoke.json.
+MCMC imports in Kosmulator_test and both emcee constructors expose moves.
+This is not an IDE performance benchmark or full distributional proof.
+The two run-manifest regressions also passed. No production chain was started.

@@ -341,3 +341,8 @@ CONV_ESS_MIN = 2000.0
 CONV_RHAT_MAX = 1.01
 CONV_TAU_RTOL = 0.05
 CONV_CONSECUTIVE = 1
+
+# Optional upstream proposal mixture; retain the historical IDE default.
+EMCEE_MOVES = "stretch"
+EMCEE_MOVES_OPTIONS = ("stretch", "de_snooker")
+DE_SNOOKER_WEIGHTS = (0.8, 0.2)
