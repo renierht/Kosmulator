@@ -192,3 +192,20 @@ Repeatable driver validation/check_ide_pool_context.py.
 This does not yet establish DES/CLASS runtime gains, resumed HDF5 workflow
 equivalence or MPI shared-filesystem behavior. Those benchmarks remain pending
 before deploying this transport to production.
+
+## Section 3 real transport validation
+validation/validate_pool_transport.py completed under Kosmulator_test.
+Original versus cached transport produced bitwise identical Model 9 CC chains
+through 24 saved steps and resume to 28 with 16 walkers and DE/snooker.
+This exercises both real M.run_mcmc constructor paths and verifies context cleanup.
+DES-Dovekie + DESI DR2, model-derived CLASS rd, 4 spawn workers:
+original 1.1293 / 1.1757 seconds; cached 0.9762 / 0.9638 seconds per 12 evaluations.
+All corresponding posterior/likelihood pairs matched exactly. Both orderings
+tested with fresh worker pools; startup/warm-up excluded.
+Callable payload 26,577,117 -> 189 bytes.
+This suggests ~14–18% less elapsed time for this small workload, not a guaranteed
+full-chain acceleration. Resident data remains replicated once per worker;
+this optimization reduces serialization, not necessarily peak worker memory.
+Results validation/pool_transport_results.json.
+MPI and hard-kill context-file cleanup remain unvalidated. Environment doctor
+adaptation and longer production-shaped performance validation remain pending.

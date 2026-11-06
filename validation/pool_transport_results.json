@@ -1,0 +1,37 @@
+{
+  "CC_save_resume": {
+    "steps": 28,
+    "walkers": 16,
+    "exact_transport_agreement": true
+  },
+  "DES_transport": [
+    {
+      "mode": "original",
+      "seconds": 1.1292996789998142,
+      "evaluations": 12,
+      "callable_bytes": 26577117,
+      "max_difference": 0.0
+    },
+    {
+      "mode": "cached",
+      "seconds": 0.9761915529961698,
+      "evaluations": 12,
+      "callable_bytes": 189,
+      "max_difference": 0.0
+    },
+    {
+      "mode": "cached",
+      "seconds": 0.9638262240041513,
+      "evaluations": 12,
+      "callable_bytes": 189,
+      "max_difference": 0.0
+    },
+    {
+      "mode": "original",
+      "seconds": 1.1757236400007969,
+      "evaluations": 12,
+      "callable_bytes": 26577117,
+      "max_difference": 0.0
+    }
+  ]
+}
