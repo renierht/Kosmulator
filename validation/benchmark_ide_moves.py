@@ -2,7 +2,7 @@
 import os
 for key in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ[key] = "1"
-import sys, json, time, multiprocessing as mp
+import sys, json, time, argparse, multiprocessing as mp
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -17,6 +17,13 @@ def evaluate(theta):
                         U.Get_model_function(NAME), NAME, CFG["observations"][0], 0)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--steps", type=int, default=100)
+    parser.add_argument("--rounds", type=int, default=1)
+    parser.add_argument("--output", default="ide_moves_benchmark.json")
+    args = parser.parse_args()
+    if args.steps < 1 or args.rounds < 1:
+        parser.error("steps and rounds must be positive")
     os.chdir(ROOT)
     NAME = "SignSwitch_IDE_1"
     paper = json.loads((ROOT/"reproducibility/SAIP2026_IDE/configs/paper.json").read_text())
@@ -33,18 +40,28 @@ if __name__ == "__main__":
         group = handle["mcmc"]
         initial = group["chain"][group.attrs["iteration"]-1]
     report = []
-    for move in ("stretch", "de_snooker"):
-        np.random.seed(173)
+    schedule = [(r, move) for r in range(args.rounds)
+                for move in (("stretch", "de_snooker") if r % 2 == 0
+                             else ("de_snooker", "stretch"))]
+    assert CFG["parameters"][0] == ["Omega_m", "w", "delta", "H_0"], CFG["parameters"]
+    for round_index, move in schedule:
+        np.random.seed(173 + round_index)
+        print(f"Starting round {round_index + 1}: {move}, {args.steps} steps", flush=True)
         with mp.get_context("fork").Pool(8) as pool:
             start = time.perf_counter()
             sampler = emcee.EnsembleSampler(120, 4, evaluate, pool=pool, moves=emcee_moves(move))
-            sampler.run_mcmc(initial.copy(), 100, progress=False)
+            sampler.run_mcmc(initial.copy(), args.steps, progress=True)
             elapsed = time.perf_counter()-start
         x = sampler.get_chain()
         tau = emcee.autocorr.integrated_time(x, tol=0, quiet=True)
-        report.append(dict(move=move, steps=100, seconds=elapsed,
+        report.append(dict(move=move, round=round_index + 1, steps=args.steps, seconds=elapsed,
             acceptance=float(sampler.acceptance_fraction.mean()), tau_provisional=tau.tolist(),
-            warning="100 steps cannot establish reliable ESS or convergence",
+            warning="Autocorrelation estimates require sufficient chain length and consistency checks",
             jump_squared=np.mean(np.diff(x,axis=0)**2,axis=(0,1)).tolist()))
-        (ROOT/"validation/ide_moves_benchmark.json").write_text(json.dumps(report,indent=2))
+        output = ROOT/"validation"/args.output
+        temporary = output.with_suffix(".tmp")
+        temporary.write_text(json.dumps(report, indent=2))
+        os.replace(temporary, output)
+        np.savez_compressed(output.with_name(output.stem + f"_{round_index}_{move}.npz"),
+                            chain=x, log_prob=sampler.get_log_prob())
         print(report[-1], flush=True)

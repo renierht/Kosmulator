@@ -91,3 +91,27 @@ order/cache effects. Tau estimates near 8-10 from 100 steps are not trustworthy
 given the full production chain tau ~188. Keep stretch as the default until a
 longer replicated benchmark and posterior consistency check can be completed.
 No sampler benchmark process remained at review.
+
+## Overnight review, 2026-11-06
+
+All four segments completed; no benchmark process remains.
+Each used 120 walkers, 2000 steps, 8 workers, the same saved final ensemble.
+Round 1 stretch / DE-snooker: 9867 / 9553 seconds; tau_max 88.58 / 39.56;
+estimated ESS/hour 989 / 2286.
+Round 2 DE-snooker / stretch: 9560 / 10107 seconds; tau_max 40.92 / 94.60;
+estimated ESS/hour 2209 / 904.
+DE/snooker therefore improves provisional effective-sample throughput 2.31x
+and 2.44x. Acceptance 18.3-18.6% versus stretch 46.3-46.7%.
+All stored samples and log probabilities are finite.
+H0 medians: stretch 70.049,70.152; DE/snooker 70.535,70.481.
+Omega_m medians agree within 0.0001; w within 0.0013; delta within 0.0005.
+These short continuations share the initial ensemble and are not independent
+confirmation of all posterior modes or full-policy convergence. Stretch segment
+lengths span only ~21-23 estimated tau, DE/snooker ~49-51. Treat ESS as provisional.
+Recommend DE/snooker as an opt-in candidate for a fresh, fully converged run;
+retain stretch as default until the user's production choice is made.
+The BBN domain and prior boundaries remain unchanged.
+Review data validation/ide_moves_overnight_review.json; original metrics
+validation/ide_moves_overnight.json; NPZ segment samples remain local and ignored.
+Prior usage-limit approval failure blocked the handoff commit, not the launched
+benchmark. The configurable script and review are now being checkpointed.

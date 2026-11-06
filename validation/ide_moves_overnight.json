@@ -1,0 +1,82 @@
+[
+  {
+    "move": "stretch",
+    "round": 1,
+    "steps": 2000,
+    "seconds": 9866.934219452,
+    "acceptance": 0.4670958333333333,
+    "tau_provisional": [
+      52.19804269322906,
+      47.27832946764616,
+      84.25166150815151,
+      88.58308850117436
+    ],
+    "warning": "Autocorrelation estimates require sufficient chain length and consistency checks",
+    "jump_squared": [
+      5.81880614860368e-06,
+      0.00011316810251848854,
+      4.3441487662067435e-06,
+      1.5054378176869228
+    ]
+  },
+  {
+    "move": "de_snooker",
+    "round": 1,
+    "steps": 2000,
+    "seconds": 9553.494097657996,
+    "acceptance": 0.18598333333333333,
+    "tau_provisional": [
+      23.4833202490624,
+      23.357368198170928,
+      39.55609326530486,
+      37.76661902231288
+    ],
+    "warning": "Autocorrelation estimates require sufficient chain length and consistency checks",
+    "jump_squared": [
+      1.0885902578709636e-05,
+      0.00021610831323158359,
+      1.155715338741991e-05,
+      4.597765688235718
+    ]
+  },
+  {
+    "move": "de_snooker",
+    "round": 2,
+    "steps": 2000,
+    "seconds": 9560.455695804994,
+    "acceptance": 0.1829375,
+    "tau_provisional": [
+      24.98142897936279,
+      23.1997955410045,
+      39.066253516075996,
+      40.91976124146387
+    ],
+    "warning": "Autocorrelation estimates require sufficient chain length and consistency checks",
+    "jump_squared": [
+      1.0708440619046186e-05,
+      0.00020762535656769314,
+      1.115031469571189e-05,
+      4.598453255688364
+    ]
+  },
+  {
+    "move": "stretch",
+    "round": 2,
+    "steps": 2000,
+    "seconds": 10107.018094474988,
+    "acceptance": 0.46334166666666665,
+    "tau_provisional": [
+      54.51789302416,
+      50.052695361431425,
+      94.46379906895076,
+      94.5996363021529
+    ],
+    "warning": "Autocorrelation estimates require sufficient chain length and consistency checks",
+    "jump_squared": [
+      5.772822232669165e-06,
+      0.00011056729780415406,
+      4.203928437514763e-06,
+      1.5248146842307695
+    ]
+  }
+]
