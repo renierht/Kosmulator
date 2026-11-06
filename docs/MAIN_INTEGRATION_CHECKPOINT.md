@@ -144,3 +144,18 @@ validation/check_live_peek.py. Copying a live HDF5 is still non-atomic, so this
 test does not guarantee all filesystem/load combinations.
 Remaining: native live plots, complete generic provenance and MPI workflow tests.
 Windows lock behavior remains untested. Production code remains separate.
+
+## Section 2 snapshot plotting
+The emcee inspection CLI accepts --plot and --plot-samples (default 10000).
+Uses GetDist and Kosmulator greek_Symbols labels, in a lightweight monitoring
+renderer rather than the full postprocessing table/derived-rd pipeline.
+Deterministic without-replacement draw selection affects display only.
+All reported percentiles and split Rhat use all post-burn snapshot samples.
+Each invocation writes a unique directory under Plots/Saved_plots/Peek with
+corner.png and snapshot.json recording source, burn, inspected steps and seed.
+Successfully rendered and visually inspected DES Model 9 from its completed
+21200-step production chain. Production plots and chains were not overwritten.
+GetDist chatter is routed to stderr to preserve JSON stdout for scripting.
+This renderer does not reproduce full publication plot settings or infer prior
+bounds for legacy metadata; use normal postprocessing for publication figures.
+Generic provenance, MPI workflow tests and optional Zeus inspection remain pending.
