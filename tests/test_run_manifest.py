@@ -14,7 +14,8 @@ class ManifestTests(unittest.TestCase):
             validate_or_record(directory, dict(settings, max_steps=200000))
             for key, value in [("observations", [["PantheonPS"]]),
                                ("priors", {"w": [-3, -.33]}),
-                               ("free_w_dm", True), ("walkers", 64)]:
+                               ("free_w_dm", True), ("walkers", 64),
+                               ("emcee_moves", "de_snooker")]:
                 with self.assertRaises(ValueError):
                     validate_or_record(directory, dict(settings, **{key: value}))
             self.assertEqual(json.loads((Path(directory) / "run_settings.json").read_text()), settings)

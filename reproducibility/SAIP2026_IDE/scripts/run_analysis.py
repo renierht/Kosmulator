@@ -18,7 +18,7 @@ def main():
     parser.add_argument("--derived-rd-samples", type=int, default=6000)
     parser.add_argument("--init-jitter-frac", type=float, default=0.10, help="Initial scatter as fraction of prior width; no change to sampling priors")
     parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--emcee-moves", choices=("stretch", "de_snooker"), default="stretch")
+    parser.add_argument("--emcee-moves", choices=("stretch", "de_snooker"), default="de_snooker")
     parser.add_argument("--num-cores", type=int, default=1)
     parser.add_argument("--ide-model", choices=("NonLinear_IDE_2", "SignSwitch_IDE_1", "SignSwitch_IDE_2"), default="NonLinear_IDE_2")
     parser.add_argument("--only-model", choices=("lcdm", "ide", "cpl"), help="Run one model in a separate output suffix")
