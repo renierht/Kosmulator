@@ -8,8 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# NumExpr (loaded by pandas) logs a note in every process, the main one and each pool worker,
+# when NUMEXPR_MAX_THREADS is not set on a machine with many cores; older NumExpr versions read
+# only this variable. Kosmulator does not use NumExpr's threads. A value set by the user is kept.
+os.environ.setdefault("NUMEXPR_MAX_THREADS", str(os.cpu_count() or 1))
 
-__version__ = "3.0.0"
+
+__version__ = "3.0.1"
 
 
 @dataclass

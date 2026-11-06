@@ -905,15 +905,22 @@ def group_waic(obs_entry, obs_types, data, samples, MODEL_func, CONFIG_model, ob
     # seeded: the same draws, so the same WAIC, on every rerun
     idx = np.random.default_rng(K.WAIC_SUBSAMPLE_SEED).choice(n_total, size=min(S, n_total), replace=False)
     cols = []
+    # A model that is not vectorised costs about as much per point as CLASS (e.g. an ODE per
+    # point), so its draws go through the pool whatever the size of the data set
+    slow_model = not bool(getattr(K, "vectorised_models", {}).get(model_name, True))
     for single_obs, single_type in zip(obs_entry, types):
         if single_type == "CMB" or single_obs not in data:
             continue
-        if U._POST_POOL is not None and len(idx) > 1 and SP.pickled_size_small(data[single_obs]):
+        small = SP.pickled_size_small(data[single_obs])
+        if U._POST_POOL is not None and len(idx) > 1 and (small or slow_model):
             # CT-27: the draws in chunks through the worker pool (r_d from CLASS at each draw for
-            # BAO/DESI with BBN or CMB); the same draws in the same order, so the same matrix
+            # BAO/DESI with BBN or CMB); the same draws in the same order, so the same matrix.
+            # A large data set (Pantheon+'s 23 MB covariance) travels with each chunk, so it gets
+            # one chunk per worker.
             task = SP.LogLikeRowsTask(data[single_obs], single_type, single_obs, CONFIG_model, obs_index,
                                       model_name, group_has_cmb=bool(cmb))
-            chunks = np.array_split(samples[idx], max(1, min(len(idx) // 50, 48)))
+            n_chunks = min(len(idx) // 50, 48) if small else min(_pool_workers(), len(idx))
+            chunks = np.array_split(samples[idx], max(1, n_chunks))
             parts = [np.asarray(p, dtype=float) for p in U.post_map(task, chunks)]
             matrix = (np.concatenate(parts, axis=0) if parts and all(p.ndim == 2 and p.shape[0] for p in parts)
                       else np.empty((0, 0)))
@@ -1194,6 +1201,10 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
             # samples are ranked by likelihood, the polish includes the Planck
             # nuisance priors, so the median is often the better start.
             has_cmb_group = any(str(t) == "CMB" for t in obs_types)
+            # A model that is not vectorised (e.g. an ODE per point): a chi^2 call costs about a
+            # second, so, as for CMB groups, the starts are evaluated once and Nelder-Mead runs
+            # from the lowest of them only (they nearly always end at the same minimum)
+            slow_model = not bool(getattr(K, "vectorised_models", {}).get(model_name, True))
             cmb_starts = list(candidate_starts_list or [])
             if has_cmb_group and obs_samples_for_waic is not None and cand_param_names is not None:
                 S = np.asarray(obs_samples_for_waic, dtype=float)
@@ -1232,7 +1243,7 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                 prior_bounds=prior_map,
                 max_evals=(_polish_maxfev_cmb() if has_cmb_group else 2000),
                 candidate_starts=(cmb_starts if has_cmb_group else candidate_starts_list),
-                n_polish=(1 if has_cmb_group else None),
+                n_polish=(1 if (has_cmb_group or slow_model) else None),
                 restrictions=CONFIG[model_name].get("restrictions") or {},
                 coupled_restrictions=CONFIG[model_name].get("coupled_restrictions") or [],
                 # the group's CMB priors (Planck and ground-based nuisances; tau for ACT or SPT
@@ -1303,15 +1314,18 @@ def statistical_analysis(best_fit_values, data, CONFIG, reference_model):
                              "(uncalibrated SNe: the offset absorbs it); its posterior is the prior, not counted in k")
             # BAO without an early-time calibrator and r_d not sampled: r_d is the fiducial
             # value, so these data measure H_0 r_d, and H_0 is that product over 147.5 Mpc
-            # (H_0 alone enters only through the radiation term, Omega_r = omega_r / h^2)
+            # (H_0 alone enters only through the late-time radiation term, Omega_r = omega_r / h^2,
+            # and not at all without it: constants.LATE_TIME_RADIATION False)
             _bao = {"BAO", "DESI_DR1", "DESI_DR2"}
             if (any(o in _bao for o in obs_entry)
                     and not bao_rd_calibrated(obs_entry)
                     and "r_d" not in param_dict and "H_0" in param_dict):
                 _rd_fid = float((CONFIG[model_name].get("rd_policy") or {}).get("fixed_value", K.R_D_SINGLETON))
+                _rad = (" (H_0 alone only through the radiation term)"
+                        if bool(getattr(K, "LATE_TIME_RADIATION", False)) else "")
                 notes.append(f"H_0 at the fiducial r_d = {_rd_fid:g} Mpc (no early-time calibrator): "
                              f"these data measure H_0 r_d, h r_d = {param_dict['H_0'] / 100.0 * _rd_fid:.2f} Mpc "
-                             "at the best fit (H_0 alone only through the radiation term)")
+                             f"at the best fit{_rad}")
             dof = num_data_points_total - num_params
 
             if dof <= 0:

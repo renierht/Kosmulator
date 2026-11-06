@@ -465,6 +465,10 @@ def main(
         vectorised = {m: True for m in vectorised}
         log.info("Vectorisation forced via CLI; treating all models as vectorised.")
 
+    # Kept for the statistics and plots: a model that is not vectorised costs about as much per
+    # point as a CMB point, so its WAIC draws also go through the worker pool (Post_processing)
+    K.vectorised_models = dict(vectorised)
+
     # ------------------------------------------------------------------
     # 8) Engine decision per model (THIS feeds the banner)
     # ------------------------------------------------------------------

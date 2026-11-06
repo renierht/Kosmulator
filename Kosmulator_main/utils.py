@@ -808,6 +808,30 @@ def class_threads_per_worker() -> int:
         return 1
 
 
+def limit_blas_threads(n):
+    """
+    threadpoolctl.threadpool_limits(n) without the traceback some BLAS builds cause: threadpoolctl
+    reads the version of every loaded OpenBLAS through a ctypes callback, and a library whose
+    openblas_get_config returns NULL makes it fail there ("Exception ignored on calling ctypes
+    callback function ... 'NoneType' object has no attribute 'split'"; RH's Anaconda base
+    environment, 6 Nov 2026). Python reports an error inside a callback through sys.unraisablehook
+    instead of raising it, so it cannot be caught; the hook is silenced for this call only. The
+    libraries threadpoolctl can read are limited as before. Returns the limiter, or None.
+    """
+    try:
+        from threadpoolctl import threadpool_limits
+    except Exception:
+        return None
+    hook = sys.unraisablehook
+    sys.unraisablehook = lambda unraisable: None
+    try:
+        return threadpool_limits(limits=int(n))
+    except Exception:
+        return None
+    finally:
+        sys.unraisablehook = hook
+
+
 def set_main_threads(n: int) -> str:
     """
     Threads for this process's own CLASS and BLAS/OpenMP work (item 45): the pre-fit,
@@ -838,11 +862,7 @@ def set_main_threads(n: int) -> str:
     # call took 60 ms with 12 threads, 11 ms with 4 and 16 ms with 1 (CT-38); CLASS keeps n
     # through OMP_NUM_THREADS (its own thread pool, which threadpoolctl does not reach).
     nb = min(n, int(getattr(K, "MAIN_BLAS_THREADS_NO_POOL", n) or n))
-    try:
-        from threadpoolctl import threadpool_limits
-        threadpool_limits(nb)         # BLAS/OpenMP libraries loaded already
-    except Exception:
-        pass
+    limit_blas_threads(nb)            # BLAS/OpenMP libraries loaded already
     return f"{n} for CLASS, {nb} for BLAS (also for groups that run vectorised in this process)"
 
 
@@ -887,6 +907,76 @@ def post_map(fn, items) -> list:
             logging.getLogger(__name__).warning(
                 "Worker pool not usable after sampling (%s); running %d tasks here.", e, len(items))
     return [fn(x) for x in items]
+
+
+def pooled_compass_search(f_batch, x0, bounds, step0: float = 0.05, step_min: float = 1e-3,
+                          max_rounds: int = 200):
+    """
+    Minimum of f for a pre-fit whose points go through the worker pool: f_batch(points) returns
+    f at a list of points, all evaluated together (one pool round). Compass search: each round
+    tries x +- h_i e_i for every parameter i; x moves to the lowest of them if it is lower than
+    f(x), otherwise every h_i is halved. h_i starts at step0 times the prior width of parameter i
+    and the search ends when it is below step_min times that width, or after max_rounds rounds.
+    A last round gives the curvature for the initial ball, with the stencil of
+    _diag_conditional_variance (Kosmulator_MCMC): step step_min times the width, moved inside
+    the prior at a bound.
+    Returns (x, conditional variances 1/H_ii (inf where the curvature is not positive), points used).
+    """
+    x = np.asarray(x0, dtype=float).copy()
+    lo = np.array([b[0] for b in bounds], dtype=float)
+    hi = np.array([b[1] for b in bounds], dtype=float)
+    span = np.maximum(hi - lo, 1e-300)
+    h = step0 * span
+    n_eval = 1
+    fx = float(np.asarray(f_batch([x]), dtype=float).ravel()[0])
+    for _ in range(int(max_rounds)):
+        if np.all(h < step_min * span):
+            break
+        trial = []
+        for i in range(x.size):
+            for sgn in (1.0, -1.0):
+                y = x.copy()
+                y[i] = min(max(x[i] + sgn * h[i], lo[i]), hi[i])
+                if y[i] != x[i]:
+                    trial.append(y)
+        if not trial:
+            h *= 0.5
+            continue
+        ft = np.asarray(f_batch(trial), dtype=float).ravel()
+        n_eval += len(trial)
+        ft = np.where(np.isfinite(ft), ft, np.inf)
+        j = int(np.argmin(ft))
+        if ft[j] < fx:
+            x, fx = trial[j], float(ft[j])
+        else:
+            h *= 0.5
+    # curvature: f(c - d), f(c) and f(c + d) per parameter, one round
+    d = step_min * span
+    c = np.minimum(np.maximum(x, lo + d), hi - d)
+    pts, where = [], []
+    for i in range(x.size):
+        if not (d[i] > 0) or span[i] <= 2.0 * d[i]:
+            continue
+        for k, v in enumerate((c[i] - d[i], c[i], c[i] + d[i])):
+            if k == 1 and c[i] == x[i]:
+                continue
+            y = x.copy()
+            y[i] = v
+            pts.append(y)
+            where.append((i, k))
+    var = np.full(x.size, np.inf)
+    if pts:
+        fv = np.asarray(f_batch(pts), dtype=float).ravel()
+        n_eval += len(pts)
+        three = {}
+        for (i, k), v in zip(where, fv):
+            three.setdefault(i, {1: fx})[k] = float(v)
+        for i, t in three.items():
+            if len(t) == 3:
+                H = (t[0] - 2.0 * t[1] + t[2]) / (d[i] * d[i])
+                if np.isfinite(H) and H > 0:
+                    var[i] = 1.0 / H
+    return x, var, n_eval
 
 
 def mpi_abort_on_error(comm) -> bool:
@@ -1094,11 +1184,7 @@ def get_pool(use_mpi: bool = False, num_cores: int | None = None, **pool_kwargs)
             for k in _POOL_THREAD_VARS:
                 os.environ[k] = "1"
             os.environ["OMP_NUM_THREADS"] = str(class_threads_per_worker())
-            try:
-                from threadpoolctl import threadpool_limits
-                threadpool_limits(1)
-            except Exception:
-                pass
+            limit_blas_threads(1)
 
         pool = MPIPool()
         if not pool.is_master():

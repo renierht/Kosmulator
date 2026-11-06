@@ -1214,11 +1214,7 @@ def _limit_main_blas(uses_pool: bool, engine: str = "", vectorised: bool = True,
              "vectorised" if vectorised else "one walker per call", n if n else "library default")
     if not n or _BLAS_LIMITER is not None:
         return
-    try:
-        from threadpoolctl import threadpool_limits
-        _BLAS_LIMITER = threadpool_limits(limits=int(n))
-    except Exception:
-        _BLAS_LIMITER = None
+    _BLAS_LIMITER = utils.limit_blas_threads(n)
 
 
 def _restore_main_blas() -> None:
@@ -1380,15 +1376,34 @@ def _run_mcmc_impl(
         # CMB groups get at most constants.PREFIT_MAXFEV_CMB calls (item 34);
         # KOSM_OPT_MAXFUN overrides both caps.
         maxfun_default = int(K.PREFIT_MAXFEV_CMB) if has_cmb else 2000
-        ic, sol_diag = optimise_initial_guess(
-            reference_vals,
-            bounds,
-            nlp,
-            maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "2000")),
-            maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", str(maxfun_default))),
-            disp=False,
-            quiet_cap=has_cmb,
-        )
+        if (pool is not None and not vectorised and not (has_cmb or has_bbn)
+                and os.environ.get("KOSM_NO_OPT", "0") != "1"):
+            # A model that cannot be vectorised (e.g. an ODE per point): the pre-fit's points go
+            # through the worker pool, a round of them at a time (compass search), instead of one
+            # Nelder-Mead call after the other in this process while the pool waits. The pool
+            # callable is the one the ball and emcee use (one argument file per group).
+            ball_state["fn"] = _pool_logprob(
+                _ball_logpost_one, (data, Type, CONFIG, MODEL_func, model_name, obs, obs_index), chain_path)
+
+            def _nlp_batch(points):
+                lp, _ = _ball_logpost(points, pool, chain_path, data, Type, CONFIG, MODEL_func,
+                                      model_name, obs, obs_index, fn=ball_state["fn"])
+                return -np.asarray(lp, dtype=float)
+
+            _t0 = time.time()
+            ic, sol_diag, _n_eval = utils.pooled_compass_search(_nlp_batch, reference_vals, bounds)
+            log.info("[%s | %s] pre-fit through the worker pool: %d points in %.0f s",
+                     model_name, _resolved_key, _n_eval, time.time() - _t0)
+        else:
+            ic, sol_diag = optimise_initial_guess(
+                reference_vals,
+                bounds,
+                nlp,
+                maxiter=int(os.environ.get("KOSM_OPT_MAXITER", "2000")),
+                maxfun=int(os.environ.get("KOSM_OPT_MAXFUN", str(maxfun_default))),
+                disp=False,
+                quiet_cap=has_cmb,
+            )
         print(f"SciPy optimized IC: {ic}\n")
 
         jitter_frac = PLOT_SETTINGS.get("init_jitter_frac", 0.10)
@@ -1408,7 +1423,7 @@ def _run_mcmc_impl(
         # likelihood is expensive per point (CMB, BBN, the official JLA) use the worker pool
         # for this too when there is one (item 60); the others stay in this process.
         ball_pool = pool if (pool is not None and (
-            has_cmb or has_bbn
+            has_cmb or has_bbn or not vectorised
             or any(o in getattr(K, "POOL_PREFERRED_DATASETS", set()) for o in (obs or [])))) else None
 
         def _ball(p):

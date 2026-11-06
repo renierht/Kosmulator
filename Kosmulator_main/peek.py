@@ -228,8 +228,8 @@ def peek(suffix: str, burn: Optional[int] = None, all_params: bool = False,
     for v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
         os.environ[v] = "1"
     try:
-        from threadpoolctl import threadpool_limits
-        threadpool_limits(1)
+        from Kosmulator_main import utils as _U
+        _U.limit_blas_threads(1)
     except Exception:
         pass
     os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")    # only our copies are opened
