@@ -276,4 +276,25 @@ if __name__ == "__main__":
         mp.set_start_method("spawn", force=True)
     except RuntimeError:
         pass
-    main()
+    import argparse
+    from contextlib import nullcontext
+    from Kosmulator_main.run_lock import run_lock
+
+    lock_parser = argparse.ArgumentParser(add_help=False)
+    lock_parser.add_argument("--output_suffix", default="")
+    lock_args, _ = lock_parser.parse_known_args()
+    try:
+        from mpi4py import MPI
+        lock_rank = MPI.COMM_WORLD.Get_rank()
+    except ImportError:
+        lock_rank = 0
+    # The paper launcher calls main() directly under its own lock.
+    # Only rank zero owns the filesystem lock in direct MPI launches.
+    guard = run_lock(Path("MCMC_Chains") / lock_args.output_suffix.strip()) if lock_rank == 0 else nullcontext()
+    try:
+        with guard:
+            main()
+    except Exception:
+        if "MPI" in globals() and MPI.COMM_WORLD.Get_size() > 1:
+            MPI.COMM_WORLD.Abort(1)
+        raise

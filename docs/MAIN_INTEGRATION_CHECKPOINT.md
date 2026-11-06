@@ -115,3 +115,18 @@ Review data validation/ide_moves_overnight_review.json; original metrics
 validation/ide_moves_overnight.json; NPZ segment samples remain local and ignored.
 Prior usage-limit approval failure blocked the handoff commit, not the launched
 benchmark. The configurable script and review are now being checkpointed.
+
+## Section 2 partial checkpoint
+Added python -m Kosmulator_main.peek --chain PATH [--burn N].
+Copies the HDF5 first, respects saved iteration count (not allocated capacity),
+excludes last potentially incomplete step, reports percentiles and split Rhat.
+Burn comes from run_settings.json, or must be explicit for legacy chains.
+Synthetic preallocated-chain test verifies burn, final-step exclusion and byte
+preservation of source. Real completed Model 9 inspected at 21200 steps with
+burn=1000. Concurrent writer stress testing remains pending. A snapshot copy can
+fail during concurrent HDF5 metadata updates; retry later rather than modifying
+the source. This command is for emcee only; live plots/Zeus support are pending.
+Direct Kosmulator.py now locks its output directory, rank zero for MPI.
+Paper launcher already owns its lock when calling main directly.
+Compiled launcher successfully; generic workflow/MPI tests and complete generic
+provenance integration remain pending. Do not deploy this checkpoint yet.
