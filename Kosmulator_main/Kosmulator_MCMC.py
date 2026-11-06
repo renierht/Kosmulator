@@ -12,7 +12,7 @@ Design notes:
   resume logic are factored out for clarity.
 """
 from __future__ import annotations
-from Kosmulator_main import sampler_moves
+from Kosmulator_main import sampler_moves, pool_context
 
 import os
 import time
@@ -679,6 +679,7 @@ def _saved_steps(chain_path):
         return None
 
 
+@pool_context.cleanup_after_run
 def run_mcmc(
     data,
     saveChains,
@@ -1112,11 +1113,14 @@ def run_mcmc(
                 last_state = None
 
             if last_state is not None:
+                probability, probability_args = pool_context.prepare(
+                    emcee_prob, (data, Type, CONFIG, MODEL_func, model_name, obs, obs_index),
+                    pool, chain_path)
                 sampler = emcee.EnsembleSampler(
                     nwalker,
                     ndim,
-                    emcee_prob,
-                    args=(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index),
+                    probability,
+                    args=probability_args,
                     pool=pool,
                     backend=backend,
             moves=sampler_moves.emcee_moves(),
@@ -1190,11 +1194,14 @@ def run_mcmc(
 
         start = time.time()
         print(f"\nInitialising ensemble of {nwalker} walkers...")
+        probability, probability_args = pool_context.prepare(
+            emcee_prob, (data, Type, CONFIG, MODEL_func, model_name, obs, obs_index),
+            pool, chain_path)
         sampler = emcee.EnsembleSampler(
             nwalker,
             ndim,
-            emcee_prob,
-            args=(data, Type, CONFIG, MODEL_func, model_name, obs, obs_index),
+            probability,
+            args=probability_args,
             pool=pool,
             backend=backend,
             moves=sampler_moves.emcee_moves(),

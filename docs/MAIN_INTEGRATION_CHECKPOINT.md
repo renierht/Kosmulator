@@ -176,3 +176,19 @@ and operational worker-count changes.
 MPI rank-zero validation now precedes a barrier; errors abort a multi-rank job.
 mpi4py package is installed but no mpiexec was found on PATH or in Kosmulator_test.
 Actual MPI smoke validation remains unperformed; do not claim MPI readiness.
+
+## Section 3 worker transport checkpoint
+Adapted upstream per-group pickle transport to pool_context.py. Both fresh and
+resumed emcee constructors use the small callable when a pool exists; serial
+calls retain original arguments. Each worker caches only its current group.
+Context files are unique and cleaned on normal return or exceptions. No cleanup
+of another process's files is attempted. Hard kills can leave private context
+files behind. These pickle files are internal trusted artifacts.
+Spawn unit tests passed for equivalence, sub-kilobyte callable size, normal and
+exception cleanup, and serial identity. Real Model 9 CC likelihood agreement
+across eight points was exact (max difference 0), callable 2335 -> 189 bytes.
+All nine warm-background regressions passed.
+Repeatable driver validation/check_ide_pool_context.py.
+This does not yet establish DES/CLASS runtime gains, resumed HDF5 workflow
+equivalence or MPI shared-filesystem behavior. Those benchmarks remain pending
+before deploying this transport to production.
