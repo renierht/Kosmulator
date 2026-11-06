@@ -159,3 +159,20 @@ GetDist chatter is routed to stderr to preserve JSON stdout for scripting.
 This renderer does not reproduce full publication plot settings or infer prior
 bounds for legacy metadata; use normal postprocessing for publication figures.
 Generic provenance, MPI workflow tests and optional Zeus inspection remain pending.
+
+## Section 2 generic provenance
+Direct Kosmulator.py now records normalized generic settings under the same lock,
+including priors, model/EOS/regime switches, serializable uppercase constants,
+CLI configuration and hashes of model, core Python and IDE CLASS source/header
+files. Resume rejects changes; worker counts and resume flags are operational.
+The snapshot is taken before MCMC_setup mutates runtime constants.
+This is deliberately conservative: even non-physics edits to hashed core source
+require provenance review. Dataset file contents are not yet hashed.
+Generic and paper manifests are distinguished to prevent cross-launcher reuse.
+Legacy chains without a manifest remain protected by refusal.
+Three manifest tests and three lock tests passed. Generic settings regression
+covers tuple/list normalization, changed baryon constant, changed physics source,
+and operational worker-count changes.
+MPI rank-zero validation now precedes a barrier; errors abort a multi-rank job.
+mpi4py package is installed but no mpiexec was found on PATH or in Kosmulator_test.
+Actual MPI smoke validation remains unperformed; do not claim MPI readiness.

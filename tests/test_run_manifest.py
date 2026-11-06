@@ -26,3 +26,28 @@ class ManifestTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_or_record(directory, {})
             self.assertFalse((Path(directory) / "run_settings.json").exists())
+
+    def test_generic_settings_roundtrip_and_physics_change(self):
+        from argparse import Namespace
+        from types import SimpleNamespace
+        from Kosmulator_main.run_manifest import generic_settings
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/"User_defined_modules.py").write_text("# mock physics")
+            namespace = dict(model_names=["IDE"], observations=[["CC"]],
+                             prior_limits={"w": (-2, -.33)}, true_values={"w": -1},
+                             nwalkers=120, burn=1000, convergence=.05)
+            constants = SimpleNamespace(EMCEE_MOVES="stretch", OMEGA_B=.048)
+            cli = Namespace(num_cores=8, resume=False, force_emcee=True)
+            settings = generic_settings(namespace, constants, SimpleNamespace(), cli, root)
+            validate_or_record(root, settings)
+            cli.num_cores = 4
+            cli.resume = True
+            validate_or_record(root, generic_settings(namespace, constants, SimpleNamespace(), cli, root))
+            constants.OMEGA_B = .05
+            with self.assertRaises(ValueError):
+                validate_or_record(root, generic_settings(namespace, constants, SimpleNamespace(), cli, root))
+            constants.OMEGA_B = .048
+            (root/"User_defined_modules.py").write_text("# changed physics")
+            with self.assertRaises(ValueError):
+                validate_or_record(root, generic_settings(namespace, constants, SimpleNamespace(), cli, root))

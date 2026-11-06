@@ -293,6 +293,15 @@ if __name__ == "__main__":
     guard = run_lock(Path("MCMC_Chains") / lock_args.output_suffix.strip()) if lock_rank == 0 else nullcontext()
     try:
         with guard:
+            if lock_rank == 0:
+                import User_defined_modules as model_module
+                from Kosmulator_main.utils import parse_cli_args
+                from Kosmulator_main.run_manifest import generic_settings, validate_or_record
+                resolved_cli = parse_cli_args()
+                settings = generic_settings(globals(), K, model_module, resolved_cli, PROJ_ROOT)
+                validate_or_record(Path("MCMC_Chains") / lock_args.output_suffix.strip(), settings)
+            if "MPI" in globals() and MPI.COMM_WORLD.Get_size() > 1:
+                MPI.COMM_WORLD.Barrier()
             main()
     except Exception:
         if "MPI" in globals() and MPI.COMM_WORLD.Get_size() > 1:
