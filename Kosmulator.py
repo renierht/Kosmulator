@@ -281,7 +281,7 @@ if __name__ == "__main__":
     from Kosmulator_main.run_lock import run_lock
 
     lock_parser = argparse.ArgumentParser(add_help=False)
-    lock_parser.add_argument("--output_suffix", default="")
+    lock_parser.add_argument("--output_suffix", default="Test_run")
     lock_args, _ = lock_parser.parse_known_args()
     try:
         from mpi4py import MPI

@@ -130,3 +130,17 @@ Direct Kosmulator.py now locks its output directory, rank zero for MPI.
 Paper launcher already owns its lock when calling main directly.
 Compiled launcher successfully; generic workflow/MPI tests and complete generic
 provenance integration remain pending. Do not deploy this checkpoint yet.
+
+## Section 2 concurrency validation
+Three run-lock tests passed: competing process rejected, reacquisition after
+normal release, reacquisition after owner termination, plus default-directory
+agreement (the first test covers normal release and contention).
+Corrected the generic lock pre-parser default from empty suffix to Test_run,
+matching the actual CLI parser.
+Live emcee writer test passed 20 snapshot reads during 100 appended steps.
+Writer completed successfully at 120 steps; no transient copy errors occurred.
+Results validation/live_peek_results.json; repeatable driver
+validation/check_live_peek.py. Copying a live HDF5 is still non-atomic, so this
+test does not guarantee all filesystem/load combinations.
+Remaining: native live plots, complete generic provenance and MPI workflow tests.
+Windows lock behavior remains untested. Production code remains separate.
