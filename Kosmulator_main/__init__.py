@@ -329,7 +329,11 @@ def main_doctor() -> None:
     parser.add_argument("--no-planck-assets", action="store_true", help="Skip checking Observations/*.clik directories.")
     parser.add_argument("--test-load", action="store_true", help="Attempt to load Planck .clik likelihoods via clik.clik(path).")
     parser.add_argument("--alterbbn", action="store_true", help="Also check optional AlterBBN wrapper and KOSMO_BBN_LIB.")
+    parser.add_argument("--ide", action="store_true", help="Read-only IDE background and shared CLASS cache report.")
     args = parser.parse_args()
+    if args.ide:
+        from Kosmulator_main.ide_doctor import main
+        raise SystemExit(main())
 
     rep = check_installation(
         check_class=not args.no_class,

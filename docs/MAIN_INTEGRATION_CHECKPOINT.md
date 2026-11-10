@@ -209,3 +209,22 @@ this optimization reduces serialization, not necessarily peak worker memory.
 Results validation/pool_transport_results.json.
 MPI and hard-kill context-file cleanup remain unvalidated. Environment doctor
 adaptation and longer production-shaped performance validation remain pending.
+
+## Section 3 IDE environment doctor
+Added kosmulator-doctor --ide via existing console entry point, also
+python -m Kosmulator_main.ide_doctor. Reuses existing dependency checks, verifies
+all ten IDE model names route to IDE_background, and checks the exact production
+source/ABI/toolchain cache signature without building or loading CLASS.
+Reports thread variables and MPI launcher availability. Current adapter imports
+CLIK even for background calculations, so that dependency is checked, while
+Planck data directories are not required. Binary loadability and likelihood
+correctness are not established by this read-only cache-presence check.
+
+Validation found that the benchmark binary was built with CONDA_PREFIX empty.
+With CONDA_PREFIX=/home/marcel/miniconda3/envs/Kosmulator_test, the signature
+differs and the doctor reports not ready. Restoring the benchmark environment
+passes with cache 093eaa42. This is conservative cache identity, not evidence
+of incompatible physics. Build under the intended activated environment before
+a future production run; no automatic build was performed by this diagnostic.
+validation/ide_environment_report.json records the activated-environment finding.
+MPI launcher remains absent. Generic legacy doctor behavior remains available.
