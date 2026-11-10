@@ -1,0 +1,22 @@
+[
+  {
+    "model": "LCDM_v",
+    "old_max_relative_error": 0.005685231483097741,
+    "proposed_max_relative_error": 2.0472663502246746e-06
+  },
+  {
+    "model": "w0waCDM",
+    "old_max_relative_error": 0.006221191249746516,
+    "proposed_max_relative_error": 2.8405133607467548e-06
+  },
+  {
+    "model": "SignSwitch_IDE_1",
+    "old_max_relative_error": 0.005870652092813344,
+    "proposed_max_relative_error": 2.4061038568223836e-06
+  },
+  {
+    "model": "SignSwitch_IDE_2",
+    "old_max_relative_error": 0.005868150636612279,
+    "proposed_max_relative_error": 2.404398285138498e-06
+  }
+]

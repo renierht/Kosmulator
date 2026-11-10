@@ -228,3 +228,47 @@ of incompatible physics. Build under the intended activated environment before
 a future production run; no automatic build was performed by this diagnostic.
 validation/ide_environment_report.json records the activated-environment finding.
 MPI launcher remains absent. Generic legacy doctor behavior remains available.
+
+## Section 4a — corrected distance quadrature and chain safeguards (2026-11-10)
+Ported only Comoving_distance_vectorized from upstream 34091d1. The integration
+mesh now includes a uniform grid with dz <= 0.01 plus the data redshifts and zero.
+Independent scipy adaptive quadrature at seven BAO redshifts, one representative
+parameter vector each for LCDM, CPL, IDE 9 and IDE 10, gives maximum relative
+errors 0.00569–0.00622 before versus 2.05e-6–2.84e-6 after. This is a numerical
+likelihood correction, NOT a performance-only or scientifically equivalent change.
+The audit script extracts the old implementation from preserved commit 5e28be3;
+validation/distance_update_audit.json records the measurements. These checks do
+not quantify posterior shifts or validate every point in the prior.
+
+The paper and generic launchers now record distance_policy=dense-grid-dz0.01-v1.
+Paper resumes reject old or absent policies; generic source hashes also protect
+resumes. Paper analysis checks each input chain's nearest ancestor manifest and
+rejects unmatched policies before likelihood-based postprocessing. Legacy chains
+remain analyzable using their original production checkout, or read-only peek.
+Do NOT relabel their manifests to bypass this check. Fresh corrected-distance
+chains are needed for consistent updated LCDM/CPL/IDE model comparisons.
+No production files, chains, IDE density equations, CLASS source, rd policy,
+priors, datasets, or stopping criteria were modified.
+
+Validation: 22 targeted tests plus 83 subtests passed (distance analytic reference,
+ordering/duplicates/negative/zero/invalid redshifts, manifest guards, warm
+background and CPL regressions). Existing CRLF in utils.py is preserved.
+
+## Section 4b — supernova/CC audit checkpoint, integration still pending
+DES_Dovekie has a separate full-precision-matrix likelihood in Kosmulator_MCMC,
+projects out the magnitude intercept and retains its normalization term; its
+luminosity distance already uses zHD for integration and zHEL for the prefactor.
+Do not replace it with upstream's generic DESY5 route. These are different samples.
+Current generic SN chi-square subtracts a sampled M_abs or defaults it to zero;
+its comment saying "Marginalize" is misleading. Upstream adds explicit analytic
+marginalization and further JLA/covariance machinery, so cherry-picking just the
+function would omit dependencies. Current Pantheon paths use zHD in the prefactor;
+loader/redshift conventions must be audited jointly before changing them.
+
+Upstream CC changes include z .44497 -> .4497 and several error bars, notably
+z .47: 23 -> 49.6. It adds correlation/SPS treatment. None adopted yet: check
+original data sources, row identity and covariance assembly first. This changes
+the likelihood and must be versioned with dataset provenance. The next bounded
+section should address explicit uncalibrated SN offset handling with loader and
+configuration tests, followed by the sourced CC covariance audit. Do not start
+production sampling until the intended combined likelihood is finalized.

@@ -15,7 +15,8 @@ class ManifestTests(unittest.TestCase):
             for key, value in [("observations", [["PantheonPS"]]),
                                ("priors", {"w": [-3, -.33]}),
                                ("free_w_dm", True), ("walkers", 64),
-                               ("emcee_moves", "de_snooker")]:
+                               ("emcee_moves", "de_snooker"),
+                               ("distance_policy", "dense-grid-dz0.01-v1")]:
                 with self.assertRaises(ValueError):
                     validate_or_record(directory, dict(settings, **{key: value}))
             self.assertEqual(json.loads((Path(directory) / "run_settings.json").read_text()), settings)
@@ -51,3 +52,19 @@ class ManifestTests(unittest.TestCase):
             (root/"User_defined_modules.py").write_text("# changed physics")
             with self.assertRaises(ValueError):
                 validate_or_record(root, generic_settings(namespace, constants, SimpleNamespace(), cli, root))
+
+    def test_analysis_rejects_legacy_distance_policy(self):
+        from Kosmulator_main.run_manifest import require_chain_distance_policy
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            chain = root / "model" / "chain.h5"
+            chain.parent.mkdir()
+            chain.touch()
+            policy = "dense-grid-dz0.01-v1"
+            with self.assertRaises(ValueError):
+                require_chain_distance_policy(chain, policy)
+            (root / "run_settings.json").write_text('{}')
+            with self.assertRaises(ValueError):
+                require_chain_distance_policy(chain, policy)
+            (root / "run_settings.json").write_text(json.dumps({"distance_policy":policy}))
+            require_chain_distance_policy(chain, policy)

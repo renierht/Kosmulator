@@ -47,3 +47,8 @@ Work on one section or a bounded subsection per session, checkpoint its tests
 and pending work, and stop there. Actual credit consumption is unavailable to
 the agent; these are scope boundaries rather than guaranteed five-hour budgets.
 No automatic production run is part of this integration plan.
+
+Section 4 progress (2026-11-10): dense distance quadrature and old-chain resume/
+analysis guards integrated and tested. See checkpoint for numerical errors and
+fresh-chain requirements. SN/CC review has identified remaining dependencies;
+no SN likelihood convention or CC data changes adopted yet.

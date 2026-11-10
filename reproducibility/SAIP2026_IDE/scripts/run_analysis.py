@@ -87,6 +87,7 @@ def main():
     if args.dataset == "dovekie":
         suffix += "_dovekie"
     settings = {
+        "distance_policy": "dense-grid-dz0.01-v1",
         "emcee_moves": args.emcee_moves,
         "observations": config["observations"],
         "mode": args.mode, "regime": args.regime, "output_suffix": suffix,
@@ -110,6 +111,13 @@ def main():
         return
     sys.path.insert(0, str(root))
     from Kosmulator_main.run_lock import run_lock
+    if args.mode == "analyse":
+        from Kosmulator_main.run_manifest import require_chain_distance_policy
+        try:
+            for chain_path in paths.values():
+                require_chain_distance_policy(chain_path, settings["distance_policy"])
+        except ValueError as exc:
+            parser.error(str(exc))
     with run_lock(root / "MCMC_Chains" / suffix):
         if args.mode == "sample":
             from Kosmulator_main.run_manifest import validate_or_record
