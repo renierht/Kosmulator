@@ -953,25 +953,35 @@ def Calc_Generic_SNe_chi(
 ) -> float:
     """
     Generic SNe χ² evaluator.
-    Supports diagonal errors (JLA/DESY5) AND full covariance (Union3).
+    Supports diagonal errors and full inverse covariance.
+    With marginalise_offset=True, project out a constant magnitude offset.
+    Returns A-B^2/E, omitting the parameter-independent log(E/2pi) term
+    for fixed covariance, matching upstream's convention. This equals the
+    minimum chi-square over the offset; it is not a normalized evidence.
+    Otherwise retain the legacy sampled-M_abs behavior.
     """
-    type_data = obs_data["type_data"]
-    
-    # 1. Marginalize M_abs (if present)
-    #    (JLA doesn't have it -> M=0 -> Data is Absolute)
-    #    (DESY5/Union3 have it -> M!=0 -> Data is Apparent)
-    M = param_dict.get("M_abs", 0.0)
+    type_data = np.asarray(obs_data["type_data"], dtype=float)
+    marginalise = bool(obs_data.get("marginalise_offset", False))
+    # Distance moduli have no sampled apparent-magnitude zero point.
+    M = 0.0 if marginalise or obs_data.get("data_is_distance_modulus", False) else param_dict.get("M_abs", 0.0)
     residual = (type_data - M) - model
-
-    # 2. Check for Covariance (Union3)
     if "inv_cov" in obs_data:
-        inv_cov = obs_data["inv_cov"]
-        # Matrix Chi2: R.T @ C^-1 @ R
-        return float(residual @ inv_cov @ residual)
-
-    # 3. Fallback to Diagonal Errors (JLA/DESY5)
-    type_data_error = obs_data["type_data_error"]
-    return float(np.sum((residual ** 2) / (type_data_error ** 2)))
+        precision = np.asarray(obs_data["inv_cov"], dtype=float)
+        if marginalise:
+            weights = precision.sum(axis=1)
+            norm = float(weights.sum())
+            if not np.isfinite(norm) or norm <= 0:
+                raise ValueError("SN offset precision must be finite and positive")
+            # Center first to avoid cancellation in A - B**2/E.
+            residual = residual - (weights @ residual) / norm
+        return float(residual @ precision @ residual)
+    weights = 1.0 / np.asarray(obs_data["type_data_error"], dtype=float)**2
+    if marginalise:
+        norm = float(weights.sum())
+        if not np.isfinite(norm) or norm <= 0:
+            raise ValueError("SN offset precision must be finite and positive")
+        residual = residual - (weights @ residual) / norm
+    return float(np.sum(weights * residual**2))
 
 
 def Calc_PantP_chi(

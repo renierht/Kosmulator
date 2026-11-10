@@ -52,3 +52,6 @@ Section 4 progress (2026-11-10): dense distance quadrature and old-chain resume/
 analysis guards integrated and tested. See checkpoint for numerical errors and
 fresh-chain requirements. SN/CC review has identified remaining dependencies;
 no SN likelihood convention or CC data changes adopted yet.
+Section 4c: DESY5/Union3 explicit offset projection enabled and validated with
+real loader data. Dedicated Dovekie and sampled Pantheon M_abs unchanged.
+Redshift/covariance review and CC integration still pending; see checkpoint.

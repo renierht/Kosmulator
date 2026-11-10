@@ -772,6 +772,10 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     cov_path = os.path.join(K.OBSERVATIONS_BASE, "Union3_mag_covmat.txt")
 
                 data_sne = load_named_sne_with_zcmb(sne_path)
+                # Uncalibrated distance moduli: remove their arbitrary zero point.
+                # This policy does not apply to the dedicated DES_Dovekie path.
+                data_sne["marginalise_offset"] = True
+                data_sne["data_is_distance_modulus"] = True
 
                 if cov_path and os.path.exists(cov_path):
                     # 1. Load the raw matrix

@@ -272,3 +272,37 @@ the likelihood and must be versioned with dataset provenance. The next bounded
 section should address explicit uncalibrated SN offset handling with loader and
 configuration tests, followed by the sourced CC covariance audit. Do not start
 production sampling until the intended combined likelihood is finalized.
+
+## Section 4c — explicit generic SN offset projection (2026-11-10)
+Added upstream's explicit marginalise_offset policy to Calc_Generic_SNe_chi,
+enabled by the DESY5 and Union3 loader. Their supplied distance moduli no longer
+act as an absolute calibration. Full inverse covariance and diagonal-error paths
+both project out the weighted constant offset. The implementation centers the
+residual before forming its quadratic to avoid cancellation in A-B^2/E.
+The data_is_distance_modulus flag prevents an unrelated sampled M_abs from
+entering these distance-modulus datasets. Legacy callers without either flag keep
+their sampled-M_abs behavior. No parameter list changes were required: these two
+datasets already request H_0 without M_abs, while H_0 can still be constrained by
+other datasets or background quantities in a combined analysis.
+
+Normalization convention matches upstream: return A-B^2/E and omit the fixed
+log(E/2pi) constant. This is the profiled chi-square and has the same cosmological
+posterior shape as flat-offset marginalization for fixed covariance; it is NOT a
+normalized Bayesian evidence calculation. DES_Dovekie's existing normalization
+and dedicated likelihood are unchanged. PantheonP and PantheonPS retain their
+sampled M_abs treatment; no SH0ES calibrator changes were made.
+
+Validation: 23 tests and 83 subtests passed, including independent scalar
+minimization with correlated/diagonal synthetic data, invariance under magnitude
+shifts, legacy M_abs behavior, actual DESY5/Union3 loading, dimensions and offset
+invariance using their real precision matrices. Warm background, CPL and resume
+manifest regressions pass. Generic launcher source hashes reject continuation
+of pre-change chains. The paper launcher does not select DESY5/Union3.
+
+This is a likelihood-changing correction requiring fresh DESY5/Union3 chains.
+It does not constitute full validation of those likelihoods: existing redshift
+selection, covariance heuristics and missing-covariance fallback remain to be
+reviewed. Dataset-specific offset conventions and effective nuisance-parameter
+counting must also be documented consistently in future IC reporting. No new
+production runs started. Next: finish DESY5 zHD/zHEL loader and covariance audit,
+then review the upstream CC rows/correlations against their original sources.
