@@ -55,3 +55,6 @@ no SN likelihood convention or CC data changes adopted yet.
 Section 4c: DESY5/Union3 explicit offset projection enabled and validated with
 real loader data. Dedicated Dovekie and sampled Pantheon M_abs unchanged.
 Redshift/covariance review and CC integration still pending; see checkpoint.
+Section 4d: DESY5 zHD/zHEL geometry and explicit DESY5/Union3 covariance loading
+implemented, real-file quadratics validated. CC source/covariance review remains
+next; no new production chains launched.

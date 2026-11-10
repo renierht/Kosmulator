@@ -152,7 +152,9 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         #name zcmb zhel dz mb dmb x1 dx1 color dcolor 3rdvar d3rdvar ...
 
     Behaviour:
-      - Uses the CMB-frame redshift column (zCMB/zcmb) as `redshift`.
+      - CSV: prefer zHD for integration and retain zHEL for the luminosity prefactor.
+      - Whitespace: use zcmb; preserve the binned Union3 convention.
+      - Reject invalid rows rather than misalign the covariance.
       - Uses MU/mb as `type_data` (distance-modulus–like quantity).
       - Uses MUERR_FINAL/dmb/etc. as `type_data_error` (σ_μ).
       - For Union3, parses lines manually to tolerate missing trailing columns.
@@ -184,7 +186,7 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
 
         # redshift
         z_name = None
-        for cand in ("zcmb", "z_cmb", "zhd", "z"):
+        for cand in ("zhd", "zcmb", "z_cmb", "z"):
             if cand in name_map:
                 z_name = name_map[cand]
                 break
@@ -220,20 +222,18 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         else:
             sigma = np.ones_like(z, dtype=float)
 
-        # Clean rows
-        good = np.isfinite(z) & np.isfinite(mu) & np.isfinite(sigma) & (sigma > 0)
-        z = z[good]
-        mu = mu[good]
-        sigma = sigma[good]
+        hel_name = name_map.get("zhel", name_map.get("z_hel"))
+        z_hel = None if hel_name is None else pd.to_numeric(df[hel_name], errors="coerce").to_numpy(dtype=float)
+        good = np.isfinite(z) & (z > 0) & np.isfinite(mu) & np.isfinite(sigma) & (sigma > 0)
+        if z_hel is not None:
+            good &= np.isfinite(z_hel) & (z_hel > -1)
+        if not good.all() or not z.size:
+            raise ValueError(f"{file_path}: invalid SN rows; refusing to change covariance row alignment")
+        out = {"redshift": z, "type_data": mu, "type_data_error": sigma}
+        if z_hel is not None:
+            out["z_hel"] = z_hel
+        return out
 
-        if z.size == 0:
-            raise ValueError(f"{file_path}: no valid rows after cleaning numeric columns.")
-
-        return {
-            "redshift": z,
-            "type_data": mu,
-            "type_data_error": sigma,
-        }
 
 
     # --------------------------------------------------
@@ -275,27 +275,23 @@ def load_named_sne_with_zcmb(file_path: Union[str, Path]) -> Dict[str, np.ndarra
         # Need indices up to whichever of z, mu, err is highest
         max_idx = max(idx_z, idx_mu, idx_err or 0)
         if len(parts) <= max_idx:
-            # Line shorter than expected → skip
-            continue
-
+            raise ValueError(f"{file_path}: incomplete SN row")
         try:
-            z_vals.append(float(parts[idx_z]))
-            mu_vals.append(float(parts[idx_mu]))
-
-            if idx_err is not None and len(parts) > idx_err:
-                err_vals.append(float(parts[idx_err]))
-            else:
-                err_vals.append(1.0)
-        except ValueError:
-            # Non-numeric junk line → skip
-            continue
+            row = (float(parts[idx_z]), float(parts[idx_mu]),
+                   float(parts[idx_err]) if idx_err is not None else 1.0)
+        except ValueError as exc:
+            raise ValueError(f"{file_path}: non-numeric SN row") from exc
+        if not np.isfinite(row).all() or row[0] <= 0 or row[2] < 0:
+            raise ValueError(f"{file_path}: invalid SN row")
+        z_vals.append(row[0])
+        mu_vals.append(row[1])
+        err_vals.append(row[2])
 
     z = np.asarray(z_vals, dtype=float)
     mu = np.asarray(mu_vals, dtype=float)
     sigma = np.asarray(err_vals, dtype=float)
-
-    if not np.any(sigma > 0):
-        sigma = np.ones_like(z)
+    if not z.size:
+        raise ValueError(f"{file_path}: empty SN sample")
 
     return {
         "redshift": z,
@@ -777,40 +773,13 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 data_sne["marginalise_offset"] = True
                 data_sne["data_is_distance_modulus"] = True
 
-                if cov_path and os.path.exists(cov_path):
-                    # 1. Load the raw matrix
-                    cov_loaded, _ = load_DESI_cov(cov_path)
-                    
-                    n_data = len(data_sne["type_data"])
-                    if cov_loaded.shape != (n_data, n_data):
-                        logger.error(f"{obs} Covariance shape {cov_loaded.shape} != Data length {n_data}")
-                        raise ValueError(f"{obs} Covariance dimension mismatch! Check for commented rows.")
-
-                    # 2. CRITICAL FIX: Explicitly handle DESY5
-                    # DESY5 uses a systematic-only matrix, so we MUST add the diagonal statistical errors.
-                    # Union3 uses a full matrix, so we use it as-is.
-                    
-                    if obs == "DESY5" or np.mean(np.diag(cov_loaded)) < 1e-3: 
-                        sigma_stat = data_sne["type_data_error"]
-                        
-                        # Add diagonal stats: C_total = C_sys + diag(sigma_stat^2)
-                        # This adds 280^2 to the bad SN, correctly de-weighting it.
-                        cov_total = cov_loaded + np.diag(sigma_stat**2)
-                        
-                        logger.info(f"Augmented {obs} covariance with diagonal statistical errors.")
-                    else:
-                        # Union3 path
-                        cov_total = cov_loaded
-                    
-                    # 3. Invert the corrected TOTAL matrix
-                    try:
-                        inv_cov_total = np.linalg.inv(cov_total)
-                    except np.linalg.LinAlgError:
-                        # Fallback for numerical stability
-                        inv_cov_total = np.linalg.pinv(cov_total, rcond=1e-12)
-
-                    data_sne["cov"] = cov_total
-                    data_sne["inv_cov"] = inv_cov_total
+                from Kosmulator_main.sn_covariance import load_sn_covariance
+                cov_total, inv_cov_total = load_sn_covariance(
+                    cov_path, len(data_sne["redshift"]),
+                    data_sne["type_data_error"] if obs == "DESY5" else None,
+                )
+                data_sne["cov"] = cov_total
+                data_sne["inv_cov"] = inv_cov_total
 
                 observation_data[obs] = data_sne
             # ------------------

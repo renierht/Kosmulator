@@ -176,7 +176,7 @@ def model_likelihood(
     # Predictions per type
     if obs_type == "SNe":
         d_c = utils.Comoving_distance_vectorized(MODEL_func, z, param_dict)
-        y_dl = d_c * (1.0 + (obs_data["zhel"] if obs == "DES_Dovekie" else z))
+        y_dl = d_c * (1.0 + (obs_data["zhel"] if obs == "DES_Dovekie" else obs_data.get("z_hel", z)))
         if (not np.isfinite(y_dl).all()) or (np.min(y_dl) <= 0):
             return -np.inf
         model = 25.0 + 5.0 * np.log10(y_dl)

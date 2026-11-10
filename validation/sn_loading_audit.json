@@ -1,0 +1,15 @@
+{
+  "DESY5": {
+    "rows": 1829,
+    "covariance_matches_explicit_recipe": true,
+    "quadratic_relative_difference": 2.220446049250313e-16,
+    "changed_integration_redshifts": 247,
+    "max_abs_delta_distance_modulus": 0.09368522164264148,
+    "geometry_comparison": "LCDM Om=.3 H0=70; both use corrected dense quadrature"
+  },
+  "Union3": {
+    "rows": 22,
+    "covariance_matches_explicit_recipe": true,
+    "quadratic_relative_difference": 8.659739592076221e-15
+  }
+}

@@ -306,3 +306,36 @@ reviewed. Dataset-specific offset conventions and effective nuisance-parameter
 counting must also be documented consistently in future IC reporting. No new
 production runs started. Next: finish DESY5 zHD/zHEL loader and covariance audit,
 then review the upstream CC rows/correlations against their original sources.
+
+## Section 4d — SN redshifts and explicit covariance loading (2026-11-10)
+DESY5 CSV loading now prioritizes zHD and retains zHEL as z_hel. The generic
+SN likelihood uses (1+z_hel) D_c(zHD) when supplied. DES_Dovekie's dedicated
+zhel branch is unchanged; Pantheon tags have no new metadata and are unchanged.
+Whitespace Union3 keeps its existing single-redshift binned convention.
+Malformed CSV/whitespace rows raise rather than silently drop rows or partially
+append arrays, protecting covariance alignment. Union3 zero placeholder dmb
+values remain zero and are not used to augment its full covariance.
+
+New sn_covariance.py loads the declared N-prefixed covariance explicitly:
+DESY5 C_total = C_sys + diag(MUERR_FINAL^2); Union3 C_total = C_file.
+It checks dimensions, finiteness and symmetry, and uses Cholesky solve to obtain
+precision. Missing/malformed/non-PD covariance fails closed: no diagonal-only
+or pseudoinverse fallback and no covariance-versus-precision diagonal heuristic.
+No dataset files modified. Config.py's mixed line endings were normalized to
+CRLF during editing; an optional attempt to restore unchanged line endings was
+rejected by automatic review, so that cosmetic cleanup was omitted.
+
+26 targeted tests and 83 subtests passed. Real-data audit confirmed 1829 DESY5
+rows and 22 Union3 bins with exactly the explicit covariance recipes. Covariance
+quadratics agree with independent linear solves at relative 2.22e-16 / 8.66e-15.
+247 DESY5 rows have zHD != zCMB. At LCDM Omega_m=.3,H0=70, switching from the
+old single-zCMB geometry to zHD/zHEL changes predicted distance modulus by up to
+0.093685 mag. Both sides use the corrected dense distance mesh, isolating the
+redshift correction. This does not quantify posterior shifts. Reproducible audit:
+validation/audit_sn_loading.py and validation/sn_loading_audit.json.
+
+Likelihood change: fresh DESY5 chains required; generic source-hash resume guard
+rejects old code provenance. Production remains untouched. No claim of external
+release-file identity or full upstream integration is made by these local checks.
+Remaining: sourced CC row/covariance review, Pantheon redshift convention audit,
+and reporting/offset nuisance-count consistency before production release.
