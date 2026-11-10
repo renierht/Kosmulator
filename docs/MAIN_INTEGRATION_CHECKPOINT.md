@@ -353,3 +353,18 @@ require fresh CC chains and do not alter production or protected IDE modules.
 Optional Moresco SPS covariance remains unintegrated, as do sample-overlap checks.
 Next bounded section: review that optional covariance and its source table,
 then reporting/likelihood convention consistency. No production chains started.
+
+## Section 4f — optional Moresco SPS covariance (2026-11-10)
+Audited Table 3 and Eq. 9 against the primary paper. Added full/ooo modes on the
+15 Moresco D4000 rows, default None. Library inclusion is explicit (default True
+for upstream parity). Endpoint extrapolation defaults to error: enabling on the
+full sample requires explicit hold for z=1.965, beyond the tabulated range.
+Settings captured by existing generic runtime_constants resume provenance.
+Default CC likelihood unchanged; changing settings needs fresh chains.
+31 tests and 83 subtests passed; upstream matrix agreement 5.68e-14 maximum
+absolute difference with matching settings. Independent pairwise construction,
+PSD, disabled identity, duplicate-attachment and input checks pass.
+See docs/CC_INTEGRATION_AUDIT.md and validation/cc_sps_audit.json.
+No production or protected IDE source changes. No new MCMC run started.
+Next: Pantheon convention/reporting consistency audit and dataset overlap
+assessment before choosing a publication dataset combination.

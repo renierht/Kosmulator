@@ -61,3 +61,6 @@ next; no new production chains launched.
 Section 4e: verified CC row corrections and published correlations integrated;
 CC data hashes protect generic resumes. Optional Moresco SPS covariance and
 sample-overlap assessment remain pending (docs/CC_INTEGRATION_AUDIT.md).
+Section 4f: optional Moresco SPS covariance audited and integrated, off by default;
+explicit library and endpoint policies. Next: Pantheon/reporting consistency and
+sample-overlap review. Production dataset choice remains separate.

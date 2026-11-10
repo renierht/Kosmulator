@@ -45,3 +45,38 @@ budget. Sample overlap and cross-study systematic correlations are not establish
 by this audit. Those checks remain necessary before recommending a final CC
 combination for publication. The existing z=.12 Wang row is retained, not newly
 added or independently verified here. No production runs or IDE physics changed.
+
+## Optional SPS covariance added (2026-11-10)
+
+The optional implementation now exists, superseding the earlier pending status.
+It remains disabled. Source: [Moresco 2020 Table 3, Eq. 9 and Section III.2](https://arxiv.org/html/2003.07362).
+The 29 tabulated rows match upstream. Contributions are outer products of
+interpolated fractional errors times measured H, restricted to 15 designated
+Moresco rows. Library inclusion and endpoint extension are assumptions: the
+paper's modern-library example omits the library term, and the table ends at
+z=1.475 while one selected datum is at z=1.965.
+
+Configure before Config.create_config/load_all_data:
+
+```python
+from Kosmulator_main import constants as K
+K.CC_SYS_COV = "full"          # None (default), "full", or "ooo"
+K.CC_SPS_INCLUDE_LIBRARY = True
+K.CC_SPS_EXTRAPOLATION = "hold" # default "error" rejects out-of-table rows
+```
+
+These settings reproduce upstream's assumptions. `ooo` excludes the most
+discordant SPS model; `CC_SPS_INCLUDE_LIBRARY=False` omits the library contribution.
+No mode is selected as a publication recommendation here. Changing any setting
+requires fresh chains, and generic manifests capture them as runtime constants.
+No extra SFH/metallicity contribution or cross-study correlations were added.
+The endpoint extension is explicit and not a validated high-redshift calibration.
+
+31 tests and 83 subtests pass. Independent pairwise matrix construction checks all
+four combinations. Duplicate attachment, invalid policies, missing selected rows
+and implicit extrapolation are rejected. Default-off covariance is unchanged.
+validation/audit_cc_sps.py compares with upstream and records fixed-point results
+in cc_sps_audit.json: maximum absolute matrix difference 5.68e-14 under matching
+settings. At the same LCDM point used above, chi-square is 24.0604 (full/library)
+or 24.1271 (ooo/library), versus 24.8380 without the additional covariance.
+These are not fitted minima, evidence values or posterior forecasts.

@@ -1,0 +1,37 @@
+{
+  "baseline_chi2": 24.838004505064653,
+  "cases": [
+    {
+      "mode": "full",
+      "include_library": true,
+      "extrapolation": "hold",
+      "upstream_max_abs_difference": 5.684341886080802e-14,
+      "chi2": 24.060429736897284,
+      "minimum_eigenvalue": 12.016566587227848
+    },
+    {
+      "mode": "full",
+      "include_library": false,
+      "extrapolation": "hold",
+      "upstream_max_abs_difference": null,
+      "chi2": 24.06962602606247,
+      "minimum_eigenvalue": 12.016566587230216
+    },
+    {
+      "mode": "ooo",
+      "include_library": true,
+      "extrapolation": "hold",
+      "upstream_max_abs_difference": 5.684341886080802e-14,
+      "chi2": 24.12707987081092,
+      "minimum_eigenvalue": 12.016566587228581
+    },
+    {
+      "mode": "ooo",
+      "include_library": false,
+      "extrapolation": "hold",
+      "upstream_max_abs_difference": null,
+      "chi2": 24.135662504069764,
+      "minimum_eigenvalue": 12.01656658722796
+    }
+  ]
+}

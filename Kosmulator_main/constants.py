@@ -346,3 +346,8 @@ CONV_CONSECUTIVE = 1
 EMCEE_MOVES = "stretch"
 EMCEE_MOVES_OPTIONS = ("stretch", "de_snooker")
 DE_SNOOKER_WEIGHTS = (0.8, 0.2)
+
+# Optional Moresco 2020 CC systematic covariance (see docs/CC_INTEGRATION_AUDIT.md).
+CC_SYS_COV = None  # None, "full", "ooo"
+CC_SPS_INCLUDE_LIBRARY = True  # upstream convention; False for modern-library scenario
+CC_SPS_EXTRAPOLATION = "error"  # "hold" explicitly reproduces upstream endpoint extension
