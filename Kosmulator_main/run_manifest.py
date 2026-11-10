@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 SCIENTIFIC_KEYS = (
-    "distance_policy", "launcher", "runtime_constants", "cli_settings", "source_hashes", "true_values",
+    "dataset_hashes", "distance_policy", "launcher", "runtime_constants", "cli_settings", "source_hashes", "true_values",
     "observations", "models", "priors", "class_settings", "regime_switches",
     "free_w", "free_w_dm", "free_w0", "free_wa", "coupled_prior",
     "emcee_moves", "walkers", "burn", "thin", "convergence_policy", "convergence_setting",
@@ -64,6 +64,12 @@ def generic_settings(namespace, constants, model_module, cli, root):
                    "output_suffix", "resume", "overwrite"}
     settings["cli_settings"] = {key: value for key, value in vars(cli).items()
                                 if key not in operational}
+    settings["dataset_hashes"] = {}
+    if any("CC" in group for group in namespace["observations"]):
+        base = Path(constants.OBSERVATIONS_BASE)
+        for filename in ("CC.dat", "CC_corr.txt"):
+            path = base / filename
+            settings["dataset_hashes"][filename] = hashlib.sha256(path.read_bytes()).hexdigest()
     settings["source_hashes"] = {}
     files = [Path(root) / "User_defined_modules.py"]
     files += sorted((Path(root) / "Kosmulator_main").glob("*.py"))

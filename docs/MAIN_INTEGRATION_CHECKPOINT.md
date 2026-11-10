@@ -339,3 +339,17 @@ rejects old code provenance. Production remains untouched. No claim of external
 release-file identity or full upstream integration is made by these local checks.
 Remaining: sourced CC row/covariance review, Pantheon redshift convention audit,
 and reporting/offset nuisance-count consistency before production release.
+
+## Section 4e — verified CC rows and correlations (2026-11-10)
+Integrated six upstream CC row changes after primary-source checks, plus the
+three Loubser measurement correlations. Detailed sources, covariance convention
+and remaining scope: docs/CC_INTEGRATION_AUDIT.md. CC loader now requires the
+pair file and validates unique matches, finite errors, rho and positive
+ definiteness; likelihood consumes the full precision. Generic manifests hash
+CC.dat and CC_corr.txt and reject data-only changes on resume.
+28 tests and 83 subtests pass. Fixed-point four-model audit saved in
+validation/cc_update_audit.json; independent linear solves agree. These changes
+require fresh CC chains and do not alter production or protected IDE modules.
+Optional Moresco SPS covariance remains unintegrated, as do sample-overlap checks.
+Next bounded section: review that optional covariance and its source table,
+then reporting/likelihood convention consistency. No production chains started.

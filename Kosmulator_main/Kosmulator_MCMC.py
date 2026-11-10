@@ -230,6 +230,10 @@ def model_likelihood(
             param_dict=param_dict   # <--- Ensure this matches your local var (usually 'param_dict')
         )
 
+    elif obs == "CC" and "inv_cov" in obs_data:
+        residual = type_data - model
+        chi2 = float(residual @ obs_data["inv_cov"] @ residual)
+
     else:
         # Fallback for CC, f_sigma_8, OHD, etc.
         chi2 = SP.Calc_chi(obs_type, type_data, type_err, model)

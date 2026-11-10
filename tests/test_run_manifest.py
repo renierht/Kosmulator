@@ -38,13 +38,19 @@ class ManifestTests(unittest.TestCase):
             namespace = dict(model_names=["IDE"], observations=[["CC"]],
                              prior_limits={"w": (-2, -.33)}, true_values={"w": -1},
                              nwalkers=120, burn=1000, convergence=.05)
-            constants = SimpleNamespace(EMCEE_MOVES="stretch", OMEGA_B=.048)
+            (root/"CC.dat").write_text("0.1 70 5")
+            (root/"CC_corr.txt").write_text("# fixture")
+            constants = SimpleNamespace(EMCEE_MOVES="stretch", OMEGA_B=.048, OBSERVATIONS_BASE=str(root))
             cli = Namespace(num_cores=8, resume=False, force_emcee=True)
             settings = generic_settings(namespace, constants, SimpleNamespace(), cli, root)
             validate_or_record(root, settings)
             cli.num_cores = 4
             cli.resume = True
             validate_or_record(root, generic_settings(namespace, constants, SimpleNamespace(), cli, root))
+            (root/"CC.dat").write_text("0.1 70 6")
+            with self.assertRaises(ValueError):
+                validate_or_record(root, generic_settings(namespace, constants, SimpleNamespace(), cli, root))
+            (root/"CC.dat").write_text("0.1 70 5")
             constants.OMEGA_B = .05
             with self.assertRaises(ValueError):
                 validate_or_record(root, generic_settings(namespace, constants, SimpleNamespace(), cli, root))

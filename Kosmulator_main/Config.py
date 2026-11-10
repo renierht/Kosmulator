@@ -787,6 +787,9 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
             # ------------------
             else:
                 observation_data[obs] = load_data(file_path)
+                if obs == "CC":
+                    from Kosmulator_main.cc_covariance import attach_cc_correlations
+                    attach_cc_correlations(observation_data[obs], Path(K.OBSERVATIONS_BASE) / "CC_corr.txt")
 
     return observation_data
 

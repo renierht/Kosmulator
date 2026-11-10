@@ -58,3 +58,6 @@ Redshift/covariance review and CC integration still pending; see checkpoint.
 Section 4d: DESY5 zHD/zHEL geometry and explicit DESY5/Union3 covariance loading
 implemented, real-file quadratics validated. CC source/covariance review remains
 next; no new production chains launched.
+Section 4e: verified CC row corrections and published correlations integrated;
+CC data hashes protect generic resumes. Optional Moresco SPS covariance and
+sample-overlap assessment remain pending (docs/CC_INTEGRATION_AUDIT.md).

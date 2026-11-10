@@ -1,0 +1,30 @@
+{
+  "rows": 36,
+  "minimum_covariance_eigenvalue": 12.016566587228803,
+  "models": [
+    {
+      "model": "LCDM_v",
+      "old_chi2": 16.30371776533347,
+      "updated_diagonal_chi2": 16.811539852682518,
+      "updated_correlated_chi2": 24.838004505064653
+    },
+    {
+      "model": "w0waCDM",
+      "old_chi2": 17.083537738849298,
+      "updated_diagonal_chi2": 17.599492923719477,
+      "updated_correlated_chi2": 26.243821725926512
+    },
+    {
+      "model": "SignSwitch_IDE_1",
+      "old_chi2": 17.14087270851914,
+      "updated_diagonal_chi2": 17.618887760990223,
+      "updated_correlated_chi2": 25.920688849694383
+    },
+    {
+      "model": "SignSwitch_IDE_2",
+      "old_chi2": 17.103715671039296,
+      "updated_diagonal_chi2": 17.583087298981894,
+      "updated_correlated_chi2": 25.890744289638803
+    }
+  ]
+}
