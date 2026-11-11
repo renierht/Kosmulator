@@ -94,3 +94,6 @@ htmlcov/
 # =========================
 .Rhistory
 
+
+# Reproducible native plot review outputs (driver is tracked).
+validation/native_sn_plot_review/

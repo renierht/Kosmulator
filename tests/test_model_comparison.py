@@ -150,6 +150,25 @@ class ComparisonTests(unittest.TestCase):
             self.assertEqual(parsed["IDE"]["CC"]["p_D"], 1.23456789)
             self.assertTrue((Path(tmp)/"information_criteria_1.pdf").is_file())
             self.assertTrue((Path(tmp)/"model_comparison.tex").is_file())
+            self.assertIn("k counts sampled parameters", (Path(tmp)/"comparison_conventions.md").read_text())
+
+    def test_dataset_signature_tracks_covariance_and_policy_not_private_cache(self):
+        data={'SN':dict(redshift=np.array([.1,.2]),inv_cov=np.eye(2),marginalise_offset=True)}
+        sig=mc.dataset_signature(data,['SN'])
+        data['SN']['_temporary_cache']=123
+        self.assertEqual(sig,mc.dataset_signature(data,['SN']))
+        data['SN']['inv_cov'][0,0]=2
+        self.assertNotEqual(sig,mc.dataset_signature(data,['SN']))
+        meta=mc.likelihood_reporting_metadata(data,['SN'])
+        self.assertEqual(meta['Analytic_offset_datasets'],['SN'])
+        self.assertEqual(meta['IC_convention'],'sampled-parameter-count-v1')
+
+    def test_same_counts_different_covariance_reports_cannot_be_compared(self):
+        row=dict(Data_counts={'CC':36},Chi_squared=10.,AIC=12.,AICc=13.,DIC=11.,BIC=14.,Dataset_signature='a',IC_convention='sampled-parameter-count-v1')
+        other=dict(row,Dataset_signature='b')
+        result=mc.compare_models({'LCDM':{'CC':row},'IDE':{'CC':other}},'LCDM')
+        self.assertTrue(np.isnan(result['IDE']['CC']['dDIC']))
+        self.assertIsNone(result['IDE']['CC'].get('LRT_sigma'))
 
 
 if __name__ == "__main__":

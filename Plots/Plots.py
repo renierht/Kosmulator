@@ -1550,7 +1550,7 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                     z_obs = Z_OBS_BASE + (len(part_sorted) - 1 - oi)
 
                     # --- VISUALIZATION MASK ---
-                    MASK_BIGERR_OBS = ("Union3", "DESY5")   # extend if needed
+                    MASK_BIGERR_OBS = ("Union3", "DESY5", "DES_Dovekie")   # extend if needed
 
                     if (y_err is not None) and (obs_type in MASK_BIGERR_OBS):
                         _y_err = np.asarray(y_err, dtype=float)
@@ -1562,6 +1562,9 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                             err_for_mask = _y_err
 
                         vis_mask = np.isfinite(err_for_mask) & (err_for_mask < 10.0)
+                        hidden = int(np.count_nonzero(~vis_mask))
+                        if hidden:
+                            disp_obs += f" ({hidden} large/invalid-error rows not shown)"
 
                         x_plot     = np.asarray(x_dat)[vis_mask]
                         y_plot     = np.asarray(y_dat)[vis_mask]

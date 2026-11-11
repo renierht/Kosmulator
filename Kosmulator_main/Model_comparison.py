@@ -29,6 +29,47 @@ SWITCHES = (
 )
 
 
+def dataset_signature(data, observations):
+    """Hash loaded dataset values/covariances; exclude private runtime caches."""
+    import hashlib
+    digest = hashlib.sha256()
+    def visit(value):
+        if isinstance(value, dict):
+            for key in sorted(value):
+                if str(key).startswith("_"):
+                    continue
+                digest.update(str(key).encode() + b"\0")
+                visit(value[key])
+        elif isinstance(value, np.ndarray):
+            array = np.ascontiguousarray(value)
+            digest.update(str(array.dtype).encode() + str(array.shape).encode())
+            if array.dtype.hasobject:
+                visit(array.tolist())
+            else:
+                digest.update(array.tobytes())
+        elif isinstance(value, (list, tuple)):
+            digest.update(b"[")
+            for item in value:
+                visit(item)
+                digest.update(b",")
+            digest.update(b"]")
+        else:
+            digest.update(repr(value).encode() + b"\0")
+    visit({name: data[name] for name in sorted(observations)})
+    return digest.hexdigest()
+
+
+def likelihood_reporting_metadata(data, observations):
+    offsets = [name for name in observations
+               if name == "DES_Dovekie" or data[name].get("marginalise_offset", False)]
+    return {
+        "Dataset_signature": dataset_signature(data, observations),
+        "IC_convention": "sampled-parameter-count-v1",
+        "Analytic_offset_datasets": offsets,
+        "IC_parameter_count_note": "k counts sampled parameters; analytically removed offsets are not added to k",
+    }
+
+
 def normalise_key(key):
     return str(key).replace("PantheonP_SH0ES", "PantheonPS").replace(
         "Pantheon+SH0ES", "PantheonPS"
@@ -477,6 +518,9 @@ def analyse_group(samples, data, cfg, model_name, index, source=None, options=No
             "Burn": int(cfg.get("burn", 0)), "Thin": 1,
             "Physicality_switches": dict(flags), "Postprocessing_options": opts,
         })
+        result.update(likelihood_reporting_metadata(data, obs))
+        if result["Analytic_offset_datasets"]:
+            notes.append(result["IC_parameter_count_note"])
         if runs and not all(r["success"] for r in runs):
             notes.append("One or more optimiser runs did not report convergence; see diagnostics")
         if notes:
@@ -495,7 +539,9 @@ def compare_models(results, reference):
         for key, result in groups.items():
             ref = next((v for rk, v in results.get(reference, {}).items()
                         if normalise_key(rk) == normalise_key(key)), None)
-            matching = ref is not None and result["Data_counts"] == ref["Data_counts"]
+            matching = (ref is not None and result["Data_counts"] == ref["Data_counts"]
+                        and result.get("Dataset_signature") == ref.get("Dataset_signature")
+                        and result.get("IC_convention") == ref.get("IC_convention"))
             for statistic, delta in (("Chi_squared", "dChi_squared"),
                                      ("AIC", "dAIC"), ("AICc", "dAICc"),
                                      ("DIC", "dDIC"), ("BIC", "dBIC")):
@@ -503,7 +549,7 @@ def compare_models(results, reference):
             result["Reference_model"] = reference
             if not matching:
                 result["Note"] = (result.get("Note", "") +
-                    " | Matching reference model/dataset unavailable; deltas undefined").strip(" |")
+                    " | Matching reference dataset/covariance/IC convention unavailable; deltas undefined").strip(" |")
     from Kosmulator_main.significance import attach_lrt
     return attach_lrt(results, reference)
 
@@ -549,7 +595,20 @@ def export_comparison(results, folder):
     export_reports(results, folder)
     (folder / "model_comparison.json").write_text(
         json.dumps(_json_safe(results), indent=2, allow_nan=False), encoding="utf-8")
+    convention_lines = [
+        "# Comparison conventions", "",
+        "k counts sampled parameters. Analytically removed SN offsets are listed below and are not added to k.",
+        "This preserves the existing marginal-likelihood convention; it is not a separate profile-likelihood nuisance count.",
+        "DIC uses mean deviance and deviance at the posterior mean. LRT calibration remains qualified in its status field.",
+        "Dataset fingerprints must match for new comparisons. Two legacy reports without fingerprints retain legacy behavior and do not establish dataset identity.",
+        "Compare models only with the same data, covariance, normalization and IC convention; these are not Bayes factors.", "",
+    ]
+    for model, groups in results.items():
+        for key, row in groups.items():
+            convention_lines.append(f"- {model} / {key}: k={row['k']}; analytic offsets={row.get('Analytic_offset_datasets', 'unrecorded')}; convention={row.get('IC_convention', 'legacy/unrecorded')}; dataset={row.get('Dataset_signature', 'unrecorded')}")
+    (folder / "comparison_conventions.md").write_text("\n".join(convention_lines)+"\n", encoding="utf-8")
     fields = ["Model", "Observation", "N", "k", "p_D", "Chi_squared",
+              "IC_convention", "IC_parameter_count_note", "Dataset_signature",
               "D_bar", "D_at_mean", "AIC", "AICc", "DIC", "BIC",
               "dChi_squared", "dAIC", "dAICc", "dDIC", "dBIC", "MLE_note", "LRT_df", "LRT_p", "LRT_sigma", "LRT_status"]
     with (folder / "model_comparison.csv").open("w", newline="", encoding="utf-8") as f:

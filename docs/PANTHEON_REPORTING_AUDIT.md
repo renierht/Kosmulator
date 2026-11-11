@@ -68,3 +68,27 @@ All ten model-derived rd routes were finite. This used the existing matching
 cache/environment without a rebuild; activated-CONDA_PREFIX cache identity still
 needs reconciliation before release. Full suite after guard: 108 tests and
 730 subtests pass. No production chains or GitHub publication changed.
+
+## Reporting fingerprints and native visual review
+
+New comparison rows hash loaded dataset values, covariance, selection and public
+policy metadata. Private runtime caches are excluded. Delta IC and LRT summaries
+are unavailable if fingerprints or IC convention identifiers differ. New and
+legacy fingerprint-free reports cannot mix; two legacy reports retain their
+historical comparison behavior, explicitly not proof of dataset identity.
+JSON/CSV carry the signature and k convention. comparison_conventions.md is
+exported alongside the tables, listing analytically removed SN offsets. Numerical
+IC definitions are unchanged; no profile-likelihood IC was silently substituted.
+
+validation/check_native_sn_plots.py generated all five native SN data/model
+figures with real data and explicitly illustrative LCDM parameters, not posterior
+fits. All five were visually inspected. Dovekie huge-error rows had compressed the
+plot; it now shares the existing DESY5 display threshold (error below 10 mag).
+Legends disclose hidden row counts (72 Dovekie, 61 DESY5 in this check). This only
+masks plotted rows; every row stays in sampling/statistics. Full-covariance Union3
+error bars and Pantheon calibrator residuals are visible and coherent. Output PNGs
+are local ignored artifacts under validation/native_sn_plot_review/.
+
+110 tests and 730 subtests passed after these changes; focused reporting export
+checks passed after adding the human-readable convention file. The native plots
+are validation artifacts, not regenerated publication posteriors.

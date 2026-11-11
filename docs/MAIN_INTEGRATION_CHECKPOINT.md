@@ -396,3 +396,13 @@ meter is accessible, and an asynchronous request for their visible percentage
 was sent. No assertion that the threshold was reached. Release remains pending
 visual validation, reporting nuisance-count convention, activation/cache identity
 and final deployment review. Preserve these checkpoints and production chains.
+
+## Section 5c — report provenance and native figure review (2026-11-11)
+User reports 59% usage; continued bounded work. Added dataset/covariance hashes
+and IC-count identifiers to comparison reports. Mismatches suppress delta IC/LRT;
+numerical IC definitions unchanged. Export comparison_conventions.md with offset
+and k explanation. Native five-dataset SN figure driver exercised and images
+reviewed. Dovekie display-only huge-error mask now matches DESY5 and discloses
+counts; sampling retains all rows. Full suite 110 tests + 730 subtests passed;
+focused export checks passed. Activated-environment CLASS cache build initiated
+in isolated checkout; collect its result and validate before marking ready.
