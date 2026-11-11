@@ -1,0 +1,38 @@
+[
+  {
+    "first": "PantheonP",
+    "second": "PantheonPS",
+    "exact_CID_and_survey_matches": 1590,
+    "exact_CID_matches": 1473
+  },
+  {
+    "first": "PantheonP",
+    "second": "DESY5",
+    "exact_CID_and_survey_matches": 332,
+    "exact_CID_matches": 335
+  },
+  {
+    "first": "PantheonP",
+    "second": "DES_Dovekie",
+    "exact_CID_and_survey_matches": 337,
+    "exact_CID_matches": 339
+  },
+  {
+    "first": "PantheonPS",
+    "second": "DESY5",
+    "exact_CID_and_survey_matches": 332,
+    "exact_CID_matches": 335
+  },
+  {
+    "first": "PantheonPS",
+    "second": "DES_Dovekie",
+    "exact_CID_and_survey_matches": 337,
+    "exact_CID_matches": 339
+  },
+  {
+    "first": "DESY5",
+    "second": "DES_Dovekie",
+    "exact_CID_and_survey_matches": 1718,
+    "exact_CID_matches": 1718
+  }
+]

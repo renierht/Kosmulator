@@ -49,3 +49,22 @@ or CC studies independent), complete report metadata/IC nuisance convention,
 visual inspection of regenerated production-style data/model figures, activated
 Conda CLASS cache readiness/full-backend smoke, final release diff and deployment.
 No production sampling, chain migration, or GitHub push occurred in this section.
+
+## Local overlap and full CLASS follow-up
+
+validation/audit_sn_overlap.py counts exact (case-normalized CID, IDSURVEY)
+identifier matches, using each Pantheon tag's actual selection. Results are in
+validation/sn_overlap_audit.json. DESY5/Dovekie share 1718 keys; PantheonP or PS
+shares 332 with DESY5 and 337 with Dovekie. PantheonP/PS share 1590 keys (1473
+unique CID strings). These are identifier matches, not independent row counts;
+aliases and cross-release identifiers can leave additional overlap undetected.
+The loader rejects pairs of these four releases within one likelihood group.
+Separate observation groups remain allowed. No joint cross-release covariance
+was constructed. Other sample overlaps, including CC studies, remain unaudited.
+
+Full cached CLASS validation also passed: 20 cold/warm cases, 800000 background
+points, maximum H relative error 1.67e-15 and scaled density error 7.40e-15.
+All ten model-derived rd routes were finite. This used the existing matching
+cache/environment without a rebuild; activated-CONDA_PREFIX cache identity still
+needs reconciliation before release. Full suite after guard: 108 tests and
+730 subtests pass. No production chains or GitHub publication changed.

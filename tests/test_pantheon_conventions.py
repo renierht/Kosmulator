@@ -33,3 +33,9 @@ class PantheonConventions(unittest.TestCase):
             np.testing.assert_array_equal(obs['indices'],np.flatnonzero(mask))
             np.testing.assert_array_equal(obs['z_hel'],df.zHEL.to_numpy()[mask])
             self.assertEqual(obs['cov'].shape,(mask.sum(),mask.sum()))
+
+    def test_overlapping_releases_rejected_before_loading(self):
+        from itertools import combinations
+        for pair in combinations(('PantheonP','PantheonPS','DESY5','DES_Dovekie'),2):
+            with self.assertRaisesRegex(ValueError,'Overlapping SN'):
+                Config.load_all_data({'observations':[list(pair)]})

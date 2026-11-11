@@ -383,3 +383,16 @@ production run. IC numerical definitions unchanged; k convention still needs
 publication documentation. Sample-overlap audit, full backend readiness and
 visual release validation remain outstanding. Usage percentage unavailable;
 no claim that a 10% threshold has been reached.
+
+## Section 5b — measured SN overlap and full CLASS check (2026-11-11)
+Measured local CID/survey matches and added same-group rejection for pairs among
+PantheonP, PantheonPS, DESY5 and DES_Dovekie; separate comparison groups allowed.
+validation/sn_overlap_audit.json records counts; identifier matching is not an
+exhaustive sample-independence proof. CC cross-study overlap still pending.
+Full existing cached CLASS passed 20 cold/warm cases / 800000 points and 10 rd
+routes. H max error 1.67e-15, density scaled max 7.40e-15. No rebuild occurred.
+108 tests and 730 subtests pass. User requested work until 10% usage; no usage
+meter is accessible, and an asynchronous request for their visible percentage
+was sent. No assertion that the threshold was reached. Release remains pending
+visual validation, reporting nuisance-count convention, activation/cache identity
+and final deployment review. Preserve these checkpoints and production chains.

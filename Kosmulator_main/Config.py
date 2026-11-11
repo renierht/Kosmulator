@@ -460,6 +460,13 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
     if prior_limits is None:
         prior_limits = config.get("prior_limits", {})
 
+    # These local releases share measured SN events; no joint cross-covariance is supplied.
+    overlapping_sn = {"PantheonP", "PantheonPS", "DESY5", "DES_Dovekie"}
+    for group in config["observations"]:
+        shared = overlapping_sn.intersection(group)
+        if len(shared) > 1:
+            raise ValueError("Overlapping SN releases cannot be treated as independent: "
+                             + ", ".join(sorted(shared)) + ". Use separate observation groups.")
     flat_obs = {o for grp in config["observations"] for o in grp}
     for grp in config["observations"]:
         # Safety: mixed CMB TTTEEE + TT only in one group is not supported
