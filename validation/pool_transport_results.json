@@ -7,28 +7,28 @@
   "DES_transport": [
     {
       "mode": "original",
-      "seconds": 1.1292996789998142,
+      "seconds": 1.1079900659970008,
       "evaluations": 12,
       "callable_bytes": 26577117,
       "max_difference": 0.0
     },
     {
       "mode": "cached",
-      "seconds": 0.9761915529961698,
+      "seconds": 0.9404469990040525,
       "evaluations": 12,
       "callable_bytes": 189,
       "max_difference": 0.0
     },
     {
       "mode": "cached",
-      "seconds": 0.9638262240041513,
+      "seconds": 0.9376723890018184,
       "evaluations": 12,
       "callable_bytes": 189,
       "max_difference": 0.0
     },
     {
       "mode": "original",
-      "seconds": 1.1757236400007969,
+      "seconds": 1.1225776510036667,
       "evaluations": 12,
       "callable_bytes": 26577117,
       "max_difference": 0.0

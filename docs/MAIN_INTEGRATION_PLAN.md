@@ -67,3 +67,6 @@ sample-overlap review. Production dataset choice remains separate.
 Sections 4g/5a: Pantheon sample/redshift conventions and SN residual plotting
 aligned; full suite and independent IDE validation passed. Remaining release
 checks listed in docs/PANTHEON_REPORTING_AUDIT.md.
+Section 5c/d: report fingerprints/conventions, native visual review and activated
+CLASS environment checks complete. Current release scope and remaining decisions
+are summarized in docs/INTEGRATION_RELEASE_STATUS.md.

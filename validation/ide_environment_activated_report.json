@@ -1,0 +1,116 @@
+{
+  "ok": true,
+  "version": "2.0.0",
+  "python": "3.11.15",
+  "executable": "/home/marcel/miniconda3/envs/Kosmulator_test/bin/python",
+  "items": [
+    {
+      "name": "python>=3.9",
+      "ok": true,
+      "detail": "3.11.15 (/home/marcel/miniconda3/envs/Kosmulator_test/bin/python)",
+      "hint": "Recommended: Python 3.11 (best compatibility in our tested setup)."
+    },
+    {
+      "name": "import numpy",
+      "ok": true,
+      "detail": "/home/marcel/miniconda3/envs/Kosmulator_test/lib/python3.11/site-packages/numpy/__init__.py",
+      "hint": "Install missing dependency: numpy (see README)."
+    },
+    {
+      "name": "import scipy",
+      "ok": true,
+      "detail": "/home/marcel/miniconda3/envs/Kosmulator_test/lib/python3.11/site-packages/scipy/__init__.py",
+      "hint": "Install missing dependency: scipy (see README)."
+    },
+    {
+      "name": "import matplotlib",
+      "ok": true,
+      "detail": "/home/marcel/miniconda3/envs/Kosmulator_test/lib/python3.11/site-packages/matplotlib/__init__.py",
+      "hint": "Install missing dependency: matplotlib (see README)."
+    },
+    {
+      "name": "import h5py",
+      "ok": true,
+      "detail": "/home/marcel/miniconda3/envs/Kosmulator_test/lib/python3.11/site-packages/h5py/__init__.py",
+      "hint": "Install missing dependency: h5py (see README)."
+    },
+    {
+      "name": "import pandas",
+      "ok": true,
+      "detail": "/home/marcel/miniconda3/envs/Kosmulator_test/lib/python3.11/site-packages/pandas/__init__.py",
+      "hint": "Install missing dependency: pandas (see README)."
+    },
+    {
+      "name": "import astropy",
+      "ok": true,
+      "detail": "/home/marcel/miniconda3/envs/Kosmulator_test/lib/python3.11/site-packages/astropy/__init__.py",
+      "hint": "Install missing dependency: astropy (see README)."
+    },
+    {
+      "name": "import emcee",
+      "ok": true,
+      "detail": "/home/marcel/miniconda3/envs/Kosmulator_test/lib/python3.11/site-packages/emcee/__init__.py",
+      "hint": "Install missing dependency: emcee (see README)."
+    },
+    {
+      "name": "import zeus",
+      "ok": true,
+      "detail": "/home/marcel/miniconda3/envs/Kosmulator_test/lib/python3.11/site-packages/zeus/__init__.py",
+      "hint": "Install missing dependency: zeus (see README)."
+    },
+    {
+      "name": "import getdist",
+      "ok": true,
+      "detail": "/home/marcel/miniconda3/envs/Kosmulator_test/lib/python3.11/site-packages/getdist/__init__.py",
+      "hint": "Install missing dependency: getdist (see README)."
+    },
+    {
+      "name": "import clik (Planck/CLIK)",
+      "ok": true,
+      "detail": "/mnt/c/Users/Marcel/PhD/Kosmulator_test/Clik/code/plc_3.0/plc-3.1/lib/python/site-packages/clik/__init__.py",
+      "hint": "Build/install CLIK and ensure activation sources `$CLIKROOT/bin/clik_profile.sh`."
+    },
+    {
+      "name": "import clik.lkl",
+      "ok": true,
+      "detail": "/mnt/c/Users/Marcel/PhD/Kosmulator_test/Clik/code/plc_3.0/plc-3.1/lib/python/site-packages/clik/lkl.cpython-311-x86_64-linux-gnu.so",
+      "hint": "If this fails: lkl module may need the activation symlink fix."
+    },
+    {
+      "name": "import clik.lkl_lensing",
+      "ok": true,
+      "detail": "/mnt/c/Users/Marcel/PhD/Kosmulator_test/Clik/code/plc_3.0/plc-3.1/lib/python/site-packages/clik/lkl_lensing.cpython-311-x86_64-linux-gnu.so",
+      "hint": "If this fails: lkl_lensing module may need the activation symlink fix."
+    },
+    {
+      "name": "Shared IDE CLASS routing and matching cache",
+      "ok": true,
+      "detail": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/Class/.cache/IDE_background/1de1fa3ca79dfa1aa40aea398de4d213222fb92e402962c6c5572267e8a7584c/classy.cpython-311-x86_64-linux-gnu.so",
+      "hint": "Build the shared IDE backend explicitly with the normal CLASS loader."
+    }
+  ],
+  "scope": "IDE background environment; no likelihood or physics validation",
+  "conda_prefix": "/home/marcel/miniconda3/envs/Kosmulator_test",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "threads": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1"
+  },
+  "mpi_launcher": null,
+  "clik_note": "Current CLASS adapter imports CLIK; Planck likelihood data are optional here.",
+  "backend_mapping": {
+    "Linear_IDE_1": "IDE_background",
+    "Linear_IDE_2": "IDE_background",
+    "Linear_IDE_3": "IDE_background",
+    "Linear_IDE_4": "IDE_background",
+    "Linear_IDE_5": "IDE_background",
+    "NonLinear_IDE_1": "IDE_background",
+    "NonLinear_IDE_2": "IDE_background",
+    "NonLinear_IDE_3": "IDE_background",
+    "SignSwitch_IDE_1": "IDE_background",
+    "SignSwitch_IDE_2": "IDE_background"
+  },
+  "class_signature": "1de1fa3ca79dfa1aa40aea398de4d213222fb92e402962c6c5572267e8a7584c",
+  "class_artifact": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/Class/.cache/IDE_background/1de1fa3ca79dfa1aa40aea398de4d213222fb92e402962c6c5572267e8a7584c/classy.cpython-311-x86_64-linux-gnu.so"
+}

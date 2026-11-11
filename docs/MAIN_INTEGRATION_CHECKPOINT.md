@@ -406,3 +406,16 @@ reviewed. Dovekie display-only huge-error mask now matches DESY5 and discloses
 counts; sampling retains all rows. Full suite 110 tests + 730 subtests passed;
 focused export checks passed. Activated-environment CLASS cache build initiated
 in isolated checkout; collect its result and validate before marking ready.
+
+## Section 5d — activated environment readiness (2026-11-11)
+Built the shared CLASS artifact inside the integration checkout with conda
+activate Kosmulator_test. Doctor now passes; report saved as
+validation/ide_environment_activated_report.json. Signature 1de1fa3c... . Re-ran
+full 20-background/10-rd validation under this activation successfully. Protected
+physics source diff remains zero; no production build or chain touched.
+Activated transport validation also passed: 24+4 steps /16 walkers exactly match,
+12 real CLASS likelihood evaluations original 1.108/1.123s versus cached
+0.940/0.938s, differences zero. validation/pool_transport_results.json updated.
+See docs/INTEGRATION_RELEASE_STATUS.md for current readiness and remaining scope.
+User's last known quota was 59%; a new async meter request was sent after this
+stage. No exact percentage is observable from tools.
