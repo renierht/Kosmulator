@@ -1541,6 +1541,11 @@ def best_fit_plots(All_best_fit_values, CONFIG, data, PLOT_SETTINGS):
                         params_med, model_name, MODEL_FUNCS
                     )
 
+                    from Plots.Plot_functions import sn_plot_values
+                    sn_values = sn_plot_values(data, obs_type, params_med, model_name)
+                    if sn_values is not None:
+                        y_dat, y_mod_pts, y_err = sn_values
+
                     # Best dataset highest among observations, but still below band/model
                     z_obs = Z_OBS_BASE + (len(part_sorted) - 1 - oi)
 

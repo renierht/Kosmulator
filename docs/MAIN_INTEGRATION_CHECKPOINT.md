@@ -368,3 +368,18 @@ See docs/CC_INTEGRATION_AUDIT.md and validation/cc_sps_audit.json.
 No production or protected IDE source changes. No new MCMC run started.
 Next: Pantheon convention/reporting consistency audit and dataset overlap
 assessment before choosing a publication dataset combination.
+
+## Sections 4g/5a — Pantheon conventions and residual plots (2026-11-11)
+PantheonP redshift-only selection and both Pantheon zHEL prefactors corrected;
+PantheonPS calibrator membership and sampled M_abs preserved. New likelihood
+policy prevents paper resume/reanalysis across this change. SN plotted point
+predictions use matching geometry/Cepheid treatment; marginalized datasets use
+precision-weighted offsets and total covariance error bars when available.
+See docs/PANTHEON_REPORTING_AUDIT.md for limitations and remaining release work.
+107 tests and 730 subtests pass. Re-ran explicit PDF equivalence (100 cases,
+8100 points, 5.34e-15 scaled density error), future ODE/tail checks (27 + endpoint)
+and real Model 9 spawn context equality (zero discrepancy). No CLASS rebuild or
+production run. IC numerical definitions unchanged; k convention still needs
+publication documentation. Sample-overlap audit, full backend readiness and
+visual release validation remain outstanding. Usage percentage unavailable;
+no claim that a 10% threshold has been reached.

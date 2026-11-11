@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 SCIENTIFIC_KEYS = (
-    "dataset_hashes", "distance_policy", "launcher", "runtime_constants", "cli_settings", "source_hashes", "true_values",
+    "likelihood_policy", "dataset_hashes", "distance_policy", "launcher", "runtime_constants", "cli_settings", "source_hashes", "true_values",
     "observations", "models", "priors", "class_settings", "regime_switches",
     "free_w", "free_w_dm", "free_w0", "free_wa", "coupled_prior",
     "emcee_moves", "walkers", "burn", "thin", "convergence_policy", "convergence_setting",
@@ -41,7 +41,7 @@ def generic_settings(namespace, constants, model_module, cli, root):
     """Conservative direct-launcher provenance; serialize before comparing."""
     import hashlib
     settings = dict(
-        distance_policy="dense-grid-dz0.01-v1", launcher="generic", models=namespace["model_names"],
+        likelihood_policy="pantheon-zhd-zhel-v1", distance_policy="dense-grid-dz0.01-v1", launcher="generic", models=namespace["model_names"],
         observations=namespace["observations"], priors=namespace["prior_limits"],
         true_values=namespace["true_values"], walkers=namespace["nwalkers"],
         burn=namespace["burn"], convergence_setting=namespace["convergence"],
@@ -80,18 +80,19 @@ def generic_settings(namespace, constants, model_module, cli, root):
     return json.loads(json.dumps(settings, allow_nan=False))
 
 
-def require_chain_distance_policy(chain_path, expected):
+def require_chain_distance_policy(chain_path, expected, likelihood_policy=None):
     """Reject likelihood-based reanalysis of chains from a different integrator."""
     chain_path = Path(chain_path).resolve()
     for directory in chain_path.parents:
         manifest = directory / "run_settings.json"
         if manifest.is_file():
             previous = json.loads(manifest.read_text())
-            if previous.get("distance_policy") == expected:
+            if (previous.get("distance_policy") == expected and
+                    (likelihood_policy is None or previous.get("likelihood_policy") == likelihood_policy)):
                 return
             break
     raise ValueError(
-        f"Chain {chain_path} has no matching distance policy. "
+        f"Chain {chain_path} has no matching distance/likelihood policy. "
         "Analyse legacy chains with their original checkout; corrected-distance "
         "likelihood statistics require fresh chains."
     )

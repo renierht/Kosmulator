@@ -96,7 +96,7 @@ def load_data(file_path: Union[str, Path]) -> Dict[str, np.ndarray]:
 def prepare_pantheonP_data(data, z_min: float = 0.01, mode: str = "PplusSH0ES"):
     """
     Prepare Pantheon+ for either:
-      • "Pplus"       : Pantheon+ without SH0ES anchor (exclude calibrators)
+      • "Pplus"       : Pantheon+ without SH0ES anchor (redshift cut only)
       • "PplusSH0ES"  : Pantheon+ with SH0ES anchor (include calibrators)
 
     Notes:
@@ -117,12 +117,12 @@ def prepare_pantheonP_data(data, z_min: float = 0.01, mode: str = "PplusSH0ES"):
         mask = (z > z_min) | (trig > 0)
         trig_eff = trig
     else:
-        # Pure Hubble-flow subset: drop calibrators completely
-        mask = (z > z_min) & (trig == 0)
+        # Hubble-flow cut only; do not use Cepheid distances without SH0ES
+        mask = (z > z_min)
         trig_eff = np.zeros_like(trig)
 
     idx = np.where(mask)[0]
-    return {
+    result = {
         "mode": ("PplusSH0ES" if use_sh0es else "Pplus"),
         "mask": mask,
         "indices": idx,
@@ -135,6 +135,13 @@ def prepare_pantheonP_data(data, z_min: float = 0.01, mode: str = "PplusSH0ES"):
             os.path.join(K.OBSERVATIONS_BASE, "PantheonP.cov"),
         ),
     }
+
+    if "zHEL" in data:
+        zhel = np.asarray(data["zHEL"], dtype=float)
+        if zhel.shape != z.shape or not np.isfinite(zhel[mask]).all() or np.any(zhel[mask] <= -1):
+            raise ValueError("Invalid Pantheon heliocentric redshifts")
+        result["z_hel"] = zhel[mask]
+    return result
 
 
 from pathlib import Path
@@ -490,6 +497,7 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                 df = pd.read_csv(pantheon_file, sep=r'\s+')
                 pantheon_data = {
                     "zHD": df["zHD"].values,
+                    "zHEL": df["zHEL"].values,
                     "m_b_corr": df["m_b_corr"].values,
                     "IS_CALIBRATOR": df["IS_CALIBRATOR"].values,
                     "CEPH_DIST": df["CEPH_DIST"].values,

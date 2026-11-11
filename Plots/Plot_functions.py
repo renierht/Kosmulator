@@ -1539,3 +1539,31 @@ def validated_rd_plot_band(median, lower, upper, resolver):
     except ValueError as exc:
         return None, None, "Marginal-endpoint band omitted: invalid joint parameter combination (" + str(exc) + ")."
     return lower, upper, None
+
+
+def sn_plot_values(data, obs_type, params, model_name):
+    """Data and point predictions in the same convention as the SN likelihood.
+
+    Smooth curves remain cosmological distances; calibrator point predictions
+    use Cepheid distances. Marginalized offsets are fitted at these parameters.
+    """
+    key = "PantheonPS" if obs_type == "PantheonP_SH0ES" else obs_type
+    if key not in ("PantheonP", "PantheonPS", "DESY5", "DES_Dovekie", "Union3"):
+        return None
+    obs = data[key]
+    z = np.asarray(obs['zHD'] if key.startswith('PantheonP') else obs['redshift'])
+    zhel = obs.get('zhel', obs.get('z_hel', z))
+    prediction = 25 + 5*np.log10(compute_Dc(z, params, model_name)*(1+np.asarray(zhel)))
+    if key.startswith('PantheonP'):
+        values = np.asarray(obs['m_b_corr']) - float(params.get('M_abs', -19.20))
+        prediction = np.where(np.asarray(obs['IS_CALIBRATOR']) == 1, obs['CEPH_DIST'], prediction)
+        errors = np.asarray(obs['type_data_error'])
+    else:
+        values = np.asarray(obs['type_data'], dtype=float).copy()
+        errors = np.sqrt(np.diag(obs['cov'])) if 'cov' in obs else np.asarray(obs['type_data_error'])
+        if key == 'DES_Dovekie' or obs.get('marginalise_offset', False):
+            weights = np.asarray(obs['inv_cov']).sum(axis=1) if 'inv_cov' in obs else 1/errors**2
+            values -= weights @ (values-prediction) / weights.sum()
+        elif not obs.get('data_is_distance_modulus', False):
+            values -= float(params.get('M_abs',0.))
+    return values, prediction, errors

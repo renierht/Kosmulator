@@ -69,8 +69,20 @@ class ManifestTests(unittest.TestCase):
             policy = "dense-grid-dz0.01-v1"
             with self.assertRaises(ValueError):
                 require_chain_distance_policy(chain, policy)
+            with self.assertRaises(ValueError):
+                require_chain_distance_policy(chain, policy, "pantheon-zhd-zhel-v1")
+            (root / "run_settings.json").write_text(json.dumps({"distance_policy":policy, "likelihood_policy":"pantheon-zhd-zhel-v1"}))
+            require_chain_distance_policy(chain, policy, "pantheon-zhd-zhel-v1")
             (root / "run_settings.json").write_text('{}')
             with self.assertRaises(ValueError):
                 require_chain_distance_policy(chain, policy)
+            with self.assertRaises(ValueError):
+                require_chain_distance_policy(chain, policy, "pantheon-zhd-zhel-v1")
+            (root / "run_settings.json").write_text(json.dumps({"distance_policy":policy, "likelihood_policy":"pantheon-zhd-zhel-v1"}))
+            require_chain_distance_policy(chain, policy, "pantheon-zhd-zhel-v1")
             (root / "run_settings.json").write_text(json.dumps({"distance_policy":policy}))
             require_chain_distance_policy(chain, policy)
+            with self.assertRaises(ValueError):
+                require_chain_distance_policy(chain, policy, "pantheon-zhd-zhel-v1")
+            (root / "run_settings.json").write_text(json.dumps({"distance_policy":policy, "likelihood_policy":"pantheon-zhd-zhel-v1"}))
+            require_chain_distance_policy(chain, policy, "pantheon-zhd-zhel-v1")

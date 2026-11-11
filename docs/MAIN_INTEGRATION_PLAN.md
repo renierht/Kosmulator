@@ -64,3 +64,6 @@ sample-overlap assessment remain pending (docs/CC_INTEGRATION_AUDIT.md).
 Section 4f: optional Moresco SPS covariance audited and integrated, off by default;
 explicit library and endpoint policies. Next: Pantheon/reporting consistency and
 sample-overlap review. Production dataset choice remains separate.
+Sections 4g/5a: Pantheon sample/redshift conventions and SN residual plotting
+aligned; full suite and independent IDE validation passed. Remaining release
+checks listed in docs/PANTHEON_REPORTING_AUDIT.md.
