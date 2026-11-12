@@ -107,16 +107,19 @@ def main():
         settings["coupled_prior"] = "w0+wa<0"
         settings["regime"] = "not applicable"
         settings["regime_switches"] = None
+    sys.path.insert(0, str(root))
+    from Kosmulator_main.run_manifest import paper_identity
+    settings.update(paper_identity(root, settings["observations"]))
     print(json.dumps(settings, indent=2), flush=True)
     if args.plan:
         return
     sys.path.insert(0, str(root))
     from Kosmulator_main.run_lock import run_lock
     if args.mode == "analyse":
-        from Kosmulator_main.run_manifest import require_chain_distance_policy
+        from Kosmulator_main.run_manifest import require_paper_chain_settings
         try:
-            for chain_path in paths.values():
-                require_chain_distance_policy(chain_path, settings["distance_policy"], settings["likelihood_policy"])
+            for model, chain_path in paths.items():
+                require_paper_chain_settings(chain_path, settings, model)
         except ValueError as exc:
             parser.error(str(exc))
     with run_lock(root / "MCMC_Chains" / suffix):

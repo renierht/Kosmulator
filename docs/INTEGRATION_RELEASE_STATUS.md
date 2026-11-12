@@ -1,4 +1,8 @@
-# Integration release status — 2026-11-11
+# Integration release status — 2026-11-12
+
+Scoped integration is complete as a local release candidate. See
+[release notes](IDE_MAIN_UPDATE_RELEASE_NOTES.md) for the final review, branch
+and migration policy. Publication/deployment is separate.
 
 Worktree: Kosmulator_IDE_main_integration; branch codex/ide-main-integration-20261105.
 Production Kosmulator_followup and saved chains are unchanged. This is a local
@@ -10,7 +14,7 @@ integration candidate, not a published replacement or a new posterior analysis.
   overlap guards and resume/analysis provenance documented in the audit files.
 - Protected IDE analytic background, conditions, rd helpers and CLASS physics source
   show no diff against preservation snapshot 5e28be3.
-- 110 tests and 730 subtests pass; later focused reporting export checks also pass.
+- 112 tests and 730 subtests pass in the final activated-environment suite.
 - PDF expression checks: 100 cases / 8100 points; independent ODE/future checks.
 - Full CLASS: 20 cold/warm cases / 800000 points and ten rd routes pass.
 - Five native SN figures generated from real data at illustrative parameters and
@@ -39,18 +43,19 @@ Caches are local generated artifacts and are not included in commits. Other
 checkouts/machines may require an explicit build. MPI launch remains untested
 because no launcher is installed. Spawn multiprocessing was tested.
 
-## Decisions and work before production release
+## Deployment and new-analysis decisions
 
 - Select the intended dataset and systematic-covariance settings. Keep overlapping
   SN releases as alternative fits, not independent factors in one likelihood.
-- CC cross-study overlap/systematic independence remains unaudited. Do not claim
+- CC cross-study review is complete at source level (CC_CROSS_STUDY_REVIEW.md).
+  The available summaries cannot establish a full joint covariance; do not claim
   the compilation is fully independent or fully systematic-complete.
 - IC convention is explicitly exported: k counts sampled parameters and excludes
   analytically removed offsets. No separate profiled-offset IC convention or
   new Bayesian evidence calculation was implemented. Numerical IC values are
   unchanged by this reporting stage.
-- Review the complete integration diff for deployment and synchronize a release
-  branch deliberately. No GitHub push or production migration occurred.
+- The scoped integration diff has been reviewed and a local release branch prepared.
+  No GitHub push or production migration occurred.
 - Corrected distances/Pantheon/DESY5/CC likelihoods require fresh chains under
   the finalized configuration. Old chains remain with their original checkout;
   do not edit their manifests to bypass compatibility guards.

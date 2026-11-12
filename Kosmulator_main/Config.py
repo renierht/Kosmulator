@@ -809,6 +809,10 @@ def load_all_data(config, prior_limits=None, logger=None) -> Dict[str, Any]:
                     attach_cc_systematics(observation_data[obs], K.CC_SYS_COV,
                                           include_library=K.CC_SPS_INCLUDE_LIBRARY,
                                           extrapolation=K.CC_SPS_EXTRAPOLATION)
+                    observation_data[obs]["likelihood_notes"] = [
+                        "CC cross-study correlations are not fully established; covariance contains the published pair block and explicitly selected SPS terms only.",
+                        "The Wang z=0.12 uncertainty omits SPS-model uncertainty; the optional Moresco D4000 prescription is not applied to that full-spectrum-fit datum.",
+                    ]
 
     return observation_data
 

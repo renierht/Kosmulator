@@ -4,6 +4,10 @@ Integration worktree Kosmulator_IDE_main_integration, branch
 codex/ide-main-integration-20261105. Preserved source snapshot 5e28be3.
 Reviewed upstream main 34091d1.
 
+Final status 2026-11-12: scoped software integration and release review complete;
+local candidate codex/ide-release-20261112. See IDE_MAIN_UPDATE_RELEASE_NOTES.md.
+The sections below retain the original staged plan and checkpoint history.
+
 ## Section 1 — sampling infrastructure and proposal validation
 Completed. Paper launcher uses run locks and complete settings manifests.
 DE/snooker is now the paper launcher's default, backed by two 2000-step
@@ -11,8 +15,8 @@ comparisons showing approximately 2.3–2.4x provisional effective samples/hour.
 Use --emcee-moves stretch for a run whose complete manifest records stretch.
 Old complete manifests missing a move field are interpreted as stretch.
 Legacy chains without complete manifests continue through the original launcher.
-The generic Kosmulator.py default stays stretch until its resume provenance is
-covered. The new default applies to the integration checkout's paper launcher.
+The generic Kosmulator.py default retains stretch for compatibility; its resume
+provenance is now covered. The new default applies to the integration checkout's paper launcher.
 Production followup remains the source for reproducing earlier results.
 
 ## Section 2 — live inspection and generic launcher safeguards

@@ -419,3 +419,18 @@ Activated transport validation also passed: 24+4 steps /16 walkers exactly match
 See docs/INTEGRATION_RELEASE_STATUS.md for current readiness and remaining scope.
 User's last known quota was 59%; a new async meter request was sent after this
 stage. No exact percentage is observable from tools.
+
+## Final scoped release review — 2026-11-12
+Completed primary-source CC overlap review. Found shared parent data in older
+studies; no complete joint covariance inferable from summaries. Newer DESI fitted
+redshift ranges disjoint; shared modelling systematics not thereby independent.
+CC limitations propagate in report metadata/conventions. Numerical CC settings
+unchanged in this review. See CC_CROSS_STUDY_REVIEW.md.
+Final provenance finding fixed: paper source/dataset hashes and analysis matching
+of priors/CLASS/physicality now enforced; burn can differ for postprocessing.
+Both paper/Dovekie dry-run plans pass. Final suite 112 tests + 730 subtests passed;
+protected IDE/CLASS source diff zero and patch hygiene passed. Production status
+reviewed read-only; its existing modifications/untracked files preserved.
+Scoped candidate complete, to be referenced by codex/ide-release-20261112.
+No remote push, production merge, chain migration or new MCMC run. Scientific
+selection/sensitivity runs are separate follow-up work, not invented validation.

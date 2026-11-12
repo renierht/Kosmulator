@@ -96,3 +96,52 @@ def require_chain_distance_policy(chain_path, expected, likelihood_policy=None):
         "Analyse legacy chains with their original checkout; corrected-distance "
         "likelihood statistics require fresh chains."
     )
+
+
+def paper_identity(root, observations):
+    """Content identity for the paper launcher's supported data and source inputs."""
+    import hashlib
+    root = Path(root)
+    datasets = {
+        'PantheonPS': ['PantheonP.dat', 'PantheonP.cov'],
+        'PantheonP': ['PantheonP.dat', 'PantheonP.cov'],
+        'DESI_DR2': ['DESI_DR2_synced.txt', 'DESI_DR2_covtot.txt'],
+        'DES_Dovekie': ['DES_Dovekie/DES-Dovekie_HD.csv', 'DES_Dovekie/STAT+SYS.npz'],
+    }
+    requested = {name for group in observations for name in group}
+    unsupported = requested - datasets.keys()
+    if unsupported:
+        raise ValueError('Paper provenance has no dataset mapping for: ' + ', '.join(sorted(unsupported)))
+    def digest(path):
+        value = hashlib.sha256()
+        with path.open('rb') as handle:
+            for block in iter(lambda: handle.read(1024*1024), b''):
+                value.update(block)
+        return value.hexdigest()
+    files = [root/'User_defined_modules.py', root/'Kosmulator.py',
+             root/'reproducibility/SAIP2026_IDE/scripts/run_analysis.py']
+    files += sorted((root/'Kosmulator_main').glob('*.py'))
+    files += sorted((root/'Class/IDE_background/source').glob('*.c'))
+    files += sorted((root/'Class/IDE_background/include').glob('*.h'))
+    return dict(source_hashes={str(p.relative_to(root)):digest(p) for p in files},
+                dataset_hashes={name:digest(root/'Observations'/name)
+                                for name in sorted({path for obs in requested for path in datasets[obs]})})
+
+
+def require_paper_chain_settings(chain_path, settings, model):
+    """Analysis can change burn, but cannot silently change the sampled posterior."""
+    keys = ('distance_policy', 'likelihood_policy', 'source_hashes', 'dataset_hashes',
+            'observations', 'priors', 'class_settings', 'regime_switches',
+            'free_w', 'free_w_dm', 'free_w0', 'free_wa', 'coupled_prior')
+    for folder in Path(chain_path).resolve().parents:
+        manifest = folder/'run_settings.json'
+        if manifest.is_file():
+            previous = json.loads(manifest.read_text())
+            changed = [key for key in keys if previous.get(key) != settings.get(key)]
+            if model not in previous.get('models', []):
+                changed.append('models')
+            if changed:
+                raise ValueError('Chain analysis settings differ: '+', '.join(changed)+
+                                 '. Use its original checkout/settings; do not relabel the manifest.')
+            return
+    raise ValueError('Chain has no run manifest; use its original analysis checkout.')

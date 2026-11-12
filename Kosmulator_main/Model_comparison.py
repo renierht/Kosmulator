@@ -64,6 +64,7 @@ def likelihood_reporting_metadata(data, observations):
                if name == "DES_Dovekie" or data[name].get("marginalise_offset", False)]
     return {
         "Dataset_signature": dataset_signature(data, observations),
+        "Data_assumptions": {name: data[name]["likelihood_notes"] for name in observations if data[name].get("likelihood_notes")},
         "IC_convention": "sampled-parameter-count-v1",
         "Analytic_offset_datasets": offsets,
         "IC_parameter_count_note": "k counts sampled parameters; analytically removed offsets are not added to k",
@@ -606,6 +607,9 @@ def export_comparison(results, folder):
     for model, groups in results.items():
         for key, row in groups.items():
             convention_lines.append(f"- {model} / {key}: k={row['k']}; analytic offsets={row.get('Analytic_offset_datasets', 'unrecorded')}; convention={row.get('IC_convention', 'legacy/unrecorded')}; dataset={row.get('Dataset_signature', 'unrecorded')}")
+            for dataset, assumptions in row.get("Data_assumptions", {}).items():
+                for assumption in assumptions:
+                    convention_lines.append(f"  - {dataset}: {assumption}")
     (folder / "comparison_conventions.md").write_text("\n".join(convention_lines)+"\n", encoding="utf-8")
     fields = ["Model", "Observation", "N", "k", "p_D", "Chi_squared",
               "IC_convention", "IC_parameter_count_note", "Dataset_signature",
