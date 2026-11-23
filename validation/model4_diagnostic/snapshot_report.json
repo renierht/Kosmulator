@@ -1,0 +1,64 @@
+{
+  "step": 15271,
+  "names": [
+    "Omega_m",
+    "delta",
+    "H_0",
+    "M_abs"
+  ],
+  "rhat_all": [
+    1.704779009179594,
+    3.336774545258297,
+    1.6425496283982506,
+    1.8360772980407607
+  ],
+  "best_last_logp": -749.3698279046037,
+  "bad_count": 1,
+  "walkers": [
+    {
+      "id": 30,
+      "initial": [
+        0.3653769544841004,
+        0.20282146189822492,
+        70.7743814145523,
+        -19.382755952327752
+      ],
+      "last": [
+        0.17073429392833245,
+        0.22650904562784158,
+        60.14833886696483,
+        -19.731608957180374
+      ],
+      "initial_logp": -5425.569411038859,
+      "last_logp": -1845.8438323698742,
+      "best_logp": -1842.6083741283676,
+      "moves_last1000": 61,
+      "block_median_logp": [
+        -1966.4662834548997,
+        -1888.7051818341884,
+        -1859.0328111404474,
+        -1849.660039964463
+      ]
+    }
+  ],
+  "rhat_diagnostic_excluding_outliers_NOT_results": [
+    1.1399317848150172,
+    1.5251045633925113,
+    1.116272953309059,
+    1.1578026490130262
+  ],
+  "main_median": [
+    0.30093910450550754,
+    -0.0015343861800640691,
+    72.05146728214636,
+    -19.29725046140056
+  ],
+  "main_last": [
+    0.3014511017390626,
+    -0.00184335931133738,
+    72.28284310322037,
+    -19.291038477778088
+  ],
+  "source": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v1_model4_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+  "context": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v1_model4_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/.kosm_pool_args_brkjrsl7.pkl"
+}

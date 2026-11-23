@@ -1,0 +1,86 @@
+{
+  "root": "/mnt/c/Users/Marcel/PhD/Kosmulator_test_Class/Kosmulator_referee_clean",
+  "parameters": {
+    "Omega_m": 0.296,
+    "H_0": 73.44,
+    "w": -0.913,
+    "w_dm": 0.0,
+    "delta": -0.006,
+    "M_abs": -19.243,
+    "Omega_b": 0.048,
+    "__model_name__": "NonLinear_IDE_2"
+  },
+  "class_settings": {
+    "DERIVE_RD_WITH_MODEL_CLASS": true,
+    "RD_CLASS_OMEGA_B": 0.048,
+    "RD_CLASS_N_EFF": 3.044,
+    "RD_CLASS_SUM_MNU_EV": 0.06,
+    "RD_CLASS_N_NCDM": 3
+  },
+  "sampled_parameters": [
+    "Omega_m",
+    "w",
+    "delta",
+    "H_0",
+    "M_abs"
+  ],
+  "rd": 136.10393997862116,
+  "z": [
+    0.295,
+    0.51,
+    0.706,
+    0.93,
+    1.317,
+    1.491,
+    2.33
+  ],
+  "E": [
+    1.1816083243974318,
+    1.3431104209404445,
+    1.5103513502301285,
+    1.7229211947217746,
+    2.1381647547930474,
+    2.342637559392146,
+    3.460178496961389
+  ],
+  "Dc": [
+    1111.6889662650199,
+    1809.7995833242762,
+    2372.524910135914,
+    2940.5989853992182,
+    3768.4875682807356,
+    4086.187266917499,
+    5312.087701579913
+  ],
+  "Dc_quad": [
+    1110.5533218714593,
+    1807.8562725993468,
+    2369.894359581285,
+    2936.970210553115,
+    3760.5054215014898,
+    4077.8862856007813,
+    5280.427656786375
+  ],
+  "distance_relative_error": [
+    0.0010225933065932669,
+    0.0010749254541875253,
+    0.0011099864194343834,
+    0.0012355504434686804,
+    0.002122626052765808,
+    0.0020356088265700567,
+    0.005995734976663947
+  ],
+  "chi2": {
+    "CC": 31.010891339202878,
+    "DESI_DR2": 9.013843054337219,
+    "PantheonPS": 1452.4245351595625
+  },
+  "data_hashes": {
+    "Observations/PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+    "Observations/PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1",
+    "Observations/DESI_DR2.txt": "a2b848067a5d970a63e537513b9a9574d24d6a12c619703ddb474117c7b005e9",
+    "Observations/DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952",
+    "Observations/DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+    "Observations/CC.dat": "dc2133bc08d6ed647f2feeb87712ed856cafd08615e5499038001df2f14067ab"
+  }
+}

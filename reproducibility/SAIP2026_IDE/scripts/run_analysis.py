@@ -20,15 +20,30 @@ def main():
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--emcee-moves", choices=("stretch", "de_snooker"), default="de_snooker")
     parser.add_argument("--num-cores", type=int, default=1)
-    parser.add_argument("--ide-model", choices=("NonLinear_IDE_2", "SignSwitch_IDE_1", "SignSwitch_IDE_2"), default="NonLinear_IDE_2")
+    parser.add_argument("--ide-model", choices=("Linear_IDE_4", "Linear_IDE_5", "NonLinear_IDE_2", "SignSwitch_IDE_1", "SignSwitch_IDE_2"), default="NonLinear_IDE_2")
     parser.add_argument("--only-model", choices=("lcdm", "ide", "cpl"), help="Run one model in a separate output suffix")
     parser.add_argument("--burn", type=int, default=1000, help="Fixed burn-in steps, as in the upstream convergence policy")
     parser.add_argument("--tau-consecutive", type=int, default=1)
     parser.add_argument("--dataset", choices=("paper", "dovekie"), default="paper")
+    parser.add_argument("--include-cc", action="store_true", help="Add the local 36-point correlated CC compilation")
     parser.add_argument("--plan", action="store_true", help="Print settings without importing Kosmulator or running CLASS")
     parser.add_argument("--delta-prior", nargs=2, type=float, metavar=("LOW", "HIGH"))
     parser.add_argument("--omega-m-prior", nargs=2, type=float, metavar=("LOW", "HIGH"))
+    parser.add_argument("--eos-case", choices=("cold_lambda", "cold_free_de", "warm_lambda"), default="cold_free_de")
+    parser.add_argument("--uncoupled", action="store_true", help="Fix delta=0 in the selected linear IDE model; remove it from sampling")
+    parser.add_argument("--w-dm-prior", nargs=2, type=float, metavar=("LOW", "HIGH"))
     args = parser.parse_args()
+    free_w = args.eos_case == "cold_free_de"
+    free_w_dm = args.eos_case == "warm_lambda"
+    if (args.eos_case != "cold_free_de" or args.uncoupled or args.w_dm_prior is not None) and (args.only_model != "ide" or args.ide_model not in ("Linear_IDE_4", "Linear_IDE_5")):
+        parser.error("New EOS cases / uncoupled mode require --only-model ide and Linear_IDE_4 or Linear_IDE_5")
+    if free_w_dm != (args.w_dm_prior is not None):
+        parser.error("Specify --w-dm-prior exactly when --eos-case warm_lambda is selected")
+    if args.uncoupled and args.delta_prior is not None:
+        parser.error("A fixed zero coupling cannot also have a sampling prior")
+    if args.ide_model in ("Linear_IDE_4", "Linear_IDE_5") and args.regime != "iw":
+        parser.error("This linear IDE study uses --regime iw (background-only unrestricted regime)")
+
     if args.regime is None:
         if args.only_model != "cpl":
             parser.error("--regime is required for LCDM/IDE runs")
@@ -54,10 +69,12 @@ def main():
     if args.dataset == "dovekie":
         config["observations"] = [["DES_Dovekie", "DESI_DR2"]]
         config["prior_limits"].pop("M_abs")
+    if args.include_cc:
+        config["observations"][0].append("CC")
     if args.only_model == "cpl":
         config["prior_limits"] = {k: v for k, v in config["prior_limits"].items() if k not in ("w", "delta")}
         config["prior_limits"].update(w0=[-3., 1.], wa=[-3., 2.])
-    for key, bounds in (("delta", args.delta_prior), ("Omega_m", args.omega_m_prior)):
+    for key, bounds in (("delta", args.delta_prior), ("Omega_m", args.omega_m_prior), ("w_dm", args.w_dm_prior)):
         if bounds is not None:
             if not all(math.isfinite(v) for v in bounds) or bounds[0] >= bounds[1]:
                 parser.error("Prior bounds must be finite and increasing")
@@ -66,6 +83,12 @@ def main():
             if key == "Omega_m" and not (0 < bounds[0] < bounds[1] < 1):
                 parser.error("Require 0 < Omega_m lower < upper < 1")
             config["prior_limits"][key] = bounds
+    if args.ide_model in ("Linear_IDE_4", "Linear_IDE_5") and args.only_model == "ide":
+        if not free_w:
+            config["prior_limits"].pop("w", None)
+        if args.uncoupled:
+            config["prior_limits"].pop("delta", None)
+    fixed_parameters = {args.ide_model: {"delta": 0.0}} if args.uncoupled else None
     paths = None
     selected_models = (["w0waCDM"] if args.only_model == "cpl" else
                        ["LCDM_v"] if args.only_model == "lcdm" else
@@ -86,13 +109,15 @@ def main():
     suffix = args.run_name + ("_cpl" if args.only_model == "cpl" else "_" + args.regime)
     if args.dataset == "dovekie":
         suffix += "_dovekie"
+    if args.include_cc:
+        suffix += "_cc"
     settings = {
         "distance_policy": "dense-grid-dz0.01-v1",
         "likelihood_policy": "pantheon-zhd-zhel-v1",
         "emcee_moves": args.emcee_moves,
         "observations": config["observations"],
         "mode": args.mode, "regime": args.regime, "output_suffix": suffix,
-        "models": selected_models, "free_w": True, "free_w_dm": False,
+        "models": selected_models, "free_w": free_w, "free_w_dm": free_w_dm,
         "walkers": config["walkers"], "burn": args.burn, "thin": config["thin"],
         "max_steps": args.max_steps, "convergence_setting": 0.05,
         "convergence_policy": {"tau_factor": 100, "ess_min": 2000, "rhat_max": 1.01, "consecutive": args.tau_consecutive},
@@ -101,6 +126,8 @@ def main():
         "regime_switches": config["regime_switches"][args.regime],
         "chain_paths": paths, "dic_convention": "posterior-mean",
     }
+    if fixed_parameters is not None:
+        settings["fixed_parameters_by_model"] = fixed_parameters
     if args.only_model == "cpl":
         settings.pop("free_w")
         settings.update(free_w0=True, free_wa=True)
@@ -137,7 +164,7 @@ def main():
         from Kosmulator_main import constants as K
         K.EMCEE_MOVES = args.emcee_moves
         kc.model_names = selected_models
-        udm.FREE_W, udm.FREE_W_DM = True, False
+        udm.FREE_W, udm.FREE_W_DM = free_w, free_w_dm
         kc.true_model = config["reference_model"] if "LCDM_v" in selected_models else selected_models[0]
         kc.observations = config["observations"]
         kc.nwalkers, kc.burn = config["walkers"], args.burn
@@ -162,6 +189,8 @@ def main():
                 "derived_rd_seed": config["derived_rd_seed"],
             },
         }
+        if fixed_parameters is not None:
+            options["fixed_parameters_by_model"] = fixed_parameters
         if paths is not None:
             options["existing_chain_paths"] = paths
         kc.main(workflow_options=options)

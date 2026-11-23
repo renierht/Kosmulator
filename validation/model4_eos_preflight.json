@@ -1,0 +1,49 @@
+{
+  "cases": [
+    {
+      "delta": 0.0,
+      "w": -1.0,
+      "w_dm": 0.0,
+      "ODE_scaled_error": 1.24863247826929e-10,
+      "rd": 144.96184559639943
+    },
+    {
+      "delta": 0.0,
+      "w": -0.95,
+      "w_dm": 0.0,
+      "ODE_scaled_error": 1.248634511470442e-10,
+      "rd": 144.96183865877003
+    },
+    {
+      "delta": 0.0,
+      "w": -1.0,
+      "w_dm": 0.005,
+      "ODE_scaled_error": 1.240144332102313e-10,
+      "rd": 141.2498243230747
+    },
+    {
+      "delta": 0.02,
+      "w": -1.0,
+      "w_dm": 0.0,
+      "ODE_scaled_error": 9.102390912493603e-11,
+      "rd": 157.95973606739804
+    },
+    {
+      "delta": 0.02,
+      "w": -0.95,
+      "w_dm": 0.0,
+      "ODE_scaled_error": 9.120835738010566e-11,
+      "rd": 157.93058951220476
+    },
+    {
+      "delta": 0.02,
+      "w": -1.0,
+      "w_dm": 0.005,
+      "ODE_scaled_error": 9.371564305208354e-11,
+      "rd": 154.76346883068052
+    }
+  ],
+  "lcdm_rd": 144.96184587777532,
+  "cold_zero_coupling_rd_relative": 1.941034111219153e-09,
+  "note": "Validation points only; no production prior or chains created."
+}

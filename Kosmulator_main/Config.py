@@ -835,6 +835,7 @@ def create_config(
     logger=None,
     free_w=None,
     free_w_dm=None,
+    fixed_parameters_by_model=None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Main entry point: construct per-model CONFIG and a shared `data` dict.
@@ -971,6 +972,9 @@ def create_config(
         raise ValueError("free_w and free_w_dm must be booleans")
     models = deepcopy(models)
     fixed_by_model = {}
+    overrides = fixed_parameters_by_model or {}
+    if set(overrides) - set(models):
+        raise ValueError("Fixed-parameter overrides contain unknown models")
     for name, model in models.items():
         fixed = {}
         if name in SELECTORS:
@@ -989,6 +993,16 @@ def create_config(
                 if not free:
                     fixed[par] = value
                     model["parameters"] = [p for p in model["parameters"] if p != par]
+        for par, value in overrides.get(name, {}).items():
+            if par not in model["parameters"] and par not in fixed:
+                raise ValueError(f"{name}: cannot fix unknown parameter {par}")
+            value = float(value)
+            if not np.isfinite(value):
+                raise ValueError("Fixed parameter values must be finite")
+            if par in fixed and value != fixed[par]:
+                raise ValueError(f"{name}: fixed {par} conflicts with EOS switches")
+            fixed[par] = value
+            model["parameters"] = [p for p in model["parameters"] if p != par]
         fixed_by_model[name] = fixed
     models_aug = Add_required_parameters(models, observation)
 

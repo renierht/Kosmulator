@@ -1,0 +1,2602 @@
+{
+  "config": "/mnt/c/Users/Marcel/PhD/Kosmulator_test_Class/Kosmulator_referee_clean/reproducibility/SAIP2026_IDE/configs/paper.json",
+  "config_sha256": "3940ab5d7f7d6182474fe4af2a7dc610817844557ad4a5eadc2b86218a8036c9",
+  "prior_volumes": {
+    "lcdm": {
+      "allowed_fraction": 1.0,
+      "quadrature_error": 0.0,
+      "sobol_fraction": 1.0,
+      "lnZ_normalization_shift": -0.0
+    },
+    "iw": {
+      "allowed_fraction": 0.9226474486701701,
+      "quadrature_error": 1.0243444411252802e-14,
+      "sobol_fraction": 0.9226388931274414,
+      "lnZ_normalization_shift": 0.08050807988303639
+    },
+    "plus_iw": {
+      "allowed_fraction": 0.4898480474725653,
+      "quadrature_error": 5.438405808717187e-15,
+      "sobol_fraction": 0.4898414611816406,
+      "lnZ_normalization_shift": 0.7136600431694915
+    },
+    "siw": {
+      "allowed_fraction": 0.5988023952095808,
+      "quadrature_error": 6.648042063623691e-15,
+      "sobol_fraction": 0.5988025665283203,
+      "lnZ_normalization_shift": 0.5128236264286639
+    }
+  },
+  "runs": [
+    {
+      "regime": "lcdm",
+      "label": "LCDM",
+      "chain": "/mnt/c/Users/Marcel/PhD/Kosmulator_test_Class/Kosmulator/MCMC_Chains/RD_CLASS_DIAG_5K/LCDM_v/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "chain_sha256": "df4e437a09b1a82e15b53db205c1ca45f81357c924214e4993f41ddce3f08c1a",
+      "steps": 4700,
+      "burn": 1000,
+      "parameters": [
+        "Omega_m",
+        "H_0",
+        "M_abs"
+      ],
+      "priors": {
+        "Omega_m": [
+          0.1,
+          0.5
+        ],
+        "H_0": [
+          60,
+          90
+        ],
+        "M_abs": [
+          -20.5,
+          -18
+        ]
+      },
+      "original_converged_attribute": true,
+      "retrospective_convergence": {
+        "n_post": 3700,
+        "walkers": 120,
+        "tau": [
+          40.28982540585117,
+          37.19736766836226,
+          37.46651278795381
+        ],
+        "tau_max": 40.28982540585117,
+        "tau_param": "Omega_m",
+        "n_over_tau": 91.83459999463439,
+        "ess": 11020.151999356127,
+        "rel_change": 0.010583167659246781,
+        "rhat": [
+          1.0099880562397296,
+          1.009580479993812,
+          1.0094516136011846
+        ],
+        "rhat_max": 1.0099880562397296,
+        "rhat_param": "Omega_m",
+        "criteria": {
+          "length": false,
+          "ess": true,
+          "stable": true,
+          "rhat": true
+        },
+        "ok": false
+      },
+      "logZ_box": -747.7971519451733,
+      "logZ_joint_uniform_allowed": -747.7971519451733,
+      "box_envelope": [
+        -747.8621552063374,
+        -747.765040197154
+      ],
+      "allowed_prior_fraction": 1.0,
+      "normalization_shift": -0.0,
+      "trials": [
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 41,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5414,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7922250023662,
+            "2": -747.7829200776928,
+            "3": -747.784337929999
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.772028570992802,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 41,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5417,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7965832461508,
+            "2": -747.8029424046503,
+            "3": -747.7995113751308
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.762314358445696,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 41,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5414,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.8083473040106,
+            "2": -747.8014969624326,
+            "3": -747.7936322094561
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.767760030130976,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 41,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 10828,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7835859661288,
+            "2": -747.7835099679181,
+            "3": -747.787373831236
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.774279923135278,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 41,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 10834,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7785622207883,
+            "2": -747.7863851282966,
+            "3": -747.7859264892077
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.746132987771492,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 41,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 10829,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7913630355122,
+            "2": -747.7909335408874,
+            "3": -747.7905825613151
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.766072624661502,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2742,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7903372470428,
+            "2": -747.7828485657859,
+            "3": -747.7762250117846
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.762420083773176,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2744,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7891942985606,
+            "2": -747.8039789221245,
+            "3": -747.7979784995282
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.745236986750559,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2738,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.8339158097991,
+            "2": -747.8217283004756,
+            "3": -747.8164273511845
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.774918346838431,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5485,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7971519451733,
+            "2": -747.7921445464076,
+            "3": -747.7878259133172
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.740299732643575,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5489,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7842812233074,
+            "2": -747.765040197154,
+            "3": -747.7760799626761
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.751682506055772,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5476,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.804484994174,
+            "2": -747.8086609962837,
+            "3": -747.7987396421062
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.783421053463956,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 202,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1098,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.789879374042,
+            "2": -747.8066032627839,
+            "3": -747.8043145607497
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.798117363665789,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 202,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1101,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.8621552063374,
+            "2": -747.785285707063,
+            "3": -747.7805793780924
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.754828322218348,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 202,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1100,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.8168118663626,
+            "2": -747.7833394965501,
+            "3": -747.8181922577602
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.730194902268114,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 202,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2197,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.772728194077,
+            "2": -747.7824851826367,
+            "3": -747.7905412140045
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.74830724897096,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 202,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2203,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7909371341968,
+            "2": -747.8202714712027,
+            "3": -747.8058207288337
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.752249931646617,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 202,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2201,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.8015570891861,
+            "2": -747.7903055258909,
+            "3": -747.8059305675849
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.752954628292727,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 101,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2742,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7870816563441,
+            "2": -747.7861569941356,
+            "3": -747.7870815904267
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.753217847937863,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 202,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2743,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.7758104927592,
+            "2": -747.778496243861,
+            "3": -747.7851179268185
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.767495601739007,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 303,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2740,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.8261980228406,
+            "2": -747.8048176905068,
+            "3": -747.7933923343408
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.804396865131029,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 101,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2742,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.8091475399948,
+            "2": -747.805096626315,
+            "3": -747.8027802160982
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.798834108960147,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 202,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2743,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.8068955517919,
+            "2": -747.7930924754688,
+            "3": -747.8016283493585
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.758609211287064,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 303,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2740,
+          "ndim": 3,
+          "logZ": {
+            "1": -747.786866493844,
+            "2": -747.8020014955777,
+            "3": -747.795167461676
+          },
+          "log_prior_volume": 3.4011973816621555,
+          "log_whitening_jacobian": -10.770885522427768,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        }
+      ],
+      "status": "exploratory: fails current convergence policy",
+      "warnings": [
+        "Original runs lack modern metadata/convergence sidecars; config and saved D_bar were checked against frozen paper reproduction artifacts.",
+        "Joint-uniform mathematical-region prior is a different model definition from a box prior with zero likelihood outside the region.",
+        "CLASS numerical-failure exclusions are retained as zero likelihood, not included in the prior-volume normalization.",
+        "kNN balls can cross internal mathematical/positive/stability boundaries; box-crossing diagnostics do not capture these boundaries. No boundary correction applied.",
+        "Sensitivity envelopes are not uncertainty intervals; independent ensembles unavailable."
+      ],
+      "delta_logZ_box": 0.0,
+      "delta_logZ_joint_uniform_allowed": 0.0,
+      "delta_box_sensitivity_envelope": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "regime": "iw",
+      "label": "iwCDM",
+      "chain": "/mnt/c/Users/Marcel/PhD/Kosmulator_test_Class/Kosmulator/MCMC_Chains/RD_CLASS_SEEDED_2K/NonLinear_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES_FINAL_8500.h5",
+      "chain_sha256": "21ca99288bf01c1b0988311d876ca39fb331b686bc02eb03038ab344ccdf624e",
+      "steps": 8500,
+      "burn": 1000,
+      "parameters": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "priors": {
+        "Omega_m": [
+          0.1,
+          0.5
+        ],
+        "w": [
+          -2,
+          -0.33
+        ],
+        "delta": [
+          -1,
+          1
+        ],
+        "H_0": [
+          60,
+          90
+        ],
+        "M_abs": [
+          -20.5,
+          -18
+        ]
+      },
+      "original_converged_attribute": false,
+      "retrospective_convergence": {
+        "n_post": 7500,
+        "walkers": 120,
+        "tau": [
+          58.61537664002112,
+          55.61588016216216,
+          56.084482595185335,
+          57.36665099535829,
+          57.372392009213094
+        ],
+        "tau_max": 58.61537664002112,
+        "tau_param": "Omega_m",
+        "n_over_tau": 127.9527733151029,
+        "ess": 15354.332797812347,
+        "rel_change": 0.005307262027163271,
+        "rhat": [
+          1.0082615102205723,
+          1.008345302893677,
+          1.0088473909812248,
+          1.0070202497460912,
+          1.0073386647893137
+        ],
+        "rhat_max": 1.0088473909812248,
+        "rhat_param": "delta",
+        "criteria": {
+          "length": true,
+          "ess": true,
+          "stable": true,
+          "rhat": true
+        },
+        "ok": true
+      },
+      "logZ_box": -751.8018974599554,
+      "logZ_joint_uniform_allowed": -751.7213893800723,
+      "box_envelope": [
+        -751.865282173864,
+        -751.7867500834734
+      ],
+      "allowed_prior_fraction": 0.9226474486701701,
+      "normalization_shift": 0.08050807988303639,
+      "trials": [
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 59,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 7628,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8310966948397,
+            "2": -751.8339616437066,
+            "3": -751.837091716315
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.048709348291933,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 59,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 7626,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8313310888037,
+            "2": -751.825997773061,
+            "3": -751.8243510137378
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.035536791364812,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 59,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 7628,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8028531947685,
+            "2": -751.8137329748955,
+            "3": -751.819491348362
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.05223772738328,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 59,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 15257,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8087555318174,
+            "2": -751.8201069893843,
+            "3": -751.826315258328
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.04436314619976,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 59,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 15253,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8254651545464,
+            "2": -751.8267209691419,
+            "3": -751.8289500754196
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.044686754417878,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 59,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 15256,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8292505604719,
+            "2": -751.8205580402025,
+            "3": -751.8236524898318
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.0415875960855,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3815,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.7867500834734,
+            "2": -751.8267140753386,
+            "3": -751.8300993642888
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.08616442505165,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3819,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8201871242809,
+            "2": -751.8163719813285,
+            "3": -751.8157481437524
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.03140856242543,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3812,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8153097583806,
+            "2": -751.8104297916381,
+            "3": -751.81264852823
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.04582439522192,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 7630,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8018974599554,
+            "2": -751.816586205265,
+            "3": -751.8230363578116
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.06284329101534,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 7639,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.794713437595,
+            "2": -751.8086857343502,
+            "3": -751.82177310628
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.030485528132207,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 7625,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8414422500606,
+            "2": -751.8305851182079,
+            "3": -751.8230896790128
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.051657933206645,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 294,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1534,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.840743031315,
+            "2": -751.8484462916858,
+            "3": -751.8094972657077
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.11203858866862,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 294,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1534,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8436289641795,
+            "2": -751.8472892235792,
+            "3": -751.8228527663083
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.063068261593674,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 294,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1530,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.865282173864,
+            "2": -751.8289284546481,
+            "3": -751.8092599698671
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.020989257864656,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 294,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3068,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8392903425822,
+            "2": -751.8442382845211,
+            "3": -751.8366145418847
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.085604473095945,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 294,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3069,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.854419747532,
+            "2": -751.8568644169632,
+            "3": -751.8413450092057
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.08230060985423,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 294,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3060,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8023802476798,
+            "2": -751.7989257141714,
+            "3": -751.8030531321615
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.018297811460123,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 101,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3815,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8163191469728,
+            "2": -751.8185242018319,
+            "3": -751.8184608543546
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.067237943744292,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 202,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3818,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8192296806518,
+            "2": -751.834655899438,
+            "3": -751.8364419140585
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.072203894650787,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 303,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3810,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.827796511126,
+            "2": -751.8338540597225,
+            "3": -751.8241550213884
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -21.059568101993996,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 101,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3815,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8004547231444,
+            "2": -751.8054752067892,
+            "3": -751.8022106331747
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -20.954571809727312,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 202,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3818,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.7896788910334,
+            "2": -751.8043765671506,
+            "3": -751.7970577118026
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -20.986781017178853,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 303,
+          "stride": 118,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 3810,
+          "ndim": 5,
+          "logZ": {
+            "1": -751.8062862285857,
+            "2": -751.8028555527029,
+            "3": -751.7990805041184
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -20.97459662037888,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        }
+      ],
+      "status": "provisional",
+      "warnings": [
+        "Original runs lack modern metadata/convergence sidecars; config and saved D_bar were checked against frozen paper reproduction artifacts.",
+        "Joint-uniform mathematical-region prior is a different model definition from a box prior with zero likelihood outside the region.",
+        "CLASS numerical-failure exclusions are retained as zero likelihood, not included in the prior-volume normalization.",
+        "kNN balls can cross internal mathematical/positive/stability boundaries; box-crossing diagnostics do not capture these boundaries. No boundary correction applied.",
+        "Sensitivity envelopes are not uncertainty intervals; independent ensembles unavailable."
+      ],
+      "delta_logZ_box": -4.004745514782144,
+      "delta_logZ_joint_uniform_allowed": -3.924237434899055,
+      "delta_box_sensitivity_envelope": [
+        -4.100241976709981,
+        -3.9245948771359735
+      ]
+    },
+    {
+      "regime": "plus_iw",
+      "label": "+iwCDM",
+      "chain": "/mnt/c/Users/Marcel/PhD/Kosmulator_test_Class/Kosmulator/MCMC_Chains/RD_CLASS_PLUS_IW_8K/NonLinear_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "chain_sha256": "2782689cff9fb39d86ab6fcc8c016e0f3af7aa477b3d0a20f9dcb9837c50393e",
+      "steps": 7300,
+      "burn": 1000,
+      "parameters": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "priors": {
+        "Omega_m": [
+          0.1,
+          0.5
+        ],
+        "w": [
+          -2,
+          -0.33
+        ],
+        "delta": [
+          -1,
+          1
+        ],
+        "H_0": [
+          60,
+          90
+        ],
+        "M_abs": [
+          -20.5,
+          -18
+        ]
+      },
+      "original_converged_attribute": false,
+      "retrospective_convergence": {
+        "n_post": 6300,
+        "walkers": 120,
+        "tau": [
+          63.2922486772535,
+          64.78607727748066,
+          80.6153309111444,
+          69.08097579638776,
+          70.41382570032063
+        ],
+        "tau_max": 80.6153309111444,
+        "tau_param": "delta",
+        "n_over_tau": 78.1489070229578,
+        "ess": 9377.868842754937,
+        "rel_change": 0.009013154441322415,
+        "rhat": [
+          1.0108844269861155,
+          1.012396442616903,
+          1.0137150534141135,
+          1.0122721533688552,
+          1.0121149920278083
+        ],
+        "rhat_max": 1.0137150534141135,
+        "rhat_param": "delta",
+        "criteria": {
+          "length": false,
+          "ess": true,
+          "stable": true,
+          "rhat": false
+        },
+        "ok": false
+      },
+      "logZ_box": -758.3989763989364,
+      "logZ_joint_uniform_allowed": -757.6853163557669,
+      "box_envelope": [
+        -758.4434610847835,
+        -758.340763755708
+      ],
+      "allowed_prior_fraction": 0.4898480474725653,
+      "normalization_shift": 0.7136600431694915,
+      "trials": [
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 4667,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.436185056892,
+            "2": -758.4434610847835,
+            "3": -758.4276116140162
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.27270407783492,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 4668,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4200468266803,
+            "2": -758.3987202486254,
+            "3": -758.4060639914528
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.254790697005433,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 4664,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4183478013723,
+            "2": -758.4088411186915,
+            "3": -758.4020679026811
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.251266996856003,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 9335,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4427922662859,
+            "2": -758.4229993070211,
+            "3": -758.4198051370682
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.26600418022136,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 9337,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.421453778255,
+            "2": -758.4122078225769,
+            "3": -758.4106769542002
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.232338033006968,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 81,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 9329,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4237804612541,
+            "2": -758.4234350869501,
+            "3": -758.4217312800988
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.236987873506134,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2333,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4375999077691,
+            "2": -758.3978064352201,
+            "3": -758.3837957623376
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.235871485054915,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2333,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4128681686743,
+            "2": -758.3771769096156,
+            "3": -758.3671659832443
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.21630412751184,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2334,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.3912686196073,
+            "2": -758.4000570434849,
+            "3": -758.3890125542431
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.256810623179103,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 4666,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4116805750258,
+            "2": -758.4168810497827,
+            "3": -758.4073316640705
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.21934283847306,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 4666,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.3966723339934,
+            "2": -758.4056248673178,
+            "3": -758.402224946735
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.235255948554425,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 4668,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.3989763989364,
+            "2": -758.4068658178326,
+            "3": -758.4076928643109
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.232652746735177,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 404,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 937,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.3810877245295,
+            "2": -758.34747447112,
+            "3": -758.3560873739254
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.2469052667429,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 404,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 941,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.340763755708,
+            "2": -758.3765337612726,
+            "3": -758.3673291687212
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.31041756302907,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 404,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 936,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4042859828412,
+            "2": -758.3680047812678,
+            "3": -758.3732606976189
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.153958966728894,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 404,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1875,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4232594190842,
+            "2": -758.405950095179,
+            "3": -758.3776580524064
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.233262890935055,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 404,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1883,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4212621687566,
+            "2": -758.3933865596325,
+            "3": -758.3801782155797
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.300631569110145,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 404,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1872,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.3769486763357,
+            "2": -758.3739680816867,
+            "3": -758.383496709592
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.180548906692103,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 101,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2336,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.387620318134,
+            "2": -758.3997490627731,
+            "3": -758.3783142790015
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.253816116653823,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 202,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2336,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.3771830520229,
+            "2": -758.3619713578638,
+            "3": -758.3656352554799
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.235462651604742,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 303,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2332,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.3656112412291,
+            "2": -758.3822474181023,
+            "3": -758.3657291231837
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.19696705102489,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 101,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2336,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4063520954969,
+            "2": -758.3962002634779,
+            "3": -758.3891575487505
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.29225210035284,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 202,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2336,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.4268809370774,
+            "2": -758.4088785118182,
+            "3": -758.3922718021441
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.289331525799852,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 303,
+          "stride": 162,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2332,
+          "ndim": 5,
+          "logZ": {
+            "1": -758.3994409553588,
+            "2": -758.378865101803,
+            "3": -758.3750777551836
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.250510418676917,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        }
+      ],
+      "status": "exploratory: fails current convergence policy",
+      "warnings": [
+        "Original runs lack modern metadata/convergence sidecars; config and saved D_bar were checked against frozen paper reproduction artifacts.",
+        "Joint-uniform mathematical-region prior is a different model definition from a box prior with zero likelihood outside the region.",
+        "CLASS numerical-failure exclusions are retained as zero likelihood, not included in the prior-volume normalization.",
+        "kNN balls can cross internal mathematical/positive/stability boundaries; box-crossing diagnostics do not capture these boundaries. No boundary correction applied.",
+        "Sensitivity envelopes are not uncertainty intervals; independent ensembles unavailable."
+      ],
+      "delta_logZ_box": -10.601824453763129,
+      "delta_logZ_joint_uniform_allowed": -9.888164410593618,
+      "delta_box_sensitivity_envelope": [
+        -10.6784208876295,
+        -10.47860854937062
+      ]
+    },
+    {
+      "regime": "siw",
+      "label": "SiwCDM",
+      "chain": "/mnt/c/Users/Marcel/PhD/Kosmulator_test_Class/Kosmulator/MCMC_Chains/RD_CLASS_SIW_8K/NonLinear_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "chain_sha256": "05a2459e06699f800a464dc6c33016b6c80945fca99b9724eb4e74f51171a18b",
+      "steps": 8200,
+      "burn": 1000,
+      "parameters": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "priors": {
+        "Omega_m": [
+          0.1,
+          0.5
+        ],
+        "w": [
+          -2,
+          -0.33
+        ],
+        "delta": [
+          -1,
+          1
+        ],
+        "H_0": [
+          60,
+          90
+        ],
+        "M_abs": [
+          -20.5,
+          -18
+        ]
+      },
+      "original_converged_attribute": false,
+      "retrospective_convergence": {
+        "n_post": 7200,
+        "walkers": 120,
+        "tau": [
+          66.5196971693812,
+          79.64520613917115,
+          69.97684049044928,
+          64.1871944720088,
+          63.453418668267446
+        ],
+        "tau_max": 79.64520613917115,
+        "tau_param": "w",
+        "n_over_tau": 90.4009211479571,
+        "ess": 10848.110537754852,
+        "rel_change": 0.0006443284829961895,
+        "rhat": [
+          1.0091572473060824,
+          1.0106164937050366,
+          1.0084891410455203,
+          1.0076314340041195,
+          1.0074898586221859
+        ],
+        "rhat_max": 1.0106164937050366,
+        "rhat_param": "w",
+        "criteria": {
+          "length": false,
+          "ess": true,
+          "stable": true,
+          "rhat": false
+        },
+        "ok": false
+      },
+      "logZ_box": -755.6360114210139,
+      "logZ_joint_uniform_allowed": -755.1231877945852,
+      "box_envelope": [
+        -755.6483694052325,
+        -755.5442586768845
+      ],
+      "allowed_prior_fraction": 0.5988023952095808,
+      "normalization_shift": 0.5128236264286639,
+      "trials": [
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 80,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5400,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6200255666373,
+            "2": -755.6326818785291,
+            "3": -755.6204288991188
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.060337822607764,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 80,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5400,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6483694052325,
+            "2": -755.6254314452515,
+            "3": -755.6238122154483
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.127750385466673,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 80,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5400,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6135242586537,
+            "2": -755.6203687874824,
+            "3": -755.6077419799333
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.087277526234693,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 80,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 10800,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6275154887528,
+            "2": -755.6242138220399,
+            "3": -755.6127424138431
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.037864553847875,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 80,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 10800,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6218400510418,
+            "2": -755.6207729087275,
+            "3": -755.6186779936479
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.09782357400133,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 1,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 80,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 10800,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.616819200176,
+            "2": -755.621018763781,
+            "3": -755.6150925468984
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.065498303889257,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2700,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6251110747152,
+            "2": -755.6232973102517,
+            "3": -755.6044741469515
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.128160022731496,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2700,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6246337602914,
+            "2": -755.6190200932944,
+            "3": -755.6050009007079
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.09512988591578,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2700,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.620647353075,
+            "2": -755.6113719612016,
+            "3": -755.597843336183
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.07907021110335,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5400,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6055531020447,
+            "2": -755.6178375943833,
+            "3": -755.6163200988426
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.09427297839342,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5400,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6360114210139,
+            "2": -755.6203526757284,
+            "3": -755.604520007677
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.0858213860152,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 5400,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.636984009127,
+            "2": -755.6030841989144,
+            "3": -755.5929231984873
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.083033319745066,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 101,
+          "stride": 399,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1083,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6075274217933,
+            "2": -755.5921669709288,
+            "3": -755.5891019277747
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.121501834605535,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 202,
+          "stride": 399,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1084,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.5442586768845,
+            "2": -755.570764171914,
+            "3": -755.5543320906306
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.047638527761066,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 0.5,
+          "block": "all",
+          "seed": 303,
+          "stride": 399,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 1085,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.5752458450861,
+            "2": -755.5879516873862,
+            "3": -755.5652492567016
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.098355608549838,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 101,
+          "stride": 399,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2167,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.5932714956972,
+            "2": -755.5771115008471,
+            "3": -755.5727925386681
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.120951223616057,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 202,
+          "stride": 399,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2168,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.5981244818728,
+            "2": -755.5805262817865,
+            "3": -755.5805842178495
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.07571413960869,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 5,
+          "fraction": 1.0,
+          "block": "all",
+          "seed": 303,
+          "stride": 399,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2170,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.634030380411,
+            "2": -755.5947294009223,
+            "3": -755.5988951025234
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.105221705949084,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 101,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2707,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6302013743174,
+            "2": -755.6088171912886,
+            "3": -755.5919669204557
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.097778665769034,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 202,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2708,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.596764101802,
+            "2": -755.5992982314142,
+            "3": -755.6017063614848
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.08235227285747,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "first",
+          "seed": 303,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2700,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6450172356256,
+            "2": -755.6262575026067,
+            "3": -755.6174042078728
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.09903696957616,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 101,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2707,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.6410507375938,
+            "2": -755.6331968982867,
+            "3": -755.6078137277336
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.126991991402505,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 202,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2708,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.5800946590101,
+            "2": -755.5815750943976,
+            "3": -755.5908804323017
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.089521175484577,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        },
+        {
+          "tau_factor": 2,
+          "fraction": 1.0,
+          "block": "second",
+          "seed": 303,
+          "stride": 160,
+          "method": "heavens-2017-auto-knn-equal-weight-v1",
+          "n": 2700,
+          "ndim": 5,
+          "logZ": {
+            "1": -755.5936983437724,
+            "2": -755.5972796793511,
+            "3": -755.5877140383478
+          },
+          "log_prior_volume": 4.607168188650764,
+          "log_whitening_jacobian": -22.130699994314572,
+          "neighbour_balls_crossing_box_fraction": {
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0
+          },
+          "valid": true
+        }
+      ],
+      "status": "exploratory: fails current convergence policy",
+      "warnings": [
+        "Original runs lack modern metadata/convergence sidecars; config and saved D_bar were checked against frozen paper reproduction artifacts.",
+        "Joint-uniform mathematical-region prior is a different model definition from a box prior with zero likelihood outside the region.",
+        "CLASS numerical-failure exclusions are retained as zero likelihood, not included in the prior-volume normalization.",
+        "kNN balls can cross internal mathematical/positive/stability boundaries; box-crossing diagnostics do not capture these boundaries. No boundary correction applied.",
+        "Sensitivity envelopes are not uncertainty intervals; independent ensembles unavailable."
+      ],
+      "delta_logZ_box": -7.83885947584065,
+      "delta_logZ_joint_uniform_allowed": -7.326035849411937,
+      "delta_box_sensitivity_envelope": [
+        -7.883329208078521,
+        -7.6821034705470765
+      ]
+    }
+  ]
+}

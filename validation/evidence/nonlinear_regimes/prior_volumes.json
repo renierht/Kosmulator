@@ -1,0 +1,26 @@
+{
+  "lcdm": {
+    "allowed_fraction": 1.0,
+    "quadrature_error": 0.0,
+    "sobol_fraction": 1.0,
+    "lnZ_normalization_shift": -0.0
+  },
+  "iw": {
+    "allowed_fraction": 0.9226474486701701,
+    "quadrature_error": 1.0243444411252802e-14,
+    "sobol_fraction": 0.9226388931274414,
+    "lnZ_normalization_shift": 0.08050807988303639
+  },
+  "plus_iw": {
+    "allowed_fraction": 0.4898480474725653,
+    "quadrature_error": 5.438405808717187e-15,
+    "sobol_fraction": 0.4898414611816406,
+    "lnZ_normalization_shift": 0.7136600431694915
+  },
+  "siw": {
+    "allowed_fraction": 0.5988023952095808,
+    "quadrature_error": 6.648042063623691e-15,
+    "sobol_fraction": 0.5988025665283203,
+    "lnZ_normalization_shift": 0.5128236264286639
+  }
+}

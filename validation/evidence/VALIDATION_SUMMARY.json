@@ -1,0 +1,8 @@
+{
+  "regression_tests_passed": 23,
+  "upstream_parity": "upstream_parity.json",
+  "synthetic_results": "synthetic_validation.json",
+  "active_run_source_and_dataset_identity_unchanged": true,
+  "final_report": "Statistical_analysis_tables/Evidence_signswitch_legacy_v2/REPORT.md",
+  "scope": "Optional completed-chain evidence, no sampling or likelihood changes"
+}

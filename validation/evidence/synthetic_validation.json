@@ -1,0 +1,43 @@
+{
+  "gaussian_3d": {
+    "errors": [
+      -0.015737129645680525,
+      0.0011625644032609017,
+      -0.0019457116807917174
+    ],
+    "tolerance": 0.08
+  },
+  "gaussian_5d": {
+    "errors": [
+      -0.015249530764940289,
+      -0.031500956480888576,
+      -0.026064858176276573
+    ],
+    "tolerance": 0.08
+  },
+  "curved_3d": {
+    "error": -0.008487896759481472
+  },
+  "two_modes": {
+    "both_modes_error": -0.010650146573793151,
+    "missing_mode_error": -0.7118221562113467,
+    "expected_missing_mode_error": -0.6931471805599453
+  },
+  "repeated_states": {
+    "rejected": true,
+    "reason": "Duplicate states: increase temporal thinning; no deduplication or jitter allowed"
+  },
+  "uniform_boundary": {
+    "known_logZ": 0.0,
+    "estimated_logZ": {
+      "1": 0.036843357763907125,
+      "2": 0.04761638048656547,
+      "3": 0.05411718843615976
+    },
+    "boundary_ball_fraction": {
+      "1": 0.10186666666666666,
+      "2": 0.13653333333333334,
+      "3": 0.15883333333333333
+    }
+  }
+}

@@ -1,0 +1,812 @@
+[
+  {
+    "delta": 0.0,
+    "w_dm": -0.15,
+    "Omega_m": 0.1,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 212.89000121749672,
+    "ok": true,
+    "seconds": 0.26830936600163113
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.0,
+    "Omega_m": 0.1,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 198.03256012080078,
+    "ok": true,
+    "seconds": 0.20878115100094874
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.15,
+    "Omega_m": 0.1,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 89.35016230911236,
+    "ok": true,
+    "seconds": 0.20505516400044144
+  },
+  {
+    "delta": -0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.1,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 211.76832657050335,
+    "ok": true,
+    "seconds": 0.21368663099929108
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.1,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 180.3258476717673,
+    "ok": true,
+    "seconds": 0.2103088399999251
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.1,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 61.20788879417382,
+    "ok": true,
+    "seconds": 0.21005961499940895
+  },
+  {
+    "delta": 0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.1,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 214.35544815374897,
+    "ok": true,
+    "seconds": 0.21268028099984804
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.1,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 233.05803601501623,
+    "ok": true,
+    "seconds": 0.21344844499981264
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.1,
+    "H_0": 60.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2056) :error in generic_evolver(background_derivs, loga_ini, loga_final, pvecback_integration, used_in_output, pba->bi_size, &bpaw, ppr->tol_background_integration, ppr->smallest_allowed_variation, background_timescale, ppr->background_integration_stepsize, pba->loga_table, pba->bt_size, background_sources, ((void *)0), pba->error_message);\n=>evolver_ndf15(L:497) :condition (absh <= hmin) is true; Step size too small: step:5.15779e-14, minimum:5.15779e-14, in interval: [-32.2362:0]\n",
+    "seconds": 0.016764373000114574
+  },
+  {
+    "delta": 0.0,
+    "w_dm": -0.15,
+    "Omega_m": 0.1,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 191.29501470819463,
+    "ok": true,
+    "seconds": 0.244578810999883
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.0,
+    "Omega_m": 0.1,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 174.13184497851134,
+    "ok": true,
+    "seconds": 0.2554820989989821
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.15,
+    "Omega_m": 0.1,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 69.95580851240915,
+    "ok": true,
+    "seconds": 0.23631185600061144
+  },
+  {
+    "delta": -0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.1,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 189.98951319122958,
+    "ok": true,
+    "seconds": 0.24424423399977968
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.1,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 155.17277492048586,
+    "ok": true,
+    "seconds": 0.24119095199966978
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.1,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 47.16609489369985,
+    "ok": true,
+    "seconds": 0.24365347899947665
+  },
+  {
+    "delta": 0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.1,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 193.0122359531041,
+    "ok": true,
+    "seconds": 0.24643618600021
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.1,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 217.2585493461586,
+    "ok": true,
+    "seconds": 0.24508964599954197
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.1,
+    "H_0": 75.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2056) :error in generic_evolver(background_derivs, loga_ini, loga_final, pvecback_integration, used_in_output, pba->bi_size, &bpaw, ppr->tol_background_integration, ppr->smallest_allowed_variation, background_timescale, ppr->background_integration_stepsize, pba->loga_table, pba->bt_size, background_sources, ((void *)0), pba->error_message);\n=>evolver_ndf15(L:497) :condition (absh <= hmin) is true; Step size too small: step:5.15779e-14, minimum:5.15779e-14, in interval: [-32.2362:0]\n",
+    "seconds": 0.01631164600075863
+  },
+  {
+    "delta": 0.0,
+    "w_dm": -0.15,
+    "Omega_m": 0.1,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.17540375900171057
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.0,
+    "Omega_m": 0.1,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.1694254230005754
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.15,
+    "Omega_m": 0.1,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.16924738799934858
+  },
+  {
+    "delta": -0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.1,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.1714563379991887
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.1,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.17351485200015304
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.1,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.17174157299996295
+  },
+  {
+    "delta": 0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.1,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.16994108600010804
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.1,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.17333229200085043
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.1,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2056) :error in generic_evolver(background_derivs, loga_ini, loga_final, pvecback_integration, used_in_output, pba->bi_size, &bpaw, ppr->tol_background_integration, ppr->smallest_allowed_variation, background_timescale, ppr->background_integration_stepsize, pba->loga_table, pba->bt_size, background_sources, ((void *)0), pba->error_message);\n=>evolver_ndf15(L:497) :condition (absh <= hmin) is true; Step size too small: step:5.15779e-14, minimum:5.15779e-14, in interval: [-32.2362:0]\n",
+    "seconds": 0.014383653999175294
+  },
+  {
+    "delta": 0.0,
+    "w_dm": -0.15,
+    "Omega_m": 0.3,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 210.51772474133037,
+    "ok": true,
+    "seconds": 0.24555902499923832
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.0,
+    "Omega_m": 0.3,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 162.3909227618237,
+    "ok": true,
+    "seconds": 0.23524155599989172
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.15,
+    "Omega_m": 0.3,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 43.650589205447034,
+    "ok": true,
+    "seconds": 0.23560194300080184
+  },
+  {
+    "delta": -0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.3,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 209.68716234928922,
+    "ok": true,
+    "seconds": 0.24009239099905244
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.3,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 155.0264599443903,
+    "ok": true,
+    "seconds": 0.25357149000046775
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.3,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 39.561728913273896,
+    "ok": true,
+    "seconds": 0.2462664049999148
+  },
+  {
+    "delta": 0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.3,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 211.59189891442358,
+    "ok": true,
+    "seconds": 0.24782125199999427
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.3,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 173.34719766730493,
+    "ok": true,
+    "seconds": 0.2464853839992429
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.3,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 50.615005290998766,
+    "ok": true,
+    "seconds": 0.24429747500107624
+  },
+  {
+    "delta": 0.0,
+    "w_dm": -0.15,
+    "Omega_m": 0.3,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 188.5531648060659,
+    "ok": true,
+    "seconds": 0.2445311679985025
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.0,
+    "Omega_m": 0.3,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 137.2021598160212,
+    "ok": true,
+    "seconds": 0.2359116539992101
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.15,
+    "Omega_m": 0.3,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 33.38910766437147,
+    "ok": true,
+    "seconds": 0.24335971199980122
+  },
+  {
+    "delta": -0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.3,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 187.59843970259132,
+    "ok": true,
+    "seconds": 0.25080541699935566
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.3,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 130.0893994018392,
+    "ok": true,
+    "seconds": 0.25308123099966906
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.3,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 30.21312661904332,
+    "ok": true,
+    "seconds": 0.24272606299928157
+  },
+  {
+    "delta": 0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.3,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 189.79471977296382,
+    "ok": true,
+    "seconds": 0.24882076300127665
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.3,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 148.07572672809636,
+    "ok": true,
+    "seconds": 0.24546585300049628
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.3,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 38.83068214105485,
+    "ok": true,
+    "seconds": 0.24952616300106456
+  },
+  {
+    "delta": 0.0,
+    "w_dm": -0.15,
+    "Omega_m": 0.3,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.18243790199994692
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.0,
+    "Omega_m": 0.3,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.1814062430003105
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.15,
+    "Omega_m": 0.3,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.18075598900031764
+  },
+  {
+    "delta": -0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.3,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.19151026799954707
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.3,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.17863529300120717
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.3,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.1817150139995647
+  },
+  {
+    "delta": 0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.3,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.18401521799933107
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.3,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.1831970370003546
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.3,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.21228489500026626
+  },
+  {
+    "delta": 0.0,
+    "w_dm": -0.15,
+    "Omega_m": 0.5,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 208.2595237534872,
+    "ok": true,
+    "seconds": 0.24419335899983707
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.0,
+    "Omega_m": 0.5,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 142.3971146117776,
+    "ok": true,
+    "seconds": 0.24781454900039535
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.15,
+    "Omega_m": 0.5,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 32.65051853322302,
+    "ok": true,
+    "seconds": 0.26929667399963364
+  },
+  {
+    "delta": -0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.5,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 207.69332542997202,
+    "ok": true,
+    "seconds": 0.2671509369993146
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.5,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 138.92836804475243,
+    "ok": true,
+    "seconds": 0.2601109560000623
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.5,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 31.287907364457695,
+    "ok": true,
+    "seconds": 0.25960880700040434
+  },
+  {
+    "delta": 0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.5,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 208.98676906442753,
+    "ok": true,
+    "seconds": 0.25562407600045844
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.5,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 147.06973426622343,
+    "ok": true,
+    "seconds": 0.24913225100135605
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.5,
+    "H_0": 60.0,
+    "w": -1.0,
+    "rd": 34.52098650620231,
+    "ok": true,
+    "seconds": 0.2545860640002502
+  },
+  {
+    "delta": 0.0,
+    "w_dm": -0.15,
+    "Omega_m": 0.5,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 185.97681796966552,
+    "ok": true,
+    "seconds": 0.257069840999975
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.0,
+    "Omega_m": 0.5,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 118.2215257832467,
+    "ok": true,
+    "seconds": 0.25124152099851926
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.15,
+    "Omega_m": 0.5,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 24.87632649486171,
+    "ok": true,
+    "seconds": 0.2497438249993138
+  },
+  {
+    "delta": -0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.5,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 185.33347141143125,
+    "ok": true,
+    "seconds": 0.26700560100107396
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.5,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 115.01846075521775,
+    "ok": true,
+    "seconds": 0.24499029899925517
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.5,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 23.826335267669908,
+    "ok": true,
+    "seconds": 0.27648226999917824
+  },
+  {
+    "delta": 0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.5,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 186.8062858612207,
+    "ok": true,
+    "seconds": 0.250294348999887
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.5,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 122.5779660852578,
+    "ok": true,
+    "seconds": 0.2510119870003109
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.5,
+    "H_0": 75.0,
+    "w": -1.0,
+    "rd": 26.319785512454665,
+    "ok": true,
+    "seconds": 0.24978761599959398
+  },
+  {
+    "delta": 0.0,
+    "w_dm": -0.15,
+    "Omega_m": 0.5,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.18325439000000188
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.0,
+    "Omega_m": 0.5,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.18175142200016126
+  },
+  {
+    "delta": 0.0,
+    "w_dm": 0.15,
+    "Omega_m": 0.5,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.1809574649996648
+  },
+  {
+    "delta": -0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.5,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.1835954660000425
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.5,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.1825201890005701
+  },
+  {
+    "delta": -0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.5,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 9.998955e-01, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination.",
+    "seconds": 0.00036004200046590995
+  },
+  {
+    "delta": 0.1,
+    "w_dm": -0.15,
+    "Omega_m": 0.5,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.1843925199991645
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.0,
+    "Omega_m": 0.5,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.18752818800021487
+  },
+  {
+    "delta": 0.1,
+    "w_dm": 0.15,
+    "Omega_m": 0.5,
+    "H_0": 90.0,
+    "w": -1.0,
+    "ok": false,
+    "error": "\n\nError in Class: thermodynamics_init(L:342) :error in thermodynamics_helium_from_bbn(ppr,pba,pth);\n=>thermodynamics_helium_from_bbn(L:660) :condition (omega_b > omegab[num_omegab-1]) is true; You have asked for an unrealistic high value omega_b = 3.888000e-02. The corresponding value of the primordial helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe to a given value rather than to BBN",
+    "seconds": 0.21244633800051815
+  }
+]

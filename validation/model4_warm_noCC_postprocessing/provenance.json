@@ -1,0 +1,7 @@
+{
+  "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_noCC_v1_model4_warm_lambda_iw/Linear_IDE_4/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+  "source_size": 65622952,
+  "source_mtime_ns": 1795307967490504200,
+  "burn": 3000,
+  "override": "GetDist automatic 2D bandwidth; unchanged samples and statistical settings"
+}

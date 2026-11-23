@@ -97,3 +97,12 @@ htmlcov/
 
 # Reproducible native plot review outputs (driver is tracked).
 validation/native_sn_plot_review/
+
+# Local study runtime state and generated analysis media
+run_logs/
+validation/**/*.h5
+validation/*.jsonlog
+Plots/EOS_case_comparisons/*.png
+Plots/EOS_case_comparisons/*.pdf
+Plots/Model4_noCC_effective_eos/*.png
+Plots/Model4_noCC_effective_eos/*.pdf

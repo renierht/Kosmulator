@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/yabebalFantaye/MCEvidence",
+  "commit": "ade1dcb8b92309da991df85bf1bbe07f492cae0b",
+  "sha256": "0f9411837adac34503e4510d6bc6efbd62ce8772ee676ff562359f9adacf9bd4",
+  "purpose": "Validation reference only; not imported by production CLI"
+}

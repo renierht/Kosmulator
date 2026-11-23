@@ -1,0 +1,766 @@
+{
+  "Uncoupled": {
+    "kernel": "Q=0",
+    "runs": [
+      {
+        "names": [
+          "Omega_m",
+          "H_0",
+          "M_abs"
+        ],
+        "fixed": {
+          "w": -1.0,
+          "w_dm": 0.0,
+          "delta": 0.0
+        },
+        "bounds": {
+          "Omega_m": [
+            0.1,
+            0.5
+          ],
+          "H_0": [
+            60,
+            90
+          ],
+          "M_abs": [
+            -20.5,
+            -18
+          ]
+        },
+        "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_lcdm_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "sha256": "a47aaec779ea59669c222409060f8b56ac66a1b84a6fbe4f9fe662a48967c6f8",
+        "burn": 1000,
+        "steps": 2300,
+        "n": 156000,
+        "dataset_signature": "a6e9e791d3167c7090b35241a860d4385c78c4baf4fae7b468d59626e3513825"
+      },
+      {
+        "names": [
+          "Omega_m",
+          "w",
+          "H_0",
+          "M_abs"
+        ],
+        "fixed": {
+          "w_dm": 0.0,
+          "delta": 0.0
+        },
+        "bounds": {
+          "Omega_m": [
+            0.1,
+            0.5
+          ],
+          "H_0": [
+            60,
+            90
+          ],
+          "M_abs": [
+            -20.5,
+            -18
+          ],
+          "w": [
+            -2,
+            -0.33
+          ]
+        },
+        "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_wcdm_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "sha256": "a05999f5c66eea9c4f849723564acda51b78d4d652d373a0a7a3630ac1a89389",
+        "burn": 1000,
+        "steps": 2500,
+        "n": 180000,
+        "dataset_signature": "a6e9e791d3167c7090b35241a860d4385c78c4baf4fae7b468d59626e3513825"
+      },
+      {
+        "names": [
+          "Omega_m",
+          "w_dm",
+          "H_0",
+          "M_abs"
+        ],
+        "fixed": {
+          "w": -1.0,
+          "delta": 0.0
+        },
+        "bounds": {
+          "Omega_m": [
+            0.1,
+            0.5
+          ],
+          "H_0": [
+            60,
+            90
+          ],
+          "M_abs": [
+            -20.5,
+            -18
+          ],
+          "w_dm": [
+            -0.15,
+            0.15
+          ]
+        },
+        "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "sha256": "401132a3d1ad9c735ee5444ef8c8bc663bb16e1581c14859750899fe793283c8",
+        "burn": 1000,
+        "steps": 7500,
+        "n": 780000,
+        "dataset_signature": "a6e9e791d3167c7090b35241a860d4385c78c4baf4fae7b468d59626e3513825"
+      }
+    ],
+    "contour_checks": [
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_lcdm_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "Omega_m"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500044504561662,
+          0.6800378972160562
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_wcdm_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "Omega_m"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500049675784908,
+          0.6800027957990945
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "Omega_m"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500070376251439,
+          0.68011823487014
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_wcdm_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "w"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500042888880567,
+          0.6800235992097897
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_wcdm_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "w"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500040692137254,
+          0.6800085020696032
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "w_dm"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500907839408615,
+          0.6804965621057777
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "w_dm"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500903979268752,
+          0.6803764471988366
+        ]
+      }
+    ]
+  },
+  "Model4": {
+    "kernel": "Q=3H\\delta\\rho_{\\rm dm}",
+    "runs": [
+      {
+        "names": [
+          "Omega_m",
+          "delta",
+          "H_0",
+          "M_abs"
+        ],
+        "fixed": {
+          "w": -1.0,
+          "w_dm": 0.0
+        },
+        "bounds": {
+          "Omega_m": [
+            0.1,
+            0.5
+          ],
+          "H_0": [
+            60,
+            90
+          ],
+          "M_abs": [
+            -20.5,
+            -18
+          ],
+          "delta": [
+            -1,
+            1
+          ]
+        },
+        "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "sha256": "fbd703139349e5de6fc3f399b45d9073baeb47fe1337d0a7b10b147f9cbde277",
+        "burn": 1000,
+        "steps": 2600,
+        "n": 192000,
+        "dataset_signature": "a6e9e791d3167c7090b35241a860d4385c78c4baf4fae7b468d59626e3513825"
+      },
+      {
+        "names": [
+          "Omega_m",
+          "w",
+          "delta",
+          "H_0",
+          "M_abs"
+        ],
+        "fixed": {
+          "w_dm": 0.0
+        },
+        "bounds": {
+          "Omega_m": [
+            0.1,
+            0.5
+          ],
+          "H_0": [
+            60,
+            90
+          ],
+          "M_abs": [
+            -20.5,
+            -18
+          ],
+          "w": [
+            -2,
+            -0.33
+          ],
+          "delta": [
+            -1,
+            1
+          ]
+        },
+        "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_free_de_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "sha256": "34ffe721d48d00636543ccaa28f3116e9e667d09d8c5753995e694ae283841f7",
+        "burn": 3000,
+        "steps": 19932,
+        "n": 2031840,
+        "dataset_signature": "a6e9e791d3167c7090b35241a860d4385c78c4baf4fae7b468d59626e3513825"
+      },
+      {
+        "names": [
+          "Omega_m",
+          "w_dm",
+          "delta",
+          "H_0",
+          "M_abs"
+        ],
+        "fixed": {
+          "w": -1.0
+        },
+        "bounds": {
+          "Omega_m": [
+            0.1,
+            0.5
+          ],
+          "H_0": [
+            60,
+            90
+          ],
+          "M_abs": [
+            -20.5,
+            -18
+          ],
+          "delta": [
+            -1,
+            1
+          ],
+          "w_dm": [
+            -0.15,
+            0.15
+          ]
+        },
+        "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_warm_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "sha256": "2177d9ad45903c93c261e9457006eec53e148e49808e4a286ab2570ccc13e582",
+        "burn": 3000,
+        "steps": 5400,
+        "n": 288000,
+        "dataset_signature": "a6e9e791d3167c7090b35241a860d4385c78c4baf4fae7b468d59626e3513825"
+      }
+    ],
+    "contour_checks": [
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "Omega_m"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500054628372019,
+          0.6800051323572484
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_free_de_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "Omega_m"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500052881482454,
+          0.6800147404581104
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_warm_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "Omega_m"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500057599985862,
+          0.6800054131015267
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_free_de_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "w"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500051569728456,
+          0.6800158487969724
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_free_de_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "w"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500072811212378,
+          0.6800236864540273
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_warm_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "w_dm"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500006604638493,
+          0.6800119422368545
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_warm_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "w_dm"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500021886259559,
+          0.6800145549000681
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.950001841310362,
+          0.6800029586324219
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_free_de_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500065176164905,
+          0.6800266924518853
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_warm_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500048632933673,
+          0.6800071572143699
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500012147664735,
+          0.6800246902265334
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_free_de_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500018807461825,
+          0.6800268847634571
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_warm_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500007478608142,
+          0.6800361656723516
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_free_de_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "w",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500002961011063,
+          0.6800076559575325
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_CC_v2_model4_warm_lambda_iw_cc/Linear_IDE_4/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "w_dm",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500048079344026,
+          0.6800045799572425
+        ]
+      }
+    ]
+  },
+  "Model5": {
+    "kernel": "Q=3H\\delta\\rho_{\\rm de}",
+    "runs": [
+      {
+        "names": [
+          "Omega_m",
+          "delta",
+          "H_0",
+          "M_abs"
+        ],
+        "fixed": {
+          "w": -1.0,
+          "w_dm": 0.0
+        },
+        "bounds": {
+          "Omega_m": [
+            0.1,
+            0.5
+          ],
+          "H_0": [
+            60,
+            90
+          ],
+          "M_abs": [
+            -20.5,
+            -18
+          ],
+          "delta": [
+            -1,
+            1
+          ]
+        },
+        "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "sha256": "0b38866daf24ffba4904abe59e569a00a96cf9510af771cd5538129d05247643",
+        "burn": 1000,
+        "steps": 2500,
+        "n": 180000,
+        "dataset_signature": "a6e9e791d3167c7090b35241a860d4385c78c4baf4fae7b468d59626e3513825"
+      },
+      {
+        "names": [
+          "Omega_m",
+          "w",
+          "delta",
+          "H_0",
+          "M_abs"
+        ],
+        "fixed": {
+          "w_dm": 0.0
+        },
+        "bounds": {
+          "Omega_m": [
+            0.1,
+            0.5
+          ],
+          "H_0": [
+            60,
+            90
+          ],
+          "M_abs": [
+            -20.5,
+            -18
+          ],
+          "w": [
+            -2,
+            -0.33
+          ],
+          "delta": [
+            -1,
+            1
+          ]
+        },
+        "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_free_de_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "sha256": "a2843069ad6ba91ec73babc75f36ebd84e41cef0d36cc80f90458195c2a8454a",
+        "burn": 1000,
+        "steps": 11700,
+        "n": 1284000,
+        "dataset_signature": "a6e9e791d3167c7090b35241a860d4385c78c4baf4fae7b468d59626e3513825"
+      },
+      {
+        "names": [
+          "Omega_m",
+          "w_dm",
+          "delta",
+          "H_0",
+          "M_abs"
+        ],
+        "fixed": {
+          "w": -1.0
+        },
+        "bounds": {
+          "Omega_m": [
+            0.1,
+            0.5
+          ],
+          "H_0": [
+            60,
+            90
+          ],
+          "M_abs": [
+            -20.5,
+            -18
+          ],
+          "delta": [
+            -1,
+            1
+          ],
+          "w_dm": [
+            -0.15,
+            0.15
+          ]
+        },
+        "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "sha256": "b3bef3fc99c0f20fbcba6c8bf680fee475b46652159dc271b1d39eb0ccf1763d",
+        "burn": 1000,
+        "steps": 3100,
+        "n": 252000,
+        "dataset_signature": "a6e9e791d3167c7090b35241a860d4385c78c4baf4fae7b468d59626e3513825"
+      }
+    ],
+    "contour_checks": [
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "Omega_m"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500008770786369,
+          0.6800164741333187
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_free_de_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "Omega_m"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500008186321249,
+          0.6800004150287877
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "Omega_m"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500007786430752,
+          0.6800323667096687
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_free_de_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "w"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500001237923997,
+          0.6800040692436253
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_free_de_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "w"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500011699410822,
+          0.680008176111479
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "w_dm"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500026638868336,
+          0.6800274093113569
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "w_dm"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500031640492691,
+          0.6800152218408463
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.950001860300386,
+          0.6800315713059197
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_free_de_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.950004277253897,
+          0.6800146430810128
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "H_0",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500061876955032,
+          0.6800192120897455
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500032943400843,
+          0.6800358053785546
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_free_de_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500077039439921,
+          0.6800351721196409
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "Omega_m",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500046518511017,
+          0.6800168797484405
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_free_de_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "w",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500027453381092,
+          0.6800099803901752
+        ]
+      },
+      {
+        "case": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model5_EOS_CC_v1_model5_warm_lambda_iw_cc/Linear_IDE_5/CC_DESI_DR2_PantheonP_SH0ES/CC+DESI_DR2+PantheonP_SH0ES.h5",
+        "pair": [
+          "w_dm",
+          "delta"
+        ],
+        "enclosed_mass_95_68": [
+          0.9500034117974621,
+          0.680031022372687
+        ]
+      }
+    ]
+  }
+}

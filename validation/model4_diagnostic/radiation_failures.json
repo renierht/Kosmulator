@@ -1,0 +1,52 @@
+[
+  {
+    "delta": -0.2,
+    "a_ini": null,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 9.934789e-01, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination."
+  },
+  {
+    "delta": -0.2,
+    "a_ini": 1e-18,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 9.998352e-01, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination."
+  },
+  {
+    "delta": -0.25,
+    "a_ini": null,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 5.576349e-01, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination."
+  },
+  {
+    "delta": -0.25,
+    "a_ini": 1e-18,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 9.265017e-01, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination."
+  },
+  {
+    "delta": -0.3,
+    "a_ini": null,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 1.030631e-02, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination."
+  },
+  {
+    "delta": -0.3,
+    "a_ini": 1e-18,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 2.549108e-02, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination."
+  },
+  {
+    "delta": -0.35,
+    "a_ini": null,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 8.589256e-05, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination."
+  },
+  {
+    "delta": -0.35,
+    "a_ini": 1e-18,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 5.419626e-05, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination."
+  },
+  {
+    "delta": -0.5,
+    "a_ini": null,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 4.783550e-11, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination."
+  },
+  {
+    "delta": -0.5,
+    "a_ini": 1e-18,
+    "error": "\n\nError in Class: background_init(L:883) :condition (pba->shooting_failed == _TRUE_) is true; Shooting failed, try optimising input_get_guess(). Error message:\n\ninput_shooting(L:653) :error in input_find_root(&xzero, &fevals, ppr->tol_shooting_deltax_rel, &fzw, errmsg);\n=>input_find_root(L:928) :error in input_fzerofun_1d(x1, pfzw, &f1, errmsg);\n=>input_fzerofun_1d(L:997) :error in input_try_unknown_parameters(&input, 1, pfzw, output, error_message);\n=>input_try_unknown_parameters(L:1399) :error in background_init(&pr,&ba);\n=>background_init(L:899) :error in background_solve(ppr,pba);\n=>background_solve(L:2010) :error in background_initial_conditions(ppr,pba,pvecback,pvecback_integration,&(loga_ini));\n=>background_initial_conditions(L:2395) :condition (fabs(pvecback[pba->index_bg_Omega_r]-1.) > ppr->tol_initial_Omega_r) is true; Omega_r = 4.783550e-13, not close enough to 1. Decrease a_ini_over_a_today_default in order to start from radiation domination."
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "E_max_relative_difference": 2.220446049250313e-16,
+  "rd_relative_difference": 2.489854988851903e-09,
+  "delta_chi2_current_minus_old": {
+    "CC": 9.986137628452177,
+    "DESI_DR2": 0.1709199788272464,
+    "PantheonPS": -0.6844180601094649
+  },
+  "SN_BAO_delta_chi2": -0.5134980812822185,
+  "limitations": [
+    "Single illustrative parameter point, not an optimum or posterior comparison.",
+    "CC files/covariance differ between implementations; CC column is not the effect of adding CC to a fit.",
+    "No LCDM point or refit included, so no delta IC attribution possible.",
+    "CLASS cached binaries only; no rebuild; no sampler or chain modifications."
+  ]
+}

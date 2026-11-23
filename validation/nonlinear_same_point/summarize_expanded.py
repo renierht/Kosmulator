@@ -1,0 +1,23 @@
+from pathlib import Path
+import json,numpy as np
+p=Path(__file__).resolve().parent
+old=json.loads((p/'expanded_paper_v2.json').read_text());new=json.loads((p/'expanded_current.json').read_text());assert len(old['rows'])==len(new['rows'])==14
+metrics=[]
+for a,b in zip(old['rows'],new['rows']):
+ assert a['model']==b['model'] and a['point']==b['point'] and a['parameters']==b['parameters']
+ metrics.append({'model':a['model'],'point':a['point'],'E_relative_error':float(np.max(abs(np.array(b['E'])/a['E']-1))),'rd_relative_error':b['rd']/a['rd']-1,'reconstructed_old_SN_BAO_error':sum(b['variants']['both_old'][k]-a['variants']['native'][k] for k in ['PantheonPS','DESI_DR2'])})
+ assert metrics[-1]['E_relative_error']<1e-12
+ assert abs(metrics[-1]['rd_relative_error'])<1e-6
+ assert abs(metrics[-1]['reconstructed_old_SN_BAO_error'])<.001
+oldcenters=[r for r in old['rows'] if r['point']=='archived_MLE'];centers=[r for r in new['rows'] if r['point']=='archived_MLE']
+for r in oldcenters: assert abs(sum(r['variants']['native'][k] for k in ['PantheonPS','DESI_DR2'])-r['archived_chi2'])<1e-5
+stages=[]
+for label,source,variant,cc in [('Original SN+BAO',oldcenters,'native',False),('Current distance, old SN prefactor',centers,'old_SN_prefactor_only',False),('Current SN+BAO',centers,'native',False),('Current SN+BAO+CC',centers,'native',True)]:
+ values=[sum(r['variants'][variant][k] for k in (['PantheonPS','DESI_DR2','CC'] if cc else ['PantheonPS','DESI_DR2'])) for r in source]
+ stages.append({'stage':label,'LCDM_chi2_at_old_MLE':values[0],'IDE_chi2_at_old_MLE':values[1],'IDE_minus_LCDM':values[1]-values[0]})
+report={'tests':metrics,'fixed_point_stages':stages,'current_CC_IDE_minus_LCDM':centers[1]['variants']['native']['CC']-centers[0]['variants']['native']['CC'],'old_CC_IDE_minus_LCDM':oldcenters[1]['variants']['native']['CC']-oldcenters[0]['variants']['native']['CC'],'distance_effect_on_delta_chi2':stages[1]['IDE_minus_LCDM']-stages[0]['IDE_minus_LCDM'],'SN_prefactor_effect_on_delta_chi2':stages[2]['IDE_minus_LCDM']-stages[1]['IDE_minus_LCDM']}
+(p/'expanded_comparison.json').write_text(json.dumps(report,indent=2))
+lines=['# Expanded unrestricted nonlinear IDE / LCDM check','', 'Fourteen matched parameter points: archived LCDM MLE and four nearby points; archived nonlinear IDE MLE and eight nearby points. Perturbations: H0 +/-0.8, Omega_m +/-0.008, and IDE w +/-0.04, delta +/-0.002. Every current point also tests the old distance calculation, old SN redshift prefactor, and both together. All toggles are process-local; production files and chains unchanged.','', '| Evaluation (no refit) | LCDM chi2 | IDE chi2 | IDE minus LCDM |','|---|---:|---:|---:|']
+for r in stages:lines.append(f"| {r['stage']} | {r['LCDM_chi2_at_old_MLE']:.6f} | {r['IDE_chi2_at_old_MLE']:.6f} | {r['IDE_minus_LCDM']:.6f} |")
+lines+=['',f"Current CC differential: {report['current_CC_IDE_minus_LCDM']:.6f}; old CC differential: {report['old_CC_IDE_minus_LCDM']:.6f}.",f"Distance correction contribution to relative chi2: {report['distance_effect_on_delta_chi2']:.6f}; subsequent SN prefactor contribution: {report['SN_prefactor_effect_on_delta_chi2']:.6f}.",f"Maximum |relative H difference|: {max(r['E_relative_error'] for r in metrics):.6g}; maximum |relative CLASS rd difference|: {max(abs(r['rd_relative_error']) for r in metrics):.6g}.",f"Largest residual SN+BAO chi2 mismatch after restoring both old numerical conventions in current code: {max(abs(r['reconstructed_old_SN_BAO_error']) for r in metrics):.6g}.",'','The old SN+BAO likelihood at both archived best fits reproduces archived minimum chi2 within 1e-5. Distances are patched at both utils and UDM references (SN and DESI respectively). CLASS settings and parameters are identical.','', 'Interpretation: for these old-fit points CC is the dominant change weakening IDE preference. The distance and SN corrections instead modestly strengthen it here. Even the original CC compilation penalizes the IDE old-fit point relative to LCDM; this effect is not solely the new CC covariance. The fitted models can move when CC is added, so none of the new-column values is a reoptimized minimum or a final AIC/DIC result. The audit does not explain differences to external papers with other priors or baryon treatments, nor different interaction kernels. These 14 points cannot exclude an error elsewhere in parameter space.','', 'Next decisive step: bounded matched optimizations for current SN+BAO and current SN+BAO+CC, followed by posterior runs only if DIC/posterior shifts are needed. No new MCMC run started by this audit.']
+(p/'EXPANDED_REPORT.md').write_text('\n'.join(lines)+'\n');print('\n'.join(lines))

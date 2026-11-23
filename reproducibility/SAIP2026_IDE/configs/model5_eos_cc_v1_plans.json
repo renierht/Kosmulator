@@ -1,0 +1,885 @@
+[
+  {
+    "distance_policy": "dense-grid-dz0.01-v1",
+    "likelihood_policy": "pantheon-zhd-zhel-v1",
+    "emcee_moves": "de_snooker",
+    "observations": [
+      [
+        "PantheonPS",
+        "DESI_DR2",
+        "CC"
+      ]
+    ],
+    "mode": "sample",
+    "regime": "iw",
+    "output_suffix": "Model5_EOS_CC_v1_lcdm_iw_cc",
+    "models": [
+      "Linear_IDE_5"
+    ],
+    "free_w": false,
+    "free_w_dm": false,
+    "walkers": 120,
+    "burn": 1000,
+    "thin": 1,
+    "max_steps": 100000,
+    "convergence_setting": 0.05,
+    "convergence_policy": {
+      "tau_factor": 100,
+      "ess_min": 2000,
+      "rhat_max": 1.01,
+      "consecutive": 1
+    },
+    "init_jitter_frac": 0.1,
+    "derived_rd_samples": 6000,
+    "class_settings": {
+      "DERIVE_RD_WITH_MODEL_CLASS": true,
+      "RD_CLASS_OMEGA_B": 0.048,
+      "RD_CLASS_N_EFF": 3.044,
+      "RD_CLASS_SUM_MNU_EV": 0.06,
+      "RD_CLASS_N_NCDM": 3
+    },
+    "priors": {
+      "Omega_m": [
+        0.1,
+        0.5
+      ],
+      "H_0": [
+        60,
+        90
+      ],
+      "M_abs": [
+        -20.5,
+        -18
+      ]
+    },
+    "regime_switches": [
+      true,
+      true,
+      true
+    ],
+    "chain_paths": null,
+    "dic_convention": "posterior-mean",
+    "fixed_parameters_by_model": {
+      "Linear_IDE_5": {
+        "delta": 0.0
+      }
+    },
+    "source_hashes": {
+      "User_defined_modules.py": "9335cb74af276f5838835034ec622cbadb9c0fc28c036132061ee74b6008c3fa",
+      "Kosmulator.py": "8776d14698b1f9436df90402a1c6311a0eab76341da6c008aff50f2eeeeb8368",
+      "reproducibility/SAIP2026_IDE/scripts/run_analysis.py": "2518a935f97f90a66e9506775a2b06110439cf19b5aa7214eabdf30c490689ef",
+      "Kosmulator_main/Class_run.py": "8d172bd7927b4790af30ddff6094925f9f3dd05efa62149880b1cba48fb0c8ea",
+      "Kosmulator_main/Config.py": "f9d953c5733ddc37f2cb47d8a2a3c170e02285558d339d928926fb52e9a00188",
+      "Kosmulator_main/Kosmulator_MCMC.py": "0fc3211720fd1e2e31052a255ead25aee5df0d34ad6765ef07039350c4906621",
+      "Kosmulator_main/MCMC_setup.py": "7e6826a34ec13ff07c7d47d84ba024f7d43ff5a23a7331958c1ae6cf0c7debcf",
+      "Kosmulator_main/Model_comparison.py": "fa6e62b9a22d9c1343bd4d7684ee1f9823b5012a1f393a03af635658ece93869",
+      "Kosmulator_main/Plot_metadata.py": "727d390b5bb1cf3049336580b8e81bfadc66ef04457a5823a69c07c6174b49e9",
+      "Kosmulator_main/Post_processing.py": "0f52bd0c03da8d71726b1fe6dfcc6da45bfb72679f4bc9060e0c78a4c2eb44a9",
+      "Kosmulator_main/Statistical_packages.py": "b51ae6013167473de72a5cd65a5aaab8073e2a0c51c45848fb82b845964020ec",
+      "Kosmulator_main/__init__.py": "d40e1ab9b002c1c6c88514312aacf2708798272bcb2d6e9e9a032405ac537029",
+      "Kosmulator_main/cc_covariance.py": "816e29081248a9e33a69e6936375b4317774fe524bea319e6441070a78c3b946",
+      "Kosmulator_main/chain_policy.py": "d2f2258aa952e05ba8fa8680f9e1b7f39404a1946e3d17bb752fe759ebae286c",
+      "Kosmulator_main/constants.py": "cea75f020bb3da7bf2d68000a1654feadc05895d1e2f84f8169fcfceae627935",
+      "Kosmulator_main/convergence.py": "4fc7127883b524ca3a9701e238a93ebedc0ec34e9692edd511040b9565052c69",
+      "Kosmulator_main/ide_background.py": "44312cfa6489e9b171d107ad2746c42306cc7c0bceabbc0a1a2bb7dd9df3ab77",
+      "Kosmulator_main/ide_doctor.py": "0decea919e8750aa21bdbbcc2c1882be1cadeb950f03f4308c5468d5eef17428",
+      "Kosmulator_main/peek.py": "ef0423608deda6ba3425bd313957792a1c4c4c0a520ae5fbb4365d534b516398",
+      "Kosmulator_main/pool_context.py": "f5332905da766e52661b5bf3e15cadf28feb23c1e19a37dfbdf3b86f16ac4a2e",
+      "Kosmulator_main/rd_helpers.py": "b514b5fec347fcfe18fec5e064fb148baa96de99f7f8d1c213742fea9c4b2c7b",
+      "Kosmulator_main/run_lock.py": "b1bf19af688b543b511af3ca6ae203aeee1588e5d0b30b4f1f21c49d21b3d921",
+      "Kosmulator_main/run_manifest.py": "23b0d911f2f33b4803e57fec27f4f2b3374784e3ea93fa84f36fe9d2dee6d6d0",
+      "Kosmulator_main/sampler_moves.py": "5b7c33a5eda6bb6656b883055d809df67a054764910b2c0a41b18887cbeb089e",
+      "Kosmulator_main/significance.py": "2a02f8c7f249a71d4fa25f894c750cf11b6b052153645fb4677ed212c01a070a",
+      "Kosmulator_main/sn_covariance.py": "c3958c962c26784485dc5e2aa46bd86788edca4faa40bd1d37a1e9d6e17c2a56",
+      "Kosmulator_main/utils.py": "d9dea7d0cabff5dfca9e728bc5aa70d42bd4b3f46b21c946eb07680d78b70cd6",
+      "Class/IDE_background/source/background.c": "d48f97a43e3b51cf8b41a86c1198ec44fb3275647e5b3f5656126a0689a21a21",
+      "Class/IDE_background/source/distortions.c": "32beaeba20b7decf6bd89b313ede84746bdc5c5e885018c30836c019047f610f",
+      "Class/IDE_background/source/fourier.c": "73546e7752cdb44a967b56cc064867ce1c0eff9b0e82e9839823f1cee974fda7",
+      "Class/IDE_background/source/harmonic.c": "a2521249ff9151cba66227491f3399f912ebb0eb29f609e0260dd874bef760fb",
+      "Class/IDE_background/source/input.c": "335c53299bcb1539a91d3785624422ada352eeadc49f466064d11ff374c11d9f",
+      "Class/IDE_background/source/lensing.c": "7be4e38490d166a4c380dcee866ddbcf4cd33eed9ddc35d7a8bbcf7d0c797084",
+      "Class/IDE_background/source/output.c": "5475e501d0c60f772e02fa9919dbf4db69e09e32cda3d19d403990f5873ed9d2",
+      "Class/IDE_background/source/perturbations.c": "5e2a48fbed1d012fb83b37a5c574f46bc2f074191268010476d0d82682a45a8e",
+      "Class/IDE_background/source/primordial.c": "9437506f48afff18d71d2d62251a8d32adc3d1966e8d95019d213348972405d7",
+      "Class/IDE_background/source/thermodynamics.c": "ce2d8e0b490106b002a3fb62561948ded4239db5109efea0ec2d297d458816ce",
+      "Class/IDE_background/source/transfer.c": "4e00bfdde7e162e5b86a51d3a47999db296b9c7448f769ffc7775429118f5ad0",
+      "Class/IDE_background/include/arrays.h": "3d3f4a0a90e9ae6cc230a2428c464f10e0c2218d77f16694b091dbbdad02e56c",
+      "Class/IDE_background/include/background.h": "5ece1d2af46f01360db30cbe2a8db1a949a3f1e8d9767e6ae27c09c0cd086328",
+      "Class/IDE_background/include/class.h": "d2848d216f673e28a14a5e145c0ab561962ffa38ec423e0f4d9b116843bb9edc",
+      "Class/IDE_background/include/common.h": "a959229a27f9bbe39ecd9411822dae213b97cd5defb3117406d119ec6bedf624",
+      "Class/IDE_background/include/dei_rkck.h": "77c56981a3c7e26e57531bb56d6af38bb7468e5457cd195f70b95b8a497973b3",
+      "Class/IDE_background/include/distortions.h": "158597380426f798678378a11011a8a3f9a2ab50c5388deb85b0529df742bf26",
+      "Class/IDE_background/include/evolver_ndf15.h": "069846924e0593b8bcd98f0430edec3bcda50ad9f4b2355a393d54737d7b45d4",
+      "Class/IDE_background/include/evolver_rkck.h": "9270f1cfa1d602dc4a19539263223fe86976db5c930b5c13eade824ac840a2ce",
+      "Class/IDE_background/include/fourier.h": "ba680f4f51b337abeb8a10a844999dd03674c5cd5b027aad5332765e96c53f6e",
+      "Class/IDE_background/include/growTable.h": "7f58701538838ff651289c99ec0fa1ea2b72afc72471b65b5878c460b5da47b9",
+      "Class/IDE_background/include/harmonic.h": "623487774620c3c68ee22888cd49524165b1e6df6881fdf035e3ab2286316f95",
+      "Class/IDE_background/include/hermite3_interpolation_csource.h": "da5920f23387f97f6090d2d6fe2c9b073b90b7f6ff27d12e8ac6450f3e93ec43",
+      "Class/IDE_background/include/hermite4_interpolation_csource.h": "0f7fa7d3f781749f517c048c53d55f0a70ad944bdced86d6e311bfdb6d48079a",
+      "Class/IDE_background/include/hermite6_interpolation_csource.h": "f3462fe9c622e84c49a0e4a06c743cb2d38f5b9016023f74d4c1a1a9ee6830ff",
+      "Class/IDE_background/include/hyperspherical.h": "4a4ea6ddb11cb04b4173a637cedf32ee2cd326f6e3cca10a1028cc7669d93869",
+      "Class/IDE_background/include/ide_densities.h": "0bac3f14f9801cbbbb718d2891d99df197cd55a5a749157ff56fbc4b627648f5",
+      "Class/IDE_background/include/input.h": "162e50e7bc0b1450b024707c0c5e11b7591063f47f58234e2b440e9f3ea67ed9",
+      "Class/IDE_background/include/lensing.h": "0b01cb46125d5dc493a5814f626ee3ff739a42f5d105c475706c0b7d7dd553c8",
+      "Class/IDE_background/include/macros_precision.h": "14a6887545b0f090bf15d2f70d8329e7d7f582eaa0f9c5d6952da8990890bfd6",
+      "Class/IDE_background/include/output.h": "1a1b52ffdb26aa6e6ffc2f7889d009f97fe515d2568c9d8402495d11a6b2c27b",
+      "Class/IDE_background/include/parallel.h": "91635eeb3def08b110bfbbc3e3be92851129c5a2c46c69f16fed4ee8dcd2946e",
+      "Class/IDE_background/include/parser.h": "1e84acde21e62fd1609fdd27e56df5ea4636c857dfaf704ddd13e32a211677bb",
+      "Class/IDE_background/include/perturbations.h": "754fd3606bb54db6b5929442cead1d499844d1c6f397b442e767a6e2997e31cf",
+      "Class/IDE_background/include/precisions.h": "962fb9d95118b223b67abf36f9d1a1666408b377d9d0fd2fe5ddf60d20440bea",
+      "Class/IDE_background/include/primordial.h": "891ff30f667b3040869e418de146f34b1e507ce3ede30f70467e0548cbff278c",
+      "Class/IDE_background/include/quadrature.h": "245f9025cc6049ea9c09ccd57faa28d2d970e05fe96093be1c54eccde97fd075",
+      "Class/IDE_background/include/sparse.h": "830c38ddea0268270c5c6e8d07631c4667b69e6904d7950816701c2e371c56f7",
+      "Class/IDE_background/include/svnversion.h": "6455940c5fe90b4786147482f2fcf8492b15e10f4b8f4139b9129145f0b728e8",
+      "Class/IDE_background/include/thermodynamics.h": "f46fcdc9c0a6dbcc93563977ab7458e08d4abc0bc571d06f7554846e8d484241",
+      "Class/IDE_background/include/transfer.h": "6b27f9f44d39982d8b0564bff4e4d2b636ce06265508745c2f317fa44bdb45db",
+      "Class/IDE_background/include/trigonometric_integrals.h": "221fbff5c2140ac3e7b8fda1c3cccc40e612f48d5ce8f66e759ebe96563e09a6"
+    },
+    "dataset_hashes": {
+      "CC.dat": "0d9de12f0adfd725b6afcd2a9bd5a30cf3e079d6b0d49ba7e0b16f17ded3f2df",
+      "CC_corr.txt": "311b333490ee03dc03f6b4612917341a7fd7d2c42a11b105899c277a2e8c61df",
+      "DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952",
+      "DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+      "PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+      "PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1"
+    }
+  },
+  {
+    "distance_policy": "dense-grid-dz0.01-v1",
+    "likelihood_policy": "pantheon-zhd-zhel-v1",
+    "emcee_moves": "de_snooker",
+    "observations": [
+      [
+        "PantheonPS",
+        "DESI_DR2",
+        "CC"
+      ]
+    ],
+    "mode": "sample",
+    "regime": "iw",
+    "output_suffix": "Model5_EOS_CC_v1_wcdm_iw_cc",
+    "models": [
+      "Linear_IDE_5"
+    ],
+    "free_w": true,
+    "free_w_dm": false,
+    "walkers": 120,
+    "burn": 1000,
+    "thin": 1,
+    "max_steps": 100000,
+    "convergence_setting": 0.05,
+    "convergence_policy": {
+      "tau_factor": 100,
+      "ess_min": 2000,
+      "rhat_max": 1.01,
+      "consecutive": 1
+    },
+    "init_jitter_frac": 0.1,
+    "derived_rd_samples": 6000,
+    "class_settings": {
+      "DERIVE_RD_WITH_MODEL_CLASS": true,
+      "RD_CLASS_OMEGA_B": 0.048,
+      "RD_CLASS_N_EFF": 3.044,
+      "RD_CLASS_SUM_MNU_EV": 0.06,
+      "RD_CLASS_N_NCDM": 3
+    },
+    "priors": {
+      "Omega_m": [
+        0.1,
+        0.5
+      ],
+      "H_0": [
+        60,
+        90
+      ],
+      "M_abs": [
+        -20.5,
+        -18
+      ],
+      "w": [
+        -2,
+        -0.33
+      ]
+    },
+    "regime_switches": [
+      true,
+      true,
+      true
+    ],
+    "chain_paths": null,
+    "dic_convention": "posterior-mean",
+    "fixed_parameters_by_model": {
+      "Linear_IDE_5": {
+        "delta": 0.0
+      }
+    },
+    "source_hashes": {
+      "User_defined_modules.py": "9335cb74af276f5838835034ec622cbadb9c0fc28c036132061ee74b6008c3fa",
+      "Kosmulator.py": "8776d14698b1f9436df90402a1c6311a0eab76341da6c008aff50f2eeeeb8368",
+      "reproducibility/SAIP2026_IDE/scripts/run_analysis.py": "2518a935f97f90a66e9506775a2b06110439cf19b5aa7214eabdf30c490689ef",
+      "Kosmulator_main/Class_run.py": "8d172bd7927b4790af30ddff6094925f9f3dd05efa62149880b1cba48fb0c8ea",
+      "Kosmulator_main/Config.py": "f9d953c5733ddc37f2cb47d8a2a3c170e02285558d339d928926fb52e9a00188",
+      "Kosmulator_main/Kosmulator_MCMC.py": "0fc3211720fd1e2e31052a255ead25aee5df0d34ad6765ef07039350c4906621",
+      "Kosmulator_main/MCMC_setup.py": "7e6826a34ec13ff07c7d47d84ba024f7d43ff5a23a7331958c1ae6cf0c7debcf",
+      "Kosmulator_main/Model_comparison.py": "fa6e62b9a22d9c1343bd4d7684ee1f9823b5012a1f393a03af635658ece93869",
+      "Kosmulator_main/Plot_metadata.py": "727d390b5bb1cf3049336580b8e81bfadc66ef04457a5823a69c07c6174b49e9",
+      "Kosmulator_main/Post_processing.py": "0f52bd0c03da8d71726b1fe6dfcc6da45bfb72679f4bc9060e0c78a4c2eb44a9",
+      "Kosmulator_main/Statistical_packages.py": "b51ae6013167473de72a5cd65a5aaab8073e2a0c51c45848fb82b845964020ec",
+      "Kosmulator_main/__init__.py": "d40e1ab9b002c1c6c88514312aacf2708798272bcb2d6e9e9a032405ac537029",
+      "Kosmulator_main/cc_covariance.py": "816e29081248a9e33a69e6936375b4317774fe524bea319e6441070a78c3b946",
+      "Kosmulator_main/chain_policy.py": "d2f2258aa952e05ba8fa8680f9e1b7f39404a1946e3d17bb752fe759ebae286c",
+      "Kosmulator_main/constants.py": "cea75f020bb3da7bf2d68000a1654feadc05895d1e2f84f8169fcfceae627935",
+      "Kosmulator_main/convergence.py": "4fc7127883b524ca3a9701e238a93ebedc0ec34e9692edd511040b9565052c69",
+      "Kosmulator_main/ide_background.py": "44312cfa6489e9b171d107ad2746c42306cc7c0bceabbc0a1a2bb7dd9df3ab77",
+      "Kosmulator_main/ide_doctor.py": "0decea919e8750aa21bdbbcc2c1882be1cadeb950f03f4308c5468d5eef17428",
+      "Kosmulator_main/peek.py": "ef0423608deda6ba3425bd313957792a1c4c4c0a520ae5fbb4365d534b516398",
+      "Kosmulator_main/pool_context.py": "f5332905da766e52661b5bf3e15cadf28feb23c1e19a37dfbdf3b86f16ac4a2e",
+      "Kosmulator_main/rd_helpers.py": "b514b5fec347fcfe18fec5e064fb148baa96de99f7f8d1c213742fea9c4b2c7b",
+      "Kosmulator_main/run_lock.py": "b1bf19af688b543b511af3ca6ae203aeee1588e5d0b30b4f1f21c49d21b3d921",
+      "Kosmulator_main/run_manifest.py": "23b0d911f2f33b4803e57fec27f4f2b3374784e3ea93fa84f36fe9d2dee6d6d0",
+      "Kosmulator_main/sampler_moves.py": "5b7c33a5eda6bb6656b883055d809df67a054764910b2c0a41b18887cbeb089e",
+      "Kosmulator_main/significance.py": "2a02f8c7f249a71d4fa25f894c750cf11b6b052153645fb4677ed212c01a070a",
+      "Kosmulator_main/sn_covariance.py": "c3958c962c26784485dc5e2aa46bd86788edca4faa40bd1d37a1e9d6e17c2a56",
+      "Kosmulator_main/utils.py": "d9dea7d0cabff5dfca9e728bc5aa70d42bd4b3f46b21c946eb07680d78b70cd6",
+      "Class/IDE_background/source/background.c": "d48f97a43e3b51cf8b41a86c1198ec44fb3275647e5b3f5656126a0689a21a21",
+      "Class/IDE_background/source/distortions.c": "32beaeba20b7decf6bd89b313ede84746bdc5c5e885018c30836c019047f610f",
+      "Class/IDE_background/source/fourier.c": "73546e7752cdb44a967b56cc064867ce1c0eff9b0e82e9839823f1cee974fda7",
+      "Class/IDE_background/source/harmonic.c": "a2521249ff9151cba66227491f3399f912ebb0eb29f609e0260dd874bef760fb",
+      "Class/IDE_background/source/input.c": "335c53299bcb1539a91d3785624422ada352eeadc49f466064d11ff374c11d9f",
+      "Class/IDE_background/source/lensing.c": "7be4e38490d166a4c380dcee866ddbcf4cd33eed9ddc35d7a8bbcf7d0c797084",
+      "Class/IDE_background/source/output.c": "5475e501d0c60f772e02fa9919dbf4db69e09e32cda3d19d403990f5873ed9d2",
+      "Class/IDE_background/source/perturbations.c": "5e2a48fbed1d012fb83b37a5c574f46bc2f074191268010476d0d82682a45a8e",
+      "Class/IDE_background/source/primordial.c": "9437506f48afff18d71d2d62251a8d32adc3d1966e8d95019d213348972405d7",
+      "Class/IDE_background/source/thermodynamics.c": "ce2d8e0b490106b002a3fb62561948ded4239db5109efea0ec2d297d458816ce",
+      "Class/IDE_background/source/transfer.c": "4e00bfdde7e162e5b86a51d3a47999db296b9c7448f769ffc7775429118f5ad0",
+      "Class/IDE_background/include/arrays.h": "3d3f4a0a90e9ae6cc230a2428c464f10e0c2218d77f16694b091dbbdad02e56c",
+      "Class/IDE_background/include/background.h": "5ece1d2af46f01360db30cbe2a8db1a949a3f1e8d9767e6ae27c09c0cd086328",
+      "Class/IDE_background/include/class.h": "d2848d216f673e28a14a5e145c0ab561962ffa38ec423e0f4d9b116843bb9edc",
+      "Class/IDE_background/include/common.h": "a959229a27f9bbe39ecd9411822dae213b97cd5defb3117406d119ec6bedf624",
+      "Class/IDE_background/include/dei_rkck.h": "77c56981a3c7e26e57531bb56d6af38bb7468e5457cd195f70b95b8a497973b3",
+      "Class/IDE_background/include/distortions.h": "158597380426f798678378a11011a8a3f9a2ab50c5388deb85b0529df742bf26",
+      "Class/IDE_background/include/evolver_ndf15.h": "069846924e0593b8bcd98f0430edec3bcda50ad9f4b2355a393d54737d7b45d4",
+      "Class/IDE_background/include/evolver_rkck.h": "9270f1cfa1d602dc4a19539263223fe86976db5c930b5c13eade824ac840a2ce",
+      "Class/IDE_background/include/fourier.h": "ba680f4f51b337abeb8a10a844999dd03674c5cd5b027aad5332765e96c53f6e",
+      "Class/IDE_background/include/growTable.h": "7f58701538838ff651289c99ec0fa1ea2b72afc72471b65b5878c460b5da47b9",
+      "Class/IDE_background/include/harmonic.h": "623487774620c3c68ee22888cd49524165b1e6df6881fdf035e3ab2286316f95",
+      "Class/IDE_background/include/hermite3_interpolation_csource.h": "da5920f23387f97f6090d2d6fe2c9b073b90b7f6ff27d12e8ac6450f3e93ec43",
+      "Class/IDE_background/include/hermite4_interpolation_csource.h": "0f7fa7d3f781749f517c048c53d55f0a70ad944bdced86d6e311bfdb6d48079a",
+      "Class/IDE_background/include/hermite6_interpolation_csource.h": "f3462fe9c622e84c49a0e4a06c743cb2d38f5b9016023f74d4c1a1a9ee6830ff",
+      "Class/IDE_background/include/hyperspherical.h": "4a4ea6ddb11cb04b4173a637cedf32ee2cd326f6e3cca10a1028cc7669d93869",
+      "Class/IDE_background/include/ide_densities.h": "0bac3f14f9801cbbbb718d2891d99df197cd55a5a749157ff56fbc4b627648f5",
+      "Class/IDE_background/include/input.h": "162e50e7bc0b1450b024707c0c5e11b7591063f47f58234e2b440e9f3ea67ed9",
+      "Class/IDE_background/include/lensing.h": "0b01cb46125d5dc493a5814f626ee3ff739a42f5d105c475706c0b7d7dd553c8",
+      "Class/IDE_background/include/macros_precision.h": "14a6887545b0f090bf15d2f70d8329e7d7f582eaa0f9c5d6952da8990890bfd6",
+      "Class/IDE_background/include/output.h": "1a1b52ffdb26aa6e6ffc2f7889d009f97fe515d2568c9d8402495d11a6b2c27b",
+      "Class/IDE_background/include/parallel.h": "91635eeb3def08b110bfbbc3e3be92851129c5a2c46c69f16fed4ee8dcd2946e",
+      "Class/IDE_background/include/parser.h": "1e84acde21e62fd1609fdd27e56df5ea4636c857dfaf704ddd13e32a211677bb",
+      "Class/IDE_background/include/perturbations.h": "754fd3606bb54db6b5929442cead1d499844d1c6f397b442e767a6e2997e31cf",
+      "Class/IDE_background/include/precisions.h": "962fb9d95118b223b67abf36f9d1a1666408b377d9d0fd2fe5ddf60d20440bea",
+      "Class/IDE_background/include/primordial.h": "891ff30f667b3040869e418de146f34b1e507ce3ede30f70467e0548cbff278c",
+      "Class/IDE_background/include/quadrature.h": "245f9025cc6049ea9c09ccd57faa28d2d970e05fe96093be1c54eccde97fd075",
+      "Class/IDE_background/include/sparse.h": "830c38ddea0268270c5c6e8d07631c4667b69e6904d7950816701c2e371c56f7",
+      "Class/IDE_background/include/svnversion.h": "6455940c5fe90b4786147482f2fcf8492b15e10f4b8f4139b9129145f0b728e8",
+      "Class/IDE_background/include/thermodynamics.h": "f46fcdc9c0a6dbcc93563977ab7458e08d4abc0bc571d06f7554846e8d484241",
+      "Class/IDE_background/include/transfer.h": "6b27f9f44d39982d8b0564bff4e4d2b636ce06265508745c2f317fa44bdb45db",
+      "Class/IDE_background/include/trigonometric_integrals.h": "221fbff5c2140ac3e7b8fda1c3cccc40e612f48d5ce8f66e759ebe96563e09a6"
+    },
+    "dataset_hashes": {
+      "CC.dat": "0d9de12f0adfd725b6afcd2a9bd5a30cf3e079d6b0d49ba7e0b16f17ded3f2df",
+      "CC_corr.txt": "311b333490ee03dc03f6b4612917341a7fd7d2c42a11b105899c277a2e8c61df",
+      "DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952",
+      "DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+      "PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+      "PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1"
+    }
+  },
+  {
+    "distance_policy": "dense-grid-dz0.01-v1",
+    "likelihood_policy": "pantheon-zhd-zhel-v1",
+    "emcee_moves": "de_snooker",
+    "observations": [
+      [
+        "PantheonPS",
+        "DESI_DR2",
+        "CC"
+      ]
+    ],
+    "mode": "sample",
+    "regime": "iw",
+    "output_suffix": "Model5_EOS_CC_v1_warm_lambda_iw_cc",
+    "models": [
+      "Linear_IDE_5"
+    ],
+    "free_w": false,
+    "free_w_dm": true,
+    "walkers": 120,
+    "burn": 1000,
+    "thin": 1,
+    "max_steps": 100000,
+    "convergence_setting": 0.05,
+    "convergence_policy": {
+      "tau_factor": 100,
+      "ess_min": 2000,
+      "rhat_max": 1.01,
+      "consecutive": 1
+    },
+    "init_jitter_frac": 0.1,
+    "derived_rd_samples": 6000,
+    "class_settings": {
+      "DERIVE_RD_WITH_MODEL_CLASS": true,
+      "RD_CLASS_OMEGA_B": 0.048,
+      "RD_CLASS_N_EFF": 3.044,
+      "RD_CLASS_SUM_MNU_EV": 0.06,
+      "RD_CLASS_N_NCDM": 3
+    },
+    "priors": {
+      "Omega_m": [
+        0.1,
+        0.5
+      ],
+      "H_0": [
+        60,
+        90
+      ],
+      "M_abs": [
+        -20.5,
+        -18
+      ],
+      "w_dm": [
+        -0.15,
+        0.15
+      ]
+    },
+    "regime_switches": [
+      true,
+      true,
+      true
+    ],
+    "chain_paths": null,
+    "dic_convention": "posterior-mean",
+    "fixed_parameters_by_model": {
+      "Linear_IDE_5": {
+        "delta": 0.0
+      }
+    },
+    "source_hashes": {
+      "User_defined_modules.py": "9335cb74af276f5838835034ec622cbadb9c0fc28c036132061ee74b6008c3fa",
+      "Kosmulator.py": "8776d14698b1f9436df90402a1c6311a0eab76341da6c008aff50f2eeeeb8368",
+      "reproducibility/SAIP2026_IDE/scripts/run_analysis.py": "2518a935f97f90a66e9506775a2b06110439cf19b5aa7214eabdf30c490689ef",
+      "Kosmulator_main/Class_run.py": "8d172bd7927b4790af30ddff6094925f9f3dd05efa62149880b1cba48fb0c8ea",
+      "Kosmulator_main/Config.py": "f9d953c5733ddc37f2cb47d8a2a3c170e02285558d339d928926fb52e9a00188",
+      "Kosmulator_main/Kosmulator_MCMC.py": "0fc3211720fd1e2e31052a255ead25aee5df0d34ad6765ef07039350c4906621",
+      "Kosmulator_main/MCMC_setup.py": "7e6826a34ec13ff07c7d47d84ba024f7d43ff5a23a7331958c1ae6cf0c7debcf",
+      "Kosmulator_main/Model_comparison.py": "fa6e62b9a22d9c1343bd4d7684ee1f9823b5012a1f393a03af635658ece93869",
+      "Kosmulator_main/Plot_metadata.py": "727d390b5bb1cf3049336580b8e81bfadc66ef04457a5823a69c07c6174b49e9",
+      "Kosmulator_main/Post_processing.py": "0f52bd0c03da8d71726b1fe6dfcc6da45bfb72679f4bc9060e0c78a4c2eb44a9",
+      "Kosmulator_main/Statistical_packages.py": "b51ae6013167473de72a5cd65a5aaab8073e2a0c51c45848fb82b845964020ec",
+      "Kosmulator_main/__init__.py": "d40e1ab9b002c1c6c88514312aacf2708798272bcb2d6e9e9a032405ac537029",
+      "Kosmulator_main/cc_covariance.py": "816e29081248a9e33a69e6936375b4317774fe524bea319e6441070a78c3b946",
+      "Kosmulator_main/chain_policy.py": "d2f2258aa952e05ba8fa8680f9e1b7f39404a1946e3d17bb752fe759ebae286c",
+      "Kosmulator_main/constants.py": "cea75f020bb3da7bf2d68000a1654feadc05895d1e2f84f8169fcfceae627935",
+      "Kosmulator_main/convergence.py": "4fc7127883b524ca3a9701e238a93ebedc0ec34e9692edd511040b9565052c69",
+      "Kosmulator_main/ide_background.py": "44312cfa6489e9b171d107ad2746c42306cc7c0bceabbc0a1a2bb7dd9df3ab77",
+      "Kosmulator_main/ide_doctor.py": "0decea919e8750aa21bdbbcc2c1882be1cadeb950f03f4308c5468d5eef17428",
+      "Kosmulator_main/peek.py": "ef0423608deda6ba3425bd313957792a1c4c4c0a520ae5fbb4365d534b516398",
+      "Kosmulator_main/pool_context.py": "f5332905da766e52661b5bf3e15cadf28feb23c1e19a37dfbdf3b86f16ac4a2e",
+      "Kosmulator_main/rd_helpers.py": "b514b5fec347fcfe18fec5e064fb148baa96de99f7f8d1c213742fea9c4b2c7b",
+      "Kosmulator_main/run_lock.py": "b1bf19af688b543b511af3ca6ae203aeee1588e5d0b30b4f1f21c49d21b3d921",
+      "Kosmulator_main/run_manifest.py": "23b0d911f2f33b4803e57fec27f4f2b3374784e3ea93fa84f36fe9d2dee6d6d0",
+      "Kosmulator_main/sampler_moves.py": "5b7c33a5eda6bb6656b883055d809df67a054764910b2c0a41b18887cbeb089e",
+      "Kosmulator_main/significance.py": "2a02f8c7f249a71d4fa25f894c750cf11b6b052153645fb4677ed212c01a070a",
+      "Kosmulator_main/sn_covariance.py": "c3958c962c26784485dc5e2aa46bd86788edca4faa40bd1d37a1e9d6e17c2a56",
+      "Kosmulator_main/utils.py": "d9dea7d0cabff5dfca9e728bc5aa70d42bd4b3f46b21c946eb07680d78b70cd6",
+      "Class/IDE_background/source/background.c": "d48f97a43e3b51cf8b41a86c1198ec44fb3275647e5b3f5656126a0689a21a21",
+      "Class/IDE_background/source/distortions.c": "32beaeba20b7decf6bd89b313ede84746bdc5c5e885018c30836c019047f610f",
+      "Class/IDE_background/source/fourier.c": "73546e7752cdb44a967b56cc064867ce1c0eff9b0e82e9839823f1cee974fda7",
+      "Class/IDE_background/source/harmonic.c": "a2521249ff9151cba66227491f3399f912ebb0eb29f609e0260dd874bef760fb",
+      "Class/IDE_background/source/input.c": "335c53299bcb1539a91d3785624422ada352eeadc49f466064d11ff374c11d9f",
+      "Class/IDE_background/source/lensing.c": "7be4e38490d166a4c380dcee866ddbcf4cd33eed9ddc35d7a8bbcf7d0c797084",
+      "Class/IDE_background/source/output.c": "5475e501d0c60f772e02fa9919dbf4db69e09e32cda3d19d403990f5873ed9d2",
+      "Class/IDE_background/source/perturbations.c": "5e2a48fbed1d012fb83b37a5c574f46bc2f074191268010476d0d82682a45a8e",
+      "Class/IDE_background/source/primordial.c": "9437506f48afff18d71d2d62251a8d32adc3d1966e8d95019d213348972405d7",
+      "Class/IDE_background/source/thermodynamics.c": "ce2d8e0b490106b002a3fb62561948ded4239db5109efea0ec2d297d458816ce",
+      "Class/IDE_background/source/transfer.c": "4e00bfdde7e162e5b86a51d3a47999db296b9c7448f769ffc7775429118f5ad0",
+      "Class/IDE_background/include/arrays.h": "3d3f4a0a90e9ae6cc230a2428c464f10e0c2218d77f16694b091dbbdad02e56c",
+      "Class/IDE_background/include/background.h": "5ece1d2af46f01360db30cbe2a8db1a949a3f1e8d9767e6ae27c09c0cd086328",
+      "Class/IDE_background/include/class.h": "d2848d216f673e28a14a5e145c0ab561962ffa38ec423e0f4d9b116843bb9edc",
+      "Class/IDE_background/include/common.h": "a959229a27f9bbe39ecd9411822dae213b97cd5defb3117406d119ec6bedf624",
+      "Class/IDE_background/include/dei_rkck.h": "77c56981a3c7e26e57531bb56d6af38bb7468e5457cd195f70b95b8a497973b3",
+      "Class/IDE_background/include/distortions.h": "158597380426f798678378a11011a8a3f9a2ab50c5388deb85b0529df742bf26",
+      "Class/IDE_background/include/evolver_ndf15.h": "069846924e0593b8bcd98f0430edec3bcda50ad9f4b2355a393d54737d7b45d4",
+      "Class/IDE_background/include/evolver_rkck.h": "9270f1cfa1d602dc4a19539263223fe86976db5c930b5c13eade824ac840a2ce",
+      "Class/IDE_background/include/fourier.h": "ba680f4f51b337abeb8a10a844999dd03674c5cd5b027aad5332765e96c53f6e",
+      "Class/IDE_background/include/growTable.h": "7f58701538838ff651289c99ec0fa1ea2b72afc72471b65b5878c460b5da47b9",
+      "Class/IDE_background/include/harmonic.h": "623487774620c3c68ee22888cd49524165b1e6df6881fdf035e3ab2286316f95",
+      "Class/IDE_background/include/hermite3_interpolation_csource.h": "da5920f23387f97f6090d2d6fe2c9b073b90b7f6ff27d12e8ac6450f3e93ec43",
+      "Class/IDE_background/include/hermite4_interpolation_csource.h": "0f7fa7d3f781749f517c048c53d55f0a70ad944bdced86d6e311bfdb6d48079a",
+      "Class/IDE_background/include/hermite6_interpolation_csource.h": "f3462fe9c622e84c49a0e4a06c743cb2d38f5b9016023f74d4c1a1a9ee6830ff",
+      "Class/IDE_background/include/hyperspherical.h": "4a4ea6ddb11cb04b4173a637cedf32ee2cd326f6e3cca10a1028cc7669d93869",
+      "Class/IDE_background/include/ide_densities.h": "0bac3f14f9801cbbbb718d2891d99df197cd55a5a749157ff56fbc4b627648f5",
+      "Class/IDE_background/include/input.h": "162e50e7bc0b1450b024707c0c5e11b7591063f47f58234e2b440e9f3ea67ed9",
+      "Class/IDE_background/include/lensing.h": "0b01cb46125d5dc493a5814f626ee3ff739a42f5d105c475706c0b7d7dd553c8",
+      "Class/IDE_background/include/macros_precision.h": "14a6887545b0f090bf15d2f70d8329e7d7f582eaa0f9c5d6952da8990890bfd6",
+      "Class/IDE_background/include/output.h": "1a1b52ffdb26aa6e6ffc2f7889d009f97fe515d2568c9d8402495d11a6b2c27b",
+      "Class/IDE_background/include/parallel.h": "91635eeb3def08b110bfbbc3e3be92851129c5a2c46c69f16fed4ee8dcd2946e",
+      "Class/IDE_background/include/parser.h": "1e84acde21e62fd1609fdd27e56df5ea4636c857dfaf704ddd13e32a211677bb",
+      "Class/IDE_background/include/perturbations.h": "754fd3606bb54db6b5929442cead1d499844d1c6f397b442e767a6e2997e31cf",
+      "Class/IDE_background/include/precisions.h": "962fb9d95118b223b67abf36f9d1a1666408b377d9d0fd2fe5ddf60d20440bea",
+      "Class/IDE_background/include/primordial.h": "891ff30f667b3040869e418de146f34b1e507ce3ede30f70467e0548cbff278c",
+      "Class/IDE_background/include/quadrature.h": "245f9025cc6049ea9c09ccd57faa28d2d970e05fe96093be1c54eccde97fd075",
+      "Class/IDE_background/include/sparse.h": "830c38ddea0268270c5c6e8d07631c4667b69e6904d7950816701c2e371c56f7",
+      "Class/IDE_background/include/svnversion.h": "6455940c5fe90b4786147482f2fcf8492b15e10f4b8f4139b9129145f0b728e8",
+      "Class/IDE_background/include/thermodynamics.h": "f46fcdc9c0a6dbcc93563977ab7458e08d4abc0bc571d06f7554846e8d484241",
+      "Class/IDE_background/include/transfer.h": "6b27f9f44d39982d8b0564bff4e4d2b636ce06265508745c2f317fa44bdb45db",
+      "Class/IDE_background/include/trigonometric_integrals.h": "221fbff5c2140ac3e7b8fda1c3cccc40e612f48d5ce8f66e759ebe96563e09a6"
+    },
+    "dataset_hashes": {
+      "CC.dat": "0d9de12f0adfd725b6afcd2a9bd5a30cf3e079d6b0d49ba7e0b16f17ded3f2df",
+      "CC_corr.txt": "311b333490ee03dc03f6b4612917341a7fd7d2c42a11b105899c277a2e8c61df",
+      "DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952",
+      "DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+      "PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+      "PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1"
+    }
+  },
+  {
+    "distance_policy": "dense-grid-dz0.01-v1",
+    "likelihood_policy": "pantheon-zhd-zhel-v1",
+    "emcee_moves": "de_snooker",
+    "observations": [
+      [
+        "PantheonPS",
+        "DESI_DR2",
+        "CC"
+      ]
+    ],
+    "mode": "sample",
+    "regime": "iw",
+    "output_suffix": "Model5_EOS_CC_v1_model5_lambda_iw_cc",
+    "models": [
+      "Linear_IDE_5"
+    ],
+    "free_w": false,
+    "free_w_dm": false,
+    "walkers": 120,
+    "burn": 1000,
+    "thin": 1,
+    "max_steps": 100000,
+    "convergence_setting": 0.05,
+    "convergence_policy": {
+      "tau_factor": 100,
+      "ess_min": 2000,
+      "rhat_max": 1.01,
+      "consecutive": 1
+    },
+    "init_jitter_frac": 0.1,
+    "derived_rd_samples": 6000,
+    "class_settings": {
+      "DERIVE_RD_WITH_MODEL_CLASS": true,
+      "RD_CLASS_OMEGA_B": 0.048,
+      "RD_CLASS_N_EFF": 3.044,
+      "RD_CLASS_SUM_MNU_EV": 0.06,
+      "RD_CLASS_N_NCDM": 3
+    },
+    "priors": {
+      "Omega_m": [
+        0.1,
+        0.5
+      ],
+      "H_0": [
+        60,
+        90
+      ],
+      "M_abs": [
+        -20.5,
+        -18
+      ],
+      "delta": [
+        -1,
+        1
+      ]
+    },
+    "regime_switches": [
+      true,
+      true,
+      true
+    ],
+    "chain_paths": null,
+    "dic_convention": "posterior-mean",
+    "source_hashes": {
+      "User_defined_modules.py": "9335cb74af276f5838835034ec622cbadb9c0fc28c036132061ee74b6008c3fa",
+      "Kosmulator.py": "8776d14698b1f9436df90402a1c6311a0eab76341da6c008aff50f2eeeeb8368",
+      "reproducibility/SAIP2026_IDE/scripts/run_analysis.py": "2518a935f97f90a66e9506775a2b06110439cf19b5aa7214eabdf30c490689ef",
+      "Kosmulator_main/Class_run.py": "8d172bd7927b4790af30ddff6094925f9f3dd05efa62149880b1cba48fb0c8ea",
+      "Kosmulator_main/Config.py": "f9d953c5733ddc37f2cb47d8a2a3c170e02285558d339d928926fb52e9a00188",
+      "Kosmulator_main/Kosmulator_MCMC.py": "0fc3211720fd1e2e31052a255ead25aee5df0d34ad6765ef07039350c4906621",
+      "Kosmulator_main/MCMC_setup.py": "7e6826a34ec13ff07c7d47d84ba024f7d43ff5a23a7331958c1ae6cf0c7debcf",
+      "Kosmulator_main/Model_comparison.py": "fa6e62b9a22d9c1343bd4d7684ee1f9823b5012a1f393a03af635658ece93869",
+      "Kosmulator_main/Plot_metadata.py": "727d390b5bb1cf3049336580b8e81bfadc66ef04457a5823a69c07c6174b49e9",
+      "Kosmulator_main/Post_processing.py": "0f52bd0c03da8d71726b1fe6dfcc6da45bfb72679f4bc9060e0c78a4c2eb44a9",
+      "Kosmulator_main/Statistical_packages.py": "b51ae6013167473de72a5cd65a5aaab8073e2a0c51c45848fb82b845964020ec",
+      "Kosmulator_main/__init__.py": "d40e1ab9b002c1c6c88514312aacf2708798272bcb2d6e9e9a032405ac537029",
+      "Kosmulator_main/cc_covariance.py": "816e29081248a9e33a69e6936375b4317774fe524bea319e6441070a78c3b946",
+      "Kosmulator_main/chain_policy.py": "d2f2258aa952e05ba8fa8680f9e1b7f39404a1946e3d17bb752fe759ebae286c",
+      "Kosmulator_main/constants.py": "cea75f020bb3da7bf2d68000a1654feadc05895d1e2f84f8169fcfceae627935",
+      "Kosmulator_main/convergence.py": "4fc7127883b524ca3a9701e238a93ebedc0ec34e9692edd511040b9565052c69",
+      "Kosmulator_main/ide_background.py": "44312cfa6489e9b171d107ad2746c42306cc7c0bceabbc0a1a2bb7dd9df3ab77",
+      "Kosmulator_main/ide_doctor.py": "0decea919e8750aa21bdbbcc2c1882be1cadeb950f03f4308c5468d5eef17428",
+      "Kosmulator_main/peek.py": "ef0423608deda6ba3425bd313957792a1c4c4c0a520ae5fbb4365d534b516398",
+      "Kosmulator_main/pool_context.py": "f5332905da766e52661b5bf3e15cadf28feb23c1e19a37dfbdf3b86f16ac4a2e",
+      "Kosmulator_main/rd_helpers.py": "b514b5fec347fcfe18fec5e064fb148baa96de99f7f8d1c213742fea9c4b2c7b",
+      "Kosmulator_main/run_lock.py": "b1bf19af688b543b511af3ca6ae203aeee1588e5d0b30b4f1f21c49d21b3d921",
+      "Kosmulator_main/run_manifest.py": "23b0d911f2f33b4803e57fec27f4f2b3374784e3ea93fa84f36fe9d2dee6d6d0",
+      "Kosmulator_main/sampler_moves.py": "5b7c33a5eda6bb6656b883055d809df67a054764910b2c0a41b18887cbeb089e",
+      "Kosmulator_main/significance.py": "2a02f8c7f249a71d4fa25f894c750cf11b6b052153645fb4677ed212c01a070a",
+      "Kosmulator_main/sn_covariance.py": "c3958c962c26784485dc5e2aa46bd86788edca4faa40bd1d37a1e9d6e17c2a56",
+      "Kosmulator_main/utils.py": "d9dea7d0cabff5dfca9e728bc5aa70d42bd4b3f46b21c946eb07680d78b70cd6",
+      "Class/IDE_background/source/background.c": "d48f97a43e3b51cf8b41a86c1198ec44fb3275647e5b3f5656126a0689a21a21",
+      "Class/IDE_background/source/distortions.c": "32beaeba20b7decf6bd89b313ede84746bdc5c5e885018c30836c019047f610f",
+      "Class/IDE_background/source/fourier.c": "73546e7752cdb44a967b56cc064867ce1c0eff9b0e82e9839823f1cee974fda7",
+      "Class/IDE_background/source/harmonic.c": "a2521249ff9151cba66227491f3399f912ebb0eb29f609e0260dd874bef760fb",
+      "Class/IDE_background/source/input.c": "335c53299bcb1539a91d3785624422ada352eeadc49f466064d11ff374c11d9f",
+      "Class/IDE_background/source/lensing.c": "7be4e38490d166a4c380dcee866ddbcf4cd33eed9ddc35d7a8bbcf7d0c797084",
+      "Class/IDE_background/source/output.c": "5475e501d0c60f772e02fa9919dbf4db69e09e32cda3d19d403990f5873ed9d2",
+      "Class/IDE_background/source/perturbations.c": "5e2a48fbed1d012fb83b37a5c574f46bc2f074191268010476d0d82682a45a8e",
+      "Class/IDE_background/source/primordial.c": "9437506f48afff18d71d2d62251a8d32adc3d1966e8d95019d213348972405d7",
+      "Class/IDE_background/source/thermodynamics.c": "ce2d8e0b490106b002a3fb62561948ded4239db5109efea0ec2d297d458816ce",
+      "Class/IDE_background/source/transfer.c": "4e00bfdde7e162e5b86a51d3a47999db296b9c7448f769ffc7775429118f5ad0",
+      "Class/IDE_background/include/arrays.h": "3d3f4a0a90e9ae6cc230a2428c464f10e0c2218d77f16694b091dbbdad02e56c",
+      "Class/IDE_background/include/background.h": "5ece1d2af46f01360db30cbe2a8db1a949a3f1e8d9767e6ae27c09c0cd086328",
+      "Class/IDE_background/include/class.h": "d2848d216f673e28a14a5e145c0ab561962ffa38ec423e0f4d9b116843bb9edc",
+      "Class/IDE_background/include/common.h": "a959229a27f9bbe39ecd9411822dae213b97cd5defb3117406d119ec6bedf624",
+      "Class/IDE_background/include/dei_rkck.h": "77c56981a3c7e26e57531bb56d6af38bb7468e5457cd195f70b95b8a497973b3",
+      "Class/IDE_background/include/distortions.h": "158597380426f798678378a11011a8a3f9a2ab50c5388deb85b0529df742bf26",
+      "Class/IDE_background/include/evolver_ndf15.h": "069846924e0593b8bcd98f0430edec3bcda50ad9f4b2355a393d54737d7b45d4",
+      "Class/IDE_background/include/evolver_rkck.h": "9270f1cfa1d602dc4a19539263223fe86976db5c930b5c13eade824ac840a2ce",
+      "Class/IDE_background/include/fourier.h": "ba680f4f51b337abeb8a10a844999dd03674c5cd5b027aad5332765e96c53f6e",
+      "Class/IDE_background/include/growTable.h": "7f58701538838ff651289c99ec0fa1ea2b72afc72471b65b5878c460b5da47b9",
+      "Class/IDE_background/include/harmonic.h": "623487774620c3c68ee22888cd49524165b1e6df6881fdf035e3ab2286316f95",
+      "Class/IDE_background/include/hermite3_interpolation_csource.h": "da5920f23387f97f6090d2d6fe2c9b073b90b7f6ff27d12e8ac6450f3e93ec43",
+      "Class/IDE_background/include/hermite4_interpolation_csource.h": "0f7fa7d3f781749f517c048c53d55f0a70ad944bdced86d6e311bfdb6d48079a",
+      "Class/IDE_background/include/hermite6_interpolation_csource.h": "f3462fe9c622e84c49a0e4a06c743cb2d38f5b9016023f74d4c1a1a9ee6830ff",
+      "Class/IDE_background/include/hyperspherical.h": "4a4ea6ddb11cb04b4173a637cedf32ee2cd326f6e3cca10a1028cc7669d93869",
+      "Class/IDE_background/include/ide_densities.h": "0bac3f14f9801cbbbb718d2891d99df197cd55a5a749157ff56fbc4b627648f5",
+      "Class/IDE_background/include/input.h": "162e50e7bc0b1450b024707c0c5e11b7591063f47f58234e2b440e9f3ea67ed9",
+      "Class/IDE_background/include/lensing.h": "0b01cb46125d5dc493a5814f626ee3ff739a42f5d105c475706c0b7d7dd553c8",
+      "Class/IDE_background/include/macros_precision.h": "14a6887545b0f090bf15d2f70d8329e7d7f582eaa0f9c5d6952da8990890bfd6",
+      "Class/IDE_background/include/output.h": "1a1b52ffdb26aa6e6ffc2f7889d009f97fe515d2568c9d8402495d11a6b2c27b",
+      "Class/IDE_background/include/parallel.h": "91635eeb3def08b110bfbbc3e3be92851129c5a2c46c69f16fed4ee8dcd2946e",
+      "Class/IDE_background/include/parser.h": "1e84acde21e62fd1609fdd27e56df5ea4636c857dfaf704ddd13e32a211677bb",
+      "Class/IDE_background/include/perturbations.h": "754fd3606bb54db6b5929442cead1d499844d1c6f397b442e767a6e2997e31cf",
+      "Class/IDE_background/include/precisions.h": "962fb9d95118b223b67abf36f9d1a1666408b377d9d0fd2fe5ddf60d20440bea",
+      "Class/IDE_background/include/primordial.h": "891ff30f667b3040869e418de146f34b1e507ce3ede30f70467e0548cbff278c",
+      "Class/IDE_background/include/quadrature.h": "245f9025cc6049ea9c09ccd57faa28d2d970e05fe96093be1c54eccde97fd075",
+      "Class/IDE_background/include/sparse.h": "830c38ddea0268270c5c6e8d07631c4667b69e6904d7950816701c2e371c56f7",
+      "Class/IDE_background/include/svnversion.h": "6455940c5fe90b4786147482f2fcf8492b15e10f4b8f4139b9129145f0b728e8",
+      "Class/IDE_background/include/thermodynamics.h": "f46fcdc9c0a6dbcc93563977ab7458e08d4abc0bc571d06f7554846e8d484241",
+      "Class/IDE_background/include/transfer.h": "6b27f9f44d39982d8b0564bff4e4d2b636ce06265508745c2f317fa44bdb45db",
+      "Class/IDE_background/include/trigonometric_integrals.h": "221fbff5c2140ac3e7b8fda1c3cccc40e612f48d5ce8f66e759ebe96563e09a6"
+    },
+    "dataset_hashes": {
+      "CC.dat": "0d9de12f0adfd725b6afcd2a9bd5a30cf3e079d6b0d49ba7e0b16f17ded3f2df",
+      "CC_corr.txt": "311b333490ee03dc03f6b4612917341a7fd7d2c42a11b105899c277a2e8c61df",
+      "DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952",
+      "DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+      "PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+      "PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1"
+    }
+  },
+  {
+    "distance_policy": "dense-grid-dz0.01-v1",
+    "likelihood_policy": "pantheon-zhd-zhel-v1",
+    "emcee_moves": "de_snooker",
+    "observations": [
+      [
+        "PantheonPS",
+        "DESI_DR2",
+        "CC"
+      ]
+    ],
+    "mode": "sample",
+    "regime": "iw",
+    "output_suffix": "Model5_EOS_CC_v1_model5_free_de_iw_cc",
+    "models": [
+      "Linear_IDE_5"
+    ],
+    "free_w": true,
+    "free_w_dm": false,
+    "walkers": 120,
+    "burn": 1000,
+    "thin": 1,
+    "max_steps": 100000,
+    "convergence_setting": 0.05,
+    "convergence_policy": {
+      "tau_factor": 100,
+      "ess_min": 2000,
+      "rhat_max": 1.01,
+      "consecutive": 1
+    },
+    "init_jitter_frac": 0.1,
+    "derived_rd_samples": 6000,
+    "class_settings": {
+      "DERIVE_RD_WITH_MODEL_CLASS": true,
+      "RD_CLASS_OMEGA_B": 0.048,
+      "RD_CLASS_N_EFF": 3.044,
+      "RD_CLASS_SUM_MNU_EV": 0.06,
+      "RD_CLASS_N_NCDM": 3
+    },
+    "priors": {
+      "Omega_m": [
+        0.1,
+        0.5
+      ],
+      "H_0": [
+        60,
+        90
+      ],
+      "M_abs": [
+        -20.5,
+        -18
+      ],
+      "w": [
+        -2,
+        -0.33
+      ],
+      "delta": [
+        -1,
+        1
+      ]
+    },
+    "regime_switches": [
+      true,
+      true,
+      true
+    ],
+    "chain_paths": null,
+    "dic_convention": "posterior-mean",
+    "source_hashes": {
+      "User_defined_modules.py": "9335cb74af276f5838835034ec622cbadb9c0fc28c036132061ee74b6008c3fa",
+      "Kosmulator.py": "8776d14698b1f9436df90402a1c6311a0eab76341da6c008aff50f2eeeeb8368",
+      "reproducibility/SAIP2026_IDE/scripts/run_analysis.py": "2518a935f97f90a66e9506775a2b06110439cf19b5aa7214eabdf30c490689ef",
+      "Kosmulator_main/Class_run.py": "8d172bd7927b4790af30ddff6094925f9f3dd05efa62149880b1cba48fb0c8ea",
+      "Kosmulator_main/Config.py": "f9d953c5733ddc37f2cb47d8a2a3c170e02285558d339d928926fb52e9a00188",
+      "Kosmulator_main/Kosmulator_MCMC.py": "0fc3211720fd1e2e31052a255ead25aee5df0d34ad6765ef07039350c4906621",
+      "Kosmulator_main/MCMC_setup.py": "7e6826a34ec13ff07c7d47d84ba024f7d43ff5a23a7331958c1ae6cf0c7debcf",
+      "Kosmulator_main/Model_comparison.py": "fa6e62b9a22d9c1343bd4d7684ee1f9823b5012a1f393a03af635658ece93869",
+      "Kosmulator_main/Plot_metadata.py": "727d390b5bb1cf3049336580b8e81bfadc66ef04457a5823a69c07c6174b49e9",
+      "Kosmulator_main/Post_processing.py": "0f52bd0c03da8d71726b1fe6dfcc6da45bfb72679f4bc9060e0c78a4c2eb44a9",
+      "Kosmulator_main/Statistical_packages.py": "b51ae6013167473de72a5cd65a5aaab8073e2a0c51c45848fb82b845964020ec",
+      "Kosmulator_main/__init__.py": "d40e1ab9b002c1c6c88514312aacf2708798272bcb2d6e9e9a032405ac537029",
+      "Kosmulator_main/cc_covariance.py": "816e29081248a9e33a69e6936375b4317774fe524bea319e6441070a78c3b946",
+      "Kosmulator_main/chain_policy.py": "d2f2258aa952e05ba8fa8680f9e1b7f39404a1946e3d17bb752fe759ebae286c",
+      "Kosmulator_main/constants.py": "cea75f020bb3da7bf2d68000a1654feadc05895d1e2f84f8169fcfceae627935",
+      "Kosmulator_main/convergence.py": "4fc7127883b524ca3a9701e238a93ebedc0ec34e9692edd511040b9565052c69",
+      "Kosmulator_main/ide_background.py": "44312cfa6489e9b171d107ad2746c42306cc7c0bceabbc0a1a2bb7dd9df3ab77",
+      "Kosmulator_main/ide_doctor.py": "0decea919e8750aa21bdbbcc2c1882be1cadeb950f03f4308c5468d5eef17428",
+      "Kosmulator_main/peek.py": "ef0423608deda6ba3425bd313957792a1c4c4c0a520ae5fbb4365d534b516398",
+      "Kosmulator_main/pool_context.py": "f5332905da766e52661b5bf3e15cadf28feb23c1e19a37dfbdf3b86f16ac4a2e",
+      "Kosmulator_main/rd_helpers.py": "b514b5fec347fcfe18fec5e064fb148baa96de99f7f8d1c213742fea9c4b2c7b",
+      "Kosmulator_main/run_lock.py": "b1bf19af688b543b511af3ca6ae203aeee1588e5d0b30b4f1f21c49d21b3d921",
+      "Kosmulator_main/run_manifest.py": "23b0d911f2f33b4803e57fec27f4f2b3374784e3ea93fa84f36fe9d2dee6d6d0",
+      "Kosmulator_main/sampler_moves.py": "5b7c33a5eda6bb6656b883055d809df67a054764910b2c0a41b18887cbeb089e",
+      "Kosmulator_main/significance.py": "2a02f8c7f249a71d4fa25f894c750cf11b6b052153645fb4677ed212c01a070a",
+      "Kosmulator_main/sn_covariance.py": "c3958c962c26784485dc5e2aa46bd86788edca4faa40bd1d37a1e9d6e17c2a56",
+      "Kosmulator_main/utils.py": "d9dea7d0cabff5dfca9e728bc5aa70d42bd4b3f46b21c946eb07680d78b70cd6",
+      "Class/IDE_background/source/background.c": "d48f97a43e3b51cf8b41a86c1198ec44fb3275647e5b3f5656126a0689a21a21",
+      "Class/IDE_background/source/distortions.c": "32beaeba20b7decf6bd89b313ede84746bdc5c5e885018c30836c019047f610f",
+      "Class/IDE_background/source/fourier.c": "73546e7752cdb44a967b56cc064867ce1c0eff9b0e82e9839823f1cee974fda7",
+      "Class/IDE_background/source/harmonic.c": "a2521249ff9151cba66227491f3399f912ebb0eb29f609e0260dd874bef760fb",
+      "Class/IDE_background/source/input.c": "335c53299bcb1539a91d3785624422ada352eeadc49f466064d11ff374c11d9f",
+      "Class/IDE_background/source/lensing.c": "7be4e38490d166a4c380dcee866ddbcf4cd33eed9ddc35d7a8bbcf7d0c797084",
+      "Class/IDE_background/source/output.c": "5475e501d0c60f772e02fa9919dbf4db69e09e32cda3d19d403990f5873ed9d2",
+      "Class/IDE_background/source/perturbations.c": "5e2a48fbed1d012fb83b37a5c574f46bc2f074191268010476d0d82682a45a8e",
+      "Class/IDE_background/source/primordial.c": "9437506f48afff18d71d2d62251a8d32adc3d1966e8d95019d213348972405d7",
+      "Class/IDE_background/source/thermodynamics.c": "ce2d8e0b490106b002a3fb62561948ded4239db5109efea0ec2d297d458816ce",
+      "Class/IDE_background/source/transfer.c": "4e00bfdde7e162e5b86a51d3a47999db296b9c7448f769ffc7775429118f5ad0",
+      "Class/IDE_background/include/arrays.h": "3d3f4a0a90e9ae6cc230a2428c464f10e0c2218d77f16694b091dbbdad02e56c",
+      "Class/IDE_background/include/background.h": "5ece1d2af46f01360db30cbe2a8db1a949a3f1e8d9767e6ae27c09c0cd086328",
+      "Class/IDE_background/include/class.h": "d2848d216f673e28a14a5e145c0ab561962ffa38ec423e0f4d9b116843bb9edc",
+      "Class/IDE_background/include/common.h": "a959229a27f9bbe39ecd9411822dae213b97cd5defb3117406d119ec6bedf624",
+      "Class/IDE_background/include/dei_rkck.h": "77c56981a3c7e26e57531bb56d6af38bb7468e5457cd195f70b95b8a497973b3",
+      "Class/IDE_background/include/distortions.h": "158597380426f798678378a11011a8a3f9a2ab50c5388deb85b0529df742bf26",
+      "Class/IDE_background/include/evolver_ndf15.h": "069846924e0593b8bcd98f0430edec3bcda50ad9f4b2355a393d54737d7b45d4",
+      "Class/IDE_background/include/evolver_rkck.h": "9270f1cfa1d602dc4a19539263223fe86976db5c930b5c13eade824ac840a2ce",
+      "Class/IDE_background/include/fourier.h": "ba680f4f51b337abeb8a10a844999dd03674c5cd5b027aad5332765e96c53f6e",
+      "Class/IDE_background/include/growTable.h": "7f58701538838ff651289c99ec0fa1ea2b72afc72471b65b5878c460b5da47b9",
+      "Class/IDE_background/include/harmonic.h": "623487774620c3c68ee22888cd49524165b1e6df6881fdf035e3ab2286316f95",
+      "Class/IDE_background/include/hermite3_interpolation_csource.h": "da5920f23387f97f6090d2d6fe2c9b073b90b7f6ff27d12e8ac6450f3e93ec43",
+      "Class/IDE_background/include/hermite4_interpolation_csource.h": "0f7fa7d3f781749f517c048c53d55f0a70ad944bdced86d6e311bfdb6d48079a",
+      "Class/IDE_background/include/hermite6_interpolation_csource.h": "f3462fe9c622e84c49a0e4a06c743cb2d38f5b9016023f74d4c1a1a9ee6830ff",
+      "Class/IDE_background/include/hyperspherical.h": "4a4ea6ddb11cb04b4173a637cedf32ee2cd326f6e3cca10a1028cc7669d93869",
+      "Class/IDE_background/include/ide_densities.h": "0bac3f14f9801cbbbb718d2891d99df197cd55a5a749157ff56fbc4b627648f5",
+      "Class/IDE_background/include/input.h": "162e50e7bc0b1450b024707c0c5e11b7591063f47f58234e2b440e9f3ea67ed9",
+      "Class/IDE_background/include/lensing.h": "0b01cb46125d5dc493a5814f626ee3ff739a42f5d105c475706c0b7d7dd553c8",
+      "Class/IDE_background/include/macros_precision.h": "14a6887545b0f090bf15d2f70d8329e7d7f582eaa0f9c5d6952da8990890bfd6",
+      "Class/IDE_background/include/output.h": "1a1b52ffdb26aa6e6ffc2f7889d009f97fe515d2568c9d8402495d11a6b2c27b",
+      "Class/IDE_background/include/parallel.h": "91635eeb3def08b110bfbbc3e3be92851129c5a2c46c69f16fed4ee8dcd2946e",
+      "Class/IDE_background/include/parser.h": "1e84acde21e62fd1609fdd27e56df5ea4636c857dfaf704ddd13e32a211677bb",
+      "Class/IDE_background/include/perturbations.h": "754fd3606bb54db6b5929442cead1d499844d1c6f397b442e767a6e2997e31cf",
+      "Class/IDE_background/include/precisions.h": "962fb9d95118b223b67abf36f9d1a1666408b377d9d0fd2fe5ddf60d20440bea",
+      "Class/IDE_background/include/primordial.h": "891ff30f667b3040869e418de146f34b1e507ce3ede30f70467e0548cbff278c",
+      "Class/IDE_background/include/quadrature.h": "245f9025cc6049ea9c09ccd57faa28d2d970e05fe96093be1c54eccde97fd075",
+      "Class/IDE_background/include/sparse.h": "830c38ddea0268270c5c6e8d07631c4667b69e6904d7950816701c2e371c56f7",
+      "Class/IDE_background/include/svnversion.h": "6455940c5fe90b4786147482f2fcf8492b15e10f4b8f4139b9129145f0b728e8",
+      "Class/IDE_background/include/thermodynamics.h": "f46fcdc9c0a6dbcc93563977ab7458e08d4abc0bc571d06f7554846e8d484241",
+      "Class/IDE_background/include/transfer.h": "6b27f9f44d39982d8b0564bff4e4d2b636ce06265508745c2f317fa44bdb45db",
+      "Class/IDE_background/include/trigonometric_integrals.h": "221fbff5c2140ac3e7b8fda1c3cccc40e612f48d5ce8f66e759ebe96563e09a6"
+    },
+    "dataset_hashes": {
+      "CC.dat": "0d9de12f0adfd725b6afcd2a9bd5a30cf3e079d6b0d49ba7e0b16f17ded3f2df",
+      "CC_corr.txt": "311b333490ee03dc03f6b4612917341a7fd7d2c42a11b105899c277a2e8c61df",
+      "DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952",
+      "DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+      "PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+      "PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1"
+    }
+  },
+  {
+    "distance_policy": "dense-grid-dz0.01-v1",
+    "likelihood_policy": "pantheon-zhd-zhel-v1",
+    "emcee_moves": "de_snooker",
+    "observations": [
+      [
+        "PantheonPS",
+        "DESI_DR2",
+        "CC"
+      ]
+    ],
+    "mode": "sample",
+    "regime": "iw",
+    "output_suffix": "Model5_EOS_CC_v1_model5_warm_lambda_iw_cc",
+    "models": [
+      "Linear_IDE_5"
+    ],
+    "free_w": false,
+    "free_w_dm": true,
+    "walkers": 120,
+    "burn": 1000,
+    "thin": 1,
+    "max_steps": 100000,
+    "convergence_setting": 0.05,
+    "convergence_policy": {
+      "tau_factor": 100,
+      "ess_min": 2000,
+      "rhat_max": 1.01,
+      "consecutive": 1
+    },
+    "init_jitter_frac": 0.1,
+    "derived_rd_samples": 6000,
+    "class_settings": {
+      "DERIVE_RD_WITH_MODEL_CLASS": true,
+      "RD_CLASS_OMEGA_B": 0.048,
+      "RD_CLASS_N_EFF": 3.044,
+      "RD_CLASS_SUM_MNU_EV": 0.06,
+      "RD_CLASS_N_NCDM": 3
+    },
+    "priors": {
+      "Omega_m": [
+        0.1,
+        0.5
+      ],
+      "H_0": [
+        60,
+        90
+      ],
+      "M_abs": [
+        -20.5,
+        -18
+      ],
+      "delta": [
+        -1,
+        1
+      ],
+      "w_dm": [
+        -0.15,
+        0.15
+      ]
+    },
+    "regime_switches": [
+      true,
+      true,
+      true
+    ],
+    "chain_paths": null,
+    "dic_convention": "posterior-mean",
+    "source_hashes": {
+      "User_defined_modules.py": "9335cb74af276f5838835034ec622cbadb9c0fc28c036132061ee74b6008c3fa",
+      "Kosmulator.py": "8776d14698b1f9436df90402a1c6311a0eab76341da6c008aff50f2eeeeb8368",
+      "reproducibility/SAIP2026_IDE/scripts/run_analysis.py": "2518a935f97f90a66e9506775a2b06110439cf19b5aa7214eabdf30c490689ef",
+      "Kosmulator_main/Class_run.py": "8d172bd7927b4790af30ddff6094925f9f3dd05efa62149880b1cba48fb0c8ea",
+      "Kosmulator_main/Config.py": "f9d953c5733ddc37f2cb47d8a2a3c170e02285558d339d928926fb52e9a00188",
+      "Kosmulator_main/Kosmulator_MCMC.py": "0fc3211720fd1e2e31052a255ead25aee5df0d34ad6765ef07039350c4906621",
+      "Kosmulator_main/MCMC_setup.py": "7e6826a34ec13ff07c7d47d84ba024f7d43ff5a23a7331958c1ae6cf0c7debcf",
+      "Kosmulator_main/Model_comparison.py": "fa6e62b9a22d9c1343bd4d7684ee1f9823b5012a1f393a03af635658ece93869",
+      "Kosmulator_main/Plot_metadata.py": "727d390b5bb1cf3049336580b8e81bfadc66ef04457a5823a69c07c6174b49e9",
+      "Kosmulator_main/Post_processing.py": "0f52bd0c03da8d71726b1fe6dfcc6da45bfb72679f4bc9060e0c78a4c2eb44a9",
+      "Kosmulator_main/Statistical_packages.py": "b51ae6013167473de72a5cd65a5aaab8073e2a0c51c45848fb82b845964020ec",
+      "Kosmulator_main/__init__.py": "d40e1ab9b002c1c6c88514312aacf2708798272bcb2d6e9e9a032405ac537029",
+      "Kosmulator_main/cc_covariance.py": "816e29081248a9e33a69e6936375b4317774fe524bea319e6441070a78c3b946",
+      "Kosmulator_main/chain_policy.py": "d2f2258aa952e05ba8fa8680f9e1b7f39404a1946e3d17bb752fe759ebae286c",
+      "Kosmulator_main/constants.py": "cea75f020bb3da7bf2d68000a1654feadc05895d1e2f84f8169fcfceae627935",
+      "Kosmulator_main/convergence.py": "4fc7127883b524ca3a9701e238a93ebedc0ec34e9692edd511040b9565052c69",
+      "Kosmulator_main/ide_background.py": "44312cfa6489e9b171d107ad2746c42306cc7c0bceabbc0a1a2bb7dd9df3ab77",
+      "Kosmulator_main/ide_doctor.py": "0decea919e8750aa21bdbbcc2c1882be1cadeb950f03f4308c5468d5eef17428",
+      "Kosmulator_main/peek.py": "ef0423608deda6ba3425bd313957792a1c4c4c0a520ae5fbb4365d534b516398",
+      "Kosmulator_main/pool_context.py": "f5332905da766e52661b5bf3e15cadf28feb23c1e19a37dfbdf3b86f16ac4a2e",
+      "Kosmulator_main/rd_helpers.py": "b514b5fec347fcfe18fec5e064fb148baa96de99f7f8d1c213742fea9c4b2c7b",
+      "Kosmulator_main/run_lock.py": "b1bf19af688b543b511af3ca6ae203aeee1588e5d0b30b4f1f21c49d21b3d921",
+      "Kosmulator_main/run_manifest.py": "23b0d911f2f33b4803e57fec27f4f2b3374784e3ea93fa84f36fe9d2dee6d6d0",
+      "Kosmulator_main/sampler_moves.py": "5b7c33a5eda6bb6656b883055d809df67a054764910b2c0a41b18887cbeb089e",
+      "Kosmulator_main/significance.py": "2a02f8c7f249a71d4fa25f894c750cf11b6b052153645fb4677ed212c01a070a",
+      "Kosmulator_main/sn_covariance.py": "c3958c962c26784485dc5e2aa46bd86788edca4faa40bd1d37a1e9d6e17c2a56",
+      "Kosmulator_main/utils.py": "d9dea7d0cabff5dfca9e728bc5aa70d42bd4b3f46b21c946eb07680d78b70cd6",
+      "Class/IDE_background/source/background.c": "d48f97a43e3b51cf8b41a86c1198ec44fb3275647e5b3f5656126a0689a21a21",
+      "Class/IDE_background/source/distortions.c": "32beaeba20b7decf6bd89b313ede84746bdc5c5e885018c30836c019047f610f",
+      "Class/IDE_background/source/fourier.c": "73546e7752cdb44a967b56cc064867ce1c0eff9b0e82e9839823f1cee974fda7",
+      "Class/IDE_background/source/harmonic.c": "a2521249ff9151cba66227491f3399f912ebb0eb29f609e0260dd874bef760fb",
+      "Class/IDE_background/source/input.c": "335c53299bcb1539a91d3785624422ada352eeadc49f466064d11ff374c11d9f",
+      "Class/IDE_background/source/lensing.c": "7be4e38490d166a4c380dcee866ddbcf4cd33eed9ddc35d7a8bbcf7d0c797084",
+      "Class/IDE_background/source/output.c": "5475e501d0c60f772e02fa9919dbf4db69e09e32cda3d19d403990f5873ed9d2",
+      "Class/IDE_background/source/perturbations.c": "5e2a48fbed1d012fb83b37a5c574f46bc2f074191268010476d0d82682a45a8e",
+      "Class/IDE_background/source/primordial.c": "9437506f48afff18d71d2d62251a8d32adc3d1966e8d95019d213348972405d7",
+      "Class/IDE_background/source/thermodynamics.c": "ce2d8e0b490106b002a3fb62561948ded4239db5109efea0ec2d297d458816ce",
+      "Class/IDE_background/source/transfer.c": "4e00bfdde7e162e5b86a51d3a47999db296b9c7448f769ffc7775429118f5ad0",
+      "Class/IDE_background/include/arrays.h": "3d3f4a0a90e9ae6cc230a2428c464f10e0c2218d77f16694b091dbbdad02e56c",
+      "Class/IDE_background/include/background.h": "5ece1d2af46f01360db30cbe2a8db1a949a3f1e8d9767e6ae27c09c0cd086328",
+      "Class/IDE_background/include/class.h": "d2848d216f673e28a14a5e145c0ab561962ffa38ec423e0f4d9b116843bb9edc",
+      "Class/IDE_background/include/common.h": "a959229a27f9bbe39ecd9411822dae213b97cd5defb3117406d119ec6bedf624",
+      "Class/IDE_background/include/dei_rkck.h": "77c56981a3c7e26e57531bb56d6af38bb7468e5457cd195f70b95b8a497973b3",
+      "Class/IDE_background/include/distortions.h": "158597380426f798678378a11011a8a3f9a2ab50c5388deb85b0529df742bf26",
+      "Class/IDE_background/include/evolver_ndf15.h": "069846924e0593b8bcd98f0430edec3bcda50ad9f4b2355a393d54737d7b45d4",
+      "Class/IDE_background/include/evolver_rkck.h": "9270f1cfa1d602dc4a19539263223fe86976db5c930b5c13eade824ac840a2ce",
+      "Class/IDE_background/include/fourier.h": "ba680f4f51b337abeb8a10a844999dd03674c5cd5b027aad5332765e96c53f6e",
+      "Class/IDE_background/include/growTable.h": "7f58701538838ff651289c99ec0fa1ea2b72afc72471b65b5878c460b5da47b9",
+      "Class/IDE_background/include/harmonic.h": "623487774620c3c68ee22888cd49524165b1e6df6881fdf035e3ab2286316f95",
+      "Class/IDE_background/include/hermite3_interpolation_csource.h": "da5920f23387f97f6090d2d6fe2c9b073b90b7f6ff27d12e8ac6450f3e93ec43",
+      "Class/IDE_background/include/hermite4_interpolation_csource.h": "0f7fa7d3f781749f517c048c53d55f0a70ad944bdced86d6e311bfdb6d48079a",
+      "Class/IDE_background/include/hermite6_interpolation_csource.h": "f3462fe9c622e84c49a0e4a06c743cb2d38f5b9016023f74d4c1a1a9ee6830ff",
+      "Class/IDE_background/include/hyperspherical.h": "4a4ea6ddb11cb04b4173a637cedf32ee2cd326f6e3cca10a1028cc7669d93869",
+      "Class/IDE_background/include/ide_densities.h": "0bac3f14f9801cbbbb718d2891d99df197cd55a5a749157ff56fbc4b627648f5",
+      "Class/IDE_background/include/input.h": "162e50e7bc0b1450b024707c0c5e11b7591063f47f58234e2b440e9f3ea67ed9",
+      "Class/IDE_background/include/lensing.h": "0b01cb46125d5dc493a5814f626ee3ff739a42f5d105c475706c0b7d7dd553c8",
+      "Class/IDE_background/include/macros_precision.h": "14a6887545b0f090bf15d2f70d8329e7d7f582eaa0f9c5d6952da8990890bfd6",
+      "Class/IDE_background/include/output.h": "1a1b52ffdb26aa6e6ffc2f7889d009f97fe515d2568c9d8402495d11a6b2c27b",
+      "Class/IDE_background/include/parallel.h": "91635eeb3def08b110bfbbc3e3be92851129c5a2c46c69f16fed4ee8dcd2946e",
+      "Class/IDE_background/include/parser.h": "1e84acde21e62fd1609fdd27e56df5ea4636c857dfaf704ddd13e32a211677bb",
+      "Class/IDE_background/include/perturbations.h": "754fd3606bb54db6b5929442cead1d499844d1c6f397b442e767a6e2997e31cf",
+      "Class/IDE_background/include/precisions.h": "962fb9d95118b223b67abf36f9d1a1666408b377d9d0fd2fe5ddf60d20440bea",
+      "Class/IDE_background/include/primordial.h": "891ff30f667b3040869e418de146f34b1e507ce3ede30f70467e0548cbff278c",
+      "Class/IDE_background/include/quadrature.h": "245f9025cc6049ea9c09ccd57faa28d2d970e05fe96093be1c54eccde97fd075",
+      "Class/IDE_background/include/sparse.h": "830c38ddea0268270c5c6e8d07631c4667b69e6904d7950816701c2e371c56f7",
+      "Class/IDE_background/include/svnversion.h": "6455940c5fe90b4786147482f2fcf8492b15e10f4b8f4139b9129145f0b728e8",
+      "Class/IDE_background/include/thermodynamics.h": "f46fcdc9c0a6dbcc93563977ab7458e08d4abc0bc571d06f7554846e8d484241",
+      "Class/IDE_background/include/transfer.h": "6b27f9f44d39982d8b0564bff4e4d2b636ce06265508745c2f317fa44bdb45db",
+      "Class/IDE_background/include/trigonometric_integrals.h": "221fbff5c2140ac3e7b8fda1c3cccc40e612f48d5ce8f66e759ebe96563e09a6"
+    },
+    "dataset_hashes": {
+      "CC.dat": "0d9de12f0adfd725b6afcd2a9bd5a30cf3e079d6b0d49ba7e0b16f17ded3f2df",
+      "CC_corr.txt": "311b333490ee03dc03f6b4612917341a7fd7d2c42a11b105899c277a2e8c61df",
+      "DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952",
+      "DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+      "PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+      "PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1"
+    }
+  }
+]

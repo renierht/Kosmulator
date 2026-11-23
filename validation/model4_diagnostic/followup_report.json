@@ -1,0 +1,120 @@
+{
+  "direct_class": [
+    {
+      "delta": -0.15,
+      "a_ini": null,
+      "rd": 37.54324687494952
+    },
+    {
+      "delta": -0.15,
+      "a_ini": 1e-18,
+      "rd": 37.54324765063693
+    },
+    {
+      "delta": -0.15,
+      "a_ini": 1e-24,
+      "error": "\n\nError in Class: thermodynamics_init(L:382) :error in thermodynamics_lists(ppr,pba,pth,ptw);\n=>thermodynamics_lists(L:1146) :error in background_tau_of_z(pba, pth->z_table[index_tau], pth->tau_table+index_tau);\n=>background_tau_of_z(L:282) :condition (z < pba->z_table[pba->bt_size-1]) is true; out of range: z=0.000000e+00 < z_min=7.105427e-15\n"
+    },
+    {
+      "delta": -0.05,
+      "a_ini": null,
+      "rd": 103.15646652105056
+    },
+    {
+      "delta": -0.05,
+      "a_ini": 1e-18,
+      "rd": 103.15646683053453
+    },
+    {
+      "delta": -0.05,
+      "a_ini": 1e-24,
+      "error": "\n\nError in Class: thermodynamics_init(L:382) :error in thermodynamics_lists(ppr,pba,pth,ptw);\n=>thermodynamics_lists(L:1146) :error in background_tau_of_z(pba, pth->z_table[index_tau], pth->tau_table+index_tau);\n=>background_tau_of_z(L:282) :condition (z < pba->z_table[pba->bt_size-1]) is true; out of range: z=0.000000e+00 < z_min=7.105427e-15\n"
+    },
+    {
+      "delta": -0.002,
+      "a_ini": null,
+      "rd": 140.25864455072727
+    },
+    {
+      "delta": -0.002,
+      "a_ini": 1e-18,
+      "rd": 140.25864404902293
+    },
+    {
+      "delta": -0.002,
+      "a_ini": 1e-24,
+      "error": "\n\nError in Class: thermodynamics_init(L:382) :error in thermodynamics_lists(ppr,pba,pth,ptw);\n=>thermodynamics_lists(L:1146) :error in background_tau_of_z(pba, pth->z_table[index_tau], pth->tau_table+index_tau);\n=>background_tau_of_z(L:282) :condition (z < pba->z_table[pba->bt_size-1]) is true; out of range: z=0.000000e+00 < z_min=7.105427e-15\n"
+    },
+    {
+      "delta": 0.2,
+      "a_ini": null,
+      "rd": 194.7052617731552
+    },
+    {
+      "delta": 0.2,
+      "a_ini": 1e-18,
+      "rd": 194.70526547757223
+    },
+    {
+      "delta": 0.2,
+      "a_ini": 1e-24,
+      "error": "\n\nError in Class: thermodynamics_init(L:382) :error in thermodynamics_lists(ppr,pba,pth,ptw);\n=>thermodynamics_lists(L:1146) :error in background_tau_of_z(pba, pth->z_table[index_tau], pth->tau_table+index_tau);\n=>background_tau_of_z(L:282) :condition (z < pba->z_table[pba->bt_size-1]) is true; out of range: z=0.000000e+00 < z_min=7.105427e-15\n"
+    }
+  ],
+  "narrow_initialization": {
+    "jitter_fraction": 0.002,
+    "center": [
+      0.307,
+      0.0,
+      70.0,
+      -19.35
+    ],
+    "tested": 120,
+    "invalid": 0,
+    "logp_quantiles": [
+      -922.7479724013265,
+      -797.1364282237465,
+      -765.7639287931613,
+      -756.2329857221124,
+      -752.5854924734816
+    ]
+  },
+  "bounded_fits": [
+    {
+      "start": "main",
+      "theta": [
+        0.3008220666283882,
+        -0.001553418266040934,
+        72.0527464608997,
+        -19.29739003310175
+      ],
+      "logp": -749.258901555157,
+      "evaluations": 100,
+      "optimizer_converged": false
+    },
+    {
+      "start": "poor",
+      "theta": [
+        0.19483823841570502,
+        0.01946150373857869,
+        60.004245134257246,
+        -19.706013437071555
+      ],
+      "logp": -1099.8024828438438,
+      "evaluations": 100,
+      "optimizer_converged": false
+    },
+    {
+      "start": "dispersed",
+      "theta": [
+        0.2919932638002954,
+        -0.003604141051589696,
+        76.11802540079304,
+        -19.180919800054692
+      ],
+      "logp": -761.1831057752878,
+      "evaluations": 100,
+      "optimizer_converged": false
+    }
+  ]
+}

@@ -1,0 +1,180 @@
+--- /mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Kosmulator_main/Kosmulator_MCMC.py
+
++++ /mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Kosmulator_main/Kosmulator_MCMC.py
+
+@@ -175,7 +175,7 @@
+
+     # Predictions per type
+     if obs_type == "SNe":
+         d_c = utils.Comoving_distance_vectorized(MODEL_func, z, param_dict)
+-        y_dl = d_c * (1.0 + z)
++        y_dl = d_c * (1.0 + (obs_data["zhel"] if obs == "DES_Dovekie" else z))
+         if (not np.isfinite(y_dl).all()) or (np.min(y_dl) <= 0):
+             return -np.inf
+         model = 25.0 + 5.0 * np.log10(y_dl)
+@@ -214,6 +214,13 @@
+
+         # Pantheon+ has its own complex covariance logic
+         chi2 = SP.Calc_PantP_chi(mb, trig, cep, cov, model, param_dict)
+ 
++    elif obs == "DES_Dovekie":
++        residual = model - type_data
++        weights = obs_data["intercept_weights"]
++        norm = weights.sum()
++        residual -= (weights @ residual) / norm
++        chi2 = residual @ (obs_data["inv_cov"] @ residual) + np.log(norm / (2 * np.pi))
++
+     elif obs_type == "SNe":
+         # ALL other SNe (JLA, DESY5, Union3) go here.
+         chi2 = SP.Calc_Generic_SNe_chi(
+@@ -241,6 +248,11 @@
+
+         low, high = CONFIG["prior_limits"][obs_index][p]
+         mask = (theta_batch[:, i] < low) | (theta_batch[:, i] > high)
+         lp[mask] = -np.inf
++
++    if CONFIG.get("model_name") == "w0waCDM":
++        w0 = theta_batch[:, params.index("w0")]
++        wa = theta_batch[:, params.index("wa")]
++        lp[~np.isfinite(theta_batch).all(axis=1) | (w0 + wa >= 0.)] = -np.inf
+ 
+     # 2) per-parameter restrictions (1D predicates)
+     restr = CONFIG.get("restrictions", {})
+@@ -651,6 +663,20 @@
+
+ # ───────────────────────────────────────────────────────────────────────────────
+ # Public API
+ # ───────────────────────────────────────────────────────────────────────────────
++
++def _saved_steps(chain_path):
++    """Return confirmed emcee iteration count, or None if unreadable/unknown.
++
++    A foreign HDF5 file is not an empty emcee chain and must not be reset.
++    """
++    try:
++        with h5py.File(chain_path, "r") as handle:
++            if "mcmc" not in handle:
++                return 0 if not list(handle.keys()) else None
++            return int(handle["mcmc"].attrs.get("iteration", 0))
++    except (OSError, ValueError, TypeError):
++        return None
++
+ 
+ def run_mcmc(
+     data,
+@@ -774,32 +800,12 @@
+
+         and resumeChains
+         and os.path.exists(chain_path)
+         and not overwrite
++        and _saved_steps(chain_path) != 0
+         and any(str(t).startswith("CMB") for t in Type)
+     )
+     pos0     = None
+     sol_diag = None
+-    initial_path = PLOT_SETTINGS.get("initial_ensemble_path")
+-    if initial_path:
+-        if resumeChains or os.path.exists(chain_path):
+-            raise ValueError("An explicit initial ensemble requires a new chain path and no resume")
+-        with np.load(initial_path, allow_pickle=False) as initial:
+-            if initial["parameters"].tolist() != list(param_names):
+-                raise ValueError("Initial ensemble parameter order does not match this model")
+-            pos0 = np.array(initial["positions"], dtype=float, copy=True)
+-        if pos0.shape != (nwalker, ndim) or not np.isfinite(pos0).all():
+-            raise ValueError("Initial ensemble shape or values are invalid")
+-        lows = np.array([prior_map[p][0] for p in param_names])
+-        highs = np.array([prior_map[p][1] for p in param_names])
+-        if not ((pos0 > lows).all() and (pos0 < highs).all()):
+-            raise ValueError("Initial ensemble is outside the configured priors")
+-        scaled = (pos0 - pos0.mean(axis=0)) / (highs - lows)
+-        if np.linalg.matrix_rank(scaled) != ndim or len(np.unique(pos0, axis=0)) != nwalker:
+-            raise ValueError("Initial ensemble is degenerate or contains duplicate walkers")
+-        post0 = batch_post(pos0, data, CONFIG, MODEL_func, model_name, obs, Type, obs_index)
+-        if not np.isfinite(post0).all() or (np.asarray(post0) <= -1e100).any():
+-            raise ValueError("Initial ensemble contains invalid posterior values")
+-        print(f"Loaded and revalidated {nwalker} initial walkers from {initial_path}", flush=True)
+-    elif do_ic:
++    if do_ic:
+         bounds = [prior_map[p] for p in param_names]
+         ic, sol_diag = optimise_initial_guess(
+             true_vals,
+@@ -1068,6 +1074,8 @@
+
+                 except FileNotFoundError:
+                     pass
+             backend = emcee.backends.HDFBackend(chain_path)
++            if _saved_steps(chain_path) == 0:
++                backend.reset(nwalker, ndim)
+             chain_policy.write(chain_path, CONFIG, obs_index)
+ 
+         # ------------------------------------------------------------
+@@ -1081,7 +1089,8 @@
+
+         # ------------------------------------------------------------
+         # Resume if requested and chain exists
+         # ------------------------------------------------------------
+-        if saveChains and resumeChains and backend.initialized and not overwrite:
++        if (saveChains and resumeChains and backend.initialized and not overwrite
++                and _saved_steps(chain_path) != 0):
+             backend = emcee.backends.HDFBackend(chain_path)
+             chain_policy.write(chain_path, CONFIG, obs_index)
+             current = backend.iteration
+--- /mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Kosmulator_main/rd_helpers.py
+
++++ /mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Kosmulator_main/rd_helpers.py
+
+@@ -203,7 +203,7 @@
+
+     "SignSwitch_IDE_2": 10,
+ }
+ 
+-MODEL_CLASS_RD_SUPPORTED = {"LCDM_v"} | set(IDE_CLASS_SELECTORS)
++MODEL_CLASS_RD_SUPPORTED = {"LCDM_v", "w0waCDM"} | set(IDE_CLASS_SELECTORS)
+ 
+ 
+ def _model_class_rd_enabled(p: Mapping[str, object]) -> bool:
+@@ -231,6 +231,7 @@
+
+     sum_mnu_ev: float,
+     n_ncdm: int,
+     w_dm: float = 0.,
++    wa: float = 0.,
+ ) -> float:
+     """
+     Compute rs_drag with the CLASS background matching `model_name`.
+@@ -305,6 +306,13 @@
+
+         "output": "",
+     }
+ 
++    if model_name == "w0waCDM":
++        if not math.isfinite(w + wa) or w + wa >= 0.:
++            raise ValueError("CPL comparison requires w0 + wa < 0")
++        # At the exact Lambda limit use the identical LCDM CLASS input.
++        if w != -1. or wa != 0.:
++            pars.update(Omega_Lambda=0., w0_fld=float(w), wa_fld=float(wa), use_ppf="yes")
++
+     if model_name in IDE_CLASS_SELECTORS:
+         pars.update({
+             "Omega_Lambda": 0.0,
+@@ -379,6 +387,10 @@
+
+         delta = 0.0
+         delta_dm = 0.0
+         delta_de = 0.0
++
++    elif model_name == "w0waCDM":
++        w = float(p["w0"])
++        delta = delta_dm = delta_de = 0.0
+ 
+     elif model_name == "Linear_IDE_1":
+         w = float(p.get("w", -1.))
+@@ -405,6 +417,7 @@
+
+         sum_mnu,
+         n_ncdm,
+         float(p.get("w_dm", 0.)),
++        float(p["wa"]) if model_name == "w0waCDM" else 0.,
+     )
+ 
+ 

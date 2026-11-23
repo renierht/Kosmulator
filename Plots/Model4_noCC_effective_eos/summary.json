@@ -1,0 +1,184 @@
+{
+  "w_dm": {
+    "median": -0.010487432382499103,
+    "interval68": [
+      -0.10728894299260129,
+      0.09599604907132996
+    ],
+    "std": 0.08641797463983698
+  },
+  "delta": {
+    "median": -0.012792695545376457,
+    "interval68": [
+      -0.10967131307395799,
+      0.09362023921101228
+    ],
+    "std": 0.08642133533559787
+  },
+  "effective": {
+    "median": 0.002374782601146354,
+    "interval68": [
+      0.0015495959224458285,
+      0.0031896160085018305
+    ],
+    "std": 0.0008240686554923846
+  },
+  "samples": 300000,
+  "burn": 3000,
+  "steps": 5500,
+  "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_IDE_main_integration/MCMC_Chains/Model4_EOS_noCC_v1_model4_warm_lambda_iw/Linear_IDE_4/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+  "correlation_wdm_delta": 0.9999545363273322,
+  "contour_checks": [
+    {
+      "pair": [
+        "H_0",
+        "Omega_m"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500055616162159,
+        0.6800336306353378
+      ]
+    },
+    {
+      "pair": [
+        "H_0",
+        "w_dm"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500056625171267,
+        0.6800251118339105
+      ]
+    },
+    {
+      "pair": [
+        "Omega_m",
+        "w_dm"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500062333448906,
+        0.6800312996800882
+      ]
+    },
+    {
+      "pair": [
+        "H_0",
+        "delta"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500023880331411,
+        0.6800100732917336
+      ]
+    },
+    {
+      "pair": [
+        "Omega_m",
+        "delta"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500032377179011,
+        0.6800206400716372
+      ]
+    },
+    {
+      "pair": [
+        "w_dm",
+        "delta"
+      ],
+      "enclosed_mass_95_68": [
+        0.950006074102835,
+        0.6800253862963539
+      ]
+    },
+    {
+      "pair": [
+        "H_0",
+        "M_abs"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500006787176333,
+        0.6800157272600077
+      ]
+    },
+    {
+      "pair": [
+        "Omega_m",
+        "M_abs"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500029487838498,
+        0.6800315228177866
+      ]
+    },
+    {
+      "pair": [
+        "w_dm",
+        "M_abs"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500065358334046,
+        0.6800118264786522
+      ]
+    },
+    {
+      "pair": [
+        "delta",
+        "M_abs"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500053952835245,
+        0.6800134025343169
+      ]
+    },
+    {
+      "pair": [
+        "H_0",
+        "effective"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500052836999632,
+        0.6800323616741032
+      ]
+    },
+    {
+      "pair": [
+        "Omega_m",
+        "effective"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500053695801416,
+        0.6800155731776971
+      ]
+    },
+    {
+      "pair": [
+        "w_dm",
+        "effective"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500060741029088,
+        0.6800253862965019
+      ]
+    },
+    {
+      "pair": [
+        "delta",
+        "effective"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500047150086749,
+        0.6800064007233366
+      ]
+    },
+    {
+      "pair": [
+        "M_abs",
+        "effective"
+      ],
+      "enclosed_mass_95_68": [
+        0.9500041024900945,
+        0.6800424150735722
+      ]
+    }
+  ],
+  "method": "Whitened histogram KDE; all retained draws; 68/95 percent smoothed contours; display axes use 0.05\u201399.95 percent quantiles; derived prior projection only. Diagnostic smoothing matches previous EOS overlays."
+}

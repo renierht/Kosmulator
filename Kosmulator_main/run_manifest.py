@@ -6,7 +6,7 @@ from pathlib import Path
 SCIENTIFIC_KEYS = (
     "likelihood_policy", "dataset_hashes", "distance_policy", "launcher", "runtime_constants", "cli_settings", "source_hashes", "true_values",
     "observations", "models", "priors", "class_settings", "regime_switches",
-    "free_w", "free_w_dm", "free_w0", "free_wa", "coupled_prior",
+    "free_w", "free_w_dm", "free_w0", "free_wa", "coupled_prior", "fixed_parameters_by_model",
     "emcee_moves", "walkers", "burn", "thin", "convergence_policy", "convergence_setting",
 )
 
@@ -103,6 +103,7 @@ def paper_identity(root, observations):
     import hashlib
     root = Path(root)
     datasets = {
+        'CC': ['CC.dat', 'CC_corr.txt'],
         'PantheonPS': ['PantheonP.dat', 'PantheonP.cov'],
         'PantheonP': ['PantheonP.dat', 'PantheonP.cov'],
         'DESI_DR2': ['DESI_DR2_synced.txt', 'DESI_DR2_covtot.txt'],
@@ -132,7 +133,7 @@ def require_paper_chain_settings(chain_path, settings, model):
     """Analysis can change burn, but cannot silently change the sampled posterior."""
     keys = ('distance_policy', 'likelihood_policy', 'source_hashes', 'dataset_hashes',
             'observations', 'priors', 'class_settings', 'regime_switches',
-            'free_w', 'free_w_dm', 'free_w0', 'free_wa', 'coupled_prior')
+            'free_w', 'free_w_dm', 'free_w0', 'free_wa', 'coupled_prior', 'fixed_parameters_by_model')
     for folder in Path(chain_path).resolve().parents:
         manifest = folder/'run_settings.json'
         if manifest.is_file():

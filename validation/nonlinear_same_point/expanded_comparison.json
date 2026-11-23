@@ -1,0 +1,132 @@
+{
+  "tests": [
+    {
+      "model": "LCDM_v",
+      "point": "archived_MLE",
+      "E_relative_error": 0.0,
+      "rd_relative_error": 0.0,
+      "reconstructed_old_SN_BAO_error": 0.0
+    },
+    {
+      "model": "LCDM_v",
+      "point": "H_0_-1",
+      "E_relative_error": 0.0,
+      "rd_relative_error": 0.0,
+      "reconstructed_old_SN_BAO_error": 0.0
+    },
+    {
+      "model": "LCDM_v",
+      "point": "H_0_+1",
+      "E_relative_error": 0.0,
+      "rd_relative_error": 0.0,
+      "reconstructed_old_SN_BAO_error": 0.0
+    },
+    {
+      "model": "LCDM_v",
+      "point": "Omega_m_-1",
+      "E_relative_error": 0.0,
+      "rd_relative_error": 0.0,
+      "reconstructed_old_SN_BAO_error": 0.0
+    },
+    {
+      "model": "LCDM_v",
+      "point": "Omega_m_+1",
+      "E_relative_error": 0.0,
+      "rd_relative_error": 0.0,
+      "reconstructed_old_SN_BAO_error": 0.0
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "point": "archived_MLE",
+      "E_relative_error": 6.661338147750939e-16,
+      "rd_relative_error": -2.0270943368316807e-08,
+      "reconstructed_old_SN_BAO_error": 6.866438972963351e-08
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "point": "H_0_-1",
+      "E_relative_error": 6.661338147750939e-16,
+      "rd_relative_error": -1.2143976046985472e-08,
+      "reconstructed_old_SN_BAO_error": 6.358061721556396e-06
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "point": "H_0_+1",
+      "E_relative_error": 6.661338147750939e-16,
+      "rd_relative_error": 2.719544589524503e-10,
+      "reconstructed_old_SN_BAO_error": 1.3366564388661573e-07
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "point": "Omega_m_-1",
+      "E_relative_error": 5.551115123125783e-16,
+      "rd_relative_error": -4.821919086239745e-09,
+      "reconstructed_old_SN_BAO_error": -2.328733085477097e-06
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "point": "Omega_m_+1",
+      "E_relative_error": 5.551115123125783e-16,
+      "rd_relative_error": 1.6302654115563087e-08,
+      "reconstructed_old_SN_BAO_error": -7.940113910365199e-06
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "point": "w_-1",
+      "E_relative_error": 2.220446049250313e-16,
+      "rd_relative_error": -4.0723298067035785e-09,
+      "reconstructed_old_SN_BAO_error": 8.69294643024432e-06
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "point": "w_+1",
+      "E_relative_error": 2.220446049250313e-16,
+      "rd_relative_error": 1.4164341477496123e-08,
+      "reconstructed_old_SN_BAO_error": 3.078168392534053e-05
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "point": "delta_-1",
+      "E_relative_error": 5.551115123125783e-16,
+      "rd_relative_error": -5.857674345577379e-10,
+      "reconstructed_old_SN_BAO_error": 1.518122857646631e-06
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "point": "delta_+1",
+      "E_relative_error": 2.220446049250313e-16,
+      "rd_relative_error": 3.811944759846142e-09,
+      "reconstructed_old_SN_BAO_error": 9.334501694269193e-06
+    }
+  ],
+  "fixed_point_stages": [
+    {
+      "stage": "Original SN+BAO",
+      "LCDM_chi2_at_old_MLE": 1472.715199510718,
+      "IDE_chi2_at_old_MLE": 1461.4166260370866,
+      "IDE_minus_LCDM": -11.29857347363145
+    },
+    {
+      "stage": "Current distance, old SN prefactor",
+      "LCDM_chi2_at_old_MLE": 1474.228025068116,
+      "IDE_chi2_at_old_MLE": 1461.54856677314,
+      "IDE_minus_LCDM": -12.67945829497603
+    },
+    {
+      "stage": "Current SN+BAO",
+      "LCDM_chi2_at_old_MLE": 1473.772021565429,
+      "IDE_chi2_at_old_MLE": 1460.8361966769046,
+      "IDE_minus_LCDM": -12.935824888524394
+    },
+    {
+      "stage": "Current SN+BAO+CC",
+      "LCDM_chi2_at_old_MLE": 1504.191986407064,
+      "IDE_chi2_at_old_MLE": 1501.8392060777858,
+      "IDE_minus_LCDM": -2.3527803292781755
+    }
+  ],
+  "current_CC_IDE_minus_LCDM": 10.58304455924629,
+  "old_CC_IDE_minus_LCDM": 9.70698805150294,
+  "distance_effect_on_delta_chi2": -1.38088482134458,
+  "SN_prefactor_effect_on_delta_chi2": -0.2563665935483641
+}

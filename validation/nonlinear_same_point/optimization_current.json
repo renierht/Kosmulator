@@ -1,0 +1,136 @@
+{
+  "results": [
+    {
+      "model": "LCDM_v",
+      "include_cc": false,
+      "parameters": {
+        "Omega_m": 0.3100515541444241,
+        "H_0": 71.72581197545158,
+        "M_abs": -19.304168821229915
+      },
+      "chi2": 1473.7177152993502,
+      "components": {
+        "CC": 29.77936599596782,
+        "DESI_DR2": 16.26076058143091,
+        "PantheonPS": 1457.4569547179192
+      },
+      "initial_chi2": 1473.772021565429,
+      "success": true,
+      "message": "Optimization terminated successfully.",
+      "nfev": 319,
+      "simplex_objective_spread": 9.962685680875438e-06,
+      "simplex_scaled_parameter_spread": 6.661338147750939e-15,
+      "k": 3,
+      "N": 1670,
+      "AIC": 1479.7177152993502,
+      "AICc": 1479.732121061655,
+      "BIC": 1495.9794520155826
+    },
+    {
+      "model": "LCDM_v",
+      "include_cc": true,
+      "parameters": {
+        "Omega_m": 0.3062202440269159,
+        "H_0": 71.02422847368562,
+        "M_abs": -19.326406965755368
+      },
+      "chi2": 1502.0288100673793,
+      "components": {
+        "CC": 27.241800639025975,
+        "DESI_DR2": 13.21685532924003,
+        "PantheonPS": 1461.5701540991133
+      },
+      "initial_chi2": 1504.1919864070637,
+      "success": true,
+      "message": "Optimization terminated successfully.",
+      "nfev": 123,
+      "simplex_objective_spread": 9.535155186313204e-06,
+      "simplex_scaled_parameter_spread": 5.827164885685576e-05,
+      "k": 3,
+      "N": 1706,
+      "AIC": 1508.0288100673793,
+      "AICc": 1508.0429111249587,
+      "BIC": 1524.354530251534
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "include_cc": false,
+      "parameters": {
+        "Omega_m": 0.2948523934812442,
+        "w": -0.9073842247120995,
+        "delta": -0.006571863858045675,
+        "H_0": 73.43404178308879,
+        "M_abs": -19.243382024027394
+      },
+      "chi2": 1460.6306768581105,
+      "components": {
+        "CC": 41.20853805984422,
+        "DESI_DR2": 8.937823646437167,
+        "PantheonPS": 1451.6928532116733
+      },
+      "initial_chi2": 1460.8361966769046,
+      "success": true,
+      "message": "Optimization terminated successfully.",
+      "nfev": 208,
+      "simplex_objective_spread": 6.564573595824186e-08,
+      "simplex_scaled_parameter_spread": 0.000302864376705958,
+      "k": 5,
+      "N": 1670,
+      "AIC": 1470.6306768581105,
+      "AICc": 1470.6667345504181,
+      "BIC": 1497.7335713851646
+    },
+    {
+      "model": "NonLinear_IDE_2",
+      "include_cc": true,
+      "parameters": {
+        "Omega_m": 0.29473861664630974,
+        "w": -0.9318206649399481,
+        "delta": -0.004545358250133609,
+        "H_0": 71.69922370708736,
+        "M_abs": -19.298600354058877
+      },
+      "chi2": 1495.6884531027388,
+      "components": {
+        "CC": 31.177034287447963,
+        "DESI_DR2": 9.10167494196681,
+        "PantheonPS": 1455.409743873324
+      },
+      "initial_chi2": 1501.8392060777858,
+      "success": true,
+      "message": "Optimization terminated successfully.",
+      "nfev": 326,
+      "simplex_objective_spread": 5.426250027085189e-08,
+      "simplex_scaled_parameter_spread": 0.0001457080847098169,
+      "k": 5,
+      "N": 1706,
+      "AIC": 1505.6884531027388,
+      "AICc": 1505.7237472203858,
+      "BIC": 1532.8979867429969
+    }
+  ],
+  "elapsed_seconds": 298.04364896699553,
+  "note": "One-start bounded Nelder-Mead; diagnostic minima, not certified global optima. No posterior/DIC estimated.",
+  "comparisons": [
+    {
+      "datasets": "SN+BAO",
+      "LCDM_chi2": 1473.7177152993502,
+      "IDE_chi2": 1460.6306768581105,
+      "Delta_chi2": -13.087038441239656,
+      "Delta_AIC": -9.087038441239656,
+      "Delta_AICc": -9.065386511236966,
+      "Delta_BIC": 1.7541193695819857,
+      "both_optimizers_converged": true
+    },
+    {
+      "datasets": "SN+BAO+CC",
+      "LCDM_chi2": 1502.0288100673793,
+      "IDE_chi2": 1495.6884531027388,
+      "Delta_chi2": -6.340356964640478,
+      "Delta_AIC": -2.3403569646404776,
+      "Delta_AICc": -2.3191639045728607,
+      "Delta_BIC": 8.543456491462848,
+      "both_optimizers_converged": true
+    }
+  ]
+}

@@ -1,0 +1,272 @@
+{
+  "reference": "LCDM",
+  "runs": [
+    {
+      "label": "LCDM",
+      "model": "LCDM_v",
+      "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/MCMC_Chains/Model9_unrestricted_20261014_iw/LCDM_v/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "parameters": [
+        "Omega_m",
+        "H_0",
+        "M_abs"
+      ],
+      "burn": 1000,
+      "priors": {
+        "Omega_m": [
+          0.1,
+          0.5
+        ],
+        "H_0": [
+          60,
+          90
+        ],
+        "M_abs": [
+          -20.5,
+          -18
+        ]
+      },
+      "prior_policy": "normalized_uniform_box_zero_likelihood_outside_domain",
+      "audit": {
+        "dataset_files": {
+          "PantheonP.dat": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Observations/PantheonP.dat",
+          "PantheonP.cov": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Observations/PantheonP.cov",
+          "DESI_DR2_synced.txt": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Observations/DESI_DR2_synced.txt",
+          "DESI_DR2_covtot.txt": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Observations/DESI_DR2_covtot.txt"
+        },
+        "dataset_hashes": {
+          "PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1",
+          "PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+          "DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+          "DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952"
+        },
+        "likelihood_convention": "legacy PantheonPS + DESI_DR2: saved log-likelihood blobs; common omitted constants; no new likelihood reevaluation",
+        "class_settings": {
+          "DERIVE_RD_WITH_MODEL_CLASS": true,
+          "RD_CLASS_OMEGA_B": 0.048,
+          "RD_CLASS_N_EFF": 3.044,
+          "RD_CLASS_SUM_MNU_EV": 0.06,
+          "RD_CLASS_N_NCDM": 3
+        },
+        "zero_domain_convention": "full rectangular prior, global background and CLASS numerical rejection retained as zero likelihood; no renormalization on solver success",
+        "provenance_files": {
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/reproducibility/SAIP2026_IDE/configs/paper.json": "3940ab5d7f7d6182474fe4af2a7dc610817844557ad4a5eadc2b86218a8036c9",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Kosmulator_main/Kosmulator_MCMC.py": "be9503bdf87c743e93379dfbc0c337acee04adecfaca1fcee66a8dd8e98d4bc3",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Kosmulator_main/rd_helpers.py": "48d9d1325053dd444567b74616aca36318779b871c24a633439ec3636d78bf00",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Kosmulator_main/Statistical_packages.py": "33aebf875a56f49ee94a1dfbf47632ed66baebb95236c70f32638796fbb56423",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/User_defined_modules.py": "d903bf24a5facfb2e8b10e1271a05a373f02a95fcd38bdd67817cf3cda87ac3f"
+        },
+        "provenance_quality": "Legacy reconstruction: no contemporaneous dataset hashes. Existing files match across both checkouts; historical likelihood-path differences audited as DES-Dovekie/CPL additions only.",
+        "prior_source": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/reproducibility/SAIP2026_IDE/configs/paper.json",
+        "note": "Includes BBN-table numerical domain. Background-only IDE. No independent ensemble. Model10 prior runs differ in both delta and Omega_m bounds."
+      }
+    },
+    {
+      "label": "Model9",
+      "model": "SignSwitch_IDE_1",
+      "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/MCMC_Chains/Model9_fresh_20261016_iw/SignSwitch_IDE_1/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "parameters": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "burn": 1000,
+      "priors": {
+        "Omega_m": [
+          0.1,
+          0.5
+        ],
+        "w": [
+          -2,
+          -0.33
+        ],
+        "delta": [
+          -1,
+          1
+        ],
+        "H_0": [
+          60,
+          90
+        ],
+        "M_abs": [
+          -20.5,
+          -18
+        ]
+      },
+      "prior_policy": "normalized_uniform_box_zero_likelihood_outside_domain",
+      "audit": {
+        "dataset_files": {
+          "PantheonP.dat": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Observations/PantheonP.dat",
+          "PantheonP.cov": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Observations/PantheonP.cov",
+          "DESI_DR2_synced.txt": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Observations/DESI_DR2_synced.txt",
+          "DESI_DR2_covtot.txt": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Observations/DESI_DR2_covtot.txt"
+        },
+        "dataset_hashes": {
+          "PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1",
+          "PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+          "DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+          "DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952"
+        },
+        "likelihood_convention": "legacy PantheonPS + DESI_DR2: saved log-likelihood blobs; common omitted constants; no new likelihood reevaluation",
+        "class_settings": {
+          "DERIVE_RD_WITH_MODEL_CLASS": true,
+          "RD_CLASS_OMEGA_B": 0.048,
+          "RD_CLASS_N_EFF": 3.044,
+          "RD_CLASS_SUM_MNU_EV": 0.06,
+          "RD_CLASS_N_NCDM": 3
+        },
+        "zero_domain_convention": "full rectangular prior, global background and CLASS numerical rejection retained as zero likelihood; no renormalization on solver success",
+        "provenance_files": {
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/reproducibility/SAIP2026_IDE/configs/paper.json": "3940ab5d7f7d6182474fe4af2a7dc610817844557ad4a5eadc2b86218a8036c9",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Kosmulator_main/Kosmulator_MCMC.py": "be9503bdf87c743e93379dfbc0c337acee04adecfaca1fcee66a8dd8e98d4bc3",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Kosmulator_main/rd_helpers.py": "48d9d1325053dd444567b74616aca36318779b871c24a633439ec3636d78bf00",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/Kosmulator_main/Statistical_packages.py": "33aebf875a56f49ee94a1dfbf47632ed66baebb95236c70f32638796fbb56423",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/User_defined_modules.py": "d903bf24a5facfb2e8b10e1271a05a373f02a95fcd38bdd67817cf3cda87ac3f"
+        },
+        "provenance_quality": "Legacy reconstruction: no contemporaneous dataset hashes. Existing files match across both checkouts; historical likelihood-path differences audited as DES-Dovekie/CPL additions only.",
+        "prior_source": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_warm_dm/reproducibility/SAIP2026_IDE/configs/paper.json",
+        "note": "Includes BBN-table numerical domain. Background-only IDE. No independent ensemble. Model10 prior runs differ in both delta and Omega_m bounds."
+      }
+    },
+    {
+      "label": "Model10_original",
+      "model": "SignSwitch_IDE_2",
+      "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/MCMC_Chains/Model10_unrestricted_v1_iw/SignSwitch_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "parameters": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "burn": 1000,
+      "priors": {
+        "Omega_m": [
+          0.1,
+          0.5
+        ],
+        "w": [
+          -2,
+          -0.33
+        ],
+        "delta": [
+          -1,
+          1
+        ],
+        "H_0": [
+          60,
+          90
+        ],
+        "M_abs": [
+          -20.5,
+          -18
+        ]
+      },
+      "prior_policy": "normalized_uniform_box_zero_likelihood_outside_domain",
+      "audit": {
+        "dataset_files": {
+          "PantheonP.dat": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Observations/PantheonP.dat",
+          "PantheonP.cov": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Observations/PantheonP.cov",
+          "DESI_DR2_synced.txt": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Observations/DESI_DR2_synced.txt",
+          "DESI_DR2_covtot.txt": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Observations/DESI_DR2_covtot.txt"
+        },
+        "dataset_hashes": {
+          "PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1",
+          "PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+          "DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+          "DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952"
+        },
+        "likelihood_convention": "legacy PantheonPS + DESI_DR2: saved log-likelihood blobs; common omitted constants; no new likelihood reevaluation",
+        "class_settings": {
+          "DERIVE_RD_WITH_MODEL_CLASS": true,
+          "RD_CLASS_OMEGA_B": 0.048,
+          "RD_CLASS_N_EFF": 3.044,
+          "RD_CLASS_SUM_MNU_EV": 0.06,
+          "RD_CLASS_N_NCDM": 3
+        },
+        "zero_domain_convention": "full rectangular prior, global background and CLASS numerical rejection retained as zero likelihood; no renormalization on solver success",
+        "provenance_files": {
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/reproducibility/SAIP2026_IDE/configs/paper.json": "3940ab5d7f7d6182474fe4af2a7dc610817844557ad4a5eadc2b86218a8036c9",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Kosmulator_main/Kosmulator_MCMC.py": "4b5371fbcad7ea04c07b5b25b222cf6a57712597e91721c7d0a7a2ef8037bab3",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Kosmulator_main/rd_helpers.py": "b514b5fec347fcfe18fec5e064fb148baa96de99f7f8d1c213742fea9c4b2c7b",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Kosmulator_main/Statistical_packages.py": "33aebf875a56f49ee94a1dfbf47632ed66baebb95236c70f32638796fbb56423",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/User_defined_modules.py": "9335cb74af276f5838835034ec622cbadb9c0fc28c036132061ee74b6008c3fa"
+        },
+        "provenance_quality": "Legacy reconstruction: no contemporaneous dataset hashes. Existing files match across both checkouts; historical likelihood-path differences audited as DES-Dovekie/CPL additions only.",
+        "prior_source": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/reproducibility/SAIP2026_IDE/configs/paper.json",
+        "note": "Includes BBN-table numerical domain. Background-only IDE. No independent ensemble. Model10 prior runs differ in both delta and Omega_m bounds."
+      }
+    },
+    {
+      "label": "Model10_wide",
+      "model": "SignSwitch_IDE_2",
+      "chain": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/MCMC_Chains/Model10_wide_priors_v2_iw/SignSwitch_IDE_2/DESI_DR2_PantheonP_SH0ES/DESI_DR2+PantheonP_SH0ES.h5",
+      "parameters": [
+        "Omega_m",
+        "w",
+        "delta",
+        "H_0",
+        "M_abs"
+      ],
+      "burn": 1000,
+      "priors": {
+        "Omega_m": [
+          0.1,
+          0.7
+        ],
+        "w": [
+          -2,
+          -0.33
+        ],
+        "delta": [
+          -2.0,
+          2.0
+        ],
+        "H_0": [
+          60,
+          90
+        ],
+        "M_abs": [
+          -20.5,
+          -18
+        ]
+      },
+      "prior_policy": "normalized_uniform_box_zero_likelihood_outside_domain",
+      "audit": {
+        "dataset_files": {
+          "PantheonP.dat": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Observations/PantheonP.dat",
+          "PantheonP.cov": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Observations/PantheonP.cov",
+          "DESI_DR2_synced.txt": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Observations/DESI_DR2_synced.txt",
+          "DESI_DR2_covtot.txt": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Observations/DESI_DR2_covtot.txt"
+        },
+        "dataset_hashes": {
+          "PantheonP.dat": "22269701ae91d365292b415d823439f1b4ed3fb3a918fe5760628d22877c25c1",
+          "PantheonP.cov": "abf806d966485e64afdb359c87bffc0ecc00d05eff0a31ced66f247385df0fdc",
+          "DESI_DR2_synced.txt": "cac0ba3c098b031f19e16a8fb8a641431a9bc343c61c38ead4bded84010b2b54",
+          "DESI_DR2_covtot.txt": "bbce2532201a33d7288889112205e02945cb11d0966544b1d78c1823d8955952"
+        },
+        "likelihood_convention": "legacy PantheonPS + DESI_DR2: saved log-likelihood blobs; common omitted constants; no new likelihood reevaluation",
+        "class_settings": {
+          "DERIVE_RD_WITH_MODEL_CLASS": true,
+          "RD_CLASS_OMEGA_B": 0.048,
+          "RD_CLASS_N_EFF": 3.044,
+          "RD_CLASS_SUM_MNU_EV": 0.06,
+          "RD_CLASS_N_NCDM": 3
+        },
+        "zero_domain_convention": "full rectangular prior, global background and CLASS numerical rejection retained as zero likelihood; no renormalization on solver success",
+        "provenance_files": {
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/reproducibility/SAIP2026_IDE/configs/paper.json": "3940ab5d7f7d6182474fe4af2a7dc610817844557ad4a5eadc2b86218a8036c9",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Kosmulator_main/Kosmulator_MCMC.py": "4b5371fbcad7ea04c07b5b25b222cf6a57712597e91721c7d0a7a2ef8037bab3",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Kosmulator_main/rd_helpers.py": "b514b5fec347fcfe18fec5e064fb148baa96de99f7f8d1c213742fea9c4b2c7b",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/Kosmulator_main/Statistical_packages.py": "33aebf875a56f49ee94a1dfbf47632ed66baebb95236c70f32638796fbb56423",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/User_defined_modules.py": "9335cb74af276f5838835034ec622cbadb9c0fc28c036132061ee74b6008c3fa",
+          "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/MCMC_Chains/Model10_wide_priors_v2_iw/prior_run_settings.json": "39d42d78c94021298d24ab597fb5cebd2a14be8d5e0ffffc243aa3498d93e0cf"
+        },
+        "provenance_quality": "Legacy reconstruction: no contemporaneous dataset hashes. Existing files match across both checkouts; historical likelihood-path differences audited as DES-Dovekie/CPL additions only.",
+        "prior_source": "/mnt/c/Users/Marcel/.codex/visualizations/2026/10/13/01a1358d-d46e-7da0-8eda-70bb634653cf/Kosmulator_followup/MCMC_Chains/Model10_wide_priors_v2_iw/prior_run_settings.json",
+        "note": "Includes BBN-table numerical domain. Background-only IDE. No independent ensemble. Model10 prior runs differ in both delta and Omega_m bounds."
+      }
+    }
+  ]
+}

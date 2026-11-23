@@ -160,6 +160,7 @@ def main(
     existing_chain_paths: Optional[Dict[str, str]] = None,
     postprocessing_options: Optional[Dict[str, Any]] = None,
     plot_settings_overrides: Optional[Dict[str, Any]] = None,
+    fixed_parameters_by_model: Optional[Dict[str, Dict[str, float]]] = None,
 ):
     """
     Orchestrates config creation, data prep, MPI broadcast, and the per-model MCMC.
@@ -253,6 +254,7 @@ def main(
                 model_name=model_names,
                 pantheonp_mode=pantheonp_mode,
                 logger=log,
+                fixed_parameters_by_model=fixed_parameters_by_model,
             )
             issue_observation_warnings(CONFIG, models, token_mode=True)
     else:
